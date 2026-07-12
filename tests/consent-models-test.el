@@ -268,15 +268,9 @@ the local tests passed. Use only ASCII text.")
     (consent-models-test--live-endpoint)
     (consent-models-test--live-model))))
 
-(defconst consent-models-test--live-portable-test-files
-  '("tests/scheme/consent-models-live-test.scm")
-  "Portable live model files run by the model-specific ERT bridge tests.")
-
 (defun consent-models-test--run-live-portable-host (host display-name)
   "Run live model portable tests on HOST named DISPLAY-NAME."
-  (let ((consent--scheme-host-test-files
-         consent-models-test--live-portable-test-files))
-    (consent--scheme-host-run-suite host display-name)))
+  (consent--scheme-host-run-plan host display-name 'live))
 
 (ert-deftest consent-models-test-local-complete-through-transport ()
   "Expose `(agent models)' and complete through a selected local provider."

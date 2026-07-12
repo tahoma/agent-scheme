@@ -682,17 +682,31 @@
   (let ((makefile (consent-ci-test--repo-file-string "Makefile"))
         (launcher
          (consent-ci-test--repo-file-string "tools/run-portable-tests.sh"))
-        (files
+        (emacs-host-helper
+         (consent-ci-test--repo-file-string "tests/consent-scheme-host.el"))
+        (plan
          (consent-ci-test--repo-file-string
-          "tests/scheme/full-test-files.txt")))
+          "tests/scheme/test-plan.scm")))
     (dolist (host '("gambit" "racket" "guile" "gauche" "chibi"))
       (should
        (string-match-p
         (format "CONSENT_PORTABLE_HOST=%s" host)
         makefile)))
     (should-not (string-match-p "emacs\\|ert" launcher))
-    (should (string-match-p "testing-runner-test.scm" files))
-    (should (string-match-p "consent-context-test.scm" files))))
+    (should (string-match-p "run-test-plan.scm" launcher))
+    (should-not
+     (string-match-p "defconst consent--scheme-host-test-files"
+                     emacs-host-helper))
+    (should-not
+     (file-exists-p
+      (expand-file-name
+       "tests/scheme/full-test-files.txt"
+       consent--test-root)))
+    (should (string-match-p "testing-runner-test.scm" plan))
+    (should (string-match-p "consent-context-test.scm" plan))
+    (should (string-match-p
+             "(shard (name full) (selector (tag full)))"
+             plan))))
 
 (ert-deftest consent-ci-test-workflow-matrixes-host-option-variants ()
   "Deal out CI shards across host, syntax metadata, and docstring retention."

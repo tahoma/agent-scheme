@@ -21,7 +21,7 @@ library outside the catalog:
 - `scheme/stdlib/manifest.sld` for optional stdlib, SRFI, and R7RS-large-facing
   aliases or owned portable libraries.
 - `scheme/testing/manifest.sld` for reusable portable testing facilities;
-  project-specific test programs and fixtures remain outside the
+  project-specific test programs, plan data, and fixtures remain outside the
   manifest graph.
 - `scheme/agent/manifest.sld` for public agent APIs and internal agent primitive
   backing libraries.

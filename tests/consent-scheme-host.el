@@ -11,86 +11,6 @@
 (require 'cl-lib)
 (require 'ert)
 
-(defconst consent--scheme-host-test-files
-  '("tests/scheme/consent-reader-test.scm"
-    "tests/scheme/consent-fixture-test.scm"
-    "tests/scheme/consent-native-cli-daemon-adapter-test.scm"
-    "tests/scheme/consent-native-cli-daemon-process-test.scm"
-    "tests/scheme/consent-module-boundary-test.scm"
-    "tests/scheme/consent-transcript-test.scm"
-    "tests/scheme/consent-repl-test.scm"
-    "tests/scheme/consent-repl-parity-test.scm"
-    "tests/scheme/consent-session-test.scm"
-    "tests/scheme/consent-context-test.scm"
-    "tests/scheme/testing-harness-test.scm"
-    "tests/scheme/testing-registry-test.scm"
-    "tests/scheme/testing-runner-test.scm"
-    "tests/scheme/consent-plan-test.scm"
-    "tests/scheme/consent-redaction-test.scm"
-    "tests/scheme/consent-task-test.scm"
-    "tests/scheme/consent-vcs-test.scm"
-    "tests/scheme/consent-agent-memory-test.scm"
-    "tests/scheme/consent-agent-registry-test.scm"
-    "tests/scheme/consent-agent-proposal-test.scm"
-    "tests/scheme/consent-agent-runner-test.scm"
-    "tests/scheme/consent-agent-reliability-test.scm"
-    "tests/scheme/consent-agent-prompt-test.scm"
-    "tests/scheme/consent-agent-generated-source-test.scm"
-    "tests/scheme/consent-models-openai-test.scm"
-    "tests/scheme/consent-script-test.scm"
-    "tests/scheme/stdlib-list-test.scm"
-    "tests/scheme/stdlib-comparator-test.scm"
-    "tests/scheme/stdlib-rbtree-test.scm"
-    "tests/scheme/stdlib-mapping-test.scm"
-    "tests/scheme/stdlib-and-let-star-test.scm"
-    "tests/scheme/stdlib-receive-test.scm"
-    "tests/scheme/stdlib-assume-test.scm"
-    "tests/scheme/stdlib-testing-test.scm"
-    "tests/scheme/stdlib-testing-upstream-test.scm"
-    "tests/scheme/stdlib-random-bits-test.scm"
-    "tests/scheme/stdlib-random-bits-upstream-test.scm"
-    "tests/scheme/stdlib-random-distributions-test.scm"
-    "tests/scheme/stdlib-random-data-generators-test.scm"
-    "tests/scheme/stdlib-random-data-generators-upstream-test.scm"
-    "tests/scheme/stdlib-property-testing-test.scm"
-    "tests/scheme/stdlib-property-testing-upstream-test.scm"
-    "tests/scheme/stdlib-eager-comprehensions-test.scm"
-    "tests/scheme/stdlib-eager-comprehensions-upstream-test.scm"
-    "tests/scheme/stdlib-lightweight-testing-test.scm"
-    "tests/scheme/stdlib-lightweight-testing-upstream-test.scm"
-    "tests/scheme/stdlib-json-reference-test.scm"
-    "tests/scheme/stdlib-generator-test.scm"
-    "tests/scheme/consent-eval-test.scm")
-  "Portable Scheme test files exercised by full-suite host shards.")
-
-(defconst consent--scheme-host-compiled-test-files
-  '("tests/scheme/consent-reader-test.scm"
-    "tests/scheme/consent-manifest-smoke-test.scm")
-  "Portable Scheme test files exercised by compiled full-suite shards.")
-
-(defconst consent--scheme-host-reflect-test-files
-  '("tests/scheme/consent-reflect-test.scm")
-  "Portable Scheme reflection contract files exercised by dedicated shards.")
-
-(defconst consent--scheme-host-reflect-stress-test-files
-  '("tests/scheme/consent-reflect-stress-test.scm")
-  "Portable Scheme reflection stress files exercised by dedicated shards.")
-
-(defconst consent--scheme-host-direct-only-test-files
-  '("tests/scheme/stdlib-mapping-conformance-test.scm")
-  "Portable Scheme test files exercised only by direct R7RS hosts.")
-
-(defun consent--scheme-host-test-files-for-host (host)
-  "Return the portable Scheme test files that should run on HOST."
-  ;; Compiled runners execute through --host-run and enforce host callback
-  ;; budgets. Keep expensive conformance and nested-evaluator suites on direct
-  ;; hosts while compact smoke tests still exercise compiled manifest bootstrap.
-  (if (memq host '(compiled gambit-native))
-      consent--scheme-host-compiled-test-files
-    (append
-     consent--scheme-host-test-files
-     consent--scheme-host-direct-only-test-files)))
-
 (defun consent--scheme-host-normalize-command (command)
   "Return COMMAND with repository-relative executable paths expanded."
   (if (and (string-match-p "/" command)
@@ -150,6 +70,18 @@
      (consent--scheme-host-configured-command "CONSENT_CHIBI" "chibi-scheme"))
     (_
      (error "Unknown portable Scheme host: %S" host))))
+
+(defun consent--scheme-host-command-environment-name (host)
+  "Return the launcher command environment variable for HOST."
+  (pcase host
+    ('gambit "CONSENT_GAMBIT")
+    ('gambit-native "CONSENT_GAMBIT_NATIVE")
+    ('racket "CONSENT_RACKET")
+    ('gauche "CONSENT_GAUCHE")
+    ('guile "CONSENT_GUILE")
+    ('compiled "CONSENT_COMPILED")
+    ('chibi "CONSENT_CHIBI")
+    (_ (error "Unknown portable Scheme host: %S" host))))
 
 (defun consent--scheme-host-racket-collection-root
     (library-root collection-root)
@@ -325,26 +257,59 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
           (delete-directory racket-collection-root t))
         (kill-buffer output-buffer)))))
 
+(defun consent--scheme-host-run-plan (host display-name shard)
+  "Run portable Scheme plan SHARD on HOST named DISPLAY-NAME."
+  (let ((runner (consent--scheme-host-command host)))
+    (unless runner
+      (ert-skip (format "%s is not available" display-name)))
+    (let ((launcher
+           (expand-file-name
+            "tools/run-portable-tests.sh"
+            consent--test-root))
+          (output-buffer
+           (generate-new-buffer
+            (format " *consent-r7rs-%s*" display-name))))
+      (unwind-protect
+          (let* ((default-directory consent--test-root)
+                 (runner-setting
+                  (format "%s=%s"
+                          (consent--scheme-host-command-environment-name host)
+                          runner))
+                 (process-environment
+                  (append
+                   (list
+                    (format "CONSENT_PORTABLE_HOST=%s" host)
+                    (format "CONSENT_PORTABLE_GROUP=%s" shard)
+                    (format "CONSENT_TEST_TARGET_ROOT=%s"
+                            consent--test-target-root)
+                    runner-setting)
+                   process-environment)))
+            (let ((status
+                   (process-file launcher nil output-buffer nil)))
+              (unless (equal status 0)
+                (ert-fail
+                 (format "Portable Scheme plan %s failed on %s:\n%s"
+                         shard
+                         display-name
+                         (with-current-buffer output-buffer
+                           (buffer-string))))))
+            (consent--test-emit-ci-check-timings output-buffer))
+        (kill-buffer output-buffer)))))
+
 (defun consent--scheme-host-run-suite (host display-name)
   "Run the full portable Scheme suite on HOST named DISPLAY-NAME."
-  (consent--scheme-host-run-files
-   host
-   display-name
-   (consent--scheme-host-test-files-for-host host)))
+  (consent--scheme-host-run-plan
+   host display-name (if (memq host '(compiled gambit-native))
+                         'compiled
+                       'full)))
 
 (defun consent--scheme-host-run-reflect-suite (host display-name)
   "Run the portable reflection contract suite on HOST named DISPLAY-NAME."
-  (consent--scheme-host-run-files
-   host
-   display-name
-   consent--scheme-host-reflect-test-files))
+  (consent--scheme-host-run-plan host display-name 'reflect))
 
 (defun consent--scheme-host-run-reflect-stress-suite (host display-name)
   "Run the portable reflection stress suite on HOST named DISPLAY-NAME."
-  (consent--scheme-host-run-files
-   host
-   display-name
-   consent--scheme-host-reflect-stress-test-files))
+  (consent--scheme-host-run-plan host display-name 'reflect-stress))
 
 (provide 'consent-scheme-host)
 

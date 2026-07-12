@@ -215,11 +215,11 @@ the feature can be expressed through R7RS libraries and data alone.
 
 Current examples:
 
-- `tools/run-portable-tests.sh` runs the shared portable file list
-  (including `tests/scheme/consent-reader-test.scm` and
-  `tests/scheme/consent-eval-test.scm`) with the configured external Scheme host
-  for the selected portable shard. Every host, Chibi included, goes through
-  this one aggregate loop without entering ERT.
+- `tests/scheme/test-plan.scm` is the Scheme-readable source of truth for
+  portable programs, tags, and shard selectors. `(testing plan)` validates and
+  selects it through `(testing runner)`; `tools/run-portable-tests.sh` only
+  maps the resulting paths to the configured external Scheme host. Every host,
+  Chibi included, goes through this boundary without entering ERT.
 - `tests/consent-scheme-eval-test.el` guards a host-independent bootstrap
   invariant around explicit continuations in the portable evaluator source.
 - `tests/consent-conformance-test.el` validates the fixture suite and runs

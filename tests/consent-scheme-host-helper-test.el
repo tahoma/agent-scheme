@@ -63,36 +63,19 @@
     (consent--scheme-host-probe-arguments 'gambit-native "scheme")
     '("--eval" "(+ 1 2)"))))
 
-(ert-deftest consent-portable-host-helper-test-selects-direct-only-files ()
-  "Keep expensive direct-only suites out of compiled host runs."
+(ert-deftest consent-portable-host-helper-test-maps-launcher-environments ()
+  "Map each portable host to the thin launcher's command override."
   (should
-   (member
-    "tests/scheme/stdlib-json-reference-test.scm"
-    (consent--scheme-host-test-files-for-host 'racket)))
-  (should
-   (member
-    "tests/scheme/consent-manifest-smoke-test.scm"
-    (consent--scheme-host-test-files-for-host 'compiled)))
-  (should-not
-   (member
-    "tests/scheme/consent-fixture-test.scm"
-    (consent--scheme-host-test-files-for-host 'compiled)))
-  (should-not
-   (member
-    "tests/scheme/consent-fixture-test.scm"
-    (consent--scheme-host-test-files-for-host 'gambit-native)))
-  (should-not
-   (member
-    "tests/scheme/stdlib-mapping-conformance-test.scm"
-    (consent--scheme-host-test-files-for-host 'compiled)))
-  (should-not
-   (member
-    "tests/scheme/stdlib-mapping-conformance-test.scm"
-    (consent--scheme-host-test-files-for-host 'gambit-native)))
-  (should
-   (member
-    "tests/scheme/stdlib-mapping-conformance-test.scm"
-    (consent--scheme-host-test-files-for-host 'racket))))
+   (equal
+    (mapcar #'consent--scheme-host-command-environment-name
+            '(gambit gambit-native racket gauche guile compiled chibi))
+    '("CONSENT_GAMBIT"
+      "CONSENT_GAMBIT_NATIVE"
+      "CONSENT_RACKET"
+      "CONSENT_GAUCHE"
+      "CONSENT_GUILE"
+      "CONSENT_COMPILED"
+      "CONSENT_CHIBI"))))
 
 (ert-deftest consent-portable-host-helper-test-expands-gambit-native-runner-path ()
   "Expand repository-relative configured Gambit-compiled runner paths."

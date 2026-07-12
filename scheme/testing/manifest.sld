@@ -104,6 +104,38 @@
         (manifest-entry
          (schema-version 1)
          (kind library)
+         (name (testing plan))
+         (owner consent-core)
+         (provider repo-source)
+         (visibility public)
+         (layer library)
+         (source-kind source-library)
+         (source (path "plan.sld"))
+         (api-version (compat 0))
+         (source-version unknown)
+         (realization portable-source)
+         (exports
+          (testing-plan-read
+           testing-plan-validate
+           testing-plan?
+           testing-plan-programs
+           testing-plan-shards
+           testing-plan-program-path
+           testing-plan-program-tags
+           testing-plan-shard-names
+           testing-plan-selector
+           testing-plan-select
+           testing-plan-files))
+         (dependencies
+          ((library (scheme base))
+           (library (scheme file))
+           (library (scheme read))))
+         (provenance ((origin repo)))
+         (status implemented)
+         (canonical #t))
+        (manifest-entry
+         (schema-version 1)
+         (kind library)
          (name (testing runner))
          (owner consent-core)
          (provider repo-source)
@@ -120,6 +152,8 @@
            testing-runner-last-report
            testing-runner-rerun-failed
            testing-runner-run
+           testing-runner-plan-files
+           testing-runner-plan-main
            testing-runner-main))
          (dependencies
           ((library (scheme base))
@@ -128,6 +162,7 @@
            (library (scheme read))
            (library (scheme time))
            (library (scheme write))
+           (library (testing plan))
            (library (testing registry))))
          (provenance ((origin repo)))
          (status implemented)

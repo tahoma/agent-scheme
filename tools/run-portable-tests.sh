@@ -10,20 +10,20 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 target_root=${CONSENT_TEST_TARGET_ROOT:-$root}
 library_root=$target_root/scheme
 export CONSENT_LIBRARY_PATH=$library_root
-list_file=$root/tests/scheme/${group}-test-files.txt
+plan_file=$root/tests/scheme/test-plan.scm
+plan_runner=$root/tests/scheme/run-test-plan.scm
 started=$SECONDS
 ran=0
 racket_collections=
+plan_output=
 current_test=
-
-if [[ ! -f $list_file ]]; then
-  printf 'unknown portable test group: %s\n' "$group" >&2
-  exit 2
-fi
 
 cleanup() {
   if [[ -n $racket_collections && -d $racket_collections ]]; then
     rm -rf "$racket_collections"
+  fi
+  if [[ -n $plan_output && -f $plan_output ]]; then
+    rm -f "$plan_output"
   fi
 }
 trap cleanup EXIT
@@ -86,33 +86,44 @@ if [[ $host == racket ]]; then
   done < <(find "$library_root" -name '*.sld' -type f | sort)
 fi
 
-cd "$root"
-while IFS= read -r test_file; do
-  [[ -n $test_file ]] || continue
-  [[ $test_file == \#* ]] && continue
-  current_test=$test_file
+run_scheme_program() {
+  local program=$1
   case $host in
     gambit)
-      "$runner" "-:r7rs,search=$library_root" "$test_file"
+      "$runner" "-:r7rs,search=$library_root" "$program"
       ;;
     gambit-native|compiled)
-      "$runner" --host-run "$test_file"
+      "$runner" --host-run "$program"
       ;;
     racket)
-      "$runner" -S "$racket_collections" -I r7rs -f "$test_file"
+      "$runner" -S "$racket_collections" -I r7rs -f "$program"
       ;;
     gauche)
-      "$runner" -I "$library_root" -r7 "$test_file"
+      "$runner" -I "$library_root" -r7 "$program"
       ;;
     guile)
-      "$runner" --no-auto-compile --r7rs -L "$library_root" "$test_file"
+      "$runner" --no-auto-compile --r7rs -L "$library_root" "$program"
       ;;
     chibi)
-      "$runner" -A "$library_root" "$test_file"
+      "$runner" -A "$library_root" "$program"
       ;;
   esac
+}
+
+cd "$root"
+plan_output=$(mktemp "${TMPDIR:-/tmp}/consent-test-plan.XXXXXX")
+current_test=$plan_runner
+export TESTING_PLAN_FILE=$plan_file
+export TESTING_PLAN_SHARD=$group
+run_scheme_program "$plan_runner" > "$plan_output"
+unset TESTING_PLAN_FILE TESTING_PLAN_SHARD
+
+while IFS= read -r test_file; do
+  [[ -n $test_file ]] || continue
+  current_test=$test_file
+  run_scheme_program "$test_file"
   ran=$((ran + 1))
-done < "$list_file"
+done < "$plan_output"
 
 elapsed=$((SECONDS - started))
 printf 'CONSENT_CI_PORTABLE_SUMMARY=%d %d 0 0 %d\n' "$ran" "$ran" "$elapsed"

@@ -8,6 +8,8 @@
           testing-runner-last-report
           testing-runner-rerun-failed
           testing-runner-run
+          testing-runner-plan-files
+          testing-runner-plan-main
           testing-runner-main)
   (import (scheme base)
           (scheme file)
@@ -15,6 +17,7 @@
           (scheme read)
           (scheme time)
           (scheme write)
+          (testing plan)
           (testing registry))
   (begin
     ;; Most recent in-process report, for REPL inspection and reruns.
@@ -278,6 +281,63 @@
                             'failed
                             'passed))
                   (list 'report report)))))))
+
+    (define (testing-runner-plan-files plan-path shard-name)
+      "Return files selected from PLAN-PATH by SHARD-NAME."
+      #((parameters
+         (plan-path (type string) (description "Scheme test-plan path."))
+         (shard-name (type symbol) (description "Named plan shard.")))
+        (returns (type (list-of string)) (description "Selected files."))
+        (effects file-read allocation error))
+      (testing-plan-files (testing-plan-read plan-path) shard-name))
+
+    (define (testing-runner-plan-option arguments option fallback)
+      "Return OPTION's value from ARGUMENTS, or FALLBACK when absent."
+      (let loop ((rest arguments))
+        (cond
+         ((null? rest) fallback)
+         ((null? (cdr rest))
+          (error "missing test plan runner option value" (car rest)))
+         ((string=? (car rest) option) (cadr rest))
+         ((or (string=? (car rest) "--plan")
+              (string=? (car rest) "--shard"))
+          (loop (cddr rest)))
+         (else (error "unknown test plan runner option" (car rest))))))
+
+    (define (testing-runner-plan-main arguments)
+      "Resolve a Scheme test plan and write selected program paths."
+      #((parameters
+         (arguments (type list) (description "Command line including program.")))
+        (returns (type unspecified) (description "Unspecified value."))
+        (effects environment-read file-read port-io error))
+      (guard (condition
+              (else
+               (write (list 'testing-runner-plan-error condition)
+                      (current-error-port))
+               (newline (current-error-port))
+               (raise condition)))
+        (let* ((environment-plan
+                (get-environment-variable "TESTING_PLAN_FILE"))
+               (environment-shard
+                (get-environment-variable "TESTING_PLAN_SHARD"))
+               (effective
+                (if (and environment-plan environment-shard)
+                    '()
+                    (testing-runner-effective-arguments arguments)))
+               (plan-path
+                (if environment-plan
+                    environment-plan
+                    (testing-runner-plan-option effective "--plan" #f)))
+               (shard-text
+                (if environment-shard
+                    environment-shard
+                    (testing-runner-plan-option effective "--shard" #f))))
+          (if (not plan-path) (error "missing test plan path"))
+          (if (not shard-text) (error "missing test plan shard"))
+          (for-each
+           (lambda (path) (display path) (newline))
+           (testing-runner-plan-files
+            plan-path (string->symbol shard-text))))))
 
     (define (testing-runner-main suite arguments)
       "Run SUITE from command-line ARGUMENTS and exit with batch status."
