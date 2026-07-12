@@ -12,8 +12,8 @@
 
 (import (scheme base)
         (scheme write)
-        (srfi 42)
-        (srfi 78))
+        (stdlib eager-comprehensions)
+        (stdlib lightweight-testing))
 
 ;; Number of failed adapted upstream SRFI 78 examples seen so far.
 (define upstream-failures 0)

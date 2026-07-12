@@ -9,7 +9,8 @@
 ;;; Local patches wrap the implementation in an R7RS define-library form,
 ;;; import R7RS `(scheme cxr)' / `(scheme write)' support plus SRFI 42
 ;;; eager-comprehensions through `(stdlib eager-comprehensions)', add Consent
-;;; Scheme docstring metadata, and expose
+;;; Scheme docstring metadata, use a call/cc early exit for `check-ec' to
+;;; avoid host-sensitive `first-ec' expansion bugs, and expose
 ;;; `(srfi 78)', `(srfi srfi-78)', `(srfi :78)', and
 ;;; `(srfi :78 lightweight-testing)' as manifest aliases.
 
@@ -239,20 +240,28 @@
          (if (>= check:mode 1)
              (check:proc-ec
               (let ((cases 0))
-                (let ((w (first-ec
-                          #f
-                          qualifiers
-                          (:let equal-pred equal)
-                          (:let expected-result expected)
-                          (:let actual-result
-                                (let ((arg arg) ...)
-                                  expr))
-                          (begin (set! cases (+ cases 1)))
-                          (if (not (equal-pred actual-result expected-result)))
-                          (list (list 'let (list (list 'arg arg) ...) 'expr)
-                                actual-result
-                                expected-result
-                                cases))))
+                (let ((w (call-with-current-continuation
+                          (lambda (return)
+                            (do-ec
+                             qualifiers
+                             (:let equal-pred equal)
+                             (:let expected-result expected)
+                             (:let actual-result
+                                   (let ((arg arg) ...)
+                                     expr))
+                             (begin
+                               (set! cases (+ cases 1))
+                               (if (not (equal-pred actual-result
+                                                    expected-result))
+                                   (return
+                                    (list
+                                     (list 'let
+                                           (list (list 'arg arg) ...)
+                                           'expr)
+                                     actual-result
+                                     expected-result
+                                     cases)))))
+                            #f))))
                   (if w
                       (cons #f w)
                       (list #t

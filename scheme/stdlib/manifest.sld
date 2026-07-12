@@ -1912,6 +1912,7 @@
             (r7rs-cxr-import (library (scheme cxr)))
             (r7rs-write-import (library (scheme write)))
             (srfi-42-dependency (library (stdlib eager-comprehensions)))
+            (check-ec-call/cc-early-exit)
             (rich-docstring-metadata)
             (gambit-helper-exports)
             (registry-aliases

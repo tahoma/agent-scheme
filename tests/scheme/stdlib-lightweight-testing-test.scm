@@ -82,6 +82,19 @@
         (check-passed? 1)
         #f)
 
+;; Count evaluations to prove `check-ec' exits when the first case fails.
+(define check-ec-evaluations 0)
+(check-reset!)
+(check-ec (:range i 100)
+          (begin
+            (set! check-ec-evaluations (+ check-ec-evaluations 1))
+            (< i 3))
+          => #t
+          (i))
+(verify 'check-ec-stops-evaluating-after-first-failure
+        check-ec-evaluations
+        4)
+
 (check-reset!)
 (check-set-mode! 'off)
 ;; State flag used to prove off mode does not evaluate the check expression.
