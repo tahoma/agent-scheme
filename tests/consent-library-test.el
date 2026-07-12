@@ -2492,6 +2492,50 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
       (regexp-quote "missing-random-helper")
       (error-message-string error)))))
 
+(ert-deftest consent-library-test-stdlib-random-distributions-imports ()
+  "Import random distribution helpers and exercise representative behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib random-distributions))
+      (let ((permutation (random-permutation 5))
+            (exponential (random-exponential 2.0))
+            (normal (random-normal 0.0 1.0)))
+        (list (vector-length permutation)
+              (and (real? exponential) (< 0 exponential))
+              (real? normal)))")
+    "(5 #t #t)")))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-random-distributions ()
+  "Expose random distribution helper status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib random-distributions))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name)
+                     '(stdlib random-distributions))
+             (equal? (manifest-field entry 'status)
+                     'srfi-27-example-implementation)
+             (equal? (manifest-field entry 'source)
+                     '(path \"random-distributions.sld\"))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))
+                       (library (scheme inexact))
+                       (library (stdlib random-bits))))
+             (member 'random-source-make-permutations
+                     (manifest-field entry 'exports))
+             (member 'random-source-make-exponentials
+                     (manifest-field entry 'exports))
+             (member 'random-source-make-normals
+                     (manifest-field entry 'exports))
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #f)))")
+    "#t")))
+
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-27 ()
   "Expose SRFI 27 support status through the stdlib manifest."
   (should
