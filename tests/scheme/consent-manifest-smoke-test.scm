@@ -19,6 +19,7 @@
         (srfi :1 lists)
         (srfi 27)
         (srfi :27 random-bits)
+        (stdlib random-distributions)
         (srfi 97)
         (srfi :97 srfi-libraries)
         (srfi 261)
@@ -111,6 +112,10 @@
 ;; Manifest entry for the SRFI 27 legacy random-bits alias.
 (define srfi-27-legacy-entry (stdlib-manifest-ref '(srfi :27 random-bits)))
 
+;; Manifest entry for the random distribution helper library.
+(define random-distributions-entry
+  (stdlib-manifest-ref '(stdlib random-distributions)))
+
 ;; Manifest entry for the SRFI 261 portable SRFI reference alias.
 (define srfi-261-portable-entry (stdlib-manifest-ref '(srfi srfi-261)))
 
@@ -177,6 +182,14 @@
 (check 'manifest-smoke-srfi-27-random-source
        (random-source? (make-random-source))
        #t)
+
+(check 'manifest-smoke-random-distributions-entry-kind
+       (car random-distributions-entry)
+       'manifest-entry)
+
+(check 'manifest-smoke-random-distribution-import
+       (vector-length (random-permutation 4))
+       4)
 
 (check 'manifest-smoke-srfi-97-entry-kind
        (car srfi-97-entry)

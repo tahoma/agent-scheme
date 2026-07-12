@@ -1032,6 +1032,48 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (stdlib random-distributions))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility public)
+        (source-kind source-library)
+        (source (path "random-distributions.sld"))
+        (api-version (compat 0))
+        (source-version (upstream-revision "a547c5508d648c61e73bebed2bcd2283fba5abaa"))
+        (realization portable-source)
+        (exports
+         (random-source-make-permutations random-permutation
+                                          random-source-make-exponentials random-exponential
+                                          random-source-make-normals random-normal))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme inexact))
+          (library (stdlib random-bits))))
+        (provenance
+         ((origin repo)
+          (upstream-source-url "https://srfi.schemers.org/srfi-27/srfi-27.html")
+          (upstream-source-section "Recommended Usage Patterns")
+          (upstream-revision "a547c5508d648c61e73bebed2bcd2283fba5abaa")
+          (upstream-reference
+           "Knuth TAOCP Vol. II, 2nd ed., sections 3.4.1.C, 3.4.1.D, 3.4.2")
+          (upstream-license "MIT") (local-license "MIT") (vendored? #f)
+          (local-patches
+           ((define-library-wrapper (library (stdlib random-distributions)))
+            (stdlib-surface (aliases ()))
+            (argument-validation (scope distribution-parameters))
+            (zero-radius-rejection (scope polar-normal-method))
+            (adapted-tests
+             (file "tests/scheme/stdlib-random-distributions-test.scm"))))))
+        (verification
+         ((test-status
+           (import-resolution representative-distribution-behavior
+            polar-cache-behavior parameter-validation
+            portable-host-suite compiled-host-smoke))))
+        (status srfi-27-example-implementation)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (stdlib receive))
         (owner stdlib)
         (provider repo-source)
