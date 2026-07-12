@@ -35,6 +35,17 @@
   (if (not value)
       (record-failure name #t value)))
 
+(define (all? predicate values)
+  "Return #t when PREDICATE accepts every item in VALUES."
+  (cond
+   ((null? values) #t)
+   ((predicate (car values)) (all? predicate (cdr values)))
+   (else #f)))
+
+(define (generated-sample generator count)
+  "Return COUNT values from GENERATOR."
+  (generator->list generator count))
+
 (define (runner-counts runner)
   "Return RUNNER pass, fail, xfail, xpass, and skip counts."
   (list (test-runner-pass-count runner)
@@ -137,6 +148,62 @@
            (test-end "error-properties"))))
        '(3 0 0 0 0))
 
+(check 'property-test-failure-counts
+       (runner-counts
+        (with-null-runner
+         (lambda (runner)
+           (test-begin "failing-properties" 3)
+           (test-property
+            (lambda (value)
+              value
+              #f)
+            (list (boolean-generator))
+            3)
+           (test-end "failing-properties"))))
+       '(0 3 0 0 0))
+
+(check 'property-expect-fail-xpass-counts
+       (runner-counts
+        (with-null-runner
+         (lambda (runner)
+           (test-begin "unexpected-passes" 2)
+           (test-property-expect-fail boolean? (list (boolean-generator)) 2)
+           (test-end "unexpected-passes"))))
+       '(0 0 0 2 0))
+
+(check 'property-error-missing-error-counts
+       (runner-counts
+        (with-null-runner
+         (lambda (runner)
+           (test-begin "missing-errors" 2)
+           (test-property-error
+            (lambda (value) value)
+            (list (boolean-generator))
+            2)
+           (test-end "missing-errors"))))
+       '(0 2 0 0 0))
+
+(check 'property-error-type-records-expected-error
+       (let ((properties '()))
+         (with-null-runner
+          (lambda (runner)
+            (test-runner-on-test-end!
+             runner
+             (lambda (active)
+               (set! properties
+                     (cons (test-result-alist active) properties))))
+            (test-begin "typed-errors" 2)
+            (test-property-error-type
+             'expected-error-kind
+             (lambda (value) (error "expected typed property error" value))
+             (list (integer-generator))
+             2)
+            (test-end "typed-errors")))
+         (map (lambda (entry)
+                (cdr (assq 'expected-error entry)))
+              properties))
+       '(expected-error-kind expected-error-kind))
+
 (check 'property-test-runner-is-srfi-64-runner
        (test-runner? (property-test-runner))
        #t)
@@ -160,14 +227,14 @@
 (check-true 'collection-generators-obey-explicit-bounds
             (let* ((lists (list-generator-of (circular-generator 'x) 4))
                    (vectors (vector-generator-of (circular-generator 'x) 4))
-                   (empty-list (lists))
-                   (sample-list (lists))
-                   (empty-vector (vectors))
-                   (sample-vector (vectors)))
-              (and (null? empty-list)
-                   (< (length sample-list) 4)
-                   (= (vector-length empty-vector) 0)
-                   (< (vector-length sample-vector) 4))))
+                   (list-samples (generated-sample lists 12))
+                   (vector-samples (generated-sample vectors 12)))
+              (and (null? (car list-samples))
+                   (all? (lambda (sample) (< (length sample) 4))
+                         list-samples)
+                   (= (vector-length (car vector-samples)) 0)
+                   (all? (lambda (sample) (< (vector-length sample) 4))
+                         vector-samples))))
 
 (check 'procedure-generator-of-values
        (let ((procedures (procedure-generator-of (generator 'first 'second))))
@@ -177,12 +244,41 @@
 (check 'deterministic-random-source-replays-generated-numbers
        (let ((left
               (parameterize ((current-random-source (make-random-source)))
-                (generator->list (gdrop (exact-number-generator) 30) 8)))
+                (generated-sample (gdrop (exact-number-generator) 30) 8)))
              (right
               (parameterize ((current-random-source (make-random-source)))
-                (generator->list (gdrop (exact-number-generator) 30) 8))))
+                (generated-sample (gdrop (exact-number-generator) 30) 8))))
          (equal? left right))
        #t)
+
+(check 'independent-random-generators-diverge-after-special-prefix
+       (let ((left (gdrop (exact-number-generator) 30))
+             (right (gdrop (exact-number-generator) 30)))
+         (not (equal? (generated-sample left 8)
+                      (generated-sample right 8))))
+       #t)
+
+(check 'exact-integer-generator-special-prefix
+       (generated-sample (exact-integer-generator) 3)
+       '(0 1 -1))
+
+(check-true 'char-generator-skips-surrogate-code-points
+            (all? (lambda (char)
+                    (let ((scalar (char->integer char)))
+                      (or (< scalar #xd800) (> scalar #xdfff))))
+                  (generated-sample (char-generator) 64)))
+
+(check-true 'basic-generators-obey-size-bounds
+            (let ((bytevectors (generated-sample (bytevector-generator) 16))
+                  (strings (generated-sample (string-generator) 16))
+                  (symbols (generated-sample (symbol-generator) 16)))
+              (and (all? (lambda (value) (<= (bytevector-length value) 1001))
+                         bytevectors)
+                   (all? (lambda (value) (<= (string-length value) 1001))
+                         strings)
+                   (all? (lambda (value)
+                           (<= (string-length (symbol->string value)) 1001))
+                         symbols))))
 
 (check-true 'numeric-generators-produce-representative-values
             (let ((values (list ((exact-integer-generator))

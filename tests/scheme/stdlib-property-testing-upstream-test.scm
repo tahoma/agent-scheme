@@ -22,6 +22,12 @@
 ;; Bounded property assertion count used by this adapted upstream fixture.
 (define sample-count 6)
 
+;; Upstream's explicit small run count for representative control forms.
+(define explicit-upstream-count 10)
+
+;; SRFI 252's default property assertion count.
+(define default-count 100)
+
 (define (record-failure name expected actual)
   "Record one failed adapted-upstream SRFI 252 check."
   (set! failures (+ failures 1))
@@ -96,6 +102,10 @@
 (test-with-runner adapted-runner
   (test-begin "property-test-adapted-upstream")
 
+  (test-property three-property (list (integer-generator)))
+  (test-property three-property (list (real-generator)))
+  (test-property three-property (list (integer-generator))
+                 explicit-upstream-count)
   (test-property three-property (list (integer-generator)) sample-count)
   (test-property three-property (list (real-generator)) sample-count)
   (test-property (lambda (flag number)
@@ -103,11 +113,26 @@
                  (list (boolean-generator) (integer-generator))
                  sample-count)
 
+  (test-property-expect-fail wrong-three-property (list (integer-generator)))
+  (test-property-expect-fail
+   wrong-three-property
+   (list (integer-generator))
+   explicit-upstream-count)
   (test-property-expect-fail
    wrong-three-property
    (list (integer-generator))
    sample-count)
+  (test-property-skip three-property (list (bad-generator)))
+  (test-property-skip
+   three-property
+   (list (bad-generator))
+   explicit-upstream-count)
   (test-property-skip three-property (list (bad-generator)) sample-count)
+  (test-property-error error-three-property (list (integer-generator)))
+  (test-property-error
+   error-three-property
+   (list (integer-generator))
+   explicit-upstream-count)
   (test-property-error
    error-three-property
    (list (integer-generator))
@@ -220,7 +245,9 @@
        (list (test-runner-fail-count adapted-runner)
              (test-runner-xfail-count adapted-runner)
              (test-runner-skip-count adapted-runner))
-       (list 0 sample-count sample-count))
+       (list 0
+             (+ default-count explicit-upstream-count sample-count)
+             (+ default-count explicit-upstream-count sample-count)))
 
 (check 'adapted-upstream-error-tests-pass
        (test-runner-pass-count
@@ -244,6 +271,13 @@
               (parameterize ((current-random-source (make-random-source)))
                 (generator->list (gdrop (exact-number-generator) 30) 8))))
          (equal? left right))
+       #t)
+
+(check 'adapted-upstream-non-determinism
+       (let ((left (gdrop (exact-number-generator) 30))
+             (right (gdrop (exact-number-generator) 30)))
+         (not (equal? (generator->list left 8)
+                      (generator->list right 8))))
        #t)
 
 (finish-property-testing-upstream-tests)
