@@ -2599,6 +2599,98 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (eq? (manifest-subfield entry 'provenance 'vendored?) #f)))")
     "#t")))
 
+(ert-deftest consent-library-test-srfi-194-imports-and-uses-random-data-generators ()
+  "Import SRFI 194 aliases and exercise representative generator behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (scheme complex) (stdlib generator) (srfi 194))
+      (define (all-in-range? values low high)
+        (let loop ((rest values))
+          (cond
+           ((null? rest) #t)
+           ((and (>= (car rest) low) (< (car rest) high))
+            (loop (cdr rest)))
+           (else #f))))
+      (let ((integers (generator->list
+                       (make-random-integer-generator -3 7)
+                       20))
+            (category ((make-categorical-generator '#(0 5 0))))
+            (bernoulli ((make-bernoulli-generator 1)))
+            (point ((make-sphere-generator 2)))
+            (sample (gsampling (generator 'x 'y))))
+        (list (all-in-range? integers -3 7)
+              category
+              bernoulli
+              (vector-length point)
+              (list (sample) (sample) (eof-object? (sample)))))")
+    "(#t 1 1 3 (x y #t))"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (scheme complex) (srfi srfi-194))
+      (let ((z ((make-random-rectangular-generator -1.0 1.0 -2.0 2.0)))
+            (g (make-geometric-generator 1)))
+        (list (complex? z) (g)))")
+    "(#t 1)")))
+
+(ert-deftest consent-library-test-srfi-194-missing-export-diagnostic ()
+  "Report missing SRFI 194 imports through the resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 194) missing-random-data-helper))
+            missing-random-data-helper")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-random-data-helper")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-194 ()
+  "Expose SRFI 194 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib random-data-generators)))
+            (alias (stdlib-manifest-ref '(srfi 194)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-194))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name)
+                     '(stdlib random-data-generators))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 194) (srfi srfi-194)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))
+                       (library (scheme case-lambda))
+                       (library (scheme inexact))
+                       (library (scheme complex))
+                       (library (stdlib random-bits))
+                       (library (stdlib generator))))
+             (member 'make-random-integer-generator
+                     (manifest-field entry 'exports))
+             (member 'make-categorical-generator
+                     (manifest-field entry 'exports))
+             (member 'make-sphere-generator
+                     (manifest-field entry 'exports))
+             (equal? (manifest-field alias 'target)
+                     '(stdlib random-data-generators))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib random-data-generators))))")
+    "#t")))
+
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-27 ()
   "Expose SRFI 27 support status through the stdlib manifest."
   (should
@@ -3485,6 +3577,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
   (let ((vendored (consent-library-test--vendored-srfi-record 1))
         (testing (consent-library-test--vendored-srfi-record 64))
         (random-bits (consent-library-test--vendored-srfi-record 27))
+        (random-data (consent-library-test--vendored-srfi-record 194))
         (cond-expand (consent-library-test--vendored-srfi-record 0))
         (shim (consent-library-test--vendored-srfi-record 16))
         (libraries (consent-library-test--vendored-srfi-record 97))
@@ -3648,6 +3741,56 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                     (mapcar #'consent-datum->external
                             (consent-library-test--record-field
                              random-bits 'tests))))
+
+    (should (equal (consent-library-test--record-field-external
+                    random-data 'number)
+                   "194"))
+    (should (equal (consent-library-test--record-field-external
+                    random-data 'name)
+                   "random-data-generators"))
+    (should (equal (consent-library-test--record-field-external
+                    random-data 'library)
+                   "(stdlib random-data-generators)"))
+    (should (equal (consent-library-test--record-field-external
+                    random-data 'classification)
+                   "vendored-library"))
+    (should (equal (consent-library-test--record-field-external
+                    random-data 'status)
+                   "vendored-adapted-implementation"))
+    (should (equal (consent-library-test--record-field
+                    random-data 'source-url)
+                   "https://github.com/scheme-requests-for-implementation/srfi-194"))
+    (should (equal (consent-library-test--record-field
+                    random-data 'license)
+                   "MIT"))
+    (should (member "(srfi 194)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-data 'import-names))))
+    (should (member "(srfi srfi-194)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-data 'import-names))))
+    (should (member "(stdlib random-data-generators)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-data 'import-names))))
+    (should (member "(library (stdlib random-bits))"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-data 'dependencies))))
+    (should (member "(library (stdlib generator))"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-data 'dependencies))))
+    (should (member "adapted-upstream-tests"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-data 'tests))))
+    (should (member "portable-host-suite"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-data 'tests))))
 
     (should (equal (consent-library-test--record-field-external
                     cond-expand 'number)

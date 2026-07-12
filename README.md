@@ -42,7 +42,9 @@ protocol/document boundaries, with `(consent json)`, `(srfi 180)`, and
 `(srfi 16)` and `(srfi srfi-16)` over the R7RS `(scheme case-lambda)` library,
 SRFI 2 `and-let*` through `(stdlib and-let-star)`, `(srfi 2)`, and
 `(srfi srfi-2)`, SRFI 1 lists through `(stdlib list)`, `(scheme list)`,
-`(srfi 1)`, and `(srfi srfi-1)`, plus `(stdlib comparator)` with R7RS-large
+`(srfi 1)`, and `(srfi srfi-1)`, SRFI 194 random data generators through
+`(stdlib random-data-generators)`, `(srfi 194)`, and `(srfi srfi-194)`,
+plus `(stdlib comparator)` with R7RS-large
 `(scheme comparator)`, `(srfi 128)`, and `(srfi srfi-128)` compatibility.
 Import failures outside implemented
 `stdlib` libraries should not be read as R7RS-small conformance failures.

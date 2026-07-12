@@ -1413,6 +1413,131 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (stdlib random-data-generators))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility public)
+        (source-kind source-library)
+        (source (path "random-data-generators.sld"))
+        (api-version (compat 0))
+        (source-version (upstream-revision "f2110d303dee2c5bbedc3bc0dfd841f3dacc4b4b"))
+        (realization portable-source)
+        (aliases ((srfi 194) (srfi srfi-194)))
+        (exports
+         (clamp-real-number
+          current-random-source
+          with-random-source
+          make-random-source-generator
+          make-random-integer-generator
+          make-random-u1-generator
+          make-random-u8-generator
+          make-random-s8-generator
+          make-random-u16-generator
+          make-random-s16-generator
+          make-random-u32-generator
+          make-random-s32-generator
+          make-random-u64-generator
+          make-random-s64-generator
+          make-random-real-generator
+          make-random-rectangular-generator
+          make-random-polar-generator
+          make-random-boolean-generator
+          make-random-char-generator
+          make-random-string-generator
+          make-bernoulli-generator
+          make-binomial-generator
+          make-categorical-generator
+          make-normal-generator
+          make-exponential-generator
+          make-geometric-generator
+          make-poisson-generator
+          make-zipf-generator
+          make-sphere-generator
+          make-ellipsoid-generator
+          make-ball-generator
+          gsampling))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme case-lambda))
+          (library (scheme inexact))
+          (library (scheme complex))
+          (library (stdlib random-bits))
+          (library (stdlib generator))))
+        (provenance
+         ((origin repo)
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-194")
+          (local-reference-documents
+           ((path "reference/srfi-194/srfi-194.html")
+            (role specification)
+            (source srfi)))
+          (upstream-source-files
+           ("srfi/194.sld" "srfi/194-impl.scm"
+            "srfi/zipf-zri.scm" "srfi/sphere.scm"))
+          (upstream-test-files ("srfi-194-test.scm"))
+          (upstream-revision "f2110d303dee2c5bbedc3bc0dfd841f3dacc4b4b")
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((library-name (from (srfi 194))
+             (to (stdlib random-data-generators)))
+            (registry-aliases (aliases (srfi 194) (srfi srfi-194)))
+            (dependency-imports
+             (from ((srfi 27) (srfi 158)))
+             (to ((stdlib random-bits) (stdlib generator))))
+            (inlined-includes
+             (files "srfi/194-impl.scm" "srfi/zipf-zri.scm" "srfi/sphere.scm"))
+            (srfi-133-vector-helpers (source local-portable-loops))
+            (documentation-metadata (scope exported-procedures))
+            (adapted-tests
+             (file "tests/scheme/stdlib-random-data-generators-test.scm"))))))
+        (verification
+         ((test-status
+           (import-resolution representative-random-data-behavior
+                              adapted-upstream-tests
+                              missing-export-diagnostic portable-host-suite
+                              compiled-host-smoke))))
+        (status vendored-adapted-implementation)
+        (canonical #t))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi 194))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib random-data-generators)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib random-data-generators))
+        (aliases ((srfi srfi-194)))
+        (dependencies
+         ((library (stdlib random-data-generators))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi srfi-194))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib random-data-generators)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib random-data-generators))
+        (dependencies
+         ((library (stdlib random-data-generators))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (stdlib receive))
         (owner stdlib)
         (provider repo-source)
