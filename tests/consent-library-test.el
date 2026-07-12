@@ -1305,6 +1305,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
     "(stdlib random-bits)"
     "(stdlib random-distributions)"
     "(stdlib property-testing)"
+    "(stdlib lightweight-testing)"
     "(stdlib receive)"
     "(stdlib assume)"
     "(stdlib comparator)"
@@ -2929,6 +2930,119 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                      '(stdlib eager-comprehensions))))")
     "#t")))
 
+(ert-deftest consent-library-test-srfi-78-lightweight-testing-imports ()
+  "Import SRFI 78 aliases and exercise representative check behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 78))
+      (check-set-mode! 'summary)
+      (check-reset!)
+      (check (+ 1 1) => 2)
+      (let ((first (check-passed? 1)))
+        (check (+ 1 1) => 3)
+        (list first (check-passed? 2)))")
+    "(#t #f)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 42) (srfi srfi-78))
+      (check-set-mode! 'summary)
+      (check-reset!)
+      (check-ec (:range i 5) (< i 5) => #t (i))
+      (check-passed? 1)")
+    "#t"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :78 lightweight-testing))
+      (check-set-mode! 'summary)
+      (check-reset!)
+      (check (vector 1) (=> equal?) (vector 1))
+      (check-passed? 1)")
+    "#t"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :78))
+      (check-set-mode! 'off)
+      (check-reset!)
+      (check-passed? 0)")
+    "#t")))
+
+(ert-deftest consent-library-test-srfi-78-missing-export-diagnostic ()
+  "Report missing SRFI 78 imports through the ordinary resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 78) missing-lightweight-helper))
+            missing-lightweight-helper")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-lightweight-helper")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-78 ()
+  "Expose SRFI 78 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib lightweight-testing)))
+            (alias (stdlib-manifest-ref '(srfi 78)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-78)))
+            (legacy-number-alias (stdlib-manifest-ref '(srfi :78)))
+            (legacy-alias
+             (stdlib-manifest-ref '(srfi :78 lightweight-testing))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name)
+                     '(stdlib lightweight-testing))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'upstream-status)
+                     'final)
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (equal? (manifest-subfield entry 'provenance
+                                        'local-reference-documents)
+                     '((path \"reference/srfi-78/srfi-78.html\")
+                       (role specification)
+                       (source srfi)))
+             (member
+              '(adapted-tests
+                (file \"tests/scheme/stdlib-lightweight-testing-test.scm\")
+                (file
+                 \"tests/scheme/stdlib-lightweight-testing-upstream-test.scm\"))
+              (manifest-subfield entry 'provenance 'local-patches))
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 78)
+                       (srfi srfi-78)
+                       (srfi :78)
+                       (srfi :78 lightweight-testing)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))
+                       (library (scheme cxr))
+                       (library (scheme write))
+                       (library (stdlib eager-comprehensions))))
+             (member 'check (manifest-field entry 'exports))
+             (member 'check-ec (manifest-field entry 'exports))
+             (member 'check-report (manifest-field entry 'exports))
+             (equal? (manifest-field alias 'target)
+                     '(stdlib lightweight-testing))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib lightweight-testing))
+             (equal? (manifest-field legacy-number-alias 'target)
+                     '(stdlib lightweight-testing))
+             (equal? (manifest-field legacy-alias 'target)
+                     '(stdlib lightweight-testing))))")
+    "#t")))
+
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-27 ()
   "Expose SRFI 27 support status through the stdlib manifest."
   (should
@@ -3817,6 +3931,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
         (random-bits (consent-library-test--vendored-srfi-record 27))
         (random-data (consent-library-test--vendored-srfi-record 194))
         (property-testing (consent-library-test--vendored-srfi-record 252))
+        (lightweight-testing (consent-library-test--vendored-srfi-record 78))
         (cond-expand (consent-library-test--vendored-srfi-record 0))
         (shim (consent-library-test--vendored-srfi-record 16))
         (libraries (consent-library-test--vendored-srfi-record 97))
@@ -3922,6 +4037,60 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                     (mapcar #'consent-datum->external
                             (consent-library-test--record-field
                              testing 'tests))))
+
+    (should (equal (consent-library-test--record-field-external
+                    lightweight-testing 'number)
+                   "78"))
+    (should (equal (consent-library-test--record-field-external
+                    lightweight-testing 'name)
+                   "lightweight-testing"))
+    (should (equal (consent-library-test--record-field-external
+                    lightweight-testing 'library)
+                   "(stdlib lightweight-testing)"))
+    (should (equal (consent-library-test--record-field-external
+                    lightweight-testing 'classification)
+                   "vendored-library"))
+    (should (equal (consent-library-test--record-field-external
+                    lightweight-testing 'status)
+                   "vendored-adapted-implementation"))
+    (should (equal (consent-library-test--record-field
+                    lightweight-testing 'source-url)
+                   "https://srfi.schemers.org/srfi-78/"))
+    (should (equal (consent-library-test--record-field
+                    lightweight-testing 'license)
+                   "MIT"))
+    (should (member "(srfi 78)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             lightweight-testing 'import-names))))
+    (should (member "(srfi srfi-78)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             lightweight-testing 'import-names))))
+    (should (member "(srfi :78)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             lightweight-testing 'import-names))))
+    (should (member "(srfi :78 lightweight-testing)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             lightweight-testing 'import-names))))
+    (should (member "(stdlib lightweight-testing)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             lightweight-testing 'import-names))))
+    (should (member "(library (stdlib eager-comprehensions))"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             lightweight-testing 'dependencies))))
+    (should (member "adapted-upstream-examples"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             lightweight-testing 'tests))))
+    (should (member "portable-host-suite"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             lightweight-testing 'tests))))
 
     (should (equal (consent-library-test--record-field-external
                     random-bits 'number)

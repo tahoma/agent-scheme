@@ -1857,6 +1857,150 @@
         (target (stdlib eager-comprehensions))
         (dependencies
          ((library (stdlib eager-comprehensions))))
+       (provenance ((origin repo)))
+       (verification ((test-status (import-resolution))))
+       (status alias)
+       (canonical #f))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (stdlib lightweight-testing))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility public)
+        (source-kind source-library)
+        (source (path "lightweight-testing.sld"))
+        (api-version (compat 0))
+        (source-version final)
+        (realization portable-source)
+        (aliases
+         ((srfi 78) (srfi srfi-78)
+          (srfi :78) (srfi :78 lightweight-testing)))
+        (exports
+         (check
+          check-ec
+          check-report
+          check-set-mode!
+          check-reset!
+          check-passed?))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme cxr))
+          (library (scheme write))
+          (library (stdlib eager-comprehensions))))
+        (provenance
+         ((origin repo)
+          (upstream-source-url "https://srfi.schemers.org/srfi-78/")
+          (local-reference-documents
+           ((path "reference/srfi-78/srfi-78.html")
+            (role specification)
+            (source srfi)))
+          (upstream-status final)
+          (upstream-source-files ("check.scm" "examples.scm"))
+          (upstream-source-urls
+           (("check.scm" . "https://srfi.schemers.org/srfi-78/check.scm")
+            ("examples.scm" . "https://srfi.schemers.org/srfi-78/examples.scm")))
+          (upstream-source-sha256
+           "ade1da44903e9208d906dbccd3bf2935b72cfea9dafc2d4db2ef6d0a5712568a")
+          (upstream-example-sha256
+           "8058de61b647dca9431852b091fe0e439ea8297f12f5dcd5c257294cee405fc9")
+          (upstream-spec-sha256
+           "fefdfc94bae8c692c078bb16217b06c4373f835a3d4072cf78526c596b5a3924")
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((define-library-wrapper (library (stdlib lightweight-testing)))
+            (r7rs-cxr-import (library (scheme cxr)))
+            (r7rs-write-import (library (scheme write)))
+            (srfi-42-dependency (library (stdlib eager-comprehensions)))
+            (rich-docstring-metadata)
+            (gambit-helper-exports)
+            (registry-aliases
+             (aliases (srfi 78) (srfi srfi-78)
+                      (srfi :78) (srfi :78 lightweight-testing)))
+            (adapted-tests
+             (file "tests/scheme/stdlib-lightweight-testing-test.scm")
+             (file
+              "tests/scheme/stdlib-lightweight-testing-upstream-test.scm"))))))
+        (verification
+         ((test-status
+           (import-resolution representative-lightweight-testing-behavior
+                              check-ec-behavior report-behavior
+                              adapted-upstream-examples
+                              missing-export-diagnostic portable-host-suite
+                              compiled-host-smoke))))
+        (status vendored-adapted-implementation)
+        (canonical #t))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi 78))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib lightweight-testing)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib lightweight-testing))
+        (aliases ((srfi srfi-78)
+                  (srfi :78)
+                  (srfi :78 lightweight-testing)))
+        (dependencies
+         ((library (stdlib lightweight-testing))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi srfi-78))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib lightweight-testing)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib lightweight-testing))
+        (dependencies
+         ((library (stdlib lightweight-testing))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi :78))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib lightweight-testing)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib lightweight-testing))
+        (dependencies
+         ((library (stdlib lightweight-testing))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi :78 lightweight-testing))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib lightweight-testing)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib lightweight-testing))
+        (dependencies
+         ((library (stdlib lightweight-testing))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
