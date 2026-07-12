@@ -1,2 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+
 tests/scheme/consent-reader-test.scm
 tests/scheme/consent-manifest-smoke-test.scm
