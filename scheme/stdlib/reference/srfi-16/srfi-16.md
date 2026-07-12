@@ -8,7 +8,14 @@ by Lars T Hansen
 
 ## Status
 
-This SRFI is currently in *final* status. Here is [an explanation](https://srfi.schemers.org/srfi-process.html) of each status that a SRFI can hold. To provide input on this SRFI, please send email to [`srfi-16@`<span class="antispam">`nospam`</span>`srfi.schemers.org`](mailto:srfi+minus+16+at+srfi+dotschemers+dot+org). To subscribe to the list, follow [these instructions](https://srfi.schemers.org/srfi-list-subscribe.html). You can access previous messages via the mailing list [archive](https://srfi-email.schemers.org/srfi-16).
+This SRFI is currently in *final* status. Here is
+[an explanation](https://srfi.schemers.org/srfi-process.html) of each status
+that a SRFI can hold. To provide input on this SRFI, please send email to
+[`srfi-16@`<span class="antispam">`nospam`</span>`srfi.schemers.org`](mailto:srfi+minus+16+at+srfi+dotschemers+dot+org).
+To subscribe to the list, follow
+[these instructions](https://srfi.schemers.org/srfi-list-subscribe.html). You
+can access previous messages via the mailing list
+[archive](https://srfi-email.schemers.org/srfi-16).
 
 - Received: 1999-11-01
 - Draft: 1999-11-06--2000-01-07
@@ -16,23 +23,39 @@ This SRFI is currently in *final* status. Here is [an explanation](https://srfi.
 
 ## Abstract
 
-CASE-LAMBDA, a syntax for procedures with a variable number of arguments, is introduced.
+CASE-LAMBDA, a syntax for procedures with a variable number of arguments, is
+introduced.
 
 ## Rationale
 
-CASE-LAMBDA reduces the clutter of procedures that execute different code depending on the number of arguments they were passed; it is a pattern-matching mechanism that matches on the number of arguments. CASE-LAMBDA is available in some Scheme systems.
+CASE-LAMBDA reduces the clutter of procedures that execute different code
+depending on the number of arguments they were passed; it is a pattern-matching
+mechanism that matches on the number of arguments. CASE-LAMBDA is available in
+some Scheme systems.
 
-While CASE-LAMBDA can be implemented as a macro using only facilities available in R5RS Scheme, it admits considerable implementation-specific optimization.
+While CASE-LAMBDA can be implemented as a macro using only facilities available
+in R5RS Scheme, it admits considerable implementation-specific optimization.
 
 ## Specification
 
 (CASE-LAMBDA \<clause> ...)\
 Syntax\
-Each \<clause> should have the form (\<formals> \<body>), where \<formals> is a formal arguments list as for LAMBDA, cf section 4.1.4 of the R5RS. Each \<body> is a \<tail-body>, cf section 3.5 of the R5RS.
+Each \<clause> should have the form (\<formals> \<body>), where \<formals> is a
+formal arguments list as for LAMBDA, cf section 4.1.4 of the R5RS. Each \<body>
+is a \<tail-body>, cf section 3.5 of the R5RS.
 
-A CASE-LAMBDA expression evaluates to a procedure that accepts a variable number of arguments and is lexically scoped in the same manner as procedures resulting from LAMBDA expressions. When the procedure is called with some arguments V1 .. Vk, then the first \<clause> for which the arguments agree with \<formals> is selected, where agreement is specified as for the \<formals> of a LAMBDA expression. The variables of \<formals> are bound to fresh locations, the values V1 .. Vk are stored in those locations, the \<body> is evaluated in the extended environment, and the results of \<body> are returned as the results of the procedure call.
+A CASE-LAMBDA expression evaluates to a procedure that accepts a variable number
+of arguments and is lexically scoped in the same manner as procedures resulting
+from LAMBDA expressions. When the procedure is called with some arguments V1 ..
+Vk, then the first \<clause> for which the arguments agree with \<formals> is
+selected, where agreement is specified as for the \<formals> of a LAMBDA
+expression. The variables of \<formals> are bound to fresh locations, the values
+V1 .. Vk are stored in those locations, the \<body> is evaluated in the extended
+environment, and the results of \<body> are returned as the results of the
+procedure call.
 
-It is an error for the arguments not to agree with the \<formals> of any \<clause>.
+It is an error for the arguments not to agree with the \<formals> of any
+\<clause>.
 
 ```
              (define plus
@@ -55,9 +78,12 @@ It is an error for the arguments not to agree with the \<formals> of any \<claus
 
 ## Implementation
 
-The following implementation is written in R5RS Scheme. It is not compatible with the IEEE Scheme standard because the IEEE standard does not contain the high-level macro system.
+The following implementation is written in R5RS Scheme. It is not compatible
+with the IEEE Scheme standard because the IEEE standard does not contain the
+high-level macro system.
 
-The implementation assumes that some top-level names defined by the R5RS are bound to their original values.
+The implementation assumes that some top-level names defined by the R5RS are
+bound to their original values.
 
 ```
 ;; This code is in the public domain.
@@ -110,14 +136,26 @@ The implementation assumes that some top-level names defined by the R5RS are bou
 
 Copyright (C) Lars T Hansen (1999). All Rights Reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ______________________________________________________________________
 
-Editor: [Mike Sperber](mailto:srfi%20minus%20editors%20at%20srfi%20dot%20schemers%20dot%20org)
+Editor:
+[Mike Sperber](mailto:srfi%20minus%20editors%20at%20srfi%20dot%20schemers%20dot%20org)
 
 Last modified: Fri Sep 18 18:34:31 MST 2009

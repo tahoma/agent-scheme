@@ -5,11 +5,19 @@
 # [<img src="https://srfi.schemers.org/srfi-logo.svg" class="srfi-logo" alt="SRFI surfboard logo" />](https://srfi.schemers.org/)8: `receive`: Binding to multiple values
 
 by John David Stone\
-Department of Mathematics and Computer Science, Grinnell College, Grinnell, Iowa 50112, [email](mailto:stone@cs.grinnell.edu).
+Department of Mathematics and Computer Science, Grinnell College, Grinnell, Iowa
+50112, [email](mailto:stone@cs.grinnell.edu).
 
 ## Status
 
-This SRFI is currently in *final* status. Here is [an explanation](https://srfi.schemers.org/srfi-process.html) of each status that a SRFI can hold. To provide input on this SRFI, please send email to [`srfi-8@`<span class="antispam">`nospam`</span>`srfi.schemers.org`](mailto:srfi+minus+8+at+srfi+dotschemers+dot+org). To subscribe to the list, follow [these instructions](https://srfi.schemers.org/srfi-list-subscribe.html). You can access previous messages via the mailing list [archive](https://srfi-email.schemers.org/srfi-8).
+This SRFI is currently in *final* status. Here is
+[an explanation](https://srfi.schemers.org/srfi-process.html) of each status
+that a SRFI can hold. To provide input on this SRFI, please send email to
+[`srfi-8@`<span class="antispam">`nospam`</span>`srfi.schemers.org`](mailto:srfi+minus+8+at+srfi+dotschemers+dot+org).
+To subscribe to the list, follow
+[these instructions](https://srfi.schemers.org/srfi-list-subscribe.html). You
+can access previous messages via the mailing list
+[archive](https://srfi-email.schemers.org/srfi-8).
 
 - Received: 1999-05-27
 - Draft: 1999-07-01--1999-08-30
@@ -17,17 +25,26 @@ This SRFI is currently in *final* status. Here is [an explanation](https://srfi.
 
 ## Related SRFIs
 
-The syntax proposed in this SRFI is used in the reference implementation of [SRFI-1](../srfi-1/), “List library.”
+The syntax proposed in this SRFI is used in the reference implementation of
+[SRFI-1](../srfi-1/), “List library.”
 
 ## Abstract
 
-The only mechanism that R<sup>5</sup>RS provides for binding identifiers to the values of a multiple-valued expression is the primitive `call-with-values`. This SRFI proposes a more concise, more readable syntax for creating such bindings.
+The only mechanism that R<sup>5</sup>RS provides for binding identifiers to the
+values of a multiple-valued expression is the primitive `call-with-values`. This
+SRFI proposes a more concise, more readable syntax for creating such bindings.
 
 ## Rationale
 
-Although R<sup>5</sup>RS supports multiple-valued expressions, it provides only the essential procedures `values` and `call-with-values`. It is evident that the authors expected Scheme programmers to define other constructs in terms of these, abstracting common patterns of use.
+Although R<sup>5</sup>RS supports multiple-valued expressions, it provides only
+the essential procedures `values` and `call-with-values`. It is evident that the
+authors expected Scheme programmers to define other constructs in terms of
+these, abstracting common patterns of use.
 
-One such pattern consists in binding an identifier to each of the values of a multiple-valued expression and then evaluating an expression in the scope of the bindings. As an instance of this pattern, consider the following excerpt from a quicksort procedure:
+One such pattern consists in binding an identifier to each of the values of a
+multiple-valued expression and then evaluating an expression in the scope of the
+bindings. As an instance of this pattern, consider the following excerpt from a
+quicksort procedure:
 
 ```
 (call-with-values
@@ -37,32 +54,69 @@ One such pattern consists in binding an identifier to each of the values of a mu
     (append (qsort fore) (cons pivot (qsort aft)))))
 ```
 
-Here `partition` is a multiple-valued procedure that takes two arguments, a predicate and a list, and returns two lists, one comprising the list elements that satisfy the predicate, the other those that do not. The purpose of the expression shown is to partition the list `others`, sort each of the sublists, and recombine the results into a sorted list.
+Here `partition` is a multiple-valued procedure that takes two arguments, a
+predicate and a list, and returns two lists, one comprising the list elements
+that satisfy the predicate, the other those that do not. The purpose of the
+expression shown is to partition the list `others`, sort each of the sublists,
+and recombine the results into a sorted list.
 
-For our purposes, the important step is the binding of the identifiers `fore` and `aft` to the values returned by `partition`. Expressing the construction and use of these bindings with the `call-by-values` primitive is cumbersome: One must explicitly embed the expression that provides the values for the bindings in a parameterless procedure, and one must explicitly embed the expression to be evaluated in the scope of those bindings in another procedure, writing as its parameters the identifiers that are to be bound to the values received.
+For our purposes, the important step is the binding of the identifiers `fore`
+and `aft` to the values returned by `partition`. Expressing the construction and
+use of these bindings with the `call-by-values` primitive is cumbersome: One
+must explicitly embed the expression that provides the values for the bindings
+in a parameterless procedure, and one must explicitly embed the expression to be
+evaluated in the scope of those bindings in another procedure, writing as its
+parameters the identifiers that are to be bound to the values received.
 
-These embeddings are boilerplate, exposing the underlying binding mechanism but not revealing anything relevant to the particular program in which it occurs. So the use of a syntactic abstraction that exposes only the interesting parts -- the identifiers to be bound, the multiple-valued expression that supplies the values, and the body of the receiving procedure -- makes the code more concise and more readable:
+These embeddings are boilerplate, exposing the underlying binding mechanism but
+not revealing anything relevant to the particular program in which it occurs. So
+the use of a syntactic abstraction that exposes only the interesting parts --
+the identifiers to be bound, the multiple-valued expression that supplies the
+values, and the body of the receiving procedure -- makes the code more concise
+and more readable:
 
 ```
 (receive (fore aft) (partition (precedes pivot) others)
   (append (qsort fore) (cons pivot (qsort aft))))
 ```
 
-The advantages are similar to those of a `let`-expression over a procedure call with a `lambda`-expression as its operator. In both cases, cleanly separating a “header” in which the bindings are established from a “body” in which they are used makes it easier to follow the code.
+The advantages are similar to those of a `let`-expression over a procedure call
+with a `lambda`-expression as its operator. In both cases, cleanly separating a
+“header” in which the bindings are established from a “body” in which they are
+used makes it easier to follow the code.
 
 ## Specification
 
 `(receive` \<formals> \<expression> \<body>`)`     library syntax
 
-\<Formals>, \<expression>, and \<body> are as described in R<sup>5</sup>RS. Specifically, \<formals> can have any of three forms:
+\<Formals>, \<expression>, and \<body> are as described in R<sup>5</sup>RS.
+Specifically, \<formals> can have any of three forms:
 
-- `(`\<variable<sub>1</sub>> `...` \<variable<sub>*n*</sub>>`)`: The environment in which the `receive`-expression is evaluated is extended by binding \<variable<sub>1</sub>>, ..., \<variable<sub>*n*</sub>> to fresh locations. The \<expression> is evaluated, and its values are stored into those locations. (It is an error if \<expression> does not have exactly *n* values.)
+- `(`\<variable<sub>1</sub>> `...` \<variable<sub>*n*</sub>>`)`: The environment
+  in which the `receive`-expression is evaluated is extended by binding
+  \<variable<sub>1</sub>>, ..., \<variable<sub>*n*</sub>> to fresh locations.
+  The \<expression> is evaluated, and its values are stored into those
+  locations. (It is an error if \<expression> does not have exactly *n* values.)
 
-- \<variable>: The environment in which the `receive`-expression is evaluated is extended by binding \<variable> to a fresh location. The \<expression> is evaluated, its values are converted into a newly allocated list, and the list is stored in the location bound to \<variable>.
+- \<variable>: The environment in which the `receive`-expression is evaluated is
+  extended by binding \<variable> to a fresh location. The \<expression> is
+  evaluated, its values are converted into a newly allocated list, and the list
+  is stored in the location bound to \<variable>.
 
-- `(`\<variable<sub>1</sub>> `...` \<variable<sub>*n*</sub>> . \<variable<sub>*n* + 1</sub>>`)`: The environment in which the `receive`-expression is evaluated is extended by binding \<variable<sub>1</sub>>, ..., \<variable<sub>*n* + 1</sub>> to fresh locations. The \<expression> is evaluated. Its first *n* values are stored into the locations bound to \<variable<sub>1</sub>> `...` \<variable<sub>*n*</sub>>. Any remaining values are converted into a newly allocated list, which is stored into the location bound to \<variable<sub>*n* + 1</sub>>. (It is an error if \<expression> does not have at least *n* values.)
+- `(`\<variable<sub>1</sub>> `...` \<variable<sub>*n*</sub>> .
+  \<variable<sub>*n* + 1</sub>>`)`: The environment in which the
+  `receive`-expression is evaluated is extended by binding
+  \<variable<sub>1</sub>>, ..., \<variable<sub>*n* + 1</sub>> to fresh
+  locations. The \<expression> is evaluated. Its first *n* values are stored
+  into the locations bound to \<variable<sub>1</sub>> `...`
+  \<variable<sub>*n*</sub>>. Any remaining values are converted into a newly
+  allocated list, which is stored into the location bound to \<variable<sub>*n*
+  \+ 1</sub>>. (It is an error if \<expression> does not have at least *n*
+  values.)
 
-In any case, the expressions in \<body> are evaluated sequentially in the extended environment. The results of the last expression in the body are the values of the `receive`-expression.
+In any case, the expressions in \<body> are evaluated sequentially in the
+extended environment. The results of the last expression in the body are the
+values of the `receive`-expression.
 
 ## Reference implementation
 
@@ -78,12 +132,24 @@ ______________________________________________________________________
 
 Copyright (C) John David Stone (1999). All Rights Reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ______________________________________________________________________
 
-Editor: [Mike Sperber](mailto:srfi%20minus%20editors%20at%20srfi%20dot%20schemers%20dot%20org)
+Editor:
+[Mike Sperber](mailto:srfi%20minus%20editors%20at%20srfi%20dot%20schemers%20dot%20org)

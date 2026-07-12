@@ -65,7 +65,7 @@ convert_one() {
     echo
     cat "$body_path"
   } >"$converted_path"
-  mdformat --wrap keep "$converted_path"
+  mdformat --wrap 80 "$converted_path"
   sed 's/[[:space:]]*$//' "$converted_path" >"$trimmed_path"
   mv "$trimmed_path" "$converted_path"
 
