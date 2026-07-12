@@ -2727,6 +2727,109 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                      '(stdlib random-data-generators))))")
     "#t")))
 
+(ert-deftest consent-library-test-srfi-252-imports-and-runs-property-tests ()
+  "Import SRFI 252 aliases and exercise representative property behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 64) (srfi 252))
+      (let ((runner (test-runner-null)))
+        (test-with-runner runner
+          (test-begin \"properties\" 4)
+          (test-property boolean? (list (boolean-generator)) 4)
+          (test-end \"properties\"))
+        (list (test-runner-pass-count runner)
+              (test-runner-fail-count runner)
+              (test-runner-skip-count runner)))")
+    "(4 0 0)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib generator) (srfi srfi-252))
+      (let ((pairs (pair-generator-of (generator 'a 'b)
+                                      (generator 1 2))))
+        (list (pairs) (pairs)))")
+    "((a . 1) (b . 2))")))
+
+(ert-deftest consent-library-test-srfi-252-missing-export-diagnostic ()
+  "Report missing SRFI 252 imports through the resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 252) missing-property-helper))
+            missing-property-helper")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-property-helper")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-252 ()
+  "Expose SRFI 252 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib property-testing)))
+            (alias (stdlib-manifest-ref '(srfi 252)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-252))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name)
+                     '(stdlib property-testing))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (member \"property-test-tests.scm\"
+                     (manifest-subfield entry 'provenance
+                                        'upstream-test-files))
+             (equal?
+              (cdr
+               (assoc \"property-test.sld\"
+                      (manifest-subfield entry 'provenance
+                                         'upstream-source-blobs)))
+              \"611b12da5564cd379d1c9dda877a8507fa824f41\")
+             (equal?
+              (cdr
+               (assoc \"property-test-tests.scm\"
+                      (manifest-subfield entry 'provenance
+                                         'upstream-test-blobs)))
+              \"5a37ecee814e5a9b9eaf2478abd436ada2416eaa\")
+             (member '(library (srfi 143))
+                     (manifest-subfield entry 'provenance
+                                        'optional-dependencies))
+             (member '(library (srfi 144))
+                     (manifest-subfield entry 'provenance
+                                        'optional-dependencies))
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 252) (srfi srfi-252)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))
+                       (library (scheme case-lambda))
+                       (library (scheme complex))
+                       (library (stdlib list))
+                       (library (stdlib testing))
+                       (library (stdlib generator))
+                       (library (stdlib random-data-generators))))
+             (member 'test-property
+                     (manifest-field entry 'exports))
+             (member 'pair-generator-of
+                     (manifest-field entry 'exports))
+             (member 'boolean-generator
+                     (manifest-field entry 'exports))
+             (equal? (manifest-field alias 'target)
+                     '(stdlib property-testing))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib property-testing))))")
+    "#t")))
+
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-27 ()
   "Expose SRFI 27 support status through the stdlib manifest."
   (should
@@ -3614,6 +3717,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
         (testing (consent-library-test--vendored-srfi-record 64))
         (random-bits (consent-library-test--vendored-srfi-record 27))
         (random-data (consent-library-test--vendored-srfi-record 194))
+        (property-testing (consent-library-test--vendored-srfi-record 252))
         (cond-expand (consent-library-test--vendored-srfi-record 0))
         (shim (consent-library-test--vendored-srfi-record 16))
         (libraries (consent-library-test--vendored-srfi-record 97))
@@ -3835,6 +3939,56 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                     (mapcar #'consent-datum->external
                             (consent-library-test--record-field
                              random-data 'tests))))
+
+    (should (equal (consent-library-test--record-field-external
+                    property-testing 'number)
+                   "252"))
+    (should (equal (consent-library-test--record-field-external
+                    property-testing 'name)
+                   "property-testing"))
+    (should (equal (consent-library-test--record-field-external
+                    property-testing 'library)
+                   "(stdlib property-testing)"))
+    (should (equal (consent-library-test--record-field-external
+                    property-testing 'classification)
+                   "vendored-library"))
+    (should (equal (consent-library-test--record-field-external
+                    property-testing 'status)
+                   "vendored-adapted-implementation"))
+    (should (equal (consent-library-test--record-field
+                    property-testing 'source-url)
+                   "https://github.com/scheme-requests-for-implementation/srfi-252"))
+    (should (equal (consent-library-test--record-field
+                    property-testing 'license)
+                   "MIT"))
+    (should (member "(srfi 252)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             property-testing 'import-names))))
+    (should (member "(srfi srfi-252)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             property-testing 'import-names))))
+    (should (member "(stdlib property-testing)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             property-testing 'import-names))))
+    (should (member "(library (stdlib testing))"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             property-testing 'dependencies))))
+    (should (member "(library (stdlib random-data-generators))"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             property-testing 'dependencies))))
+    (should (member "adapted-upstream-tests"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             property-testing 'tests))))
+    (should (member "compiled-host-smoke"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             property-testing 'tests))))
 
     (should (equal (consent-library-test--record-field-external
                     cond-expand 'number)

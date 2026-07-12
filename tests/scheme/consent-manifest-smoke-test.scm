@@ -17,11 +17,14 @@
         (srfi srfi-0)
         (srfi 1)
         (srfi :1 lists)
+        (srfi 64)
         (srfi 27)
         (srfi :27 random-bits)
         (stdlib random-distributions)
         (srfi 194)
         (srfi srfi-194)
+        (srfi 252)
+        (srfi srfi-252)
         (srfi 97)
         (srfi :97 srfi-libraries)
         (srfi 261)
@@ -124,6 +127,12 @@
 ;; Manifest entry for the SRFI 194 portable SRFI reference alias.
 (define srfi-194-portable-entry (stdlib-manifest-ref '(srfi srfi-194)))
 
+;; Manifest entry for the SRFI 252 property-testing alias.
+(define srfi-252-entry (stdlib-manifest-ref '(srfi 252)))
+
+;; Manifest entry for the SRFI 252 portable SRFI reference alias.
+(define srfi-252-portable-entry (stdlib-manifest-ref '(srfi srfi-252)))
+
 ;; Manifest entry for the SRFI 261 portable SRFI reference alias.
 (define srfi-261-portable-entry (stdlib-manifest-ref '(srfi srfi-261)))
 
@@ -210,6 +219,23 @@
 (check 'manifest-smoke-srfi-194-bernoulli-import
        ((make-bernoulli-generator 1))
        1)
+
+(check 'manifest-smoke-srfi-252-target
+       (field srfi-252-entry 'target)
+       '(stdlib property-testing))
+
+(check 'manifest-smoke-srfi-252-portable-target
+       (field srfi-252-portable-entry 'target)
+       '(stdlib property-testing))
+
+(check 'manifest-smoke-srfi-252-property-import
+       (let ((runner (test-runner-null)))
+         (test-with-runner runner
+           (test-begin "srfi-252-smoke" 2)
+           (test-property boolean? (list (boolean-generator)) 2)
+           (test-end "srfi-252-smoke"))
+         (test-runner-pass-count runner))
+       2)
 
 (check 'manifest-smoke-srfi-97-entry-kind
        (car srfi-97-entry)

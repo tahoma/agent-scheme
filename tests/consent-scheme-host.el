@@ -43,6 +43,8 @@
     "tests/scheme/stdlib-random-distributions-test.scm"
     "tests/scheme/stdlib-random-data-generators-test.scm"
     "tests/scheme/stdlib-random-data-generators-upstream-test.scm"
+    "tests/scheme/stdlib-property-testing-test.scm"
+    "tests/scheme/stdlib-property-testing-upstream-test.scm"
     "tests/scheme/stdlib-generator-test.scm"
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
