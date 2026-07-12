@@ -13,6 +13,7 @@
         (scheme write)
         (development manifest)
         (development testing harness)
+        (development testing registry)
         (stdlib manifest)
         (consent json)
         (srfi 0)
@@ -164,6 +165,10 @@
 (define development-test-harness-entry
   (development-library-manifest-ref '(development testing harness)))
 
+;; Manifest entry for portable registered test discovery and selection.
+(define development-test-registry-entry
+  (development-library-manifest-ref '(development testing registry)))
+
 ;; Output string used to verify that pure alias exports include json-write.
 (define json-output (open-output-string))
 
@@ -180,6 +185,10 @@
 (check 'manifest-smoke-development-test-harness-source
        (field development-test-harness-entry 'source)
        '(path "testing/harness.sld"))
+
+(check 'manifest-smoke-development-test-registry-source
+       (field development-test-registry-entry 'source)
+       '(path "testing/registry.sld"))
 
 (check 'manifest-smoke-consent-json-target
        (field consent-json-entry 'target)

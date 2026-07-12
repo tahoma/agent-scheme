@@ -833,6 +833,18 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
       source-file))
     (should (file-readable-p source-file))))
 
+(ert-deftest consent-library-test-development-testing-registry-is-source-backed ()
+  "Expose portable test discovery and selection through the runtime catalog."
+  (let ((source-file
+         (consent-library-test--manifest-source-file
+          "(development testing registry)")))
+    (should source-file)
+    (should
+     (string-suffix-p
+      "scheme/development/testing/registry.sld"
+      source-file))
+    (should (file-readable-p source-file))))
+
 (ert-deftest consent-library-test-agent-memory-is-source-backed ()
   "Load `(agent memory)' from the shared portable source library."
   (let ((source-file

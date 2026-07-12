@@ -221,7 +221,8 @@
       (%test-runner-fail-list! runner '())
       (%test-runner-skip-save! runner '())
       (%test-runner-fail-save! runner '())
-      (test-runner-group-stack! runner '()))
+      (test-runner-group-stack! runner '())
+      (test-runner-aux-value! runner #f))
 
     (define (test-runner-group-path runner)
       "Return RUNNER's active group path from outermost to innermost."

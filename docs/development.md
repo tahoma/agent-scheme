@@ -238,6 +238,12 @@ reserved for standards-derived libraries. Additional test libraries should be
 named for the missing facility they provide, such as a future `(development
 testing registry)`.
 
+`(development testing registry)` supplies ERT-style named case registration,
+tags, composable selectors, failed-case reruns, explicit source locations,
+per-case timing through an injectable clock, and Scheme-readable inspection
+records. Its diagnostic hook lets an Emacs, CLI, or other host attach native
+backtraces without putting non-R7RS stack APIs in portable test code.
+
 Host-neutral semantics must have canonical portable Scheme tests unless a
 documented host boundary makes that impossible. Core runtime, reader,
 evaluator, macro, library, and standard-library changes should therefore add

@@ -23,6 +23,7 @@
     "tests/scheme/consent-session-test.scm"
     "tests/scheme/consent-context-test.scm"
     "tests/scheme/development-testing-harness-test.scm"
+    "tests/scheme/development-testing-registry-test.scm"
     "tests/scheme/consent-plan-test.scm"
     "tests/scheme/consent-redaction-test.scm"
     "tests/scheme/consent-task-test.scm"
