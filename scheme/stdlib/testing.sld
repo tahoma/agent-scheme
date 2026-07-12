@@ -88,6 +88,40 @@
           test-on-bad-end-name-simple
           test-on-test-end-simple
           test-on-final-simple)
+  ;; Gambit expands imported syntax-rules templates in the client library
+  ;; environment and requires every helper identifier referenced by those
+  ;; templates to be exported. Keep that host accommodation out of the manifest
+  ;; and other R7RS hosts.
+  (cond-expand
+   (gambit
+    (export %test-begin
+            %test-end
+            %test-ensure-runner
+            %test-result-name!
+            %test-result-clear!
+            %test-should-execute
+            %test-evaluate-with-catch
+            %test-comp1body
+            %test-comp2body
+            %test-comp2
+            %test-approximate=
+            %test-error
+            %test-result-actual-value!
+            %test-result-expected-value!
+            %test-result-actual-error!
+            %test-result-expected-error!
+            %test-on-test-begin
+            %test-on-test-end
+            %test-report-result
+            %test-match-nth
+            %test-match-all
+            %test-match-any
+            %test-as-specifier
+            %test-runner-skip-list
+            %test-runner-skip-list!
+            %test-runner-fail-list
+            %test-runner-fail-list!))
+   (else))
   (import (scheme base)
           (scheme write)
           (scheme read)
