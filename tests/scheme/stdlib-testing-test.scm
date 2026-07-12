@@ -142,6 +142,11 @@
              test-log-to-file)
        '(42 #f))
 
+(check 'fresh-runner-initializes-auxiliary-value
+       (list (test-runner-aux-value (test-runner-null))
+             (test-runner-aux-value (test-runner-simple)))
+       '(#f #f))
+
 (check 'test-apply-selects-and-restores
        (runner-counts
         (with-null-runner

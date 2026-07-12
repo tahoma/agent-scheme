@@ -58,6 +58,47 @@
            (library (stdlib lightweight-testing))))
          (provenance ((origin repo)))
          (status implemented)
+         (canonical #t))
+        (manifest-entry
+         (schema-version 1)
+         (kind library)
+         (name (development testing registry))
+         (owner consent-core)
+         (provider repo-source)
+         (visibility public)
+         (layer library)
+         (source-kind source-library)
+         (source (path "testing/registry.sld"))
+         (api-version (compat 0))
+         (source-version unknown)
+         (realization portable-source)
+         (exports
+          (consent-test-case
+           consent-test-register!
+           consent-test-registry-clear!
+           consent-test-registry
+           consent-test-case-name
+           consent-test-case-tags
+           consent-test-case-source-file
+           consent-test-case-source-line
+           consent-test-select-all
+           consent-test-select-name
+           consent-test-select-tag
+           consent-test-select-and
+           consent-test-select-or
+           consent-test-select-not
+           consent-test-clock
+           consent-test-diagnostic-hook
+           consent-test-run-registered
+           consent-test-rerun-failed
+           consent-test-report-failed-names))
+         (dependencies
+          ((library (scheme base))
+           (library (scheme write))
+           (library (development testing harness))
+           (library (stdlib testing))))
+         (provenance ((origin repo)))
+         (status implemented)
          (canonical #t))))
 
     (define (development-library-manifest-ref library)
