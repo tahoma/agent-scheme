@@ -2670,6 +2670,42 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (equal? (manifest-subfield entry 'provenance 'local-license)
                      \"MIT\")
              (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (member \"srfi-194-test.scm\"
+                     (manifest-subfield entry 'provenance
+                                        'upstream-test-files))
+             (member \"zipf-test.scm\"
+                     (manifest-subfield entry 'provenance
+                                        'upstream-test-files))
+             (member \"sphere-test.scm\"
+                     (manifest-subfield entry 'provenance
+                                        'upstream-test-files))
+             (member \"ellipsoid-test.scm\"
+                     (manifest-subfield entry 'provenance
+                                        'upstream-test-files))
+             (equal?
+              (cdr
+               (assoc \"srfi-194-test.scm\"
+                      (manifest-subfield entry 'provenance
+                                         'upstream-test-blobs)))
+              \"ffb1ec46ecf83853e1fd2b15d01a9f3ec250b41b\")
+             (equal?
+              (cdr
+               (assoc \"zipf-test.scm\"
+                      (manifest-subfield entry 'provenance
+                                         'upstream-test-blobs)))
+              \"509db74f571e3cf0c989f7674dc78425b5bb9876\")
+             (equal?
+              (cdr
+               (assoc \"sphere-test.scm\"
+                      (manifest-subfield entry 'provenance
+                                         'upstream-test-blobs)))
+              \"2de4be9e47f03e328e4e73b85dbb516c4a87ee1b\")
+             (equal?
+              (cdr
+               (assoc \"ellipsoid-test.scm\"
+                      (manifest-subfield entry 'provenance
+                                         'upstream-test-blobs)))
+              \"bc0d289cb1ab1f3da1c77b184124f86d7b18b7a6\")
              (equal? (manifest-field entry 'aliases)
                      '((srfi 194) (srfi srfi-194)))
              (equal? (manifest-field entry 'dependencies)
@@ -3784,6 +3820,14 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                             (consent-library-test--record-field
                              random-data 'dependencies))))
     (should (member "adapted-upstream-tests"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-data 'tests))))
+    (should (member "upstream-fixtures"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-data 'tests))))
+    (should (member "adapted-upstream-statistical-tests"
                     (mapcar #'consent-datum->external
                             (consent-library-test--record-field
                              random-data 'tests))))
