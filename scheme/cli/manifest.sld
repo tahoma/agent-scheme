@@ -46,7 +46,7 @@
         (exports (cli-host-available? cli-host-run))
         (dependencies
          ((library (scheme base)) (library (scheme file)) (library (stdlib generator))
-                                (library (cli process-host primitive))))
+          (library (cli process-host primitive))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))

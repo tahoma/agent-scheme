@@ -61,8 +61,9 @@
           (local-patches ())))
         (verification
          ((test-status
-                                 (import-resolution representative-read-write emacs-json-oracle portable-host-suite
-                                  imported-reference-corpus json-lines json-text-sequences))))
+           (import-resolution representative-read-write emacs-json-oracle
+                              portable-host-suite imported-reference-corpus
+                              json-lines json-text-sequences))))
         (status direct-portable-implementation)
         (canonical #t))
        (manifest-index-entry
@@ -232,8 +233,8 @@
           (local-license "Apache-2.0") (vendored? #f)))
         (verification
          ((test-status
-                                (import-resolution representative-case-lambda-behavior
-                                 missing-export-diagnostic portable-host-suite))))
+           (import-resolution representative-case-lambda-behavior
+                              missing-export-diagnostic portable-host-suite))))
         (status built-in-shim)
         (canonical #f))
        (manifest-index-entry
@@ -333,9 +334,10 @@
         (aliases ((srfi srfi-261)))
         (dependencies ((library (stdlib srfi-reference))))
         (provenance
-         ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-261/")
-                        (upstream-license "MIT") (local-license "Apache-2.0")
-                        (vendored? #f)))
+         ((origin repo)
+          (upstream-source-url "https://srfi.schemers.org/srfi-261/")
+          (upstream-license "MIT") (local-license "Apache-2.0")
+          (vendored? #f)))
         (verification
          ((test-status (import-resolution reference-aliases no-export-shim))))
         (status built-in-shim)
@@ -403,9 +405,10 @@
         (aliases ((srfi srfi-97) (srfi :97) (srfi :97 srfi-libraries)))
         (dependencies ((library (stdlib srfi-libraries))))
         (provenance
-         ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-97/")
-                        (upstream-license "MIT") (local-license "Apache-2.0")
-                        (vendored? #f)))
+         ((origin repo)
+          (upstream-source-url "https://srfi.schemers.org/srfi-97/")
+          (upstream-license "MIT") (local-license "Apache-2.0")
+          (vendored? #f)))
         (verification
          ((test-status (import-resolution library-reference-aliases no-export-shim))))
         (status built-in-shim)
@@ -494,8 +497,9 @@
             (adapted-tests (file "tests/scheme/stdlib-and-let-star-test.scm"))))))
         (verification
          ((test-status
-                                 (import-resolution representative-and-let-star-behavior missing-export-diagnostic
-                                  adapted-upstream-tests portable-host-suite))))
+           (import-resolution representative-and-let-star-behavior
+                              missing-export-diagnostic adapted-upstream-tests
+                              portable-host-suite))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-index-entry
@@ -620,8 +624,8 @@
             (adapted-tests (file "tests/scheme/stdlib-list-test.scm"))))))
         (verification
          ((test-status
-                                 (import-resolution representative-list-behavior alias-import missing-export-diagnostic
-                                  portable-host-suite))))
+           (import-resolution representative-list-behavior alias-import
+                              missing-export-diagnostic portable-host-suite))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-index-entry
@@ -760,9 +764,9 @@
             (adapted-tests (file "tests/scheme/stdlib-generator-test.scm"))))))
         (verification
          ((test-status
-                                (import-resolution representative-generator-behavior alias-import
-                                 missing-export-diagnostic adapted-upstream-tests
-                                 portable-host-suite))))
+           (import-resolution representative-generator-behavior alias-import
+                              missing-export-diagnostic adapted-upstream-tests
+                              portable-host-suite))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-index-entry
@@ -859,7 +863,7 @@
                      test-on-final-simple))
         (dependencies
          ((library (scheme base)) (library (scheme write)) (library (scheme read))
-                                (library (scheme eval)) (library (scheme file))))
+          (library (scheme eval)) (library (scheme file))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -886,9 +890,9 @@
             (adapted-tests (file "tests/scheme/stdlib-testing-test.scm"))))))
         (verification
          ((test-status
-                                (import-resolution representative-test-runner-behavior
-                                 alias-import missing-export-diagnostic
-                                 adapted-upstream-tests portable-host-suite))))
+           (import-resolution representative-test-runner-behavior
+                              alias-import missing-export-diagnostic
+                              adapted-upstream-tests portable-host-suite))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-index-entry
@@ -1009,8 +1013,9 @@
             (registry-aliases
              (aliases (srfi 27) (srfi srfi-27)
                       (srfi :27) (srfi :27 random-bits)))
-            (time-source (from "Scheme 48 current-time")
-                         (to "(scheme time) current-jiffy"))
+            (time-source
+             (from "Scheme 48 current-time")
+             (to "(scheme time) current-jiffy"))
             (upstream-confidence-tests
              (file "fixtures/srfi-27/reference/conftest.scm"))
             (adapted-tests
@@ -1018,10 +1023,10 @@
              (file "tests/scheme/stdlib-random-bits-upstream-test.scm"))))))
         (verification
          ((test-status
-                                (import-resolution representative-random-source-behavior
-                                 alias-import missing-export-diagnostic clock-grant-randomization
-                                 adapted-upstream-tests upstream-confidence-tests
-                                 portable-host-suite))))
+           (import-resolution representative-random-source-behavior
+                              alias-import missing-export-diagnostic
+                              clock-grant-randomization adapted-upstream-tests
+                              upstream-confidence-tests portable-host-suite))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-index-entry
@@ -1174,8 +1179,8 @@
             (local-tests (file "tests/scheme/stdlib-receive-test.scm"))))))
         (verification
          ((test-status
-                                (import-resolution representative-receive-behavior
-                                 missing-export-diagnostic portable-host-suite))))
+           (import-resolution representative-receive-behavior
+                              missing-export-diagnostic portable-host-suite))))
         (status built-in-shim)
         (canonical #t))
        (manifest-index-entry
@@ -1277,8 +1282,8 @@
             (local-tests (file "tests/scheme/stdlib-assume-test.scm"))))))
         (verification
          ((test-status
-                                (import-resolution representative-assume-behavior
-                                 missing-export-diagnostic portable-host-suite))))
+           (import-resolution representative-assume-behavior
+                              missing-export-diagnostic portable-host-suite))))
         (status built-in-shim)
         (canonical #t))
        (manifest-index-entry
@@ -1339,7 +1344,7 @@
                            comparator-hash hash-bound hash-salt =? <? >? <=? >=? comparator-if<=>))
         (dependencies
          ((library (scheme base)) (library (scheme case-lambda)) (library (scheme char))
-                                (library (scheme inexact)) (library (scheme complex))))
+          (library (scheme inexact)) (library (scheme complex))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -1362,8 +1367,8 @@
             (hash-helpers (source local-portable-procedures))))))
         (verification
          ((test-status
-                                (import-resolution representative-comparator-behavior alias-import
-                                 missing-export-diagnostic portable-host-suite))))
+           (import-resolution representative-comparator-behavior alias-import
+                              missing-export-diagnostic portable-host-suite))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-entry
@@ -1383,8 +1388,8 @@
                            tree-key-successor tree-map tree-catenate tree-split))
         (dependencies
          ((library (scheme base)) (library (scheme case-lambda)) (library (stdlib and-let-star))
-                                (library (stdlib receive)) (library (stdlib generator))
-                                (library (stdlib comparator))))
+          (library (stdlib receive)) (library (stdlib generator))
+          (library (stdlib comparator))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -1414,8 +1419,9 @@
             (adapted-tests (file "tests/scheme/stdlib-rbtree-test.scm"))))))
         (verification
          ((test-status
-                                (import-resolution representative-tree-behavior mutation-sequences
-                                 missing-export-diagnostic helper-smoke portable-host-suite))))
+           (import-resolution representative-tree-behavior mutation-sequences
+                              missing-export-diagnostic helper-smoke
+                              portable-host-suite))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-entry
@@ -1454,8 +1460,8 @@
                            mapping-map/monotone! mapping-fold/reverse comparator?))
         (dependencies
          ((library (scheme base)) (library (scheme case-lambda)) (library (stdlib list))
-                                (library (stdlib receive)) (library (stdlib comparator))
-                                (library (stdlib assume)) (library (stdlib rbtree))))
+          (library (stdlib receive)) (library (stdlib comparator))
+          (library (stdlib assume)) (library (stdlib rbtree))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -1492,10 +1498,11 @@
              (file "tests/scheme/stdlib-mapping-conformance-test.scm"))))))
         (verification
          ((test-status
-                                (import-resolution representative-mapping-behavior alias-import
-                                 missing-export-diagnostic hash-alias-diagnostic model-oracle
-                                 adapted-upstream-tests direct-host-conformance compiled-host-smoke
-                                 portable-host-suite))))
+           (import-resolution representative-mapping-behavior alias-import
+                              missing-export-diagnostic hash-alias-diagnostic
+                              model-oracle adapted-upstream-tests
+                              direct-host-conformance compiled-host-smoke
+                              portable-host-suite))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-index-entry
