@@ -27,7 +27,9 @@
         (api-version internal)
         (source-version unknown)
         (realization portable-source)
-        (exports (emacs-library-manifest emacs-library-manifest-ref))
+        (exports
+         (emacs-library-manifest
+          emacs-library-manifest-ref))
         (dependencies
          ((library (scheme base))))
         (provenance ((origin repo)))
@@ -52,8 +54,14 @@
         (source-version runtime)
         (realization host-primitive)
         (exports
-         (emacs-current-buffer buffer-name buffer-file-name buffer-major-mode buffer-text buffer-switch!
-                           buffer-point emacs-buffer-list))
+         (emacs-current-buffer
+          buffer-name
+          buffer-file-name
+          buffer-major-mode
+          buffer-text
+          buffer-switch!
+          buffer-point
+          emacs-buffer-list))
         (primitive-exports
          ((name emacs-current-buffer)
           (primitive primitive-emacs-current-buffer)
@@ -117,7 +125,11 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (buffer-insert! buffer-delete! buffer-replace! buffer-save!))
+        (exports
+         (buffer-insert!
+          buffer-delete!
+          buffer-replace!
+          buffer-save!))
         (primitive-exports
          ((name buffer-insert!)
           (primitive primitive-buffer-insert!)
@@ -161,7 +173,11 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (command-doc command-call! function-doc variable-info))
+        (exports
+         (command-doc
+          command-call!
+          function-doc
+          variable-info))
         (primitive-exports
          ((name command-doc)
           (primitive primitive-command-doc)
@@ -205,7 +221,13 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (compile-run! project-compile! recompile! compile-status compile-output compile-yield))
+        (exports
+         (compile-run!
+          project-compile!
+          recompile!
+          compile-status
+          compile-output
+          compile-yield))
         (primitive-exports
          ((name compile-run!)
           (primitive primitive-compile-run!)
@@ -259,7 +281,10 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (buffer-diagnostics project-diagnostics diagnostic-at))
+        (exports
+         (buffer-diagnostics
+          project-diagnostics
+          diagnostic-at))
         (primitive-exports
          ((name buffer-diagnostics)
           (primitive primitive-buffer-diagnostics)
@@ -298,7 +323,10 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (buffer-diff file-diff project-diff))
+        (exports
+         (buffer-diff
+          file-diff
+          project-diff))
         (primitive-exports
          ((name buffer-diff)
           (primitive primitive-buffer-diff)
@@ -337,7 +365,10 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (emacs-current-frame emacs-frame-list frame-name))
+        (exports
+         (emacs-current-frame
+          emacs-frame-list
+          frame-name))
         (primitive-exports
          ((name emacs-current-frame)
           (primitive primitive-emacs-current-frame)
@@ -376,7 +407,9 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (network-http-request network-open-sse-stream))
+        (exports
+         (network-http-request
+          network-open-sse-stream))
         (primitive-exports
          ((name network-http-request)
           (primitive primitive-network-http-request)
@@ -411,8 +444,16 @@
         (source-version runtime)
         (realization host-primitive)
         (exports
-         (process-start! emacs-process-list process-name process-status process-buffer process-output-port
-                           process-error-port process-input-port process-interrupt! process-kill!))
+         (process-start!
+          emacs-process-list
+          process-name
+          process-status
+          process-buffer
+          process-output-port
+          process-error-port
+          process-input-port
+          process-interrupt!
+          process-kill!))
         (primitive-exports
          ((name process-start!)
           (primitive primitive-process-start!)
@@ -486,7 +527,11 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (emacs-current-project project-root project-compile! project-recompile!))
+        (exports
+         (emacs-current-project
+          project-root
+          project-compile!
+          project-recompile!))
         (primitive-exports
          ((name emacs-current-project)
           (primitive primitive-emacs-current-project)
@@ -530,7 +575,11 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (buffer-search project-search project-files search-yield))
+        (exports
+         (buffer-search
+          project-search
+          project-files
+          search-yield))
         (primitive-exports
          ((name buffer-search)
           (primitive primitive-buffer-search)
@@ -574,7 +623,13 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (vcs-root vcs-branch vcs-status vcs-diff vcs-recent-commits vcs-yield))
+        (exports
+         (vcs-root
+          vcs-branch
+          vcs-status
+          vcs-diff
+          vcs-recent-commits
+          vcs-yield))
         (primitive-exports
          ((name vcs-root)
           (primitive primitive-vcs-root)
@@ -628,7 +683,15 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (vcs-stage! vcs-unstage! vcs-commit! vcs-branch-create! vcs-switch! vcs-fetch! vcs-pull! vcs-push!))
+        (exports
+         (vcs-stage!
+          vcs-unstage!
+          vcs-commit!
+          vcs-branch-create!
+          vcs-switch!
+          vcs-fetch!
+          vcs-pull!
+          vcs-push!))
         (primitive-exports
          ((name vcs-stage!)
           (primitive primitive-vcs-stage!)
@@ -692,7 +755,12 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (emacs-window-list window-frame window-select! window-split! window-delete!))
+        (exports
+         (emacs-window-list
+          window-frame
+          window-select!
+          window-split!
+          window-delete!))
         (primitive-exports
          ((name emacs-window-list)
           (primitive primitive-emacs-window-list)

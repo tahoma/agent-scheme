@@ -25,7 +25,9 @@
         (api-version (compat 0))
         (source-version unknown)
         (realization portable-source)
-        (exports (cli-library-manifest cli-library-manifest-ref))
+        (exports
+         (cli-library-manifest
+          cli-library-manifest-ref))
         (dependencies
          ((library (scheme base))))
         (provenance ((origin repo)))
@@ -44,7 +46,9 @@
         (api-version internal)
         (source-version unknown)
         (realization portable-source)
-        (exports (cli-host-available? cli-host-run))
+        (exports
+         (cli-host-available?
+          cli-host-run))
         (dependencies
          ((library (scheme base))
           (library (scheme file))
@@ -69,7 +73,9 @@
         (api-version internal)
         (source-version runtime)
         (realization host-primitive)
-        (exports (primitive-cli-host-available? primitive-cli-host-run))
+        (exports
+         (primitive-cli-host-available?
+          primitive-cli-host-run))
         (primitive-exports
          ((name primitive-cli-host-available?)
           (primitive primitive-cli-host-available?)

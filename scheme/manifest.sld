@@ -137,7 +137,9 @@
         (api-version (compat 0))
         (source-version unknown)
         (realization portable-source)
-        (exports (manifest-index manifest-index-ref))
+        (exports
+         (manifest-index
+          manifest-index-ref))
         (dependencies
          ((library (scheme base))))
         (provenance ((origin repo)))
