@@ -31,53 +31,42 @@
 
 (testing-registry-case
  'boolean-true '(portable core)
- ("consent-reader-test.scm" 32)
 (check-external 'boolean-true "#true" "#t"))
 (testing-registry-case
  'boolean-false '(portable core)
- ("consent-reader-test.scm" 36)
 (check-external 'boolean-false "#false" "#f"))
 (testing-registry-case
  'false-is-not-null '(portable core)
- ("consent-reader-test.scm" 40)
 (test-equal 'false-is-not-null #f (null? (consent-read "#f"))))
 (testing-registry-case
  'empty-list-is-null '(portable core)
- ("consent-reader-test.scm" 44)
 (test-equal 'empty-list-is-null #t (null? (consent-read "()"))))
 
 (testing-registry-case
  'symbol-case '(portable core)
- ("consent-reader-test.scm" 49)
 (check-external 'symbol-case "Consent-Scheme" "Consent-Scheme"))
 (testing-registry-case
  'fold-case '(portable core)
- ("consent-reader-test.scm" 53)
 (check-external 'fold-case "#!fold-case Consent-Scheme" "consent-scheme"))
 (testing-registry-case
  'vertical-symbol '(portable core)
- ("consent-reader-test.scm" 57)
 (check-external 'vertical-symbol "|two\\x20;words|" "|two words|"))
 
 (testing-registry-case
  'string-escapes '(portable core)
- ("consent-reader-test.scm" 62)
 (test-equal 'string-escapes
              (string-append "line\n" (string (integer->char #x03bb)))
              (consent-read "\"line\\n\\x03bb;\"")))
 (testing-registry-case
  'string-line-continuation '(portable core)
- ("consent-reader-test.scm" 68)
 (test-equal 'string-line-continuation
              "ab"
              (consent-read (string-append "\"a\\" "\n  b\""))))
 (testing-registry-case
  'character-name '(portable core)
- ("consent-reader-test.scm" 74)
 (check-external 'character-name "#\\space" "#\\space"))
 (testing-registry-case
  'character-hex '(portable core)
- ("consent-reader-test.scm" 78)
 (check-external 'character-hex "#\\X03BB" "#\\λ"))
 
 ;; Character writer fixtures cover named, printable, Unicode, and control forms.
@@ -99,7 +88,6 @@
 
 (testing-registry-case
  'name '(portable core)
- ("consent-reader-test.scm" 100)
 (for-each
  (lambda (case)
    (let* ((name (string->symbol (car case)))
@@ -116,7 +104,6 @@
 
 (testing-registry-case
  'integer '(portable core)
- ("consent-reader-test.scm" 117)
 (check-external 'integer "42" "42"))
 ;; Read numbers share the canonical constructors' representation class.
 ;; Compare against a canonical integer rather than hardcoding what the
@@ -126,110 +113,87 @@
 ;; #t). The invariant is the agreement, not the host's answer.
 (testing-registry-case
  'integer-matches-canonical-number-class '(portable core)
- ("consent-reader-test.scm" 127)
 (test-equal 'integer-matches-canonical-number-class
              (number? (consent-make-canonical-integer 42))
              (number? (consent-read "42"))))
 (testing-registry-case
  'host-integer-writer '(portable core)
- ("consent-reader-test.scm" 133)
 (test-equal 'host-integer-writer
              "42"
              (consent-datum->external 42)))
 (testing-registry-case
  'host-rational-writer '(portable core)
- ("consent-reader-test.scm" 139)
 (test-equal 'host-rational-writer
              "3/2"
              (consent-datum->external (/ 3 2))))
 (testing-registry-case
  'host-decimal-writer '(portable core)
- ("consent-reader-test.scm" 145)
 (test-equal 'host-decimal-writer
              "3.0"
              (consent-datum->external 3.0)))
 (testing-registry-case
  'hex-integer '(portable core)
- ("consent-reader-test.scm" 151)
 (check-external 'hex-integer "#x2a" "42"))
 (testing-registry-case
  'rational '(portable core)
- ("consent-reader-test.scm" 155)
 (check-external 'rational "3/4" "3/4"))
 (testing-registry-case
  'decimal '(portable core)
- ("consent-reader-test.scm" 159)
 (check-external 'decimal "1.5" "1.5"))
 (testing-registry-case
  'decimal-integer-external-form '(portable core)
- ("consent-reader-test.scm" 163)
 (test-equal 'decimal-integer-external-form
              "3.0"
              (consent-datum->external
         (consent-make-canonical-decimal 3.0))))
 (testing-registry-case
  'reduced-rational '(portable core)
- ("consent-reader-test.scm" 170)
 (check-external 'reduced-rational "6/10" "3/5"))
 (testing-registry-case
  'exact-decimal '(portable core)
- ("consent-reader-test.scm" 174)
 (check-external 'exact-decimal "#e1.5" "3/2"))
 (testing-registry-case
  'inexact-rational '(portable core)
- ("consent-reader-test.scm" 178)
 (check-external 'inexact-rational "#i3/2" "1.5"))
 (testing-registry-case
  'complex-rectangular '(portable core)
- ("consent-reader-test.scm" 182)
 (check-external 'complex-rectangular "3/4-5/6i" "3/4-5/6i"))
 (testing-registry-case
  'infinity '(portable core)
- ("consent-reader-test.scm" 186)
 (check-external 'infinity "+inf.0" "+inf.0"))
 (testing-registry-case
  'complex-positive-infinity-imaginary '(portable core)
- ("consent-reader-test.scm" 190)
 (check-external 'complex-positive-infinity-imaginary "+inf.0i" "0+inf.0i"))
 (testing-registry-case
  'complex-negative-infinity-imaginary '(portable core)
- ("consent-reader-test.scm" 194)
 (check-external 'complex-negative-infinity-imaginary "-inf.0i" "0-inf.0i"))
 (testing-registry-case
  'complex-nan-imaginary '(portable core)
- ("consent-reader-test.scm" 198)
 (check-external 'complex-nan-imaginary "+nan.0i" "0+nan.0i"))
 (testing-registry-case
  'polar-infinite-magnitude '(portable core)
- ("consent-reader-test.scm" 202)
 (check-external 'polar-infinite-magnitude "+inf.0@0" "+inf.0+nan.0i"))
 (testing-registry-case
  'polar-infinite-angle '(portable core)
- ("consent-reader-test.scm" 206)
 (check-external 'polar-infinite-angle "1@+inf.0" "+nan.0+nan.0i"))
 (testing-registry-case
  'polar-nan-magnitude '(portable core)
- ("consent-reader-test.scm" 210)
 (check-external 'polar-nan-magnitude "+nan.0@0" "+nan.0+nan.0i"))
 (testing-registry-case
  'bare-i-symbol '(portable core)
- ("consent-reader-test.scm" 214)
 (check-external 'bare-i-symbol "i" "i"))
 (testing-registry-case
  'ordinary-identifier '(portable core)
- ("consent-reader-test.scm" 218)
 (check-external 'ordinary-identifier
                 "number-parser-should-not-see-me"
                 "number-parser-should-not-see-me"))
 (testing-registry-case
  'signed-identifier '(portable core)
- ("consent-reader-test.scm" 224)
 (check-external 'signed-identifier
                 "+number-parser-should-not-see-me"
                 "+number-parser-should-not-see-me"))
 (testing-registry-case
  'dotted-identifier '(portable core)
- ("consent-reader-test.scm" 230)
 (check-external 'dotted-identifier
                 ".number-parser-should-not-see-me"
                 ".number-parser-should-not-see-me"))
@@ -238,7 +202,6 @@
 ;; Multibyte contents also cover readers whose strings use UTF-8 storage.
 (testing-registry-case
  'large-unicode-string-length '(portable core)
- ("consent-reader-test.scm" 239)
 (let* ((length 1024)
        (source (string-append "\"" (make-string length #\λ) "\""))
        (value (consent-read source)))
@@ -248,31 +211,25 @@
 
 (testing-registry-case
  'dotted-list '(portable core)
- ("consent-reader-test.scm" 249)
 (check-external 'dotted-list "(alpha beta . gamma)" "(alpha beta . gamma)"))
 (testing-registry-case
  'quote '(portable core)
- ("consent-reader-test.scm" 253)
 (check-external 'quote "'alpha" "(quote alpha)"))
 (testing-registry-case
  'quasiquote '(portable core)
- ("consent-reader-test.scm" 257)
 (check-external
  'quasiquote
  "`(,alpha ,@beta)"
  "(quasiquote ((unquote alpha) (unquote-splicing beta)))"))
 (testing-registry-case
  'vector '(portable core)
- ("consent-reader-test.scm" 264)
 (check-external 'vector "#(1 alpha \"ok\")" "#(1 alpha \"ok\")"))
 (testing-registry-case
  'bytevector '(portable core)
- ("consent-reader-test.scm" 268)
 (check-external 'bytevector "#u8(0 127 255)" "#u8(0 127 255)"))
 
 (testing-registry-case
  'comments '(portable core)
- ("consent-reader-test.scm" 273)
 (test-equal 'comments
              '("1" "2")
              (map consent-datum->external
@@ -281,7 +238,6 @@
 
 (testing-registry-case
  'list-limit '(portable core)
- ("consent-reader-test.scm" 282)
 (test-equal 'list-limit
              #t
              (raises?
@@ -289,7 +245,6 @@
           (consent-read "(1 2 3)" '((max-list-length . 2)))))))
 (testing-registry-case
  'vector-limit '(portable core)
- ("consent-reader-test.scm" 290)
 (test-equal 'vector-limit
              #t
              (raises?
@@ -297,7 +252,6 @@
           (consent-read "#(1 2 3)" '((max-vector-length . 2)))))))
 (testing-registry-case
  'datum-labels-circular-identity '(portable core)
- ("consent-reader-test.scm" 298)
 (let ((circular (consent-read "#1=(a . #1#)"))
       (shared (consent-read "(#1=(a b) #1#)")))
   (test-equal 'datum-labels-circular-identity
@@ -349,7 +303,6 @@
 ;; malformed top-level form and collects an ordered diagnostics list.
 (testing-registry-case
  'recover-status-complete '(portable core)
- ("consent-reader-test.scm" 350)
 (let ((result
        (consent-read-recover
         "(good 1)\n(broken ]\n(also ]\n(good 2)\n")))
@@ -394,7 +347,6 @@
 ;; incomplete (valid-prefix) region, and marks the result incomplete.
 (testing-registry-case
  'recover-incomplete-status '(portable core)
- ("consent-reader-test.scm" 395)
 (let ((result (consent-read-recover "(a 1)\n(b ")))
   (test-equal 'recover-incomplete-status
              'incomplete
@@ -412,7 +364,6 @@
 ;; source discards everything after the first malformed form.
 (testing-registry-case
  'recover-custom-resync-datums '(portable core)
- ("consent-reader-test.scm" 413)
 (let ((result
        (consent-read-recover
         "(bad ]\n(good)\n"
@@ -430,7 +381,6 @@
 ;; reports a resume offset for each.
 (testing-registry-case
  'step-datum-status '(portable core)
- ("consent-reader-test.scm" 431)
 (let ((datum-step (consent-read-recover-from-string-at "(a b) trailing" 0))
       (invalid-step (consent-read-recover-from-string-at ")oops\n(z)" 0))
       (incomplete-step (consent-read-recover-from-string-at "(a" 0))
@@ -463,7 +413,6 @@
 ;; construct kind; complete, invalid, and eof steps carry no stack.
 (testing-registry-case
  'step-pending-nested-lists '(portable core)
- ("consent-reader-test.scm" 464)
 (let ((nested-step (consent-read-recover-from-string-at "(+ (* 1" 0))
       (string-step (consent-read-recover-from-string-at "(display \"abc" 0))
       (vector-step (consent-read-recover-from-string-at "(a #(1" 0))
@@ -502,7 +451,6 @@
 ;; same ordered offset pairs, so cached editor diagnostics do not flicker.
 (testing-registry-case
  'recover-spans-stable '(portable core)
- ("consent-reader-test.scm" 503)
 (let ((first (consent-read-recover "(a ]\n(b }\n(c)\n"))
       (second (consent-read-recover "(a ]\n(b }\n(c)\n")))
   (test-equal 'recover-spans-stable
@@ -517,7 +465,6 @@
 ;; each make forward progress instead of wedging the driver.
 (testing-registry-case
  'recover-pathological-closers '(portable core)
- ("consent-reader-test.scm" 518)
 (let ((closers (consent-read-recover (make-string 500 #\))))
       (openers (consent-read-recover (make-string 50 #\()))
       (junk-lines
@@ -540,13 +487,11 @@
 ;; The default raise-on-error path is unchanged for existing callers.
 (testing-registry-case
  'recover-default-still-raises '(portable core)
- ("consent-reader-test.scm" 541)
 (test-equal 'recover-default-still-raises
              #t
              (raises? (lambda () (consent-read "(a")))))
 (testing-registry-case
  'recover-default-read-all-raises '(portable core)
- ("consent-reader-test.scm" 547)
 (test-equal 'recover-default-read-all-raises
              #t
              (raises? (lambda () (consent-read-all "(good) (bad ]")))))
@@ -573,39 +518,32 @@
 ;; A length ceiling shows the first L elements then the marker.
 (testing-registry-case
  'bounded-length '(portable core)
- ("consent-reader-test.scm" 574)
 (check-bounded 'bounded-length "(1 2 3 4 5 6 7 8)" '((length . 4)) "(1 2 3 4 ...)"))
 ;; A depth ceiling elides the over-deep nesting with the marker.
 (testing-registry-case
  'bounded-depth '(portable core)
- ("consent-reader-test.scm" 579)
 (check-bounded 'bounded-depth "(1 (2 (3 (4 5))))" '((depth . 2)) "(1 (2 ...))"))
 ;; Vectors honor the length ceiling too.
 (testing-registry-case
  'bounded-vector '(portable core)
- ("consent-reader-test.scm" 584)
 (check-bounded 'bounded-vector "#(10 20 30 40)" '((length . 2)) "#(10 20 ...)"))
 ;; Bytevectors honor the length ceiling.
 (testing-registry-case
  'bounded-bytevector '(portable core)
- ("consent-reader-test.scm" 589)
 (check-bounded 'bounded-bytevector "#u8(1 2 3 4 5)" '((length . 3)) "#u8(1 2 3 ...)"))
 ;; The total-size ceiling is a hard backstop that stops the walk mid-structure.
 (testing-registry-case
  'bounded-size '(portable core)
- ("consent-reader-test.scm" 594)
 (check-bounded 'bounded-size "(100 200 300 400 500)" '((size . 14)) "(100 200 300 ..."))
 ;; A long string atom is pre-capped so a huge atom cannot escape the size bound.
 (testing-registry-case
  'bounded-size-string '(portable core)
- ("consent-reader-test.scm" 599)
 (test-equal 'bounded-size-string
              "..."
              (consent-datum->external-bounded "abcdefghijklmnop" '((size . 6)))))
 ;; With no ceilings, bounded output equals the canonical writer for acyclic data.
 (testing-registry-case
  'bounded-no-limit-matches '(portable core)
- ("consent-reader-test.scm" 606)
 (test-equal 'bounded-no-limit-matches
              (consent-datum->external (consent-read "(1 (2 3) #(4 5) \"s\")"))
              (consent-datum->external-bounded (consent-read "(1 (2 3) #(4 5) \"s\")") '())))

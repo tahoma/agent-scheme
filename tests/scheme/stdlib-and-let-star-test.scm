@@ -19,100 +19,81 @@
 
 (testing-registry-case
  'no-claws-one-body '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 20)
 (test-equal 'no-claws-one-body 1 (and-let* () 1)))
 (testing-registry-case
  'no-claws-multiple-body '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 24)
 (test-equal 'no-claws-multiple-body 2 (and-let* () 1 2)))
 (testing-registry-case
  'no-claws-no-body '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 28)
 (test-equal 'no-claws-no-body #t (and-let* ())))
 
 (testing-registry-case
  'one-bound-variable-false '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 33)
 (test-equal 'one-bound-variable-false
              #f
              (let ((x #f)) (and-let* (x)))))
 (testing-registry-case
  'one-bound-variable-true '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 39)
 (test-equal 'one-bound-variable-true
              1
              (let ((x 1)) (and-let* (x)))))
 (testing-registry-case
  'one-expression-claw '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 45)
 (test-equal 'one-expression-claw
              2
              (let ((x 1)) (and-let* (((+ x 1)))))))
 (testing-registry-case
  'one-binding-claw-false '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 51)
 (test-equal 'one-binding-claw-false #f (and-let* ((x #f)))))
 (testing-registry-case
  'one-binding-claw-true '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 55)
 (test-equal 'one-binding-claw-true 1 (and-let* ((x 1)))))
 
 (testing-registry-case
  'two-claws-short-circuit '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 60)
 (test-equal 'two-claws-short-circuit #f (and-let* ((#f) (x 1)))))
 (testing-registry-case
  'two-claws-expression-before-binding '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 64)
 (test-equal 'two-claws-expression-before-binding 1 (and-let* ((2) (x 1)))))
 (testing-registry-case
  'two-claws-binding-before-expression '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 68)
 (test-equal 'two-claws-binding-before-expression 2 (and-let* ((x 1) (2)))))
 (testing-registry-case
  'two-claws-binding-before-variable '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 72)
 (test-equal 'two-claws-binding-before-variable 1 (and-let* ((x 1) x))))
 (testing-registry-case
  'two-claws-binding-before-variable-expression '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 76)
 (test-equal 'two-claws-binding-before-variable-expression
              1
              (and-let* ((x 1) (x)))))
 
 (testing-registry-case
  'bound-variable-body-false '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 83)
 (test-equal 'bound-variable-body-false
              #f
              (let ((x #f)) (and-let* (x) x))))
 (testing-registry-case
  'bound-variable-body-true '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 89)
 (test-equal 'bound-variable-body-true
              ""
              (let ((x "")) (and-let* (x) x))))
 (testing-registry-case
  'expression-guard-body '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 95)
 (test-equal 'expression-guard-body
              2
              (let ((x 1)) (and-let* (((positive? x))) (+ x 1)))))
 (testing-registry-case
  'expression-guard-no-body '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 101)
 (test-equal 'expression-guard-no-body
              #t
              (let ((x 1)) (and-let* (((positive? x)))))))
 (testing-registry-case
  'expression-guard-false '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 107)
 (test-equal 'expression-guard-false
              #f
              (let ((x 0)) (and-let* (((positive? x))) (+ x 1)))))
 (testing-registry-case
  'duplicate-bindings-are-sequential '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 113)
 (test-equal 'duplicate-bindings-are-sequential
              4
              (let ((x 1))
@@ -123,26 +104,22 @@
 
 (testing-registry-case
  'variable-guard-expression '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 124)
 (test-equal 'variable-guard-expression
              2
              (let ((x 1)) (and-let* (x ((positive? x))) (+ x 1)))))
 (testing-registry-case
  'variable-guard-false '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 130)
 (test-equal 'variable-guard-false
              #f
              (let ((x #f)) (and-let* (x ((positive? x))) (+ x 1)))))
 (testing-registry-case
  'later-guard-prevents-body '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 136)
 (test-equal 'later-guard-prevents-body
              #f
              (let ((x 1))
          (and-let* (x (y (- x 1)) ((positive? y))) (/ x y)))))
 (testing-registry-case
  'all-guards-pass '(portable stdlib)
- ("stdlib-and-let-star-test.scm" 143)
 (test-equal 'all-guards-pass
              (/ 3 2)
              (let ((x 3))

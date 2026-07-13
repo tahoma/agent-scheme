@@ -413,20 +413,16 @@
 
 (testing-registry-case
  'fixture-suite-tag '(portable core)
- ("consent-fixture-test.scm" 414)
 (test-equal 'fixture-suite-tag 'consent-fixture-suite (car suite)))
 (testing-registry-case
  'fixture-suite-has-cases '(portable core)
- ("consent-fixture-test.scm" 418)
 (test-assert 'fixture-suite-has-cases (pair? cases)))
 (testing-registry-case
  'fixture-suite-ids-unique '(portable core)
- ("consent-fixture-test.scm" 422)
 (test-assert 'fixture-suite-ids-unique (unique-ids? cases)))
 
 (testing-registry-case
  'consent-fixture-case-4 '(portable core)
- ("consent-fixture-test.scm" 427)
 (for-each
  (lambda (case)
    (test-assert (field case 'id) (case-valid? case)))
@@ -434,7 +430,6 @@
 
 (testing-registry-case
  'consent-fixture-case-5 '(portable core)
- ("consent-fixture-test.scm" 435)
 (for-each
  (lambda (case)
    (if (and (eq? (field case 'status) 'implemented)

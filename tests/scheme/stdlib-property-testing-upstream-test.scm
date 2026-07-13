@@ -68,7 +68,6 @@
 
 (testing-registry-case
  'stdlib-property-testing-upstream-case-1 '(portable stdlib)
- ("stdlib-property-testing-upstream-test.scm" 69)
 (test-with-runner adapted-runner
   (test-begin "property-test-adapted-upstream")
 
@@ -210,13 +209,11 @@
 
 (testing-registry-case
  'adapted-upstream-records-passing-tests '(portable stdlib)
- ("stdlib-property-testing-upstream-test.scm" 211)
 (test-assert 'adapted-upstream-records-passing-tests
              (> (test-runner-pass-count adapted-runner) 0)))
 
 (testing-registry-case
  'adapted-upstream-control-counts '(portable stdlib)
- ("stdlib-property-testing-upstream-test.scm" 217)
 (test-equal 'adapted-upstream-control-counts
              (list 0
              (+ default-count explicit-upstream-count sample-count)
@@ -227,7 +224,6 @@
 
 (testing-registry-case
  'adapted-upstream-error-tests-pass '(portable stdlib)
- ("stdlib-property-testing-upstream-test.scm" 228)
 (test-equal 'adapted-upstream-error-tests-pass
              2
              (test-runner-pass-count
@@ -244,7 +240,6 @@
 
 (testing-registry-case
  'adapted-upstream-determinism '(portable stdlib)
- ("stdlib-property-testing-upstream-test.scm" 245)
 (test-equal 'adapted-upstream-determinism
              #t
              (let ((left
@@ -257,7 +252,6 @@
 
 (testing-registry-case
  'adapted-upstream-non-determinism '(portable stdlib)
- ("stdlib-property-testing-upstream-test.scm" 258)
 (test-equal 'adapted-upstream-non-determinism
              #t
              (let ((left (gdrop (exact-number-generator) 30))

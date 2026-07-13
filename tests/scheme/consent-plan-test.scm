@@ -20,7 +20,7 @@
   (guard (condition (else #t)) (thunk) #f))
 
 (testing-registry-case
- 'plan-domain '(agent plan unit) ("consent-plan-test.scm" 20)
+ 'plan-domain '(agent plan unit)
  (test-equal "scopes" '(fresh session project) consent-plan-scopes)
  (test-equal "statuses"
              '(pending active blocked done cancelled failed)
@@ -28,7 +28,7 @@
  (test-assert "store predicate" (consent-plan-store? store)))
 
 (testing-registry-case
- 'plan-lifecycle '(agent plan integration) ("consent-plan-test.scm" 29)
+ 'plan-lifecycle '(agent plan integration)
  (let ((created
         (plan-store-create!
          store
@@ -58,7 +58,7 @@
                (plan-store-ref store 'launch))))
 
 (testing-registry-case
- 'plan-validation '(agent plan error) ("consent-plan-test.scm" 60)
+ 'plan-validation '(agent plan error)
  (test-assert "unknown plan fails"
               (raises? (lambda ()
                          (plan-store-step-add! store 'missing '((id x))))))
@@ -71,7 +71,7 @@
                          (plan-store-status! store 'launch 'unknown)))))
 
 (testing-registry-case
- 'plan-status-property '(agent plan property) ("consent-plan-test.scm" 74)
+ 'plan-status-property '(agent plan property)
  (test-property
   (lambda (index)
     (let* ((status (list-ref consent-plan-statuses index))

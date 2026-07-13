@@ -94,10 +94,10 @@
              (or (testing-registry-key=? key (car rest))
                  (loop (cdr rest))))))
 
-    ;; Define and register a portable test case with explicit source metadata.
+    ;; Define and register a portable test case, optionally with source metadata.
     (define-syntax testing-registry-case
-      (syntax-rules ()
-        ((_ name tags (source-file source-line) body ...)
+      (syntax-rules (source)
+        ((_ name tags (source source-file source-line) body ...)
          (testing-registry-register!
           name tags source-file source-line (lambda () body ...)))
         ((_ name tags body ...)

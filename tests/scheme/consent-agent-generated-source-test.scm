@@ -65,7 +65,6 @@
 
 (testing-registry-case
  'plain-candidate-record '(portable agent)
- ("consent-agent-generated-source-test.scm" 66)
 (let ((candidate
        (generated-source-candidate "(define answer 42)\nanswer\n")))
   (test-assert 'plain-candidate-record
@@ -83,7 +82,6 @@
 
 (testing-registry-case
  'fenced-candidate-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 84)
 (let ((candidate
        (generated-source-candidate
         "```scheme\n(define answer 42)\nanswer\n```\n")))
@@ -97,7 +95,6 @@
 
 (testing-registry-case
  'prose-candidate-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 98)
 (let ((candidate
        (generated-source-candidate
         "Here is the code:\n```scheme\n(define answer 42)\n```\n")))
@@ -110,7 +107,6 @@
 
 (testing-registry-case
  'multiple-fence-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 111)
 (let ((candidate
        (generated-source-candidate
         "```scheme\n(define a 1)\n```\n```scheme\n(define b 2)\n```\n")))
@@ -123,7 +119,6 @@
 
 (testing-registry-case
  'plain-prose-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 124)
 (let ((candidate
        (generated-source-candidate "This is explanatory prose.")))
   (test-equal 'plain-prose-status
@@ -135,7 +130,6 @@
 
 (testing-registry-case
  'reader-error-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 136)
 (let ((candidate
        (generated-source-candidate "(define (broken x)\n")))
   (test-equal 'reader-error-status
@@ -150,7 +144,6 @@
 
 (testing-registry-case
  'sandbox-success-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 151)
 (let* ((loop
         (generated-source-run
          "(define deriv 1)\n(define differentiator-tests 'ok)\n"
@@ -180,7 +173,6 @@
 
 (testing-registry-case
  'unbound-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 181)
 (let* ((loop
         (generated-source-run
          "(missing-helper 1)\n"
@@ -200,7 +192,6 @@
 
 (testing-registry-case
  'contract-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 201)
 (let* ((loop
         (generated-source-run
          "(define other 1)\n"
@@ -221,7 +212,6 @@
 
 (testing-registry-case
  'import-contract-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 222)
 (let* ((loop
         (generated-source-run
          "(define deriv 1)\n"
@@ -244,7 +234,6 @@
 
 (testing-registry-case
  'repair-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 245)
 (let ((repair-inputs '()))
   (let* ((loop
           (generated-source-run
@@ -278,7 +267,6 @@
 
 (testing-registry-case
  'rejected-apply-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 279)
 (let ((applied '()))
   (let* ((rejected
           (generated-source-run
@@ -297,7 +285,6 @@
 
 (testing-registry-case
  'accepted-apply-status '(portable agent)
- ("consent-agent-generated-source-test.scm" 298)
 (let ((applied '()))
   (let* ((accepted
           (generated-source-run

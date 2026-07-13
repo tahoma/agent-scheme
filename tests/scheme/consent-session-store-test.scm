@@ -16,7 +16,6 @@
 
 (testing-registry-case
  'session-store-lifecycle '(agent session lifecycle)
- ("consent-session-store-test.scm" 17)
  (let* ((store (consent-make-session-store))
         (created
          (session-store-create!
@@ -69,7 +68,6 @@
 
 (testing-registry-case
  'session-store-validation '(agent session error)
- ("consent-session-store-test.scm" 71)
  (let ((store (consent-make-session-store)))
    (session-store-create! store 'named '((id retired-session)))
    (session-store-retire! store 'retired-session)

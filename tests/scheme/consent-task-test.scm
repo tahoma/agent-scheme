@@ -17,7 +17,7 @@
   (guard (condition (else #t)) (thunk) #f))
 
 (testing-registry-case
- 'task-transitions '(agent task unit) ("consent-task-test.scm" 19)
+ 'task-transitions '(agent task unit)
  (test-assert "created to observing"
               (task-transition-allowed? 'created 'observing))
  (test-assert "created to complete rejected"
@@ -27,7 +27,7 @@
                          (validate-task-transition 'created 'complete)))))
 
 (testing-registry-case
- 'task-records '(agent task records) ("consent-task-test.scm" 29)
+ 'task-records '(agent task records)
  (let* ((task
          (make-agent-task
           'task-1 "Ship task records." 'session-1
@@ -55,7 +55,7 @@
               (not (task-record-valid? '(agent-task (id incomplete))))))
 
 (testing-registry-case
- 'task-state-table '(agent task table) ("consent-task-test.scm" 59)
+ 'task-state-table '(agent task table)
  (testing-harness-check
   "lightweight eager state table" 1
   (check-ec (:list state task-states)

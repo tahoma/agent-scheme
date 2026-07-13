@@ -192,7 +192,6 @@
 
 (testing-registry-case
  'stdlib-random-data-generators-upstream-case-1 '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 193)
 (let loop ((index 0) (cases fixed-integer-cases))
   (if (not (null? cases))
       (let ((case (car cases)))
@@ -209,7 +208,6 @@
 
 (testing-registry-case
  'seeded-integer-replay '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 210)
 (with-seeded-random-source
  11
  0
@@ -226,7 +224,6 @@
 
 (testing-registry-case
  'random-real-generator-broad-range '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 227)
 (with-seeded-random-source
  12
  0
@@ -246,7 +243,6 @@
 
 (testing-registry-case
  'bernoulli-statistical-frequency '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 247)
 (with-seeded-random-source
  13
  0
@@ -259,7 +255,6 @@
 
 (testing-registry-case
  'categorical-first-frequency '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 260)
 (with-seeded-random-source
  14
  0
@@ -282,7 +277,6 @@
 
 (testing-registry-case
  'binomial-zero-frequency '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 283)
 (with-seeded-random-source
  15
  0
@@ -294,7 +288,6 @@
 
 (testing-registry-case
  'normal-mean '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 295)
 (with-seeded-random-source
  16
  0
@@ -306,7 +299,6 @@
 
 (testing-registry-case
  'exponential-mean '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 307)
 (with-seeded-random-source
  17
  0
@@ -318,7 +310,6 @@
 
 (testing-registry-case
  'geometric-mean '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 319)
 (with-seeded-random-source
  18
  0
@@ -330,7 +321,6 @@
 
 (testing-registry-case
  'poisson-small-mean '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 331)
 (with-seeded-random-source
  19
  0
@@ -346,20 +336,16 @@
 
 (testing-registry-case
  'stdlib-random-data-generators-upstream-case-11 '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 347)
 (check-zipf-distribution 'zipf-harmonic 8 1.0 0.0 8000 0.25))
 (testing-registry-case
  'stdlib-random-data-generators-upstream-case-12 '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 351)
 (check-zipf-distribution 'zipf-hurwicz 8 1.2 0.5 8000 0.25))
 (testing-registry-case
  'stdlib-random-data-generators-upstream-case-13 '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 355)
 (check-zipf-distribution 'zipf-flat-ish 8 0.1 0.0 8000 0.25))
 
 (testing-registry-case
  'sphere-point-on-surface '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 360)
 (with-seeded-random-source
  20
  0
@@ -380,7 +366,6 @@
 
 (testing-registry-case
  'ellipsoid-point-on-surface '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 381)
 (with-seeded-random-source
  21
  0
@@ -398,7 +383,6 @@
 
 (testing-registry-case
  'ball-point-inside-ellipsoid '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 399)
 (with-seeded-random-source
  22
  0
@@ -433,14 +417,12 @@
 
 (testing-registry-case
  'gsampling-empty '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 434)
 (test-equal 'gsampling-empty
              #t
              (eof-object? ((gsampling)))))
 
 (testing-registry-case
  'gsampling-mixed-finite-generators '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 441)
 (test-assert 'gsampling-mixed-finite-generators
              (let ((sample (gsampling (generator 'a) (generator) (generator 'b 'c))))
               (let* ((values (generator->fixed-list sample 4))
@@ -452,7 +434,6 @@
 
 (testing-registry-case
  'stdlib-random-data-generators-upstream-case-19 '(portable stdlib)
- ("stdlib-random-data-generators-upstream-test.scm" 453)
 (for-each
  (lambda (case)
    (test-assert (car case) (raises? (cadr case))))

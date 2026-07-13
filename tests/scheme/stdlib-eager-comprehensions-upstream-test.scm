@@ -49,7 +49,6 @@
 
 (testing-registry-case
  'do-ec-counts '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 50)
 (upstream-check 'do-ec-counts
                 (list (let ((x 0))
                         (do-ec (:range i 10) (set! x (+ x 1)))
@@ -63,7 +62,6 @@
 
 (testing-registry-case
  'list-ec-basic-qualifiers '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 64)
 (upstream-check 'list-ec-basic-qualifiers
                 (list (list-ec 1)
                       (list-ec (:range i 4) i)
@@ -86,7 +84,6 @@
 
 (testing-registry-case
  'collector-boundaries '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 87)
 (upstream-check 'collector-boundaries
                 (list (append-ec '(a b))
                       (append-ec (:range i 0) '(a b))
@@ -106,7 +103,6 @@
 
 (testing-registry-case
  'early-and-folding-comprehensions '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 107)
 (upstream-check 'early-and-folding-comprehensions
                 (list (first-ec #f 1)
                       (first-ec #f (:range i 0) i)
@@ -135,7 +131,6 @@
 
 (testing-registry-case
  'typed-generator-boundaries '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 136)
 (upstream-check 'typed-generator-boundaries
                 (list (list-ec (:list x '()) x)
                       (list-ec (:list x '(1) '(2) '(3)) x)
@@ -161,7 +156,6 @@
 
 (testing-registry-case
  'special-generators '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 162)
 (upstream-check 'special-generators
                 (list (list-ec (:do ((i 0)) (< i 4) ((+ i 1))) i)
                       (list-ec
@@ -183,7 +177,6 @@
 
 (testing-registry-case
  'while-until-stop-behavior '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 184)
 (upstream-check 'while-until-stop-behavior
                 (list (list-ec (:until (:list i '(1 2 3 4 5 6 7 8 9))
                                        (>= i 5))
@@ -216,7 +209,6 @@
 
 (testing-registry-case
  'dispatching-generator-boundaries '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 217)
 (upstream-check 'dispatching-generator-boundaries
                 (list (list-ec (: c '(a b)) c)
                       (list-ec (: c '(a b) '(c d)) c)
@@ -237,7 +229,6 @@
 
 (testing-registry-case
  'index-variable-examples '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 238)
 (upstream-check 'index-variable-examples
                 (list (list-ec (:list c (index i) '(a b)) (list c i))
                       (list-ec (:string c (index i) "a") (list c i))
@@ -258,7 +249,6 @@
 
 (testing-registry-case
  'little-shop-examples '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 259)
 (upstream-check 'little-shop-examples
                 (list (list-ec (:range x 5) (:range x x) x)
                       (list-ec (:list x '(2 "23" (4))) (: y x) y)
@@ -310,7 +300,6 @@
 
 (testing-registry-case
  'less-artificial-examples '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 311)
 (upstream-check 'less-artificial-examples
                 (list (factorial 0)
                       (factorial 5)
@@ -413,7 +402,6 @@
 
 (testing-registry-case
  'extension-examples '(portable stdlib)
- ("stdlib-eager-comprehensions-upstream-test.scm" 414)
 (upstream-check 'extension-examples
                 (let ((original-dispatch (:-dispatch-ref)))
                   (dynamic-wind

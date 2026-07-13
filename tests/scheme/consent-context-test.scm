@@ -13,7 +13,7 @@
         (stdlib property-testing))
 
 (testing-registry-case
- 'context-fields '(agent context unit) ("consent-context-test.scm" 15)
+ 'context-fields '(agent context unit)
  (test-equal "context field"
              '(request-id req-1)
              (context-field 'request-id 'req-1))
@@ -21,7 +21,7 @@
  (test-assert "absent value" (not (context-present? #f))))
 
 (testing-registry-case
- 'context-record-construction '(agent context records) ("consent-context-test.scm" 23)
+ 'context-record-construction '(agent context records)
  (test-equal
   "request context omits absent fields"
   '(request-context (request-id req-1) (request "inspect"))
@@ -36,7 +36,7 @@
              (make-conversation-summary 'session-1 #f)))
 
 (testing-registry-case
- 'context-composition '(agent context integration) ("consent-context-test.scm" 38)
+ 'context-composition '(agent context integration)
  (test-equal
   "focus filters absent records"
   '(focus-context
@@ -58,7 +58,7 @@
      (list (make-conversation-summary #f "hello")))))))
 
 (testing-registry-case
- 'context-request-property '(agent context property) ("consent-context-test.scm" 61)
+ 'context-request-property '(agent context property)
  (test-property
   (lambda (present? request-id)
     (let ((context

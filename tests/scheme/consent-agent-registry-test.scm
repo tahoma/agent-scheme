@@ -29,7 +29,6 @@
 
 (testing-registry-case
  'agent-predicate '(portable agent)
- ("consent-agent-registry-test.scm" 30)
 (let ((agent (make-agent 'coder-1
                          (list (list 'name "Coder One")
                                (list 'role 'coder)
@@ -55,7 +54,6 @@
 ;; Minimal construction fills documented defaults.
 (testing-registry-case
  'default-name '(portable agent)
- ("consent-agent-registry-test.scm" 56)
 (let ((agent (make-agent 'minimal '())))
   (test-equal 'default-name "minimal" (agent-name agent))
   (test-equal 'default-role 'planner (agent-role agent))
@@ -67,7 +65,6 @@
 
 (testing-registry-case
  'agent-predicate-rejects-non-agent '(portable agent)
- ("consent-agent-registry-test.scm" 68)
 (test-assert 'agent-predicate-rejects-non-agent
              (not (agent? '(not-an-agent (id x))))))
 
@@ -75,7 +72,6 @@
 
 (testing-registry-case
  'registry-predicate '(portable agent)
- ("consent-agent-registry-test.scm" 76)
 (let ((registry (make-agent-registry)))
   (test-assert 'registry-predicate (agent-registry? registry))
   (test-equal 'seeded-default-id 'default (default-agent-id registry))
@@ -85,7 +81,6 @@
 
 (testing-registry-case
  'registration-order '(portable agent)
- ("consent-agent-registry-test.scm" 86)
 (let ((registry (make-agent-registry)))
   (register-agent registry (make-agent 'reviewer-1 (list (list 'role 'reviewer))))
   (register-agent registry (make-agent 'coder-1 (list (list 'role 'coder))))
@@ -103,7 +98,6 @@
 
 (testing-registry-case
  'register-rejects-non-agent '(portable agent)
- ("consent-agent-registry-test.scm" 104)
 (test-assert 'register-rejects-non-agent
              (raises?
              (lambda ()
@@ -113,7 +107,6 @@
 
 (testing-registry-case
  'set-default-returns-agent '(portable agent)
- ("consent-agent-registry-test.scm" 114)
 (let ((registry (make-agent-registry)))
   (register-agent registry (make-agent 'planner-2 (list (list 'role 'planner))))
   (let ((returned (set-default-agent! registry 'planner-2)))
@@ -127,7 +120,6 @@
 
 (testing-registry-case
  'auto-is-selection '(portable agent)
- ("consent-agent-registry-test.scm" 128)
 (let ((registry (make-agent-registry)))
   (register-agent registry (make-agent 'coder-1 (list (list 'role 'coder))))
   (register-agent registry (make-agent 'reviewer-1 (list (list 'role 'reviewer))))
@@ -202,7 +194,6 @@
 ;; An explicitly chosen default still reports the explicit basis.
 (testing-registry-case
  'explicit-default-basis '(portable agent)
- ("consent-agent-registry-test.scm" 203)
 (let ((registry (make-agent-registry)))
   (register-agent registry (make-agent 'coder-1 (list (list 'role 'coder))))
   (set-default-agent! registry 'coder-1)
@@ -217,7 +208,6 @@
 ;; A requested model selects the first matching agent, then falls back.
 (testing-registry-case
  'model-match-basis '(portable agent)
- ("consent-agent-registry-test.scm" 218)
 (let ((registry (make-agent-registry)))
   (register-agent registry
                   (make-agent 'cod (list (list 'role 'coder) (list 'model 'm1))))

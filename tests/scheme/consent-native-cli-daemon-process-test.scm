@@ -97,7 +97,6 @@
 
 (testing-registry-case
  'batch-deny-exit '(portable core)
- ("consent-native-cli-daemon-process-test.scm" 98)
 (let ((outcome (cli-native-cli-execute
                 '((subcommand . "process-run") (mode . "batch")
                   (command . "/bin/echo") (child-arguments "should-not-run")))))
@@ -120,7 +119,6 @@
 
 (testing-registry-case
  'stdin-deny-exit '(portable core)
- ("consent-native-cli-daemon-process-test.scm" 121)
 (let ((outcome (cli-native-cli-execute
                 '((subcommand . "stdin-read") (mode . "batch")))))
   (test-equal 'stdin-deny-exit 3 (outcome-exit outcome))
@@ -133,7 +131,6 @@
 
 (testing-registry-case
  'stale-exit '(portable core)
- ("consent-native-cli-daemon-process-test.scm" 134)
 (let ((outcome (cli-native-cli-execute
                 '((subcommand . "process-status") (mode . "daemon")
                   (channel . #t) (job-id . "h-job-42")
@@ -153,7 +150,6 @@
 
 (testing-registry-case
  'event-kind-in-vocabulary '(portable core)
- ("consent-native-cli-daemon-process-test.scm" 154)
 (let* ((approval (cli-native-cli-execute
                   '((subcommand . "process-status") (mode . "cli")
                     (job-id . "h-job-1") (job-state . "live"))))
@@ -176,7 +172,6 @@
 
 (testing-registry-case
  'interpreted-execution '(portable core)
- ("consent-native-cli-daemon-process-test.scm" 177)
 (let* ((interpreted (cli-native-cli-execute
                      '((subcommand . "process-status") (mode . "cli")
                        (job-id . "h-job-1") (job-state . "live")
@@ -207,7 +202,6 @@
 
 (testing-registry-case
  'run-exit '(portable core)
- ("consent-native-cli-daemon-process-test.scm" 208)
 (if (not (cli-host-available?))
     (begin
       (display

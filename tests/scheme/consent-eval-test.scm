@@ -305,7 +305,6 @@
 
 (testing-registry-case
  'expected-datum-external-normalizes-whitespace '(portable core)
- ("consent-eval-test.scm" 306)
 (check 'expected-datum-external-normalizes-whitespace
        (expected-datum-external
         "(alpha
@@ -315,7 +314,6 @@
 
 (testing-registry-case
  'expected-datum-external-joins-fragments '(portable core)
- ("consent-eval-test.scm" 316)
 (check 'expected-datum-external-joins-fragments
        (expected-datum-external "(alpha " "(beta gamma))")
        "(alpha (beta gamma))"))
@@ -345,21 +343,18 @@
 
 (testing-registry-case
  'runtime-version-components '(portable core)
- ("consent-eval-test.scm" 346)
 (check 'runtime-version-components
        (consent-version-components)
        (cdr consent-version-datum)))
 
 (testing-registry-case
  'runtime-version-datum '(portable core)
- ("consent-eval-test.scm" 353)
 (check 'runtime-version-datum
        (consent-result->external (consent-version))
        (consent-test--expected-version-external)))
 
 (testing-registry-case
  'reader-source-metadata-default-enabled '(portable core)
- ("consent-eval-test.scm" 360)
 (check 'reader-source-metadata-default-enabled
        (consent-datum->external
         (consent-syntax-source
@@ -368,7 +363,6 @@
 
 (testing-registry-case
  'reader-source-metadata-explicit-disabled '(portable core)
- ("consent-eval-test.scm" 369)
 (check 'reader-source-metadata-explicit-disabled
        (consent-datum->external
         (consent-syntax-source
@@ -378,7 +372,6 @@
 
 (testing-registry-case
  'reader-source-metadata-explicit-enabled '(portable core)
- ("consent-eval-test.scm" 379)
 (check 'reader-source-metadata-explicit-enabled
        (consent-datum->external
         (consent-syntax-source
@@ -388,14 +381,12 @@
 
 (testing-registry-case
  'reader-native-number-predicate-preserves-canonical-record '(portable core)
- ("consent-eval-test.scm" 389)
 (check 'reader-native-number-predicate-preserves-canonical-record
        (consent-number? (consent-make-canonical-integer 21))
        #t))
 
 (testing-registry-case
  'reader-native-number-value-unwraps-canonical-record '(portable core)
- ("consent-eval-test.scm" 396)
 (check 'reader-native-number-value-unwraps-canonical-record
        (consent-number-value (consent-make-canonical-integer 21))
        (consent-number-value 21)))
@@ -412,7 +403,6 @@
 
 (testing-registry-case
  'reader-source-metadata-retains-loaded-graph '(portable core)
- ("consent-eval-test.scm" 413)
 (check 'reader-source-metadata-retains-loaded-graph
        (let* ((datum
                (consent-read (consent-test-source-metadata-graph 1200)
@@ -425,7 +415,6 @@
 
 (testing-registry-case
  'reader-source-metadata-limit-can-be-raised '(portable core)
- ("consent-eval-test.scm" 426)
 (check 'reader-source-metadata-limit-can-be-raised
        (let ((source (consent-test-source-metadata-graph 3)))
          (consent-datum->external
@@ -446,7 +435,6 @@
 
 (testing-registry-case
  'simple-string-docstring-reflection '(portable core)
- ("consent-eval-test.scm" 447)
 (check-external/options 'simple-string-docstring-reflection
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -473,7 +461,6 @@
 
 (testing-registry-case
  'documentation-arguments-metadata '(portable core)
- ("consent-eval-test.scm" 474)
 (check-external/options 'documentation-arguments-metadata
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -503,7 +490,6 @@
 
 (testing-registry-case
  'primitive-manifest-docstring-reflection '(portable core)
- ("consent-eval-test.scm" 504)
 (check-external 'primitive-manifest-docstring-reflection
                 "(import (scheme base) (scheme time) (agent reflect))
                  (define (field datum name)
@@ -541,7 +527,6 @@
 
 (testing-registry-case
  'primitive-manifest-rich-metadata-reflection '(portable core)
- ("consent-eval-test.scm" 542)
 (check-external 'primitive-manifest-rich-metadata-reflection
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -583,7 +568,6 @@
 
 (testing-registry-case
  'doc-and-describe-introspection '(portable core)
- ("consent-eval-test.scm" 584)
 (check-external/options 'doc-and-describe-introspection
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -639,7 +623,6 @@
 
 (testing-registry-case
  'docstring-edge-cases '(portable core)
- ("consent-eval-test.scm" 640)
 (check-external/options 'docstring-edge-cases
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -679,7 +662,6 @@
 
 (testing-registry-case
  'rich-documentation-metadata '(portable core)
- ("consent-eval-test.scm" 680)
 (check-external/options 'rich-documentation-metadata
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -808,7 +790,6 @@
 
 (testing-registry-case
  'typed-rich-documentation-metadata '(portable core)
- ("consent-eval-test.scm" 809)
 (check-external/options 'typed-rich-documentation-metadata
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -888,7 +869,6 @@
 
 (testing-registry-case
  'boundary-contract-checking-default-advisory '(portable core)
- ("consent-eval-test.scm" 889)
 (check-external 'boundary-contract-checking-default-advisory
                 "(define (string-identity text)
                    \"Return TEXT.\"
@@ -903,7 +883,6 @@
 
 (testing-registry-case
  'docstring-retention-simple '(portable core)
- ("consent-eval-test.scm" 904)
 (check-external/options 'docstring-retention-simple
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -930,7 +909,6 @@
 
 (testing-registry-case
  'docstring-retention-none '(portable core)
- ("consent-eval-test.scm" 931)
 (check-external/options 'docstring-retention-none
                 "(import (scheme base) (agent reflect))
                  (define (documented x)
@@ -947,7 +925,6 @@
 
 (testing-registry-case
  'docstring-retention-strips-body '(portable core)
- ("consent-eval-test.scm" 948)
 (check 'docstring-retention-strips-body
        (procedure-body-external
         (consent-eval-source
@@ -960,7 +937,6 @@
 
 (testing-registry-case
  'docstring-retention-none-strips-body '(portable core)
- ("consent-eval-test.scm" 961)
 (check 'docstring-retention-none-strips-body
        (procedure-body-external
         (consent-eval-source
@@ -975,7 +951,6 @@
 
 (testing-registry-case
  'docstring-retention-none-keeps-final-string-body '(portable core)
- ("consent-eval-test.scm" 976)
 (check 'docstring-retention-none-keeps-final-string-body
        (procedure-body-external
         (consent-eval-source
@@ -988,7 +963,6 @@
 
 (testing-registry-case
  'source-library-docstring-reflection '(portable core)
- ("consent-eval-test.scm" 989)
 (check-external/options 'source-library-docstring-reflection
                 "(import (scheme base)
                          (scheme lazy)
@@ -1100,7 +1074,6 @@
 
 (testing-registry-case
  'boundary-contract-checking-argument-failure '(portable core)
- ("consent-eval-test.scm" 1101)
 (check-result-contains
  'boundary-contract-checking-argument-failure
  "(define (string-identity text)
@@ -1123,7 +1096,6 @@
 
 (testing-registry-case
  'boundary-contract-checking-return-failure '(portable core)
- ("consent-eval-test.scm" 1124)
 (check-result-contains
  'boundary-contract-checking-return-failure
  "(define (bad-return text)
@@ -1144,7 +1116,6 @@
 
 (testing-registry-case
  'boundary-contract-checking-lowerable-shapes '(portable core)
- ("consent-eval-test.scm" 1145)
 (check-result-contains
  'boundary-contract-checking-lowerable-shapes
  "(define (accept-shapes names scores cell maybe callback)
@@ -1171,7 +1142,6 @@
 
 (testing-registry-case
  'boundary-contract-checking-reports-stripped-metadata '(portable core)
- ("consent-eval-test.scm" 1172)
 (check-result-contains
  'boundary-contract-checking-reports-stripped-metadata
  "(define (documented x)
@@ -1190,7 +1160,6 @@
 
 (testing-registry-case
  'boundary-contract-checking-precedes-body-prep '(portable core)
- ("consent-eval-test.scm" 1191)
 (check 'boundary-contract-checking-precedes-body-prep
        (let ((environment (consent-make-base-environment)))
          (let ((raised?
@@ -1224,7 +1193,6 @@
 
 (testing-registry-case
  'srfi-1-list-docstring-reflection '(portable core)
- ("consent-eval-test.scm" 1225)
 (check-result-contains
  'srfi-1-list-docstring-reflection
  "(import (scheme base)
@@ -1262,7 +1230,6 @@
 
 (testing-registry-case
  'srfi-158-generator-docstring-reflection '(portable core)
- ("consent-eval-test.scm" 1263)
 (check-result-contains
  'srfi-158-generator-docstring-reflection
  "(import (scheme base)
@@ -1302,7 +1269,6 @@
 
 (testing-registry-case
  'library-bindings-reflection '(portable core)
- ("consent-eval-test.scm" 1303)
 (check-result-contains
  'library-bindings-reflection
  "(import (scheme base)
@@ -1319,7 +1285,6 @@
 
 (testing-registry-case
  'srfi-158-generator-docstring-metadata-coverage '(portable core)
- ("consent-eval-test.scm" 1320)
 (check-external/options
  'srfi-158-generator-docstring-metadata-coverage
  "(import (scheme base)
@@ -1461,7 +1426,6 @@
 
 (testing-registry-case
  'literal-number '(portable core)
- ("consent-eval-test.scm" 1462)
 (check-external 'literal-number "42" "42"))
 ;; Evaluated numbers share the canonical constructors' representation class
 ;; (see the reader suite's integer-matches-canonical-number-class): the
@@ -1470,39 +1434,32 @@
 ;; on the Consent runtime itself via --host-run.
 (testing-registry-case
  'literal-number-matches-canonical-number-class '(portable core)
- ("consent-eval-test.scm" 1471)
 (check 'literal-number-matches-canonical-number-class
        (number? (consent-eval-source "42"))
        (number? (consent-make-canonical-integer 42))))
 (testing-registry-case
  'literal-string '(portable core)
- ("consent-eval-test.scm" 1477)
 (check-external 'literal-string "\"ok\"" "\"ok\""))
 (testing-registry-case
  'quote-symbol '(portable core)
- ("consent-eval-test.scm" 1481)
 (check-external 'quote-symbol "'alpha" "alpha"))
 (testing-registry-case
  'quote-list '(portable core)
- ("consent-eval-test.scm" 1485)
 (check-external 'quote-list "'(1 2 3)" "(1 2 3)"))
 (testing-registry-case
  'empty-list-expression-error '(portable core)
- ("consent-eval-test.scm" 1489)
 (check 'empty-list-expression-error
        (raises? (lambda () (consent-eval-source "()")))
        #t))
 
 (testing-registry-case
  'definition-and-reference '(portable core)
- ("consent-eval-test.scm" 1496)
 (check-external 'definition-and-reference
                 "(define answer 40)
                  (+ answer 2)"
                 "42"))
 (testing-registry-case
  'top-level-begin '(portable core)
- ("consent-eval-test.scm" 1503)
 (check-external 'top-level-begin
                 "(begin
                    (define answer 42)
@@ -1510,20 +1467,17 @@
                 "42"))
 (testing-registry-case
  'operator-expression '(portable core)
- ("consent-eval-test.scm" 1511)
 (check-external 'operator-expression
                 "((if #f + *) 3 4)"
                 "12"))
 (testing-registry-case
  'unknown-identifier '(portable core)
- ("consent-eval-test.scm" 1517)
 (check 'unknown-identifier
        (raises? (lambda () (consent-eval-source "missing")))
        #t))
 
 (testing-registry-case
  'base-registry-names '(portable core)
- ("consent-eval-test.scm" 1524)
 (let ((names (consent-base-primitive-names))
       (prelude-names (consent-base-prelude-binding-names))
       (specs (consent-base-primitive-specs))
@@ -1585,7 +1539,6 @@
 
 (testing-registry-case
  'primitive-manifest-vector-ref '(portable core)
- ("consent-eval-test.scm" 1586)
 (let* ((manifest-specs (consent-primitive-manifest-binding-specs))
        (vector-ref
         (find-manifest-spec '(scheme base) 'vector-ref manifest-specs))
@@ -1677,7 +1630,6 @@
 
 (testing-registry-case
  'standard-source-library-case-lambda-exports '(portable core)
- ("consent-eval-test.scm" 1678)
 (let* ((source-specs (consent-standard-source-library-specs))
        (case-lambda-spec
         (find-source-library-spec '(scheme case-lambda) source-specs))
@@ -1735,7 +1687,6 @@
 
 (testing-registry-case
  'stdlib-source-library-files '(portable core)
- ("consent-eval-test.scm" 1736)
 (let* ((source-specs (consent-stdlib-source-library-specs))
        (manifest-spec
         (find-source-library-spec '(stdlib manifest) source-specs))
@@ -1838,7 +1789,6 @@
 
 (testing-registry-case
  'user-manifest-root-path-list-import '(portable core)
- ("consent-eval-test.scm" 1839)
 (check 'user-manifest-root-path-list-import
        (let ((user-directories (consent-library-user-directory-list)))
          (dynamic-wind
@@ -1857,7 +1807,6 @@
 
 (testing-registry-case
  'srfi-16-case-lambda-alias-import '(portable core)
- ("consent-eval-test.scm" 1858)
 (check-external 'srfi-16-case-lambda-alias-import
                 "(import (scheme base) (srfi 16))
                  (define (describe . args)
@@ -1872,7 +1821,6 @@
 
 (testing-registry-case
  'srfi-16-portable-alias-import '(portable core)
- ("consent-eval-test.scm" 1873)
 (check-external 'srfi-16-portable-alias-import
                 "(import (scheme base) (srfi srfi-16))
                  ((case-lambda
@@ -1882,7 +1830,6 @@
 
 (testing-registry-case
  'srfi-16-case-lambda-no-matching-clause '(portable core)
- ("consent-eval-test.scm" 1883)
 (check 'srfi-16-case-lambda-no-matching-clause
        (raises?
         (lambda ()
@@ -1894,7 +1841,6 @@
 
 (testing-registry-case
  'stdlib-srfi-16-manifest '(portable core)
- ("consent-eval-test.scm" 1895)
 (check-external 'stdlib-srfi-16-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(srfi 16)))
@@ -1919,7 +1865,6 @@
 
 (testing-registry-case
  'srfi-0-cond-expand-import '(portable core)
- ("consent-eval-test.scm" 1920)
 (check-external 'srfi-0-cond-expand-import
                 "(import (scheme base) (srfi 0))
                  (cond-expand
@@ -1929,7 +1874,6 @@
 
 (testing-registry-case
  'srfi-0-cond-expand-library-feature '(portable core)
- ("consent-eval-test.scm" 1930)
 (check-external 'srfi-0-cond-expand-library-feature
                 "(define-library (consent fixture srfi-0-cond-expand)
                   (cond-expand
@@ -1949,7 +1893,6 @@
 
 (testing-registry-case
  'stdlib-srfi-0-manifest '(portable core)
- ("consent-eval-test.scm" 1950)
 (check-external 'stdlib-srfi-0-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(srfi 0)))
@@ -1972,7 +1915,6 @@
 
 (testing-registry-case
  'srfi-261-aliases-cover-supported-srfi-libraries '(portable core)
- ("consent-eval-test.scm" 1973)
 (check-external/options
  'srfi-261-aliases-cover-supported-srfi-libraries
  (stdlib-manifest-source
@@ -2012,7 +1954,6 @@
 
 (testing-registry-case
  'srfi-97-library-reference-alias-import '(portable core)
- ("consent-eval-test.scm" 2013)
 (check-external 'srfi-97-library-reference-alias-import
                 "(import (scheme base) (srfi :1 lists))
                  (iota 4)"
@@ -2020,7 +1961,6 @@
 
 (testing-registry-case
  'srfi-97-number-only-library-reference-alias-import '(portable core)
- ("consent-eval-test.scm" 2021)
 (check-external 'srfi-97-number-only-library-reference-alias-import
                 "(import (scheme base) (srfi :16))
                  ((case-lambda
@@ -2030,7 +1970,6 @@
 
 (testing-registry-case
  'srfi-97-library-reference-shim-import '(portable core)
- ("consent-eval-test.scm" 2031)
 (check-external 'srfi-97-library-reference-shim-import
                 "(define-library (consent fixture srfi-97-library-reference)
                    (cond-expand
@@ -2053,7 +1992,6 @@
 
 (testing-registry-case
  'stdlib-srfi-97-manifest '(portable core)
- ("consent-eval-test.scm" 2054)
 (check-external 'stdlib-srfi-97-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(stdlib srfi-libraries)))
@@ -2075,7 +2013,6 @@
 
 (testing-registry-case
  'srfi-2-and-let-star-behavior '(portable core)
- ("consent-eval-test.scm" 2076)
 (check-external 'srfi-2-and-let-star-behavior
                 "(import (scheme base) (srfi 2))
                  (let ((events '()))
@@ -2099,7 +2036,6 @@
 
 (testing-registry-case
  'srfi-2-portable-alias-import '(portable core)
- ("consent-eval-test.scm" 2100)
 (check-external 'srfi-2-portable-alias-import
                 "(import (scheme base) (srfi srfi-2))
                  (and-let* (((positive? 3)) (x 4)) x)"
@@ -2107,7 +2043,6 @@
 
 (testing-registry-case
  'stdlib-and-let-star-import '(portable core)
- ("consent-eval-test.scm" 2108)
 (check-external 'stdlib-and-let-star-import
                 "(import (scheme base) (stdlib and-let-star))
                  (and-let* ((x 'primary)) x)"
@@ -2115,7 +2050,6 @@
 
 (testing-registry-case
  'stdlib-srfi-2-manifest '(portable core)
- ("consent-eval-test.scm" 2116)
 (check-external 'stdlib-srfi-2-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(stdlib and-let-star)))
@@ -2148,7 +2082,6 @@
 
 (testing-registry-case
  'srfi-42-eager-comprehensions-behavior '(portable core)
- ("consent-eval-test.scm" 2149)
 (check-external 'srfi-42-eager-comprehensions-behavior
                 "(import (scheme base) (srfi 42))
                  (list (list-ec (:range i 5) (* i i))
@@ -2160,7 +2093,6 @@
 
 (testing-registry-case
  'srfi-42-portable-alias-import '(portable core)
- ("consent-eval-test.scm" 2161)
 (check-external 'srfi-42-portable-alias-import
                 "(import (scheme base) (srfi srfi-42))
                  (sum-ec (:range i 4) i)"
@@ -2168,7 +2100,6 @@
 
 (testing-registry-case
  'srfi-42-library-reference-alias-import '(portable core)
- ("consent-eval-test.scm" 2169)
 (check-external 'srfi-42-library-reference-alias-import
                 "(import (scheme base) (srfi :42 eager-comprehensions))
                  (list-ec (:list x '(a b)) x)"
@@ -2176,7 +2107,6 @@
 
 (testing-registry-case
  'stdlib-srfi-42-manifest '(portable core)
- ("consent-eval-test.scm" 2177)
 (check-external 'stdlib-srfi-42-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref
@@ -2216,7 +2146,6 @@
 
 (testing-registry-case
  'srfi-78-lightweight-testing-behavior '(portable core)
- ("consent-eval-test.scm" 2217)
 (check-external 'srfi-78-lightweight-testing-behavior
                 "(import (scheme base) (srfi 78))
                  (check-set-mode! 'summary)
@@ -2229,7 +2158,6 @@
 
 (testing-registry-case
  'srfi-78-check-ec-behavior '(portable core)
- ("consent-eval-test.scm" 2230)
 (check-external 'srfi-78-check-ec-behavior
                 "(import (scheme base) (srfi 42) (srfi srfi-78))
                  (check-set-mode! 'summary)
@@ -2240,7 +2168,6 @@
 
 (testing-registry-case
  'srfi-78-library-reference-alias-import '(portable core)
- ("consent-eval-test.scm" 2241)
 (check-external 'srfi-78-library-reference-alias-import
                 "(import (scheme base) (srfi :78 lightweight-testing))
                  (check-set-mode! 'summary)
@@ -2251,7 +2178,6 @@
 
 (testing-registry-case
  'stdlib-srfi-78-manifest '(portable core)
- ("consent-eval-test.scm" 2252)
 (check-external 'stdlib-srfi-78-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref
@@ -2293,7 +2219,6 @@
 
 (testing-registry-case
  'srfi-145-assume-behavior '(portable core)
- ("consent-eval-test.scm" 2294)
 (check-external 'srfi-145-assume-behavior
                 "(import (scheme base) (srfi 145))
                  (let ((events '()))
@@ -2309,7 +2234,6 @@
 
 (testing-registry-case
  'srfi-145-portable-alias-import '(portable core)
- ("consent-eval-test.scm" 2310)
 (check-external 'srfi-145-portable-alias-import
                 "(import (scheme base) (srfi srfi-145))
                  (assume 'portable-alias)"
@@ -2317,7 +2241,6 @@
 
 (testing-registry-case
  'stdlib-assume-import '(portable core)
- ("consent-eval-test.scm" 2318)
 (check-external 'stdlib-assume-import
                 "(import (scheme base) (stdlib assume))
                  (assume '(stdlib primary) \"primary import\")"
@@ -2325,7 +2248,6 @@
 
 (testing-registry-case
  'srfi-145-false-assumption-raises '(portable core)
- ("consent-eval-test.scm" 2326)
 (check 'srfi-145-false-assumption-raises
        (raises?
         (lambda ()
@@ -2336,7 +2258,6 @@
 
 (testing-registry-case
  'srfi-145-missing-export-diagnostic '(portable core)
- ("consent-eval-test.scm" 2337)
 (check 'srfi-145-missing-export-diagnostic
        (raises?
         (lambda ()
@@ -2348,7 +2269,6 @@
 
 (testing-registry-case
  'stdlib-srfi-145-manifest '(portable core)
- ("consent-eval-test.scm" 2349)
 (check-external 'stdlib-srfi-145-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(stdlib assume)))
@@ -2383,7 +2303,6 @@
 
 (testing-registry-case
  'srfi-1-list-library-behavior '(portable core)
- ("consent-eval-test.scm" 2384)
 (check-external 'srfi-1-list-library-behavior
                 "(import (scheme base)
                          (scheme list))
@@ -2413,7 +2332,6 @@
 
 (testing-registry-case
  'srfi-1-alias-import '(portable core)
- ("consent-eval-test.scm" 2414)
 (check-external 'srfi-1-alias-import
                 "(import (scheme base)
                          (srfi 1))
@@ -2422,7 +2340,6 @@
 
 (testing-registry-case
  'srfi-1-portable-alias-import '(portable core)
- ("consent-eval-test.scm" 2423)
 (check-external 'srfi-1-portable-alias-import
                 "(import (scheme base) (srfi srfi-1))
                  (drop-right '(a b c d) 2)"
@@ -2430,7 +2347,6 @@
 
 (testing-registry-case
  'srfi-1-missing-export-diagnostic '(portable core)
- ("consent-eval-test.scm" 2431)
 (check 'srfi-1-missing-export-diagnostic
        (raises?
         (lambda ()
@@ -2442,7 +2358,6 @@
 
 (testing-registry-case
  'stdlib-srfi-1-manifest '(portable core)
- ("consent-eval-test.scm" 2443)
 (check-external 'stdlib-srfi-1-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(stdlib list)))
@@ -2481,7 +2396,6 @@
 
 (testing-registry-case
  'srfi-158-generator-behavior '(portable core)
- ("consent-eval-test.scm" 2482)
 (check-external 'srfi-158-generator-behavior
                 "(import (scheme base) (scheme generator))
                  (list (generator->list (gmap - (make-range-generator 0 3)))
@@ -2496,7 +2410,6 @@
 
 (testing-registry-case
  'srfi-158-alias-import '(portable core)
- ("consent-eval-test.scm" 2497)
 (check-external 'srfi-158-alias-import
                 "(import (scheme base) (srfi 158))
                  (generator->list
@@ -2506,7 +2419,6 @@
 
 (testing-registry-case
  'srfi-158-portable-alias-import '(portable core)
- ("consent-eval-test.scm" 2507)
 (check-external 'srfi-158-portable-alias-import
                 "(import (scheme base) (srfi srfi-158))
                  (let ((acc (sum-accumulator)))
@@ -2517,7 +2429,6 @@
 
 (testing-registry-case
  'srfi-158-missing-export-diagnostic '(portable core)
- ("consent-eval-test.scm" 2518)
 (check 'srfi-158-missing-export-diagnostic
        (raises?
         (lambda ()
@@ -2529,7 +2440,6 @@
 
 (testing-registry-case
  'stdlib-srfi-158-manifest '(portable core)
- ("consent-eval-test.scm" 2530)
 (check-external 'stdlib-srfi-158-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(stdlib generator)))
@@ -2569,7 +2479,6 @@
 
 (testing-registry-case
  'srfi-180-json-read '(portable core)
- ("consent-eval-test.scm" 2570)
 (check-external 'srfi-180-json-read
                 (string-append
                  "(import (scheme base) (srfi 180))
@@ -2589,7 +2498,6 @@
 
 (testing-registry-case
  'srfi-180-json-write-round-trip '(portable core)
- ("consent-eval-test.scm" 2590)
 (check-external 'srfi-180-json-write-round-trip
                 "(import (scheme base) (srfi 180))
                  (let ((out (open-output-string)))
@@ -2611,7 +2519,6 @@
 
 (testing-registry-case
  'srfi-180-json-write-nested-object-fields '(portable core)
- ("consent-eval-test.scm" 2612)
 (check-external 'srfi-180-json-write-nested-object-fields
                 "(import (scheme base) (srfi 180))
                  (define (ref object name)
@@ -2643,7 +2550,6 @@
 
 (testing-registry-case
  'srfi-180-json-error '(portable core)
- ("consent-eval-test.scm" 2644)
 (check-external 'srfi-180-json-error
                 "(import (scheme base) (srfi 180))
                  (guard (condition
@@ -2655,7 +2561,6 @@
 
 (testing-registry-case
  'srfi-180-json-write-rejects-non-json-number '(portable core)
- ("consent-eval-test.scm" 2656)
 (check-external 'srfi-180-json-write-rejects-non-json-number
                 "(import (scheme base) (srfi 180))
                  (guard (condition
@@ -2667,7 +2572,6 @@
 
 (testing-registry-case
  'srfi-180-json-read-character-limit '(portable core)
- ("consent-eval-test.scm" 2668)
 (check-external 'srfi-180-json-read-character-limit
                 "(import (scheme base) (srfi 180))
                  (guard (condition
@@ -2680,7 +2584,6 @@
 
 (testing-registry-case
  'srfi-180-alias-import '(portable core)
- ("consent-eval-test.scm" 2681)
 (check-external 'srfi-180-alias-import
                 "(import (scheme base) (srfi srfi-180))
                  (json-null? (json-read (open-input-string \"null\")))"
@@ -2688,7 +2591,6 @@
 
 (testing-registry-case
  'consent-json-import '(portable core)
- ("consent-eval-test.scm" 2689)
 (check-external 'consent-json-import
                 "(import (scheme base) (consent json))
                  (json-null? (json-read (open-input-string \"null\")))"
@@ -2696,7 +2598,6 @@
 
 (testing-registry-case
  'consent-json-pure-alias-inherits-target-exports '(portable core)
- ("consent-eval-test.scm" 2697)
 (check-external 'consent-json-pure-alias-inherits-target-exports
                 "(import (scheme base) (stdlib manifest) (consent json))
                  (define (manifest-field entry name)
@@ -2716,7 +2617,6 @@
 
 (testing-registry-case
  'agent-reflect-primitive-declaration-manifest '(portable core)
- ("consent-eval-test.scm" 2717)
 (check-external 'agent-reflect-primitive-declaration-manifest
                 "(import (scheme base) (agent manifest))
                  (define (manifest-field entry name)
@@ -2747,7 +2647,6 @@
 
 (testing-registry-case
  'stdlib-json-import '(portable core)
- ("consent-eval-test.scm" 2748)
 (check-external 'stdlib-json-import
                 "(import (scheme base) (stdlib json))
                  (json-null? (json-read (open-input-string \"null\")))"
@@ -2755,7 +2654,6 @@
 
 (testing-registry-case
  'stdlib-json-read-subset-import '(portable core)
- ("consent-eval-test.scm" 2756)
 (check-external 'stdlib-json-read-subset-import
                 "(import (scheme base) (stdlib json read))
                  (json-null? (json-read (open-input-string \"null\")))"
@@ -2763,7 +2661,6 @@
 
 (testing-registry-case
  'stdlib-json-manifest '(portable core)
- ("consent-eval-test.scm" 2764)
 (check-external 'stdlib-json-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(stdlib json))))
@@ -2782,7 +2679,6 @@
 
 (testing-registry-case
  'srfi-128-comparator-behavior '(portable core)
- ("consent-eval-test.scm" 2783)
 (check-external 'srfi-128-comparator-behavior
                 "(import (scheme base) (stdlib comparator))
                  (let* ((number-comparator (make-comparator real? = < number-hash))
@@ -2814,7 +2710,6 @@
 
 (testing-registry-case
  'srfi-128-alias-import '(portable core)
- ("consent-eval-test.scm" 2815)
 (check-external 'srfi-128-alias-import
                 "(import (scheme base) (srfi 128))
                  (let ((string-comparator
@@ -2825,7 +2720,6 @@
 
 (testing-registry-case
  'srfi-128-portable-alias-import '(portable core)
- ("consent-eval-test.scm" 2826)
 (check-external 'srfi-128-portable-alias-import
                 "(import (scheme base) (srfi srfi-128))
                  (let ((string-comparator
@@ -2836,7 +2730,6 @@
 
 (testing-registry-case
  'stdlib-comparator-manifest '(portable core)
- ("consent-eval-test.scm" 2837)
 (check-external 'stdlib-comparator-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(stdlib comparator)))
@@ -2877,7 +2770,6 @@
 
 (testing-registry-case
  'stdlib-rbtree-helper '(portable core)
- ("consent-eval-test.scm" 2878)
 (check-external 'stdlib-rbtree-helper
                 "(import (scheme base)
                          (stdlib comparator)
@@ -2918,7 +2810,6 @@
 
 (testing-registry-case
  'stdlib-rbtree-manifest '(portable core)
- ("consent-eval-test.scm" 2919)
 (check-external 'stdlib-rbtree-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(stdlib rbtree))))
@@ -2946,7 +2837,6 @@
 
 (testing-registry-case
  'stdlib-mapping-manifest '(portable core)
- ("consent-eval-test.scm" 2947)
 (check-external 'stdlib-mapping-manifest
                 (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(stdlib mapping)))
@@ -2992,7 +2882,6 @@
 
 (testing-registry-case
  'base-list-helpers '(portable core)
- ("consent-eval-test.scm" 2993)
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))
                        (cadr '(alpha beta gamma))
@@ -3001,7 +2890,6 @@
 
 (testing-registry-case
  'records-construct-predicate-access-and-mutate '(portable core)
- ("consent-eval-test.scm" 3002)
 (check-external 'records-construct-predicate-access-and-mutate
                 "(define-record-type <pare>
                    (kons x y)
@@ -3018,7 +2906,6 @@
 
 (testing-registry-case
  'circular-equality-terminates '(portable core)
- ("consent-eval-test.scm" 3019)
 (check-external 'circular-equality-terminates
                 "(let ((left '#1=(a b . #1#))
                        (right '#2=(a b a b . #2#)))
@@ -3028,7 +2915,6 @@
 
 (testing-registry-case
  'base-scalar-helpers '(portable core)
- ("consent-eval-test.scm" 3029)
 (check-external 'base-scalar-helpers
                 "(list (/ 5 2)
                        (abs -4)
@@ -3040,7 +2926,6 @@
 
 (testing-registry-case
  'numeric-tower-exact-rationals '(portable core)
- ("consent-eval-test.scm" 3041)
 (check-external 'numeric-tower-exact-rationals
                 "(list (/ 3 4 5)
                        (+ 1/2 1/3)
@@ -3052,7 +2937,6 @@
 
 (testing-registry-case
  'numeric-tower-polar-special-values '(portable core)
- ("consent-eval-test.scm" 3053)
 (check-external 'numeric-tower-polar-special-values
                 "(import (scheme complex))
                  (list (make-polar +inf.0 0)
@@ -3062,7 +2946,6 @@
 
 (testing-registry-case
  'base-vector-and-bytevector-helpers '(portable core)
- ("consent-eval-test.scm" 3063)
 (check-external 'base-vector-and-bytevector-helpers
                 "(define v (vector 'a 'b 'c))
                  (vector-set! v 1 'changed)
@@ -3073,7 +2956,6 @@
 
 (testing-registry-case
  'base-derived-string-vector-iteration '(portable core)
- ("consent-eval-test.scm" 3074)
 (check-external 'base-derived-string-vector-iteration
                 "(let ((chars '())
                        (indexes (make-list 3)))
@@ -3095,7 +2977,6 @@
 
 (testing-registry-case
  'base-higher-order-helpers '(portable core)
- ("consent-eval-test.scm" 3096)
 (check-external 'base-higher-order-helpers
                 "(define total 0)
                  (for-each (lambda (x) (set! total (+ total x))) '(1 2 3))
@@ -3106,7 +2987,6 @@
 
 (testing-registry-case
  'sequence-length-primitives-return-canonical-numbers '(portable core)
- ("consent-eval-test.scm" 3107)
 (check-external 'sequence-length-primitives-return-canonical-numbers
                 "(list
                    (string-length \"abc\")
@@ -3116,7 +2996,6 @@
 
 (testing-registry-case
  'multiple-values-result '(portable core)
- ("consent-eval-test.scm" 3117)
 (check-result-external 'multiple-values-result
                        "(values 1 2)"
                        (expected-datum-external
@@ -3128,7 +3007,6 @@
 
 (testing-registry-case
  'debugger-unbound-variable-result '(portable core)
- ("consent-eval-test.scm" 3129)
 (check-result-contains 'debugger-unbound-variable-result
                        "missing"
                        '("(status error)"
@@ -3141,7 +3019,6 @@
 
 (testing-registry-case
  'debugger-private-procedure-docstring-result '(portable core)
- ("consent-eval-test.scm" 3142)
 (check-result-contains 'debugger-private-procedure-docstring-result
                        "(define (private-helper x)
                           \"Explain the private helper for debugger inspection.\"
@@ -3155,7 +3032,6 @@
 
 (testing-registry-case
  'debugger-current-error-restarts '(portable core)
- ("consent-eval-test.scm" 3156)
 (check-result-contains 'debugger-current-error-restarts
                        "(import (scheme base) (agent debugger))
                         (with-exception-handler
@@ -3169,7 +3045,6 @@
 
 (testing-registry-case
  'debugger-yield-event '(portable core)
- ("consent-eval-test.scm" 3170)
 (check-result-contains 'debugger-yield-event
                        "(import (scheme base) (agent debugger))
                         (debugger-yield
@@ -3183,7 +3058,6 @@
 
 (testing-registry-case
  'multiple-values-binding-forms '(portable core)
- ("consent-eval-test.scm" 3184)
 (check-external 'multiple-values-binding-forms
                 "(let ((a 'a) (b 'b) (x 'x) (y 'y))
                    (let*-values (((a b) (values x y))
@@ -3193,7 +3067,6 @@
 
 (testing-registry-case
  'call-with-values-consumer '(portable core)
- ("consent-eval-test.scm" 3194)
 (check-external 'call-with-values-consumer
                 "(call-with-values (lambda () (values 4 5))
                                    (lambda (a b) (- b a)))"
@@ -3201,7 +3074,6 @@
 
 (testing-registry-case
  'define-values-top-level '(portable core)
- ("consent-eval-test.scm" 3202)
 (check-external 'define-values-top-level
                 "(define-values (root remainder)
                    (exact-integer-sqrt 10))
@@ -3214,7 +3086,6 @@
 
 (testing-registry-case
  'define-values-internal '(portable core)
- ("consent-eval-test.scm" 3215)
 (check-external 'define-values-internal
                 "((lambda ()
                     (define-values (left right)
@@ -3224,7 +3095,6 @@
 
 (testing-registry-case
  'base-features-parameters-and-utf8 '(portable core)
- ("consent-eval-test.scm" 3225)
 (check-external 'base-features-parameters-and-utf8
                 "(let ((available (features))
                        (setting (make-parameter 'outer)))
@@ -3243,14 +3113,12 @@
 
 (testing-registry-case
  'call/cc-escape '(portable core)
- ("consent-eval-test.scm" 3244)
 (check-external 'call/cc-escape
                 "(call/cc (lambda (escape) (+ 1 (escape 42))))"
                 "42"))
 
 (testing-registry-case
  'dynamic-wind-exit '(portable core)
- ("consent-eval-test.scm" 3251)
 (check-external 'dynamic-wind-exit
                 "(let ((path '()))
                    (define (add tag) (set! path (cons tag path)))
@@ -3267,7 +3135,6 @@
 
 (testing-registry-case
  'call/cc-reenter-after-return '(portable core)
- ("consent-eval-test.scm" 3268)
 (check-external 'call/cc-reenter-after-return
                 "(let ((again #f))
                    (let ((value (call/cc
@@ -3281,7 +3148,6 @@
 
 (testing-registry-case
  'call/cc-repeated-invocation '(portable core)
- ("consent-eval-test.scm" 3282)
 (check-external 'call/cc-repeated-invocation
                 "(let ((again #f)
                        (seen '()))
@@ -3297,7 +3163,6 @@
 
 (testing-registry-case
  'dynamic-wind-reentry '(portable core)
- ("consent-eval-test.scm" 3298)
 (check-external 'dynamic-wind-reentry
                 "(let ((again #f)
                        (outside #f)
@@ -3339,7 +3204,6 @@
 
 (testing-registry-case
  'call/cc-multiple-values '(portable core)
- ("consent-eval-test.scm" 3340)
 (check-external 'call/cc-multiple-values
                 "(let ((again #f))
                    (call-with-values
@@ -3356,7 +3220,6 @@
 
 (testing-registry-case
  'let-values-continuation-multiple-values '(portable core)
- ("consent-eval-test.scm" 3357)
 (check-external 'let-values-continuation-multiple-values
                 "(let ((again #f))
                    (let-values (((a b)
@@ -3371,7 +3234,6 @@
 
 (testing-registry-case
  'let*-values-continuation-multiple-values '(portable core)
- ("consent-eval-test.scm" 3372)
 (check-external 'let*-values-continuation-multiple-values
                 "(let ((again #f))
                    (let*-values (((a b)
@@ -3387,7 +3249,6 @@
 
 (testing-registry-case
  'guard-raise '(portable core)
- ("consent-eval-test.scm" 3388)
 (check-external 'guard-raise
                 "(guard (exn (else (list 'caught exn)))
                    (raise 'boom))"
@@ -3395,7 +3256,6 @@
 
 (testing-registry-case
  'raise-continuable '(portable core)
- ("consent-eval-test.scm" 3396)
 (check-external 'raise-continuable
                 "(with-exception-handler
                    (lambda (exn) 42)
@@ -3405,7 +3265,6 @@
 
 (testing-registry-case
  'error-object '(portable core)
- ("consent-eval-test.scm" 3406)
 (check-external 'error-object
                 "(guard (exn
                          ((error-object? exn)
@@ -3416,7 +3275,6 @@
 
 (testing-registry-case
  'define-syntax-expands-ellipsis '(portable core)
- ("consent-eval-test.scm" 3417)
 (check-external 'define-syntax-expands-ellipsis
                 "(define x 0)
                  (define-syntax unless
@@ -3430,7 +3288,6 @@
 
 (testing-registry-case
  'syntax-rules-numeric-datum-source-metadata '(portable core)
- ("consent-eval-test.scm" 3431)
 (check-external/options 'syntax-rules-numeric-datum-source-metadata
                         "(define-syntax numeric-tag
                            (syntax-rules ()
@@ -3445,7 +3302,6 @@
 
 (testing-registry-case
  'introduced-bindings-are-hygienic '(portable core)
- ("consent-eval-test.scm" 3446)
 (check-external 'introduced-bindings-are-hygienic
                 "(define-syntax my-or
                    (syntax-rules ()
@@ -3460,7 +3316,6 @@
 
 (testing-registry-case
  'let-syntax-is-referentially-transparent '(portable core)
- ("consent-eval-test.scm" 3461)
 (check-external 'let-syntax-is-referentially-transparent
                 "(let ((x 'outer))
                    (let-syntax ((m (syntax-rules ()
@@ -3471,7 +3326,6 @@
 
 (testing-registry-case
  'free-template-identifiers-do-not-capture-use-site '(portable core)
- ("consent-eval-test.scm" 3472)
 (check 'free-template-identifiers-do-not-capture-use-site
        (raises? (lambda ()
                   (consent-eval-source
@@ -3484,7 +3338,6 @@
 
 (testing-registry-case
  'letrec-syntax-allows-recursive-transformers '(portable core)
- ("consent-eval-test.scm" 3485)
 (check-external 'letrec-syntax-allows-recursive-transformers
                 "(letrec-syntax
                      ((my-or
@@ -3499,7 +3352,6 @@
 
 (testing-registry-case
  'named-let-expands-through-letrec '(portable core)
- ("consent-eval-test.scm" 3500)
 (check-external 'named-let-expands-through-letrec
                 "(let loop ((n 5) (acc 0))
                    (if (= n 0)
@@ -3512,14 +3364,12 @@
 ;; syntax-rules matcher that rejected pair patterns against () outright.
 (testing-registry-case
  'let-empty-bindings '(portable core)
- ("consent-eval-test.scm" 3513)
 (check-external 'let-empty-bindings
                 "(let () 5)"
                 "5"))
 
 (testing-registry-case
  'let-empty-bindings-with-body-definitions '(portable core)
- ("consent-eval-test.scm" 3520)
 (check-external 'let-empty-bindings-with-body-definitions
                 "(let () (define x 6) (* x 7))"
                 "42"))
@@ -3529,40 +3379,31 @@
 ;; char->integer must yield a usable Consent number, not a raw host integer.
 (testing-registry-case
  'char-literal-open-paren '(portable core)
- ("consent-eval-test.scm" 3530)
 (check-external 'char-literal-open-paren    "(char->integer #\\()" "40"))
 (testing-registry-case
  'char-literal-close-paren '(portable core)
- ("consent-eval-test.scm" 3534)
 (check-external 'char-literal-close-paren   "(char->integer #\\))" "41"))
 (testing-registry-case
  'char-literal-open-bracket '(portable core)
- ("consent-eval-test.scm" 3538)
 (check-external 'char-literal-open-bracket  "(char->integer #\\[)" "91"))
 (testing-registry-case
  'char-literal-close-bracket '(portable core)
- ("consent-eval-test.scm" 3542)
 (check-external 'char-literal-close-bracket "(char->integer #\\])" "93"))
 (testing-registry-case
  'char-literal-pipe '(portable core)
- ("consent-eval-test.scm" 3546)
 (check-external 'char-literal-pipe          "(char->integer #\\|)" "124"))
 (testing-registry-case
  'char-literal-named-space '(portable core)
- ("consent-eval-test.scm" 3550)
 (check-external 'char-literal-named-space   "(char->integer #\\space)" "32"))
 (testing-registry-case
  'char-literal-hex-scalar '(portable core)
- ("consent-eval-test.scm" 3554)
 (check-external 'char-literal-hex-scalar    "(char->integer #\\x41)" "65"))
 (testing-registry-case
  'char->integer-yields-number '(portable core)
- ("consent-eval-test.scm" 3558)
 (check-external 'char->integer-yields-number "(+ 1 (char->integer #\\a))" "98"))
 
 (testing-registry-case
  'cond-arrow-respects-literal-binding '(portable core)
- ("consent-eval-test.scm" 3563)
 (check-external 'cond-arrow-respects-literal-binding
                 "(list
                    (cond ((assv 'b '((a 1) (b 2))) => cadr)
@@ -3573,7 +3414,6 @@
 
 (testing-registry-case
  'case-expands-from-base-syntax '(portable core)
- ("consent-eval-test.scm" 3574)
 (check-external 'case-expands-from-base-syntax
                 "(list
                    (case (car '(c d))
@@ -3588,7 +3428,6 @@
 
 (testing-registry-case
  'do-expands-nested-ellipses '(portable core)
- ("consent-eval-test.scm" 3589)
 (check-external 'do-expands-nested-ellipses
                 "(do ((i 0 (+ i 1))
                       (acc 0 (+ acc i)))
@@ -3597,7 +3436,6 @@
 
 (testing-registry-case
  'dotted-patterns-and-templates '(portable core)
- ("consent-eval-test.scm" 3598)
 (check-external 'dotted-patterns-and-templates
                 "(define-syntax rest-list
                    (syntax-rules ()
@@ -3613,7 +3451,6 @@
 
 (testing-registry-case
  'nested-ellipsis-template-expands '(portable core)
- ("consent-eval-test.scm" 3614)
 (check-external 'nested-ellipsis-template-expands
                 "(define-syntax echo-groups
                    (syntax-rules ()
@@ -3624,7 +3461,6 @@
 
 (testing-registry-case
  'quasiquote-evaluates-unquotes '(portable core)
- ("consent-eval-test.scm" 3625)
 (check-external 'quasiquote-evaluates-unquotes
                 "(list
                    (quasiquote (a (unquote (+ 1 2))
@@ -3638,7 +3474,6 @@
 
 (testing-registry-case
  'cond-expand-selects-base-feature '(portable core)
- ("consent-eval-test.scm" 3639)
 (check-external 'cond-expand-selects-base-feature
                 "(list
                    (cond-expand (r7rs 'ok) (else 'missing))
@@ -3649,7 +3484,6 @@
 
 (testing-registry-case
  'cond-expand-selects-consent-feature '(portable core)
- ("consent-eval-test.scm" 3650)
 (check-external 'cond-expand-selects-consent-feature
                 "(cond-expand
                    (consent 'ok)
@@ -3658,7 +3492,6 @@
 
 (testing-registry-case
  'macroexpand-one-step-record '(portable core)
- ("consent-eval-test.scm" 3659)
 (check-result-contains 'macroexpand-one-step-record
                        "(import (scheme base) (agent reflect))
                         (define-syntax my-unless
@@ -3675,7 +3508,6 @@
 
 (testing-registry-case
  'macroexpand-does-not-evaluate-expanded-form '(portable core)
- ("consent-eval-test.scm" 3676)
 (check-external 'macroexpand-does-not-evaluate-expanded-form
                 "(import (scheme base) (agent reflect))
                  (define touched #f)
@@ -3689,7 +3521,6 @@
 
 (testing-registry-case
  'macroexpand-budget-errors '(portable core)
- ("consent-eval-test.scm" 3690)
 (check-result-contains 'macroexpand-budget-errors
                        "(import (scheme base) (agent reflect))
                         (macroexpand
@@ -3711,7 +3542,6 @@
 ;; The ledger reports every enforced and reserved dimension plus the reason.
 (testing-registry-case
  'budget-ledger-shape '(portable core)
- ("consent-eval-test.scm" 3712)
 (check-result-contains 'budget-ledger-shape
                        "(import (scheme base) (agent reflect)) (current-budget)"
                        (list "(steps-used " "(max-steps 100000)"
@@ -3735,7 +3565,6 @@
 ;; interned-symbol budget is the binding constraint and is named in the receipt.
 (testing-registry-case
  'budget-interned-symbol-flood-reason '(portable core)
- ("consent-eval-test.scm" 3736)
 (check-result-contains 'budget-interned-symbol-flood-reason
                        "(import (scheme base))
                         (let loop ((i 0))
@@ -3749,7 +3578,6 @@
 ;; Step exhaustion halts with a budget-exhausted reason of `steps'.
 (testing-registry-case
  'budget-step-exhaustion-reason '(portable core)
- ("consent-eval-test.scm" 3750)
 (check-result-contains 'budget-step-exhaustion-reason
                        "(import (scheme base))
                         (let loop ((i 0)) (loop (+ i 1)))"
@@ -3760,7 +3588,6 @@
 ;; reaching a stop receipt at all proves the trampoline stayed iterative.
 (testing-registry-case
  'budget-tail-loop-bounded-by-steps '(portable core)
- ("consent-eval-test.scm" 3761)
 (check-result-contains 'budget-tail-loop-bounded-by-steps
                        "(import (scheme base)) (let loop () (loop))"
                        '("(type budget-exhausted)")
@@ -3769,7 +3596,6 @@
 ;; Host-callback exhaustion names the `host-callbacks' dimension.
 (testing-registry-case
  'budget-host-callback-exhaustion-reason '(portable core)
- ("consent-eval-test.scm" 3770)
 (check-result-contains 'budget-host-callback-exhaustion-reason
                        "(import (scheme base))
                         (let loop ((i 0)) (loop (+ i 1)))"
@@ -3779,7 +3605,6 @@
 ;; Printed-output exhaustion names the `output-bytes' dimension.
 (testing-registry-case
  'budget-output-exhaustion-reason '(portable core)
- ("consent-eval-test.scm" 3780)
 (check-result-contains 'budget-output-exhaustion-reason
                        "(import (scheme base) (scheme write))
                         (let ((port (open-output-string)))
@@ -3791,7 +3616,6 @@
 ;; Yielded-event exhaustion names the `events' dimension.
 (testing-registry-case
  'budget-yield-exhaustion-reason '(portable core)
- ("consent-eval-test.scm" 3792)
 (check-result-contains 'budget-yield-exhaustion-reason
                        "(import (scheme base) (agent io))
                         (let loop ((i 0)) (agent-yield i) (loop (+ i 1)))"
@@ -3806,7 +3630,6 @@
   budget-wall-clock-tick)
 (testing-registry-case
  'budget-wall-time-exhaustion-reason '(portable core)
- ("consent-eval-test.scm" 3807)
 (check-result-contains 'budget-wall-time-exhaustion-reason
                        "(import (scheme base))
                         (let loop ((i 0)) (loop (+ i 1)))"
@@ -3817,7 +3640,6 @@
 ;; with-budget tightens for its dynamic extent, halting on the step budget.
 (testing-registry-case
  'budget-with-budget-tightens-steps '(portable core)
- ("consent-eval-test.scm" 3818)
 (check-result-contains 'budget-with-budget-tightens-steps
                        "(import (scheme base) (agent reflect))
                         (with-budget '(budget (steps 50))
@@ -3827,7 +3649,6 @@
 ;; After a normally completing with-budget the outer ceiling is restored.
 (testing-registry-case
  'budget-with-budget-restores-ceiling '(portable core)
- ("consent-eval-test.scm" 3828)
 (check-result-contains 'budget-with-budget-restores-ceiling
                        "(import (scheme base) (agent reflect))
                         (with-budget '(budget (steps 50)) (+ 1 2))
@@ -3837,7 +3658,6 @@
 ;; budget-remaining reports headroom per enforced dimension and no reason.
 (testing-registry-case
  'budget-remaining-headroom '(portable core)
- ("consent-eval-test.scm" 3838)
 (check-result-contains 'budget-remaining-headroom
                        "(import (scheme base) (agent reflect))
                         (budget-remaining)"
@@ -3850,21 +3670,18 @@
 ;; budget-exhausted? classifies condition and evaluation-result error datums.
 (testing-registry-case
  'budget-exhausted-true '(portable core)
- ("consent-eval-test.scm" 3851)
 (check-external 'budget-exhausted-true
                 "(import (scheme base) (agent reflect))
                  (budget-exhausted? '(condition (type budget-exhausted)))"
                 "#t"))
 (testing-registry-case
  'budget-exhausted-false '(portable core)
- ("consent-eval-test.scm" 3858)
 (check-external 'budget-exhausted-false
                 "(import (scheme base) (agent reflect))
                  (budget-exhausted? '(condition (type evaluation-error)))"
                 "#f"))
 (testing-registry-case
  'budget-exhausted-result-datum '(portable core)
- ("consent-eval-test.scm" 3865)
 (check-external 'budget-exhausted-result-datum
                 "(import (scheme base) (agent reflect))
                  (budget-exhausted?
@@ -3875,7 +3692,6 @@
 ;; budget-yield emits the current ledger as an observable yield event.
 (testing-registry-case
  'budget-yield-emits-ledger '(portable core)
- ("consent-eval-test.scm" 3876)
 (check-result-contains 'budget-yield-emits-ledger
                        "(import (scheme base) (agent reflect))
                         (budget-yield)
@@ -3884,7 +3700,6 @@
 
 (testing-registry-case
  'macroexpand-expands-local-syntax-scope '(portable core)
- ("consent-eval-test.scm" 3885)
 (check-external 'macroexpand-expands-local-syntax-scope
                 "(import (scheme base) (agent reflect))
                  (let ((expansion
@@ -3900,7 +3715,6 @@
 
 (testing-registry-case
  'macro-binding-info-and-syntax-source '(portable core)
- ("consent-eval-test.scm" 3901)
 (check-external/options 'macro-binding-info-and-syntax-source
                 "(import (scheme base) (agent reflect))
                  (define-syntax twice
@@ -3929,7 +3743,6 @@
 
 (testing-registry-case
  'macro-binding-info-and-syntax-source-opt-out '(portable core)
- ("consent-eval-test.scm" 3930)
 (check-external/options 'macro-binding-info-and-syntax-source-opt-out
                 "(import (scheme base) (agent reflect))
                  (define-syntax twice
@@ -3945,7 +3758,6 @@
 
 (testing-registry-case
  'import-scheme-base-into-empty-environment '(portable core)
- ("consent-eval-test.scm" 3946)
 (check 'import-scheme-base-into-empty-environment
        (consent-value->external
         (consent-eval-source
@@ -3956,7 +3768,6 @@
 
 (testing-registry-case
  'define-library-import-export '(portable core)
- ("consent-eval-test.scm" 3957)
 (check-external 'define-library-import-export
                 "(define-library (consent fixture math)
                    (export answer)
@@ -3969,7 +3780,6 @@
 
 (testing-registry-case
  'library-import-set-modifiers '(portable core)
- ("consent-eval-test.scm" 3970)
 (check-external 'library-import-set-modifiers
                 "(define-library (consent fixture modifiers)
                    (export add sub hidden)
@@ -3993,7 +3803,6 @@
 
 (testing-registry-case
  'library-export-rename '(portable core)
- ("consent-eval-test.scm" 3994)
 (check-external 'library-export-rename
                 "(define-library (consent fixture export-rename)
                    (export (rename internal external))
@@ -4006,7 +3815,6 @@
 
 (testing-registry-case
  'emacs-capability-import-unavailable-on-portable '(portable core)
- ("consent-eval-test.scm" 4007)
 (check 'emacs-capability-import-unavailable-on-portable
        (raises?
         (lambda ()
@@ -4020,7 +3828,6 @@
 
 (testing-registry-case
  'conflicting-library-imports '(portable core)
- ("consent-eval-test.scm" 4021)
 (check 'conflicting-library-imports
        (raises?
         (lambda ()
@@ -4040,7 +3847,6 @@
 
 (testing-registry-case
  'exported-library-macro-keeps-scope '(portable core)
- ("consent-eval-test.scm" 4041)
 (check-external 'exported-library-macro-keeps-scope
                 "(define-library (consent fixture syntax)
                    (export choose)
@@ -4058,7 +3864,6 @@
 
 (testing-registry-case
  'library-procedure-keeps-private-imported-syntax '(portable core)
- ("consent-eval-test.scm" 4059)
 (check-external 'library-procedure-keeps-private-imported-syntax
                 "(define-library (consent fixture private-syntax)
                    (export choose-private)
@@ -4083,7 +3888,6 @@
 
 (testing-registry-case
  'library-cond-expand-declaration '(portable core)
- ("consent-eval-test.scm" 4084)
 (check-external 'library-cond-expand-declaration
                 "(define-library (consent fixture conditional)
                    (cond-expand
@@ -4100,7 +3904,6 @@
 
 (testing-registry-case
  'include-declarations-are-policy-gated '(portable core)
- ("consent-eval-test.scm" 4101)
 (check 'include-declarations-are-policy-gated
        (raises?
        (lambda ()
@@ -4320,7 +4123,6 @@
 
 (testing-registry-case
  'include-reads-policy-allowed-body '(portable core)
- ("consent-eval-test.scm" 4321)
 (check-external/options 'include-reads-policy-allowed-body
                         "(define-library (consent fixture include-body)
                            (export answer)
@@ -4333,7 +4135,6 @@
 
 (testing-registry-case
  'include-ci-folds-policy-allowed-body '(portable core)
- ("consent-eval-test.scm" 4334)
 (check-external/options 'include-ci-folds-policy-allowed-body
                         "(define-library (consent fixture include-ci-body)
                            (export mixedanswer)
@@ -4346,7 +4147,6 @@
 
 (testing-registry-case
  'include-library-declarations-splice '(portable core)
- ("consent-eval-test.scm" 4347)
 (check-external/options 'include-library-declarations-splice
                         "(define-library
                            (consent fixture included-declarations)
@@ -4360,7 +4160,6 @@
 
 (testing-registry-case
  'include-file-grant-allowed-body '(portable core)
- ("consent-eval-test.scm" 4361)
 (check-external/options 'include-file-grant-allowed-body
                         "(define-library (consent fixture include-body)
                            (export answer)
@@ -4373,7 +4172,6 @@
 
 (testing-registry-case
  'include-ci-file-grant-allowed-body '(portable core)
- ("consent-eval-test.scm" 4374)
 (check-external/options 'include-ci-file-grant-allowed-body
                         "(define-library (consent fixture include-ci-body)
                            (export mixedanswer)
@@ -4386,7 +4184,6 @@
 
 (testing-registry-case
  'standard-case-lambda-import '(portable core)
- ("consent-eval-test.scm" 4387)
 (check-external 'standard-case-lambda-import
                 "(import (scheme base) (scheme case-lambda))
                  ((case-lambda
@@ -4397,7 +4194,6 @@
 
 (testing-registry-case
  'standard-case-lambda-rest-import '(portable core)
- ("consent-eval-test.scm" 4398)
 (check-external 'standard-case-lambda-rest-import
                 "(import (scheme base) (scheme case-lambda))
                  (list
@@ -4412,7 +4208,6 @@
 
 (testing-registry-case
  'standard-char-and-cxr-imports '(portable core)
- ("consent-eval-test.scm" 4413)
 (check-external 'standard-char-and-cxr-imports
                 "(import (scheme base) (scheme char) (scheme cxr))
                  (list (char-upcase #\\a)
@@ -4430,7 +4225,6 @@
 
 (testing-registry-case
  'standard-inexact-transcendentals '(portable core)
- ("consent-eval-test.scm" 4431)
 (check-external 'standard-inexact-transcendentals
                 "(import (scheme inexact))
                  (list (sqrt 9)
@@ -4443,7 +4237,6 @@
 
 (testing-registry-case
  'standard-lazy-import-memoizes '(portable core)
- ("consent-eval-test.scm" 4444)
 (check-external 'standard-lazy-import-memoizes
                 "(import (scheme base) (scheme lazy))
                  (let ((count 0))
@@ -4459,7 +4252,6 @@
 
 (testing-registry-case
  'standard-write-import-string-output '(portable core)
- ("consent-eval-test.scm" 4460)
 (check-external 'standard-write-import-string-output
                 "(import (scheme base) (scheme write))
                  (let ((out (open-output-string)))
@@ -4469,7 +4261,6 @@
 
 (testing-registry-case
  'standard-write-shared-output '(portable core)
- ("consent-eval-test.scm" 4470)
 (check-external 'standard-write-shared-output
                 "(import (scheme base) (scheme write))
                  (let ((x (list 'a)))
@@ -4480,7 +4271,6 @@
 
 (testing-registry-case
  'standard-write-circular-output '(portable core)
- ("consent-eval-test.scm" 4481)
 (check-external 'standard-write-circular-output
                 "(import (scheme base) (scheme write))
                  (let ((out (open-output-string)))
@@ -4490,7 +4280,6 @@
 
 (testing-registry-case
  'standard-write-simple-output '(portable core)
- ("consent-eval-test.scm" 4491)
 (check-external 'standard-write-simple-output
                 "(import (scheme base) (scheme write))
                  (let ((out (open-output-string)))
@@ -4500,7 +4289,6 @@
 
 (testing-registry-case
  'standard-write-record-output '(portable core)
- ("consent-eval-test.scm" 4501)
 (check-external 'standard-write-record-output
                 "(import (scheme base) (scheme write))
                  (define-record-type <pare>
@@ -4515,7 +4303,6 @@
 
 (testing-registry-case
  'standard-string-ports-read-and-write '(portable core)
- ("consent-eval-test.scm" 4516)
 (check-external 'standard-string-ports-read-and-write
                 "(import (scheme base) (scheme read) (scheme write))
                  (let ((in (open-input-string \"(alpha 1) \"))
@@ -4528,7 +4315,6 @@
 
 (testing-registry-case
  'standard-string-port-read-write-round-trip '(portable core)
- ("consent-eval-test.scm" 4529)
 (check-external 'standard-string-port-read-write-round-trip
                 "(import (scheme base) (scheme read) (scheme write))
                  (let ((out (open-output-string)))
@@ -4538,7 +4324,6 @@
 
 (testing-registry-case
  'standard-bytevector-ports-read-and-write '(portable core)
- ("consent-eval-test.scm" 4539)
 (check-external 'standard-bytevector-ports-read-and-write
                 "(import (scheme base))
                  (let ((in (open-input-bytevector #u8(1 2 3)))
@@ -4551,7 +4336,6 @@
 
 (testing-registry-case
  'standard-eval-import-evaluates-scheme '(portable core)
- ("consent-eval-test.scm" 4552)
 (check-external 'standard-eval-import-evaluates-scheme
                 "(import (scheme base) (scheme eval))
                  (eval '(* 7 3) (environment '(scheme base)))"
@@ -4559,7 +4343,6 @@
 
 (testing-registry-case
  'standard-eval-immutable-environment-rejects-definition '(portable core)
- ("consent-eval-test.scm" 4560)
 (check 'standard-eval-immutable-environment-rejects-definition
        (raises?
         (lambda ()
@@ -4570,7 +4353,6 @@
 
 (testing-registry-case
  'standard-repl-interaction-environment-mutates-session '(portable core)
- ("consent-eval-test.scm" 4571)
 (check-external/options 'standard-repl-interaction-environment-mutates-session
                         "(import (scheme base) (scheme eval) (scheme repl))
                          (eval '(define portable-repl-value 42)
@@ -4581,7 +4363,6 @@
 
 (testing-registry-case
  'standard-repl-interaction-environment-policy-denied '(portable core)
- ("consent-eval-test.scm" 4582)
 (check 'standard-repl-interaction-environment-policy-denied
        (raises?
         (lambda ()
@@ -4594,7 +4375,6 @@
 
 (testing-registry-case
  'standard-load-default-denied '(portable core)
- ("consent-eval-test.scm" 4595)
 (check 'standard-load-default-denied
        (raises?
         (lambda ()
@@ -4605,7 +4385,6 @@
 
 (testing-registry-case
  'standard-load-policy-allowed '(portable core)
- ("consent-eval-test.scm" 4606)
 (check-external/options 'standard-load-policy-allowed
                         "(import (scheme base) (scheme load))
                          (load \"fixtures/r7rs/include-body.scm\")
@@ -4615,7 +4394,6 @@
 
 (testing-registry-case
  'standard-load-file-grant-allowed '(portable core)
- ("consent-eval-test.scm" 4616)
 (check-external/options 'standard-load-file-grant-allowed
                         "(import (scheme base) (scheme load))
                          (load \"fixtures/r7rs/include-body.scm\")
@@ -4625,7 +4403,6 @@
 
 (testing-registry-case
  'standard-load-audits-code-loading-request '(portable core)
- ("consent-eval-test.scm" 4626)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (scheme load))
@@ -4652,7 +4429,6 @@
 
 (testing-registry-case
  'standard-file-import-default-denied '(portable core)
- ("consent-eval-test.scm" 4653)
 (check 'standard-file-import-default-denied
        (raises?
         (lambda ()
@@ -4663,7 +4439,6 @@
 
 (testing-registry-case
  'standard-file-default-denial-audits '(portable core)
- ("consent-eval-test.scm" 4664)
 (let* ((result
        (consent-eval-source-result
          "(import (scheme base) (scheme file))
@@ -4683,7 +4458,6 @@
 
 (testing-registry-case
  'standard-time-default-denial-audits-clock-request '(portable core)
- ("consent-eval-test.scm" 4684)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (scheme time))
@@ -4709,7 +4483,6 @@
 
 (testing-registry-case
  'standard-time-clock-grant-allowed '(portable core)
- ("consent-eval-test.scm" 4710)
 (check-external/options 'standard-time-clock-grant-allowed
                         "(import (scheme base) (scheme time))
                          (list (real? (current-second))
@@ -4721,7 +4494,6 @@
 
 (testing-registry-case
  'standard-time-clock-grant-audits-request-decision-result '(portable core)
- ("consent-eval-test.scm" 4722)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (scheme time))
@@ -4753,7 +4525,6 @@
 
 (testing-registry-case
  'standard-file-import-policy-allowed '(portable core)
- ("consent-eval-test.scm" 4754)
 (check-external/options 'standard-file-import-policy-allowed
                         "(import (scheme base) (scheme file))
                          (file-exists?
@@ -4763,7 +4534,6 @@
 
 (testing-registry-case
  'standard-file-import-file-grant-allowed '(portable core)
- ("consent-eval-test.scm" 4764)
 (check-external/options 'standard-file-import-file-grant-allowed
                         "(import (scheme base) (scheme file))
                          (file-exists?
@@ -4773,12 +4543,10 @@
 
 (testing-registry-case
  'consent-eval-case-231 '(portable core)
- ("consent-eval-test.scm" 4774)
 (write-host-test-file delete-test-path "(define old 1)"))
 
 (testing-registry-case
  'standard-delete-file-grant-allowed '(portable core)
- ("consent-eval-test.scm" 4779)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (scheme file))
@@ -4810,7 +4578,6 @@
 
 (testing-registry-case
  'portable-process-capability-authorizes-and-audits '(portable core)
- ("consent-eval-test.scm" 4811)
 (let* ((context (new-eval-context process-grant-options))
        (authorization
         (authorize-process-capability
@@ -4854,7 +4621,6 @@
 
 (testing-registry-case
  'portable-process-capability-denies-without-policy '(portable core)
- ("consent-eval-test.scm" 4855)
 (let* ((context (new-eval-context process-grant-without-policy-options))
        (raised
         (raises?
@@ -4882,7 +4648,6 @@
 
 (testing-registry-case
  'portable-process-capability-denies-command-mismatch '(portable core)
- ("consent-eval-test.scm" 4883)
 (let* ((context (new-eval-context process-grant-options))
        (raised
         (raises?
@@ -4907,7 +4672,6 @@
 
 (testing-registry-case
  'portable-handle-lifecycle-primitives '(portable core)
- ("consent-eval-test.scm" 4908)
 (check-external 'portable-handle-lifecycle-primitives
                 "(import (scheme base) (consent capability))
                  (define process-handle
@@ -4958,7 +4722,6 @@
 
 (testing-registry-case
  'portable-process-capability-handle-datums '(portable core)
- ("consent-eval-test.scm" 4959)
 (check 'portable-process-capability-handle-datums
        (list
         (process-capability-handle
@@ -4994,7 +4757,6 @@
 
 (testing-registry-case
  'portable-network-capability-authorizes-and-audits '(portable core)
- ("consent-eval-test.scm" 4995)
 (let* ((context (new-eval-context network-grant-options))
        (authorization
         (authorize-network-capability
@@ -5039,7 +4801,6 @@
 
 (testing-registry-case
  'portable-network-capability-denies-without-policy '(portable core)
- ("consent-eval-test.scm" 5040)
 (let* ((context (new-eval-context network-grant-without-policy-options))
        (raised
         (raises?
@@ -5074,7 +4835,6 @@
 
 (testing-registry-case
  'portable-network-capability-denies-host-mismatch '(portable core)
- ("consent-eval-test.scm" 5075)
 (let* ((context (new-eval-context network-grant-options))
        (raised
         (raises?
@@ -5098,7 +4858,6 @@
 
 (testing-registry-case
  'portable-network-capability-handle-datums '(portable core)
- ("consent-eval-test.scm" 5099)
 (check 'portable-network-capability-handle-datums
        (list
         (network-capability-handle
@@ -5135,41 +4894,33 @@
 
 (testing-registry-case
  'consent-eval-case-242 '(portable core)
- ("consent-eval-test.scm" 5136)
 (write-host-test-file port-test-input-path "abc"))
 (testing-registry-case
  'consent-eval-case-243 '(portable core)
- ("consent-eval-test.scm" 5140)
 (if (file-exists? port-test-output-path)
     (delete-file port-test-output-path)))
 (testing-registry-case
  'consent-eval-case-244 '(portable core)
- ("consent-eval-test.scm" 5145)
 (if (file-exists? port-test-call-output-path)
     (delete-file port-test-call-output-path)))
 (testing-registry-case
  'consent-eval-case-245 '(portable core)
- ("consent-eval-test.scm" 5150)
 (if (file-exists? port-test-with-output-path)
     (delete-file port-test-with-output-path)))
 (testing-registry-case
  'consent-eval-case-246 '(portable core)
- ("consent-eval-test.scm" 5155)
 (if (file-exists? port-test-close-output-path)
     (delete-file port-test-close-output-path)))
 (testing-registry-case
  'consent-eval-case-247 '(portable core)
- ("consent-eval-test.scm" 5160)
 (write-host-binary-file port-test-binary-input-path '(1 2 3 4 255)))
 (testing-registry-case
  'consent-eval-case-248 '(portable core)
- ("consent-eval-test.scm" 5164)
 (if (file-exists? port-test-binary-output-path)
     (delete-file port-test-binary-output-path)))
 
 (testing-registry-case
  'standard-open-input-file-port-grant-allowed '(portable core)
- ("consent-eval-test.scm" 5170)
 (check-external/options 'standard-open-input-file-port-grant-allowed
                         "(import (scheme base) (scheme file))
                          (let ((port (open-input-file
@@ -5184,7 +4935,6 @@
 
 (testing-registry-case
  'standard-open-output-file-port-grant-allowed '(portable core)
- ("consent-eval-test.scm" 5185)
 (check-external/options 'standard-open-output-file-port-grant-allowed
                         "(import (scheme base) (scheme file))
                          (let ((port (open-output-file
@@ -5197,7 +4947,6 @@
 
 (testing-registry-case
  'standard-open-output-file-writes-host-file '(portable core)
- ("consent-eval-test.scm" 5198)
 (check 'standard-open-output-file-writes-host-file
        (call-with-input-file port-test-output-path
          (lambda (port) (read-string 7 port)))
@@ -5205,7 +4954,6 @@
 
 (testing-registry-case
  'standard-file-port-wrappers-use-capabilities '(portable core)
- ("consent-eval-test.scm" 5206)
 (check-external/options 'standard-file-port-wrappers-use-capabilities
                         "(import (scheme base) (scheme file))
                          (list
@@ -5230,7 +4978,6 @@
 
 (testing-registry-case
  'standard-call-output-file-writes-host-file '(portable core)
- ("consent-eval-test.scm" 5231)
 (check 'standard-call-output-file-writes-host-file
        (call-with-input-file port-test-call-output-path
          (lambda (port) (read-string 4 port)))
@@ -5238,7 +4985,6 @@
 
 (testing-registry-case
  'standard-with-output-file-writes-host-file '(portable core)
- ("consent-eval-test.scm" 5239)
 (check 'standard-with-output-file-writes-host-file
        (call-with-input-file port-test-with-output-path
          (lambda (port) (read-string 4 port)))
@@ -5246,7 +4992,6 @@
 
 (testing-registry-case
  'standard-current-output-port-default-denied '(portable core)
- ("consent-eval-test.scm" 5247)
 (check 'standard-current-output-port-default-denied
        (raises?
         (lambda ()
@@ -5257,7 +5002,6 @@
 
 (testing-registry-case
  'standard-file-port-close-invalidates-handle '(portable core)
- ("consent-eval-test.scm" 5258)
 (check 'standard-file-port-close-invalidates-handle
        (raises?
         (lambda ()
@@ -5273,7 +5017,6 @@
 
 (testing-registry-case
  'standard-file-port-revoked-grant-is-stale '(portable core)
- ("consent-eval-test.scm" 5274)
 (check 'standard-file-port-revoked-grant-is-stale
        (raises?
         (lambda ()
@@ -5299,7 +5042,6 @@
 
 (testing-registry-case
  'standard-file-port-read-limit-is-enforced '(portable core)
- ("consent-eval-test.scm" 5300)
 (check 'standard-file-port-read-limit-is-enforced
        (raises?
         (lambda ()
@@ -5326,7 +5068,6 @@
 
 (testing-registry-case
  'standard-file-port-close-limit-allows-close '(portable core)
- ("consent-eval-test.scm" 5327)
 (check-external/options 'standard-file-port-close-limit-allows-close
                         "(import (scheme base) (scheme file)
                                  (consent capability))
@@ -5352,7 +5093,6 @@
 
 (testing-registry-case
  'standard-file-port-close-limit-writes-host-file '(portable core)
- ("consent-eval-test.scm" 5353)
 (check 'standard-file-port-close-limit-writes-host-file
        (call-with-input-file port-test-close-output-path
          (lambda (port) (read-string 1 port)))
@@ -5360,7 +5100,6 @@
 
 (testing-registry-case
  'standard-open-binary-file-port-grant-allowed '(portable core)
- ("consent-eval-test.scm" 5361)
 (check-external/options 'standard-open-binary-file-port-grant-allowed
                         "(import (scheme base) (scheme file))
                          (let ((in (open-binary-input-file
@@ -5378,14 +5117,12 @@
 
 (testing-registry-case
  'standard-open-binary-output-file-writes-host-file '(portable core)
- ("consent-eval-test.scm" 5379)
 (check 'standard-open-binary-output-file-writes-host-file
        (read-host-binary-file port-test-binary-output-path)
        '(1 2 3 4 255)))
 
 (testing-registry-case
  'standard-file-grant-denies-path-traversal '(portable core)
- ("consent-eval-test.scm" 5386)
 (check 'standard-file-grant-denies-path-traversal
        (raises?
         (lambda ()
@@ -5398,7 +5135,6 @@
 
 (testing-registry-case
  'standard-file-grant-denies-url-paths '(portable core)
- ("consent-eval-test.scm" 5399)
 (check 'standard-file-grant-denies-url-paths
        (raises?
         (lambda ()
@@ -5411,7 +5147,6 @@
 
 (testing-registry-case
  'standard-file-grant-audits-request-decision-result '(portable core)
- ("consent-eval-test.scm" 5412)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (scheme file))
@@ -5442,7 +5177,6 @@
 
 (testing-registry-case
  'standard-file-grant-revocation-audits '(portable core)
- ("consent-eval-test.scm" 5443)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (scheme file) (consent capability))
@@ -5467,7 +5201,6 @@
 
 (testing-registry-case
  'standard-file-policy-allowed-audits '(portable core)
- ("consent-eval-test.scm" 5468)
 (let* ((result
        (consent-eval-source-result
          "(import (scheme base) (scheme file))
@@ -5489,7 +5222,6 @@
 
 (testing-registry-case
  'agent-io-yields-are-ordered-result-events '(portable core)
- ("consent-eval-test.scm" 5490)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent io))
@@ -5510,7 +5242,6 @@
 
 (testing-registry-case
  'agent-io-core-events-render-in-result '(portable core)
- ("consent-eval-test.scm" 5511)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent io))
@@ -5536,7 +5267,6 @@
 
 (testing-registry-case
  'agent-io-event-count-limit-fails-closed '(portable core)
- ("consent-eval-test.scm" 5537)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent io))
@@ -5561,7 +5291,6 @@
 ;; catchable raises, but budget enforcement must stay uncatchable.
 (testing-registry-case
  'agent-io-event-count-limit-uncatchable-by-guard '(portable core)
- ("consent-eval-test.scm" 5562)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent io))
@@ -5581,7 +5310,6 @@
 
 (testing-registry-case
  'agent-io-event-node-limit-fails-closed '(portable core)
- ("consent-eval-test.scm" 5582)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent io))
@@ -5600,7 +5328,6 @@
 
 (testing-registry-case
  'agent-reflect-capability-budget-imports-and-yields '(portable core)
- ("consent-eval-test.scm" 5601)
 (let ((external
        (consent-value->external
         (consent-eval-source
@@ -5632,7 +5359,6 @@
 
 (testing-registry-case
  'agent-reflect-recent-yields-redacts-secrets '(portable core)
- ("consent-eval-test.scm" 5633)
 (let ((external
        (consent-value->external
         (consent-eval-source
@@ -5649,7 +5375,6 @@
 
 (testing-registry-case
  'agent-diff-proposed-edit-renders '(portable core)
- ("consent-eval-test.scm" 5650)
 (check 'agent-diff-proposed-edit-renders
        (consent-eval-source
         "(import (agent diff))
@@ -5667,7 +5392,6 @@
 
 (testing-registry-case
  'agent-diff-yield-records-event '(portable core)
- ("consent-eval-test.scm" 5668)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent diff))
@@ -5688,7 +5412,6 @@
 
 (testing-registry-case
  'agent-vcs-status-parser '(portable core)
- ("consent-eval-test.scm" 5689)
 (check-external 'agent-vcs-status-parser
                 "(import (scheme base) (agent vcs))
                  (define nul (string #\\null))
@@ -5714,7 +5437,6 @@
 
 (testing-registry-case
  'agent-vcs-raw-diff-parser '(portable core)
- ("consent-eval-test.scm" 5715)
 (check-external 'agent-vcs-raw-diff-parser
                 "(import (scheme base) (agent vcs))
                  (define nul (string #\\null))
@@ -5733,7 +5455,6 @@
 
 (testing-registry-case
  'agent-vcs-local-mutation-authorization '(portable core)
- ("consent-eval-test.scm" 5734)
 (check-external 'agent-vcs-local-mutation-authorization
                 "(import (scheme base) (agent vcs))
                  (define request
@@ -5791,7 +5512,6 @@
 
 (testing-registry-case
  'agent-vcs-remote-mutation-authorization '(portable core)
- ("consent-eval-test.scm" 5792)
 (check-external 'agent-vcs-remote-mutation-authorization
                 "(import (scheme base) (agent vcs))
                  (define request
@@ -5841,7 +5561,6 @@
 
 (testing-registry-case
  'agent-approval-request-status '(portable core)
- ("consent-eval-test.scm" 5842)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent approval))
@@ -5862,7 +5581,6 @@
 
 (testing-registry-case
  'agent-approval-yield-pending '(portable core)
- ("consent-eval-test.scm" 5863)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent approval))
@@ -5894,7 +5612,6 @@
 
 (testing-registry-case
  'agent-approval-self-approval-denied '(portable core)
- ("consent-eval-test.scm" 5895)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent approval))
@@ -5915,7 +5632,6 @@
 
 (testing-registry-case
  'agent-redaction-secret-source-redact-provider '(portable core)
- ("consent-eval-test.scm" 5916)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent redaction))
@@ -5940,7 +5656,6 @@
 
 (testing-registry-case
  'agent-source-libraries-import-through-portable-registry '(portable core)
- ("consent-eval-test.scm" 5941)
 (check-external
  'agent-source-libraries-import-through-portable-registry
  "(import (scheme base)
@@ -5956,7 +5671,6 @@
 
 (testing-registry-case
  'agent-models-register-and-route '(portable core)
- ("consent-eval-test.scm" 5957)
 (check-external
  'agent-models-register-and-route
  "(import (scheme base) (agent models))
@@ -5983,7 +5697,6 @@
 
 (testing-registry-case
  'agent-models-route-skips-unavailable '(portable core)
- ("consent-eval-test.scm" 5984)
 (check-external
  'agent-models-route-skips-unavailable
  "(import (scheme base) (agent models))
@@ -6013,7 +5726,6 @@
 
 (testing-registry-case
  'agent-models-remote-local-only-denied '(portable core)
- ("consent-eval-test.scm" 6014)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent models) (agent redaction))
@@ -6044,7 +5756,6 @@
 
 (testing-registry-case
  'agent-models-diagnostics-redact-credentials '(portable core)
- ("consent-eval-test.scm" 6045)
 (let ((external
        (consent-value->external
         (consent-eval-source
@@ -6073,7 +5784,6 @@
 
 (testing-registry-case
  'agent-models-tool-spec-from-docstring-metadata '(portable core)
- ("consent-eval-test.scm" 6074)
 (check-external/options
  'agent-models-tool-spec-from-docstring-metadata
  "(import (scheme base) (agent models))
@@ -6125,7 +5835,6 @@
 
 (testing-registry-case
  'agent-models-tool-spec-any-schema-default '(portable core)
- ("consent-eval-test.scm" 6126)
 (check-external/options
  'agent-models-tool-spec-any-schema-default
  "(import (scheme base) (agent models))
@@ -6157,7 +5866,6 @@
 
 (testing-registry-case
  'consent-capability-grant-datums '(portable core)
- ("consent-eval-test.scm" 6158)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (consent capability))
@@ -6189,7 +5897,6 @@
 
 (testing-registry-case
  'consent-capability-attenuate-revoke-with-grant '(portable core)
- ("consent-eval-test.scm" 6190)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (consent capability))
@@ -6224,7 +5931,6 @@
 
 (testing-registry-case
  'agent-memory-crud-search-tags '(portable core)
- ("consent-eval-test.scm" 6225)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent memory))
@@ -6269,7 +5975,6 @@
 
 (testing-registry-case
  'agent-memory-source-store-helpers '(portable core)
- ("consent-eval-test.scm" 6270)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent memory))
@@ -6299,7 +6004,6 @@
 
 (testing-registry-case
  'agent-memory-reflection-selection-primitives '(portable core)
- ("consent-eval-test.scm" 6300)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent memory))
@@ -6370,7 +6074,6 @@
 
 (testing-registry-case
  'agent-memory-yield-emits-context-event '(portable core)
- ("consent-eval-test.scm" 6371)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent memory))
@@ -6395,7 +6098,6 @@
 
 (testing-registry-case
  'agent-helper-save-list-load '(portable core)
- ("consent-eval-test.scm" 6396)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent helper))
@@ -6421,7 +6123,6 @@
 
 (testing-registry-case
  'agent-helper-artifact-and-skill-candidate '(portable core)
- ("consent-eval-test.scm" 6422)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent helper))
@@ -6457,7 +6158,6 @@
 
 (testing-registry-case
  'agent-test-group-results '(portable core)
- ("consent-eval-test.scm" 6458)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent test))
@@ -6479,7 +6179,6 @@
 
 (testing-registry-case
  'agent-test-yield-failures '(portable core)
- ("consent-eval-test.scm" 6480)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent test) (agent io))
@@ -6499,7 +6198,6 @@
 
 (testing-registry-case
  'agent-test-skill-and-srfi64 '(portable core)
- ("consent-eval-test.scm" 6500)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent test))
@@ -6527,7 +6225,6 @@
 
 (testing-registry-case
  'agent-test-budget-exhaustion-status '(portable core)
- ("consent-eval-test.scm" 6528)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent test))
@@ -6552,7 +6249,6 @@
 
 (testing-registry-case
  'agent-plan-crud-step-status '(portable core)
- ("consent-eval-test.scm" 6553)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent plan))
@@ -6586,7 +6282,6 @@
 
 (testing-registry-case
  'agent-plan-yield-emits-context-event '(portable core)
- ("consent-eval-test.scm" 6587)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent plan))
@@ -6613,7 +6308,6 @@
 
 (testing-registry-case
  'agent-context-portable-request-summary-focus-and-yield '(portable core)
- ("consent-eval-test.scm" 6614)
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent context))
@@ -6647,7 +6341,6 @@
 
 (testing-registry-case
  'agent-context-missing-defaults '(portable core)
- ("consent-eval-test.scm" 6648)
 (check-external
  'agent-context-missing-defaults
  "(import (scheme base) (agent context))
@@ -6659,7 +6352,6 @@
 
 (testing-registry-case
  'standard-host-libraries-import-and-default-deny '(portable core)
- ("consent-eval-test.scm" 6660)
 (check 'standard-host-libraries-import-and-default-deny
        (and
         (not
@@ -6690,7 +6382,6 @@
 ;; returns #f (no denial), which makes the allow path deterministic.
 (testing-registry-case
  'process-environment-read-denied-by-default '(portable core)
- ("consent-eval-test.scm" 6691)
 (check 'process-environment-read-denied-by-default
        (raises?
         (lambda ()
@@ -6701,7 +6392,6 @@
 
 (testing-registry-case
  'process-environment-read-allowed-under-grant '(portable core)
- ("consent-eval-test.scm" 6702)
 (check-external/options 'process-environment-read-allowed-under-grant
                         "(import (scheme base) (scheme process-context))
                          (get-environment-variable \"CONSENT_UNSET_ENV_PROBE\")"
@@ -6719,7 +6409,6 @@
 ;; capability that lets the compiled runtime act as a full Scheme host runner.
 (testing-registry-case
  'internal-library-import-denied-by-default '(portable core)
- ("consent-eval-test.scm" 6720)
 (check 'internal-library-import-denied-by-default
        (raises?
         (lambda ()
@@ -6735,7 +6424,6 @@
 ;; the native interpreter loads it quickly rather than being re-interpreted.
 (testing-registry-case
  'internal-library-self-hosts-from-source '(portable core)
- ("consent-eval-test.scm" 6736)
 (check-external/options 'internal-library-self-hosts-from-source
                         "(import (consent version))
                          (length consent-version-datum)"
@@ -6747,7 +6435,6 @@
 ;; their portable store helpers while attaching host effects.
 (testing-registry-case
  'internal-agent-primitive-library-self-hosts-from-source '(portable core)
- ("consent-eval-test.scm" 6748)
 (check-external/options 'internal-agent-primitive-library-self-hosts-from-source
                         "(import (agent approval))
                          (consent-approval-store?
@@ -6757,7 +6444,6 @@
 
 (testing-registry-case
  'manifest-resolution-requires-manifest-root '(portable core)
- ("consent-eval-test.scm" 6758)
 (check 'manifest-resolution-requires-manifest-root
        (let ((directories (consent-library-search-directory-list)))
          (dynamic-wind
@@ -6779,7 +6465,6 @@
 ;; does not turn every (consent ...) name into a phantom library.
 (testing-registry-case
  'internal-library-grant-unknown-still-denied '(portable core)
- ("consent-eval-test.scm" 6780)
 (check 'internal-library-grant-unknown-still-denied
        (raises?
         (lambda ()
@@ -6791,7 +6476,6 @@
 
 (testing-registry-case
  'standard-r5rs-import '(portable core)
- ("consent-eval-test.scm" 6792)
 (check-external 'standard-r5rs-import
                 "(import (scheme r5rs))
                  (list (+ 1 2)
@@ -6801,7 +6485,6 @@
 
 (testing-registry-case
  'imported-value-set-is-rejected '(portable core)
- ("consent-eval-test.scm" 6802)
 (check 'imported-value-set-is-rejected
        (raises?
         (lambda ()
@@ -6813,7 +6496,6 @@
 
 (testing-registry-case
  'imported-value-define-is-rejected '(portable core)
- ("consent-eval-test.scm" 6814)
 (check 'imported-value-define-is-rejected
        (raises?
         (lambda ()
@@ -6825,7 +6507,6 @@
 
 (testing-registry-case
  'imported-syntax-define-is-rejected '(portable core)
- ("consent-eval-test.scm" 6826)
 (check 'imported-syntax-define-is-rejected
        (raises?
         (lambda ()
@@ -6839,7 +6520,6 @@
 
 (testing-registry-case
  'duplicate-export-names-signal-error '(portable core)
- ("consent-eval-test.scm" 6840)
 (check 'duplicate-export-names-signal-error
        (raises?
         (lambda ()
@@ -6852,7 +6532,6 @@
 
 (testing-registry-case
  'program-imports-precede-body '(portable core)
- ("consent-eval-test.scm" 6853)
 (check 'program-imports-precede-body
        (raises?
         (lambda ()
@@ -6866,7 +6545,6 @@
 
 (testing-registry-case
  'expand-source-exposes-expanded-forms '(portable core)
- ("consent-eval-test.scm" 6867)
 (check 'expand-source-exposes-expanded-forms
        (consent-value->external
         (consent-expand-source
@@ -6879,7 +6557,6 @@
 
 (testing-registry-case
  'syntax-error-reports-source-form '(portable core)
- ("consent-eval-test.scm" 6880)
 (check 'syntax-error-reports-source-form
        (let* ((result
                (consent-eval-source-result
@@ -6895,7 +6572,6 @@
 
 (testing-registry-case
  'result-rendering '(portable core)
- ("consent-eval-test.scm" 6896)
 (check 'result-rendering
        (consent-result->external
         (consent-eval-source-result "(+ 1 2)"))
@@ -6903,7 +6579,6 @@
 
 (testing-registry-case
  'closure '(portable core)
- ("consent-eval-test.scm" 6904)
 (check-external 'closure
                 "(define (make-adder x)
                    (lambda (y) (+ x y)))
@@ -6911,7 +6586,6 @@
                 "10"))
 (testing-registry-case
  'internal-variable-definition '(portable core)
- ("consent-eval-test.scm" 6912)
 (check-external 'internal-variable-definition
                 "((lambda (x)
                     (define y 2)
@@ -6920,7 +6594,6 @@
                 "5"))
 (testing-registry-case
  'internal-function-definition '(portable core)
- ("consent-eval-test.scm" 6921)
 (check-external 'internal-function-definition
                 "((lambda (x)
                     (define (twice y) (+ y y))
@@ -6929,7 +6602,6 @@
                 "10"))
 (testing-registry-case
  'internal-definition-shadows-parent '(portable core)
- ("consent-eval-test.scm" 6930)
 (check-external 'internal-definition-shadows-parent
                 "((lambda ()
                     (define (+ x y)
@@ -6939,7 +6611,6 @@
 
 (testing-registry-case
  'child-definition-shadows-parent '(portable core)
- ("consent-eval-test.scm" 6940)
 (let ((parent (consent-make-base-environment))
       (child #f))
   (set! child (consent-make-empty-environment parent))
@@ -6958,7 +6629,6 @@
 
 (testing-registry-case
  'set-mutates-local '(portable core)
- ("consent-eval-test.scm" 6959)
 (check-external 'set-mutates-local
                 "((lambda (x)
                     (set! x (+ x 1))
@@ -6967,7 +6637,6 @@
                 "3"))
 (testing-registry-case
  'set-mutates-captured '(portable core)
- ("consent-eval-test.scm" 6968)
 (check-external 'set-mutates-captured
                 "(define (make-counter)
                    (define x 0)
@@ -6980,44 +6649,36 @@
                 "2"))
 (testing-registry-case
  'set-unbound '(portable core)
- ("consent-eval-test.scm" 6981)
 (check 'set-unbound
        (raises? (lambda () (consent-eval-source "(set! missing 1)")))
        #t))
 
 (testing-registry-case
  'scheme-truthiness-false '(portable core)
- ("consent-eval-test.scm" 6988)
 (check-external 'scheme-truthiness-false "(if #f 1 2)" "2"))
 (testing-registry-case
  'scheme-truthiness-empty-list '(portable core)
- ("consent-eval-test.scm" 6992)
 (check-external 'scheme-truthiness-empty-list "(if '() 1 2)" "1"))
 (testing-registry-case
  'if-without-alternate '(portable core)
- ("consent-eval-test.scm" 6996)
 (check-external 'if-without-alternate "(if #f 1)" "#<unspecified>"))
 
 (testing-registry-case
  'variadic-formals '(portable core)
- ("consent-eval-test.scm" 7001)
 (check-external 'variadic-formals "((lambda x x) 3 4 5)" "(3 4 5)"))
 (testing-registry-case
  'dotted-formals '(portable core)
- ("consent-eval-test.scm" 7005)
 (check-external 'dotted-formals
                 "((lambda (x y . z) z) 3 4 5 6)"
                 "(5 6)"))
 (testing-registry-case
  'duplicate-formals '(portable core)
- ("consent-eval-test.scm" 7011)
 (check 'duplicate-formals
        (raises? (lambda ()
                   (consent-eval-source "((lambda (x x) x) 1 2)")))
        #t))
 (testing-registry-case
  'arity-error '(portable core)
- ("consent-eval-test.scm" 7018)
 (check 'arity-error
        (raises? (lambda ()
                   (consent-eval-source "((lambda (x) x) 1 2)")))
@@ -7025,7 +6686,6 @@
 
 (testing-registry-case
  'tail-recursive-loop '(portable core)
- ("consent-eval-test.scm" 7026)
 (check-external/options 'tail-recursive-loop
                         "(define (loop n acc)
                            (if (= n 0)
@@ -7038,7 +6698,6 @@
 
 (testing-registry-case
  'step-budget '(portable core)
- ("consent-eval-test.scm" 7039)
 (check 'step-budget
        (raises?
         (lambda ()
@@ -7050,7 +6709,6 @@
        #t))
 (testing-registry-case
  'value-budget '(portable core)
- ("consent-eval-test.scm" 7051)
 (check 'value-budget
        (raises?
         (lambda ()
@@ -7061,7 +6719,6 @@
        #t))
 (testing-registry-case
  'host-callback-budget '(portable core)
- ("consent-eval-test.scm" 7062)
 (check 'host-callback-budget
        (raises?
         (lambda ()
@@ -7084,7 +6741,6 @@
                      (expires never)))
 (testing-registry-case
  'program-input-granted-read-line '(portable core)
- ("consent-eval-test.scm" 7085)
 (check-external/options 'program-input-granted-read-line
                         "(read-line)"
                         (list (cons 'program-input-reader
@@ -7094,7 +6750,6 @@
                         "\"alpha\""))
 (testing-registry-case
  'program-input-granted-sequence '(portable core)
- ("consent-eval-test.scm" 7095)
 (check-external/options 'program-input-granted-sequence
                         "(list (read-line) (read-line) (read-char)
                                (eof-object? (read-line)))"
@@ -7104,7 +6759,6 @@
                         "(\"a\" \"b\" #\\c #t)"))
 (testing-registry-case
  'program-input-ungranted-denies '(portable core)
- ("consent-eval-test.scm" 7105)
 (check 'program-input-ungranted-denies
        (raises?
         (lambda ()
@@ -7116,7 +6770,6 @@
        #t))
 (testing-registry-case
  'program-input-no-content-denies '(portable core)
- ("consent-eval-test.scm" 7117)
 (check 'program-input-no-content-denies
        (raises?
         (lambda ()
@@ -7150,11 +6803,9 @@
 
 (testing-registry-case
  'consent-eval-case-348 '(portable core)
- ("consent-eval-test.scm" 7151)
 (set! program-input-stream-pulls 0))
 (testing-registry-case
  'program-input-stream-read-line '(portable core)
- ("consent-eval-test.scm" 7155)
 (check-external/options 'program-input-stream-read-line
                         "(read-line)"
                         (list (cons 'program-input-reader
@@ -7165,13 +6816,11 @@
 ;; Reading one line pulled exactly one chunk -- the stream was not drained.
 (testing-registry-case
  'program-input-stream-incremental '(portable core)
- ("consent-eval-test.scm" 7166)
 (check 'program-input-stream-incremental program-input-stream-pulls 1))
 ;; An unbounded reader would hang here if the port drained eagerly; reading a
 ;; bounded number of lines completes because refills stop at each newline.
 (testing-registry-case
  'program-input-stream-unbounded '(portable core)
- ("consent-eval-test.scm" 7172)
 (check-external/options 'program-input-stream-unbounded
                         "(list (read-line) (read-line) (read-line))"
                         (list (cons 'program-input-reader (lambda () "x\n"))
@@ -7181,7 +6830,6 @@
 ;; reader sees a complete form.
 (testing-registry-case
  'program-input-stream-datum '(portable core)
- ("consent-eval-test.scm" 7182)
 (check-external/options 'program-input-stream-datum
                         "(import (scheme read)) (read)"
                         (list (cons 'program-input-reader
@@ -7221,7 +6869,6 @@
 
 (testing-registry-case
  'program-output-granted-text '(portable core)
- ("consent-eval-test.scm" 7222)
 (let ((captured (run-with-output-writer
                  "(import (scheme write)) (display \"hi\") (newline)"
                  'program-output-writer program-output-grant)))
@@ -7231,7 +6878,6 @@
 
 (testing-registry-case
  'program-output-ungranted-denies '(portable core)
- ("consent-eval-test.scm" 7232)
 (check 'program-output-ungranted-denies
        (raises?
         (lambda ()
@@ -7243,7 +6889,6 @@
 
 (testing-registry-case
  'program-output-budget-bounded '(portable core)
- ("consent-eval-test.scm" 7244)
 (check 'program-output-budget-bounded
        (raises?
         (lambda ()
@@ -7258,7 +6903,6 @@
 
 (testing-registry-case
  'program-error-granted-text '(portable core)
- ("consent-eval-test.scm" 7259)
 (let ((captured (run-with-output-writer
                  "(write-string \"e!\" (current-error-port))"
                  'program-error-writer program-error-grant)))
@@ -7266,7 +6910,6 @@
 
 (testing-registry-case
  'current-error-port-ungranted-denies '(portable core)
- ("consent-eval-test.scm" 7267)
 (check 'current-error-port-ungranted-denies
        (raises?
         (lambda () (consent-eval-source "(current-error-port)" #f '())))
@@ -7281,7 +6924,6 @@
 ;; twin of the Emacs `consent-eval-test-program-binary-input-stream'.
 (testing-registry-case
  'program-binary-input-read-u8 '(portable core)
- ("consent-eval-test.scm" 7282)
 (check-external/options 'program-binary-input-read-u8
                         "(list (read-u8 (current-input-port))
                                (read-u8 (current-input-port))
@@ -7294,7 +6936,6 @@
 ;; peek-u8 does not advance the cursor; read-u8 then returns the peeked byte.
 (testing-registry-case
  'program-binary-input-peek-u8 '(portable core)
- ("consent-eval-test.scm" 7295)
 (check-external/options 'program-binary-input-peek-u8
                         "(let ((port (current-input-port)))
                            (list (peek-u8 port) (read-u8 port) (read-u8 port)))"
@@ -7306,7 +6947,6 @@
 ;; read-bytevector pulls up to its count across the buffered bytes.
 (testing-registry-case
  'program-binary-input-read-bytevector '(portable core)
- ("consent-eval-test.scm" 7307)
 (check-external/options 'program-binary-input-read-bytevector
                         "(read-bytevector 3 (current-input-port))"
                         (list (cons 'program-input-byte-reader
@@ -7316,7 +6956,6 @@
                         "#u8(1 2 3)"))
 (testing-registry-case
  'program-binary-input-ungranted-denies '(portable core)
- ("consent-eval-test.scm" 7317)
 (check 'program-binary-input-ungranted-denies
        (raises?
         (lambda ()
@@ -7329,7 +6968,6 @@
        #t))
 (testing-registry-case
  'program-binary-input-no-reader-denies '(portable core)
- ("consent-eval-test.scm" 7330)
 (check 'program-binary-input-no-reader-denies
        (raises?
         (lambda ()
@@ -7364,11 +7002,9 @@
 
 (testing-registry-case
  'consent-eval-case-363 '(portable core)
- ("consent-eval-test.scm" 7365)
 (set! program-input-byte-pulls 0))
 (testing-registry-case
  'program-binary-input-stream-read-u8 '(portable core)
- ("consent-eval-test.scm" 7369)
 (check-external/options 'program-binary-input-stream-read-u8
                         "(read-u8 (current-input-port))"
                         (list (cons 'program-input-byte-reader
@@ -7381,13 +7017,11 @@
 ;; Reading one byte pulled exactly one chunk -- the stream was not drained.
 (testing-registry-case
  'program-binary-input-stream-incremental '(portable core)
- ("consent-eval-test.scm" 7382)
 (check 'program-binary-input-stream-incremental program-input-byte-pulls 1))
 ;; An unbounded byte reader would hang here if the port drained eagerly; reading
 ;; a bounded number of bytes completes because refills stop once a byte is buffered.
 (testing-registry-case
  'program-binary-input-stream-unbounded '(portable core)
- ("consent-eval-test.scm" 7388)
 (check-external/options 'program-binary-input-stream-unbounded
                         "(let ((port (current-input-port)))
                            (list (read-u8 port) (read-u8 port) (read-u8 port)))"
@@ -7398,7 +7032,6 @@
 ;; A read-bytevector spanning multiple chunks refills until count bytes buffer.
 (testing-registry-case
  'program-binary-input-stream-read-bytevector '(portable core)
- ("consent-eval-test.scm" 7399)
 (check-external/options 'program-binary-input-stream-read-bytevector
                         "(read-bytevector 4 (current-input-port))"
                         (list (cons 'program-input-byte-reader
@@ -7430,7 +7063,6 @@
 
 (testing-registry-case
  'program-binary-output-granted-bytes '(portable core)
- ("consent-eval-test.scm" 7431)
 (let ((captured (run-with-byte-writer
                  "(let ((port (current-output-port)))
                     (write-u8 104 port)
@@ -7442,7 +7074,6 @@
 
 (testing-registry-case
  'program-binary-output-ungranted-denies '(portable core)
- ("consent-eval-test.scm" 7443)
 (check 'program-binary-output-ungranted-denies
        (raises?
         (lambda ()
@@ -7454,7 +7085,6 @@
 
 (testing-registry-case
  'program-binary-output-budget-bounded '(portable core)
- ("consent-eval-test.scm" 7455)
 (check 'program-binary-output-budget-bounded
        (raises?
         (lambda ()
@@ -7470,7 +7100,6 @@
 
 (testing-registry-case
  'program-binary-error-granted-bytes '(portable core)
- ("consent-eval-test.scm" 7471)
 (let ((captured (run-with-byte-writer
                  "(write-u8 33 (current-error-port))"
                  'program-error-byte-writer program-error-grant)))
@@ -7480,7 +7109,6 @@
 ;; this is required by SRFI test runners executing inside compiled --host-run.
 (testing-registry-case
  'interaction-current-error-port-status '(portable core)
- ("consent-eval-test.scm" 7481)
 (let* ((interaction (consent-make-interaction-context))
        (result
         (consent-interaction-eval-form
@@ -7497,7 +7125,6 @@
 ;; enough handler state after this rejected import to perturb later checks.
 (testing-registry-case
  'consent-json-read-subset-excludes-write '(portable core)
- ("consent-eval-test.scm" 7498)
 (check 'consent-json-read-subset-excludes-write
        (raises?
         (lambda ()

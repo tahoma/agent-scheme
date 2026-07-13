@@ -27,7 +27,6 @@
 
 (testing-registry-case
  'basic-test-counts '(portable stdlib)
- ("stdlib-testing-test.scm" 28)
 (test-equal 'basic-test-counts
              '(4 0 0 0 0)
              (runner-counts
@@ -42,7 +41,6 @@
 
 (testing-registry-case
  'skip-and-expected-failure-counts '(portable stdlib)
- ("stdlib-testing-test.scm" 43)
 (test-equal 'skip-and-expected-failure-counts
              '(1 0 1 1 1)
              (runner-counts
@@ -60,7 +58,6 @@
 
 (testing-registry-case
  'test-error-passes-on-raised-condition '(portable stdlib)
- ("stdlib-testing-test.scm" 61)
 (test-equal 'test-error-passes-on-raised-condition
              '(1 0 0 0 0)
              (runner-counts
@@ -72,7 +69,6 @@
 
 (testing-registry-case
  'test-result-properties '(portable stdlib)
- ("stdlib-testing-test.scm" 73)
 (test-equal 'test-result-properties
              '("named" (x y) (x y) pass)
              (let ((properties '()))
@@ -94,7 +90,6 @@
 
 (testing-registry-case
  'group-paths '(portable stdlib)
- ("stdlib-testing-test.scm" 95)
 (test-equal 'group-paths
              '((("outer" "inner") "leaf"))
              (let ((paths '()))
@@ -114,7 +109,6 @@
 
 (testing-registry-case
  'approximate-and-passed-predicate '(portable stdlib)
- ("stdlib-testing-test.scm" 115)
 (test-equal 'approximate-and-passed-predicate
              '((1 0 0 0 0) #t pass)
              (let ((runner
@@ -129,7 +123,6 @@
 
 (testing-registry-case
  'read-eval-string-uses-scheme-base '(portable stdlib)
- ("stdlib-testing-test.scm" 130)
 (test-equal 'read-eval-string-uses-scheme-base
              '(42 #f)
              (list (test-read-eval-string "(let ((x 20)) (+ x 22))")
@@ -137,7 +130,6 @@
 
 (testing-registry-case
  'fresh-runner-initializes-auxiliary-value '(portable stdlib)
- ("stdlib-testing-test.scm" 138)
 (test-equal 'fresh-runner-initializes-auxiliary-value
              '(#f #f)
              (list (test-runner-aux-value (test-runner-null))
@@ -145,7 +137,6 @@
 
 (testing-registry-case
  'test-apply-selects-and-restores '(portable stdlib)
- ("stdlib-testing-test.scm" 146)
 (test-equal 'test-apply-selects-and-restores
              '(2 0 0 0 1)
              (runner-counts
@@ -163,7 +154,6 @@
 
 (testing-registry-case
  'group-cleanup-normal-and-error-exits '(portable stdlib)
- ("stdlib-testing-test.scm" 164)
 (test-equal 'group-cleanup-normal-and-error-exits
              '(body cleanup error-cleanup caught)
              (let ((events '()))
@@ -184,7 +174,6 @@
 
 (testing-registry-case
  'bad-count-and-end-name-callbacks '(portable stdlib)
- ("stdlib-testing-test.scm" 185)
 (test-equal 'bad-count-and-end-name-callbacks
              '((name "different" "counted") (count 1 2))
              (let ((events '()))
@@ -205,7 +194,6 @@
 
 (testing-registry-case
  'runner-factory-current-and-reset '(portable stdlib)
- ("stdlib-testing-test.scm" 206)
 (test-equal 'runner-factory-current-and-reset
              '(#t #t (1 0 0 0 0) (0 0 0 0 0) ())
              (let ((saved-factory (test-runner-factory))
@@ -233,7 +221,6 @@
 
 (testing-registry-case
  'result-property-mutation '(portable stdlib)
- ("stdlib-testing-test.scm" 234)
 (test-equal 'result-property-mutation
              '(41 42 missing cleared)
              (let ((runner
@@ -253,7 +240,6 @@
 
 (testing-registry-case
  'manifest-reports-upstream-meta-suite '(portable stdlib)
- ("stdlib-testing-test.scm" 254)
 (test-equal 'manifest-reports-upstream-meta-suite
              #t
              (let* ((entry (stdlib-manifest-ref '(stdlib testing)))

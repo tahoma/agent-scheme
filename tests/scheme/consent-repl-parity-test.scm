@@ -270,23 +270,18 @@
 
 (testing-registry-case
  'parity-suite-tag '(portable core)
- ("consent-repl-parity-test.scm" 271)
 (test-equal 'parity-suite-tag 'consent-fixture-suite (car suite)))
 (testing-registry-case
  'parity-suite-kind '(portable core)
- ("consent-repl-parity-test.scm" 275)
 (test-equal 'parity-suite-kind 'repl-parity (field suite 'kind)))
 (testing-registry-case
  'parity-suite-version '(portable core)
- ("consent-repl-parity-test.scm" 279)
 (test-equal 'parity-suite-version 1 (field suite 'version)))
 (testing-registry-case
  'parity-suite-has-cases '(portable core)
- ("consent-repl-parity-test.scm" 283)
 (test-assert 'parity-suite-has-cases (pair? cases)))
 (testing-registry-case
  'parity-suite-contract '(portable core)
- ("consent-repl-parity-test.scm" 287)
 (let ((contract (field suite 'contract)))
   (test-assert 'parity-suite-contract
              (and (pair? contract)
@@ -296,7 +291,6 @@
 ;; Case ids are unique so a divergence is reported against a stable name.
 (testing-registry-case
  'duplicate-case-id '(portable core)
- ("consent-repl-parity-test.scm" 297)
 (let loop ((rest cases) (seen '()))
   (cond
    ((null? rest) #t)
@@ -306,11 +300,9 @@
 
 (testing-registry-case
  'consent-repl-parity-case-7 '(portable core)
- ("consent-repl-parity-test.scm" 307)
 (for-each run-case cases))
 (testing-registry-case
  'consent-repl-parity-case-8 '(portable core)
- ("consent-repl-parity-test.scm" 311)
 (run-stream-separation-check))
 
 (testing-runner-main "Consent Repl Parity portable tests" (command-line))

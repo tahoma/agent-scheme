@@ -28,7 +28,6 @@
 
 (testing-registry-case
  'constructors-and-copy '(portable stdlib)
- ("stdlib-list-test.scm" 29)
 (test-equal 'constructors-and-copy
              '((head tail)
          (0 1 2 3 4)
@@ -50,7 +49,6 @@
 
 (testing-registry-case
  'predicates-and-circular-lists '(portable stdlib)
- ("stdlib-list-test.scm" 51)
 (test-equal 'predicates-and-circular-lists
              '(#t #f #f #t #f #t #f #t #t #t 3 #f #t #t)
              (let ((two-cycle (circular-list 'a 'b))
@@ -72,7 +70,6 @@
 
 (testing-registry-case
  'selectors '(portable stdlib)
- ("stdlib-list-test.scm" 73)
 (test-equal 'selectors
              '(one two three four five six seven eight nine ten)
              (let ((values '(one two three four five six seven eight nine ten)))
@@ -89,14 +86,12 @@
 
 (testing-registry-case
  'car+cdr '(portable stdlib)
- ("stdlib-list-test.scm" 90)
 (check-values 'car+cdr
               (lambda () (car+cdr '(head tail rest)))
               '(head (tail rest))))
 
 (testing-registry-case
  'slices '(portable stdlib)
- ("stdlib-list-test.scm" 97)
 (test-equal 'slices
              '((a b) (c d) (c d) (a b) #t d (d))
              (let ((source (list 'a 'b 'c 'd)))
@@ -110,14 +105,12 @@
 
 (testing-registry-case
  'split-at '(portable stdlib)
- ("stdlib-list-test.scm" 111)
 (check-values 'split-at
               (lambda () (split-at '(a b c d) 2))
               '((a b) (c d))))
 
 (testing-registry-case
  'destructive-slices '(portable stdlib)
- ("stdlib-list-test.scm" 118)
 (test-equal 'destructive-slices
              '((a b) #t (a b) (a b) #t (a b) (a b) (c d) #t #t)
              (let* ((take-source (list 'a 'b 'c 'd))
@@ -142,7 +135,6 @@
 
 (testing-registry-case
  'append-and-reverse '(portable stdlib)
- ("stdlib-list-test.scm" 143)
 (test-equal 'append-and-reverse
              '((a b c d) #t #t (1 2 3 4 5) (p q r) #t
          (three two one) #t (c b a tail) (y x z) #t)
@@ -171,7 +163,6 @@
 
 (testing-registry-case
  'zip-and-unzip '(portable stdlib)
- ("stdlib-list-test.scm" 172)
 (test-equal 'zip-and-unzip
              '(((a 1 x) (b 2 y) (c 3 z))
          (a b c)
@@ -196,7 +187,6 @@
 
 (testing-registry-case
  'folds-reduces-and-unfolds '(portable stdlib)
- ("stdlib-list-test.scm" 197)
 (test-equal 'folds-reduces-and-unfolds
              '(10 (33 22 11) (a b c)
             ((c) (b c) (a b c))
@@ -244,7 +234,6 @@
 
 (testing-registry-case
  'maps-and-filters '(portable stdlib)
- ("stdlib-list-test.scm" 245)
 (test-equal 'maps-and-filters
              '((1 -1 2 -2 3 -3)
          (1 1 2 4 3 9)
@@ -294,14 +283,12 @@
 
 (testing-registry-case
  'partition '(portable stdlib)
- ("stdlib-list-test.scm" 295)
 (check-values 'partition
               (lambda () (partition even? '(1 2 3 4 5)))
               '((2 4) (1 3 5))))
 
 (testing-registry-case
  'search '(portable stdlib)
- ("stdlib-list-test.scm" 302)
 (test-equal 'search
              '(4 (4 6) (1 3) (4 5) (1 3)
            ((1 3) (4 5))
@@ -345,7 +332,6 @@
 
 (testing-registry-case
  'delete-and-alist '(portable stdlib)
- ("stdlib-list-test.scm" 346)
 (test-equal 'delete-and-alist
              '((1 3 4)
          (1 3 4)
@@ -369,7 +355,6 @@
 
 (testing-registry-case
  'list-as-sets '(portable stdlib)
- ("stdlib-list-test.scm" 370)
 (test-equal 'list-as-sets
              '(#t #t (3 1 2) (4 3 1 2) (2 3) (1 3) (4 1)
             ((1 3) (2 4))
@@ -402,7 +387,6 @@
 
 (testing-registry-case
  'error-cases '(portable stdlib)
- ("stdlib-list-test.scm" 403)
 (test-equal 'error-cases
              '(#t #t #t #t #t #t #t #t #t)
              (list (raises? (lambda () (iota -1)))

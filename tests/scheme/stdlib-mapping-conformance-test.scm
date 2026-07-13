@@ -51,7 +51,6 @@
 
 (testing-registry-case
  'predicate-mapping '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 52)
 (let ((mapping0 (mapping default-comparator))
       (mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
       (mapping2 (mapping default-comparator 'c 1 'd 2 'e 3))
@@ -67,7 +66,6 @@
 
 (testing-registry-case
  'ref-found '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 68)
 (let ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3)))
   (test-equal 'ref-found 2 (mapping-ref mapping1 'b))
   (test-equal 'ref-missing-failure
@@ -84,7 +82,6 @@
 
 (testing-registry-case
  'adjoin-existing '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 85)
 (let* ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
        (mapping2 (mapping-set mapping1 'c 4 'd 4 'd 5))
        (mapping3 (mapping-update mapping1 'b (lambda (value) (* value value))))
@@ -235,7 +232,6 @@
 
 (testing-registry-case
  'mapping-unfold '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 236)
 (let ((unfolded
        (mapping-unfold (lambda (seed) (> seed 3))
                        (lambda (seed) (values seed (* seed seed)))
@@ -262,7 +258,6 @@
 
 (testing-registry-case
  'size-empty '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 263)
 (let ((mapping0 (mapping default-comparator))
       (mapping1 (mapping default-comparator 'a 1 'b 2 'c 3)))
   (test-equal 'size-empty 0 (mapping-size mapping0))
@@ -302,7 +297,6 @@
 
 (testing-registry-case
  'map '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 303)
 (let* ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
        (mapping2 (mapping-map (lambda (key value)
                                 (values (symbol->string key) (* 10 value)))
@@ -359,7 +353,6 @@
 
 (testing-registry-case
  'copy-size '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 360)
 (let* ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
        (mapping2 (alist->mapping default-comparator
                                  '((a . 1) (b . 2) (c . 3))))
@@ -385,7 +378,6 @@
 
 (testing-registry-case
  'mapping=?-equal '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 386)
 (let ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
       (mapping2 (mapping default-comparator 'a 1 'b 2 'c 3))
       (mapping3 (mapping default-comparator 'a 1 'c 3))
@@ -436,7 +428,6 @@
 
 (testing-registry-case
  'union-new '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 437)
 (let ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
       (mapping2 (mapping default-comparator 'a 1 'b 2 'd 4))
       (mapping4 (mapping default-comparator 'a 1 'b 2 'c 4))
@@ -478,7 +469,6 @@
 
 (testing-registry-case
  'min-key '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 479)
 (let ((mapping0 (mapping default-comparator))
       (mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
       (mapping2 (mapping default-comparator 'a 1 'b 2 'c 3 'd 4))
@@ -578,7 +568,6 @@
 
 (testing-registry-case
  'mapping-comparator-predicate '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 579)
 (let* ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
        (mapping2 (mapping default-comparator 'a 1 'b 2 'c 3))
        (mapping3 (mapping default-comparator 'a 1 'b 2))
@@ -616,7 +605,6 @@
 
 (testing-registry-case
  'constructor-preserves-earlier-duplicate '(portable stdlib)
- ("stdlib-mapping-conformance-test.scm" 617)
 (let* ((mapping1 (mapping integer-comparator 3 'three 1 'one 2 'two 2 'TWO))
        (mapping2 (mapping-set mapping1 4 'four 2 'TWO))
        (without-one (mapping-delete mapping2 1)))

@@ -51,57 +51,48 @@
 
 (testing-registry-case
  'shebang-env-line '(portable core)
- ("consent-script-test.scm" 52)
 (test-equal 'shebang-env-line
              #t
              (cli-script-shebang-line? "#!/usr/bin/env consent-scheme --script")))
 (testing-registry-case
  'shebang-absolute-path '(portable core)
- ("consent-script-test.scm" 58)
 (test-equal 'shebang-absolute-path
              #t
              (cli-script-shebang-line? "#!/bin/sh\n")))
 (testing-registry-case
  'shebang-leading-space '(portable core)
- ("consent-script-test.scm" 64)
 (test-equal 'shebang-leading-space
              #t
              (cli-script-shebang-line? "#! /bin/sh\n")))
 (testing-registry-case
  'shebang-leading-tab '(portable core)
- ("consent-script-test.scm" 70)
 (test-equal 'shebang-leading-tab
              #t
              (cli-script-shebang-line? "#!\tfoo\n")))
 ;; `#!'-tokens that are not shebangs keep their reader-token meaning.
 (testing-registry-case
  'directive-fold-case-not-shebang '(portable core)
- ("consent-script-test.scm" 77)
 (test-equal 'directive-fold-case-not-shebang
              #f
              (cli-script-shebang-line? "#!fold-case\n(x)")))
 (testing-registry-case
  'directive-r6rs-not-shebang '(portable core)
- ("consent-script-test.scm" 83)
 (test-equal 'directive-r6rs-not-shebang
              #f
              (cli-script-shebang-line? "#!r6rs")))
 (testing-registry-case
  'bare-bang-not-shebang '(portable core)
- ("consent-script-test.scm" 89)
 (test-equal 'bare-bang-not-shebang
              #f
              (cli-script-shebang-line? "#!")))
 ;; A `#!' that is not the first two bytes is never a shebang.
 (testing-registry-case
  'indented-hashbang-not-shebang '(portable core)
- ("consent-script-test.scm" 96)
 (test-equal 'indented-hashbang-not-shebang
              #f
              (cli-script-shebang-line? " #!/bin/sh")))
 (testing-registry-case
  'plain-form-not-shebang '(portable core)
- ("consent-script-test.scm" 102)
 (test-equal 'plain-form-not-shebang
              #f
              (cli-script-shebang-line? "(display 1)\n")))
@@ -112,25 +103,21 @@
 ;; source starts with a blank first line and later datums keep their line.
 (testing-registry-case
  'strip-keeps-terminator '(portable core)
- ("consent-script-test.scm" 113)
 (test-equal 'strip-keeps-terminator
              "\n(display 1)\n"
              (cli-script-strip-shebang "#!/bin/sh\n(display 1)\n")))
 (testing-registry-case
  'strip-shebang-only '(portable core)
- ("consent-script-test.scm" 119)
 (test-equal 'strip-shebang-only
              ""
              (cli-script-strip-shebang "#!/bin/sh/no/newline")))
 (testing-registry-case
  'strip-leaves-fold-case '(portable core)
- ("consent-script-test.scm" 125)
 (test-equal 'strip-leaves-fold-case
              "#!fold-case\n(x)"
              (cli-script-strip-shebang "#!fold-case\n(x)")))
 (testing-registry-case
  'strip-leaves-plain-source '(portable core)
- ("consent-script-test.scm" 131)
 (test-equal 'strip-leaves-plain-source
              "(display 1)\n"
              (cli-script-strip-shebang "(display 1)\n")))
@@ -141,7 +128,6 @@
 ;; block comment that hides the `exec' line from Scheme is skipped by the reader.
 (testing-registry-case
  'polyglot-reads-to-one-form '(portable core)
- ("consent-script-test.scm" 142)
 (test-equal 'polyglot-reads-to-one-form
              (list "(display \"hi\\n\")")
              (map consent-datum->external
@@ -149,7 +135,6 @@
 ;; `#!fold-case' still folds through the reader after the (no-op) strip.
 (testing-registry-case
  'fold-case-still-folds '(portable core)
- ("consent-script-test.scm" 150)
 (test-equal 'fold-case-still-folds
              "foo"
              (consent-datum->external
@@ -158,7 +143,6 @@
 ;; keeps a valid executable script from being rejected.
 (testing-registry-case
  'raw-shebang-would-error '(portable core)
- ("consent-script-test.scm" 159)
 (test-equal 'raw-shebang-would-error
              #t
              (raises? (lambda () (consent-read-all sh-polyglot)))))
@@ -170,7 +154,6 @@
 
 (testing-registry-case
  'consent-script-case-17 '(portable core)
- ("consent-script-test.scm" 171)
 (write-scratch-file
  command-line-script-path
  (string-append
@@ -180,7 +163,6 @@
 
 (testing-registry-case
  'script-command-line-normalized '(portable core)
- ("consent-script-test.scm" 181)
 (test-equal 'script-command-line-normalized
              (consent-value->external
         (list command-line-script-path "alpha" "beta"))
@@ -195,7 +177,6 @@
 ;; present the test file as the complete Scheme command line.
 (testing-registry-case
  'host-run-command-line-normalized '(portable core)
- ("consent-script-test.scm" 196)
 (test-equal 'host-run-command-line-normalized
              (list command-line-script-path)
              (cdr (assq 'command-line
@@ -204,7 +185,6 @@
 
 (testing-registry-case
  'consent-script-case-20 '(portable core)
- ("consent-script-test.scm" 205)
 (delete-if-present command-line-script-path))
 
 (testing-runner-main "Consent Script portable tests" (command-line))

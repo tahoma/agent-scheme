@@ -203,7 +203,6 @@
 
 (testing-registry-case
  'reflect-manifest-input-contract '(portable core)
- ("consent-reflect-test.scm" 204)
 (check-external 'reflect-manifest-input-contract
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -252,7 +251,6 @@
 
 (testing-registry-case
  'reflect-documentation-contract '(portable core)
- ("consent-reflect-test.scm" 253)
 (check-external/options 'reflect-documentation-contract
                         "(import (scheme base) (agent reflect))
                          (define (needle-procedure x)
@@ -271,7 +269,6 @@
 
 (testing-registry-case
  'reflect-helper-defaults '(portable core)
- ("consent-reflect-test.scm" 272)
 (check-external 'reflect-helper-defaults
                 "(import (scheme base) (agent reflect))
                  (define present-false '(sample (present #f)))

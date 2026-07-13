@@ -11,14 +11,26 @@
 
 (testing-registry-clear!)
 
-(testing-registry-case 'alpha '(fast unit) ("registry-test.scm" 12)
+(testing-registry-case 'alpha '(fast unit)
+  (source "registry-test.scm" 12)
   (test-equal "alpha value" 4 (+ 2 2)))
 
-(testing-registry-case 'beta '(slow integration) ("registry-test.scm" 15)
+(testing-registry-case 'beta '(slow integration)
   (test-assert "beta value" #t))
 
-(testing-registry-case 'gamma '(fast integration) ("registry-test.scm" 18)
+(testing-registry-case 'gamma '(fast integration)
   (test-equal "gamma value" '(a b) (list 'a 'b)))
+
+;; A two-element first body form must not be mistaken for source metadata.
+(define two-element-body-ran? #f)
+
+(define (run-two-element-body! value)
+  "Record VALUE and assert it through the active test runner."
+  (set! two-element-body-ran? value)
+  (test-assert "two-element body value" value))
+
+(testing-registry-case 'two-element-body '(syntax regression)
+  (run-two-element-body! #t))
 
 ;; Deterministic clock values make per-case timing portable and testable.
 (define ticks '(10 13 20 27))
@@ -40,10 +52,20 @@
 ;; Case-level records extracted from REPORT.
 (define case-results (cadr (assq 'cases (cdr report))))
 
+;; Report proving an ordinary two-element first body form remains executable.
+(define two-element-body-report
+  (testing-registry-run-registered
+   "registered two-element body"
+   (testing-registry-select-name 'two-element-body)))
+
 (testing-harness-run "Testing registry"
   (test-equal "registration order"
-              '(alpha beta gamma)
+              '(alpha beta gamma two-element-body)
               (map testing-registry-case-name testing-registry-cases))
+  (test-assert "two-element first body form runs" two-element-body-ran?)
+  (test-assert "two-element first body form passes"
+               (not (testing-registry-report-failed?
+                     two-element-body-report)))
   (test-equal "tag selection and durations"
               '((alpha 3 pass) (gamma 7 pass))
               (map
@@ -96,7 +118,7 @@
 ;; Diagnostic captured by the host hook for a raised registered case.
 (define captured-diagnostic #f)
 
-(testing-registry-case 'broken '(fast failure) ("registry-test.scm" 90)
+(testing-registry-case 'broken '(fast failure)
   (error "expected registry failure"))
 
 ;; A batch failure remains inspectable by an embedding test or interactive host.

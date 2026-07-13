@@ -38,7 +38,6 @@
 
 (testing-registry-case
  'diagnostics-records '(agent diagnostics records)
- ("consent-diagnostics-test.scm" 39)
  (test-equal
   "diagnostic records"
   (string-append
@@ -66,7 +65,6 @@
 
 (testing-registry-case
  'diagnostics-capability-records '(agent diagnostics capability)
- ("consent-diagnostics-test.scm" 67)
  (test-equal
   "adapter-neutral request and result datums"
   "(#t #f #t buffer-diagnostics read-only-observation ok ok unavailable)"
@@ -97,7 +95,6 @@
 
 (testing-registry-case
  'diagnostics-yield '(agent diagnostics events)
- ("consent-diagnostics-test.scm" 98)
  (let ((result
         (consent-result->external
          (consent-eval-source-result

@@ -48,7 +48,6 @@
 
 (testing-registry-case
  'complete-is-result '(portable agent)
- ("consent-agent-prompt-test.scm" 49)
 (let* ((harness (make-prompt-harness))
        (result (prompt harness 'finish-the-goal
                        (list (list 'provider '((finish done)))
@@ -76,7 +75,6 @@
 
 (testing-registry-case
  'no-provider-status '(portable agent)
- ("consent-agent-prompt-test.scm" 77)
 (let ((result (prompt (make-prompt-harness) 'do-a-thing)))
   (test-equal 'no-provider-status 'selected (prompt-result-status result))
   (test-equal 'no-provider-state 'blocked (prompt-result-state result))
@@ -87,7 +85,6 @@
 
 (testing-registry-case
  'closed-status '(portable agent)
- ("consent-agent-prompt-test.scm" 88)
 (let* ((harness (make-prompt-harness (list (list 'authority #f))))
        (result (prompt harness 'sensitive
                        (list (list 'provider '((finish done)))
@@ -106,7 +103,6 @@
 
 (testing-registry-case
  'noninteractive-authority-record '(portable agent)
- ("consent-agent-prompt-test.scm" 107)
 (let* ((authority
         (make-prompt-authority
          '((origin noninteractive)
@@ -142,7 +138,6 @@
 
 (testing-registry-case
  'noninteractive-authority-denied-status '(portable agent)
- ("consent-agent-prompt-test.scm" 143)
 (let* ((authority
         (make-prompt-authority '((origin noninteractive))))
        (harness (make-prompt-harness (list (list 'authority authority))))
@@ -171,7 +166,6 @@
 
 (testing-registry-case
  'no-session-status '(portable agent)
- ("consent-agent-prompt-test.scm" 172)
 (let* ((harness (make-prompt-harness (list (list 'session #f))))
        (result (prompt harness 'orphan)))
   (test-equal 'no-session-status 'no-session (prompt-result-status result))
@@ -181,7 +175,6 @@
 
 (testing-registry-case
  'role-agent-id '(portable agent)
- ("consent-agent-prompt-test.scm" 182)
 (let* ((harness (make-staffed-harness))
        (result (prompt-role harness 'reviewer 'review-the-diff
                             (list (list 'provider '((finish done)))
@@ -197,7 +190,6 @@
 
 (testing-registry-case
  'model-status '(portable agent)
- ("consent-agent-prompt-test.scm" 198)
 (let* ((harness (make-staffed-harness))
        (result (prompt-model harness 'portable-coder 'build-it)))
   (test-equal 'model-status 'selected (prompt-result-status result))
@@ -215,7 +207,6 @@
 
 (testing-registry-case
  'gated-status '(portable agent)
- ("consent-agent-prompt-test.scm" 216)
 (let* ((harness (make-staffed-harness))
        (result (prompt harness 'edit-file
                        (list (list 'provider
@@ -230,7 +221,6 @@
 
 (testing-registry-case
  'budget-from-agent '(portable agent)
- ("consent-agent-prompt-test.scm" 231)
 (let ((registry (make-agent-registry)))
   (register-agent registry
                   (make-agent 'budgeted
@@ -251,7 +241,6 @@
 
 (testing-registry-case
  'discover-agents '(portable agent)
- ("consent-agent-prompt-test.scm" 252)
 (let ((harness (make-staffed-harness)))
   (test-equal 'discover-agents
              '(default coder-1 reviewer-1)
@@ -265,18 +254,15 @@
 
 (testing-registry-case
  'consent-agent-prompt-case-12 '(portable agent)
- ("consent-agent-prompt-test.scm" 266)
 (reset-prompt-harness!))
 (testing-registry-case
  'ambient-status '(portable agent)
- ("consent-agent-prompt-test.scm" 270)
 (let ((result (prompt 'ambient-goal)))
   (test-equal 'ambient-status 'selected (prompt-result-status result))
   (test-equal 'ambient-state 'blocked (prompt-result-state result))))
 
 (testing-registry-case
  'ambient-installed '(portable agent)
- ("consent-agent-prompt-test.scm" 277)
 (let ((custom (make-staffed-harness)))
   (set-current-prompt-harness! custom)
   (test-equal 'ambient-installed '(default coder-1 reviewer-1) (map agent-id (agents)))
@@ -288,14 +274,12 @@
                              (list 'verifier 'passed)))))))
 (testing-registry-case
  'consent-agent-prompt-case-15 '(portable agent)
- ("consent-agent-prompt-test.scm" 289)
 (reset-prompt-harness!))
 
 ;;;; Identical prompts are deterministic and replayable
 
 (testing-registry-case
  'prompt-deterministic '(portable agent)
- ("consent-agent-prompt-test.scm" 296)
 (let ((harness (make-prompt-harness)))
   (test-equal 'prompt-deterministic
              (prompt harness 'replay

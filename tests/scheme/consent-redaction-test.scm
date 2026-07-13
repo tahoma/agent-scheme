@@ -25,7 +25,7 @@
      (else (loop (cdr fields))))))
 
 (testing-registry-case
- 'redaction-secrets '(agent redaction security) ("consent-redaction-test.scm" 27)
+ 'redaction-secrets '(agent redaction security)
  (consent-redaction-clear!)
  (let* ((secret '((source env)
                   (field "OPENAI_API_KEY")
@@ -42,7 +42,7 @@
                 (not (safe-for-provider? secret 'openai)))))
 
 (testing-registry-case
- 'redaction-local-context '(agent redaction context) ("consent-redaction-test.scm" 45)
+ 'redaction-local-context '(agent redaction context)
  (let ((local (context-local-only! '((text "private")) "private buffer")))
    (test-equal "local-only record" 'local-only (car local))
    (test-equal "local-only reason" "private buffer"
@@ -58,7 +58,7 @@
               (pair? (cdr (redaction-log)))))
 
 (testing-registry-case
- 'redaction-properties '(agent redaction property) ("consent-redaction-test.scm" 62)
+ 'redaction-properties '(agent redaction property)
  (test-property
   (lambda (text) (equal? text (redact text 'debugger)))
   (list (make-random-string-generator 12 "abcxyz"))

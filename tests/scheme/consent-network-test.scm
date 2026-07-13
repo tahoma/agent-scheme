@@ -11,7 +11,6 @@
 
 (testing-registry-case
  'network-request-decision-audit '(agent network records)
- ("consent-network-test.scm" 12)
  (let* ((request
          (make-network-request
           'req-http 'request
@@ -53,7 +52,6 @@
 
 (testing-registry-case
  'network-grant-denials '(agent network capability)
- ("consent-network-test.scm" 54)
  (let* ((grant
          (make-network-grant
           'grant-http '(request)
@@ -92,7 +90,7 @@
     (reason (request 'too-large "api.example.test" 'metadata 9)))))
 
 (testing-registry-case
- 'network-handles '(agent network records) ("consent-network-test.scm" 94)
+ 'network-handles '(agent network records)
  (test-equal
   "stream handle"
   '(handle
