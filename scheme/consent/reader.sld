@@ -81,13 +81,15 @@
     (define-record-type <reader>
       ;; Reader state is mutable only for cursor position, fold-case mode, and
       ;; node count.  SOURCE remains the immutable snapshot of input text.
-      (make-reader source position length line-starts fold-case node-count datum-labels
+      (make-reader source characters position length line-starts fold-case
+                   node-count datum-labels
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
                    maximum-total-nodes maximum-source-metadata source-id
                    source-metadata recovery pending-stack)
       reader?
       (source reader-source)
+      (characters reader-characters)
       (position reader-position set-reader-position!)
       (length reader-length)
       (line-starts reader-line-starts)
@@ -302,14 +304,18 @@
             (consent-number-value-field value)
             value)))
 
-    (define (source-line-starts source)
-      "Return a vector of zero-based offsets where each source line starts."
-      (let ((length (string-length source)))
+    (define (source-line-starts characters)
+      "Return zero-based line starts for a string or character vector."
+      (let* ((characters
+              (if (string? characters)
+                  (list->vector (string->list characters))
+                  characters))
+             (length (vector-length characters)))
         (let loop ((index 0) (starts '(0)))
           (if (= index length)
               (list->vector (reverse starts))
               (loop (+ index 1)
-                    (if (and (char=? (string-ref source index) #\newline)
+                    (if (and (char=? (vector-ref characters index) #\newline)
                              (< (+ index 1) length))
                         (cons (+ index 1) starts)
                         starts))))))
@@ -318,12 +324,20 @@
       "Create a reader state object from SOURCE and per-run option overrides."
       (if (not (string? source))
           (error "consent reader source must be a string" source)
-          (let ((source-metadata
-                 (option-ref options 'source-metadata #t)))
+          (let* ((source-metadata
+                  (option-ref options 'source-metadata #t))
+                 (characters (list->vector (string->list source))))
+            ;; Keep cursor access independent of the host's string indexing
+            ;; representation.  Some R7RS systems use variable-width UTF-8
+            ;; strings, turning repeated indexed access into a large-source
+            ;; performance cliff.
             (make-reader source
+                         characters
                          0
-                         (string-length source)
-                         (if source-metadata (source-line-starts source) #f)
+                         (vector-length characters)
+                         (if source-metadata
+                             (source-line-starts characters)
+                             #f)
                          #f
                          0
                          '()
@@ -564,8 +578,17 @@
       (let* ((offset (if (null? maybe-offset) 0 (car maybe-offset)))
              (index (+ (reader-position reader) offset)))
         (if (< index (reader-length reader))
-            (string-ref (reader-source reader) index)
+            (vector-ref (reader-characters reader) index)
             #f)))
+
+    (define (reader-substring reader start end)
+      "Return reader source characters from START up to END as a string."
+      (let loop ((index start) (characters '()))
+        (if (= index end)
+            (list->string (reverse characters))
+            (loop (+ index 1)
+                  (cons (vector-ref (reader-characters reader) index)
+                        characters)))))
 
     (define (advance! reader . maybe-count)
       "Move the reader cursor forward by one character or the requested count."
@@ -577,10 +600,13 @@
       (let ((position (reader-position reader))
             (end (+ (reader-position reader) (string-length text))))
         (and (<= end (reader-length reader))
-             (string=? text
-                       (substring (reader-source reader)
-                                  position
-                                  end)))))
+             (let loop ((index 0))
+               (or (= index (string-length text))
+                   (and (char=?
+                         (string-ref text index)
+                         (vector-ref (reader-characters reader)
+                                     (+ position index)))
+                        (loop (+ index 1))))))))
 
     (define (whitespace? char)
       "Recognize R7RS whitespace characters accepted between tokens."
@@ -705,7 +731,7 @@
                                   (peek reader)))
                 (advance! reader)
                 (loop))))
-        (substring (reader-source reader) start (reader-position reader))))
+        (reader-substring reader start (reader-position reader))))
 
     (define (hex-digit-value char)
       "Convert one hexadecimal digit character to its integer value."
@@ -1434,6 +1460,23 @@
                         (parse-complex-number-body
                          reader token body exactness radix)))))))
 
+    (define (number-token-candidate? token)
+      "Report whether TOKEN can begin an R7RS numeric literal."
+      "This constant-time gate keeps ordinary identifiers out of the full"
+      "radix, exactness, real, rational, decimal, and complex-number parser."
+      (let ((length (string-length token)))
+        (and (> length 0)
+             (let ((first (string-ref token 0)))
+               (or (and (char>=? first #\0) (char<=? first #\9))
+                   (char=? first #\#)
+                   (and (or (char=? first #\+) (char=? first #\-))
+                        (> length 1))
+                   (and (char=? first #\.)
+                        (> length 1)
+                        (let ((second (string-ref token 1)))
+                          (and (char>=? second #\0)
+                               (char<=? second #\9)))))))))
+
     (define (hex-scalar->char reader digits)
       "Validate and convert a hexadecimal scalar value to a character."
       (if (= (string-length digits) 0)
@@ -1465,9 +1508,9 @@
                 (loop))))
         (if (eof? reader)
             (reader-incomplete reader "unterminated hexadecimal escape"))
-        (let ((digits (substring (reader-source reader)
-                                 start
-                                 (reader-position reader))))
+        (let ((digits (reader-substring reader
+                                        start
+                                        (reader-position reader))))
           (advance! reader)
           (hex-scalar->char reader digits))))
 
@@ -1699,7 +1742,9 @@
       (cond
        ((or (string=? token "#t") (string=? token "#true")) #t)
        ((or (string=? token "#f") (string=? token "#false")) #f)
-       ((parse-number-token reader token) => (lambda (number) number))
+       ((and (number-token-candidate? token)
+             (parse-number-token reader token))
+        => (lambda (number) number))
        ((identifier-token? token)
         (string->symbol
          (if (reader-fold-case reader)
@@ -1876,9 +1921,9 @@
                   (digit-loop)))))
         (if (= start (reader-position reader))
             (reader-error reader "datum label requires digits"))
-        (let* ((id (substring (reader-source reader)
-                              start
-                              (reader-position reader)))
+        (let* ((id (reader-substring reader
+                                     start
+                                     (reader-position reader)))
                (marker (peek reader)))
           (cond
            ((and marker (char=? marker #\=))
@@ -2252,7 +2297,7 @@
         (if (eq? kind 'incomplete)
             (let* ((end (reader-length reader))
                    (range (recovery-range line-starts start end))
-                   (text (substring (reader-source reader) start end))
+                   (text (reader-substring reader start end))
                    (diagnostic
                     (recovery-diagnostic source-id 'incomplete reason range))
                    (span (recovery-span 'incomplete reason range text)))
@@ -2263,7 +2308,7 @@
                    (next (min (reader-length reader)
                               (max proposed (+ start 1))))
                    (range (recovery-range line-starts start next))
-                   (text (substring (reader-source reader) start next))
+                   (text (reader-substring reader start next))
                    (diagnostic
                     (recovery-diagnostic source-id 'invalid reason range))
                    (span (recovery-span 'invalid reason range text)))
