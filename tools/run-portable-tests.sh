@@ -121,7 +121,11 @@ unset TESTING_PLAN_FILE TESTING_PLAN_SHARD
 while IFS= read -r test_file; do
   [[ -n $test_file ]] || continue
   current_test=$test_file
+  program_started=$SECONDS
   run_scheme_program "$test_file"
+  program_elapsed=$((SECONDS - program_started))
+  printf 'CONSENT_CI_PROGRAM_SECONDS=%s %d\n' \
+    "$test_file" "$program_elapsed"
   ran=$((ran + 1))
 done < "$plan_output"
 

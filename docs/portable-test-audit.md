@@ -155,3 +155,13 @@ to #346 (7 programs), #350 (1), #432 (8), and #901 (2). Their issue comments
 name the exact registered cases or first failing manual checks. As those runtime
 defects ship, their programs move into `compiled`; the plan test rejects an
 unclassified full-suite program or a program tagged both ways.
+
+The plan also partitions the 55 direct programs exactly once across seven
+behavior surfaces (`runtime`, `evaluator`, `integration`, `agent`, `library`,
+`random`, and `property`) and the 38 compiled programs exactly once across six
+parallel counterparts. CI uses those names as first-class Guile, Gauche,
+Gambit-compiled, and Racket-compiled jobs; aggregate local and exhaustive-lane
+runs launch the same selectors through `tools/run-portable-test-set.sh` and
+retain one log per group. The CI timing parser additionally records each
+program's wall time, so a new within-group outlier can be moved or split using
+measured evidence rather than host-wide totals.

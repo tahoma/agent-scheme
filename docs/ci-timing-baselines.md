@@ -38,7 +38,8 @@ the *set of shards* and the project name are not.
 | D | #362–#405 | + Gambit-native compiled shard | still `agent-scheme` |
 | E | #406–#518 | project renamed to **consent** | current format; shard names gain `Consent Scheme` |
 | F | #520–#651 | compiled shards parallel/incremental/cached | build-bound shards' wall time becomes cache-dependent; see the Era F section |
-| G | #652–present | stdlib reference corpus and stress shards split from library/conformance | compare `Emacs library/conformance`, `Emacs stdlib/reference corpus`, and `Emacs stdlib/reference stress` as separate rows |
+| G | #652–#881 | stdlib reference corpus and stress shards split from library/conformance | compare the post-split rows rather than the older aggregate |
+| H | #882–present | semantic portable matrices; compiled build artifacts; five-way ERT library split | compare matching plan-group names; build wall time is separate from compiled test wall time |
 
 The Era A→B boundary (#355→#356) is a hard discontinuity *for the portable
 side*: the slow single Chibi host (~70s `eval` + a 152s `rest` outlier) was
@@ -53,11 +54,13 @@ ERT seconds unless noted. `Ran` is the per-shard test count (always `1` for a
 portable host, which runs its whole suite as one aggregate test — so for hosts
 the ERT *is* the signal, with no `Ran`-growth guard to apply).
 
-The Emacs rows below predate the Era G stdlib reference corpus split. Until a
-post-split baseline is refreshed, compare Era G library, stdlib-reference, and
-stdlib-reference-stress rows against recent merged Era G PR timing comments
-rather than against the single historical `Emacs library/conformance` row
-below.
+The Emacs rows below predate the Era G and H splits. Until a post-H baseline is
+refreshed, compare fixture/conformance, library runtime, standard-library core,
+random/property, and manifest/vendor rows against recent merged Era H PR timing
+comments rather than against the single historical
+`Emacs library/conformance` row below. The same boundary applies to portable
+hosts: compare a semantic plan group with the same group on another host, not
+with a pre-H full-host aggregate.
 
 | Shard / host | Ran (med) | ERT median | ERT min–max | Wall median |
 | --- | ---: | ---: | ---: | ---: |

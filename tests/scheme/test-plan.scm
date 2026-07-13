@@ -145,10 +145,10 @@
     (tags (full direct compiled stdlib random upstream slow)))
    (program
    (path "tests/scheme/stdlib-property-testing-test.scm")
-    (tags (full direct compiled stdlib testing)))
+    (tags (full direct compiled stdlib testing property)))
    (program
    (path "tests/scheme/stdlib-property-testing-upstream-test.scm")
-    (tags (full direct compiled stdlib testing upstream)))
+    (tags (full direct compiled stdlib testing upstream property)))
    (program
    (path "tests/scheme/stdlib-eager-comprehensions-test.scm")
     (tags (full direct stdlib self-host-gap)))
@@ -189,14 +189,96 @@
     (path "tests/scheme/consent-models-compiled-live-test.scm")
     (tags (live-compiled agent models integration self-hosted)))))
  (shards
-  ((shard (name full) (selector (tag full)))
+ ((shard (name full) (selector (tag full)))
+   (shard
+    (name runtime)
+    (selector
+     (and
+      (tag full)
+      (not (tag evaluator))
+      (not (tag agent))
+      (not (tag integration))
+      (not (tag repl))
+      (not (tag parity))
+      (not (tag stdlib)))))
+   (shard
+    (name evaluator)
+    (selector (and (tag full) (tag evaluator))))
+   (shard
+    (name integration)
+    (selector
+     (and
+      (tag full)
+      (or (tag integration) (tag repl) (tag parity)))))
+   (shard
+    (name agent)
+    (selector
+     (and
+      (tag full)
+      (tag agent)
+      (not (tag integration))
+      (not (tag repl))
+      (not (tag parity)))))
+   (shard
+    (name library)
+    (selector
+     (and
+      (tag full)
+      (tag stdlib)
+      (not (tag random))
+      (not (tag property)))))
+   (shard
+    (name random)
+    (selector (and (tag full) (tag stdlib) (tag random))))
+   (shard
+    (name property)
+    (selector (and (tag full) (tag stdlib) (tag property))))
    (shard
     (name full-evaluator)
     (selector (and (tag full) (tag evaluator))))
    (shard
-    (name full-support)
+   (name full-support)
     (selector (and (tag full) (not (tag evaluator)))))
    (shard (name compiled) (selector (tag compiled)))
+   (shard
+    (name compiled-runtime)
+    (selector
+     (and
+      (tag compiled)
+      (not (tag agent))
+      (not (tag integration))
+      (not (tag repl))
+      (not (tag parity))
+      (not (tag stdlib)))))
+   (shard
+    (name compiled-integration)
+    (selector
+     (and
+      (tag compiled)
+      (or (tag integration) (tag repl) (tag parity)))))
+   (shard
+    (name compiled-agent)
+    (selector
+     (and
+      (tag compiled)
+      (tag agent)
+      (not (tag integration))
+      (not (tag repl))
+      (not (tag parity)))))
+   (shard
+    (name compiled-library)
+    (selector
+     (and
+      (tag compiled)
+      (tag stdlib)
+      (not (tag random))
+      (not (tag property)))))
+   (shard
+    (name compiled-random)
+    (selector (and (tag compiled) (tag stdlib) (tag random))))
+   (shard
+    (name compiled-property)
+    (selector (and (tag compiled) (tag stdlib) (tag property))))
    (shard (name reflect) (selector (tag reflect)))
    (shard (name reflect-stress) (selector (tag reflect-stress)))
    (shard (name live-direct) (selector (tag live-direct)))

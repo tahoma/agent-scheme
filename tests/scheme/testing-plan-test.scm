@@ -54,6 +54,26 @@
       (and (predicate (car values))
            (every predicate (cdr values)))))
 
+(define (membership-count value lists)
+  "Return how many LISTS contain VALUE."
+  (let loop ((rest lists) (count 0))
+    (if (null? rest)
+        count
+        (loop (cdr rest)
+              (+ count (if (member value (car rest)) 1 0))))))
+
+(define (programs-exactly-partitioned? programs tag shard-files)
+  "Return true when TAGGED PROGRAMS occur in exactly one SHARD-FILES list."
+  (every
+   (lambda (program)
+     (if (program-tagged? program tag)
+         (= (membership-count
+             (testing-plan-program-path program)
+             shard-files)
+            1)
+         #t))
+   programs))
+
 (testing-harness-run "Testing plan"
   (test-assert "valid plan predicate" (testing-plan? sample-plan))
   (test-equal "declared shard names"
@@ -90,7 +110,18 @@
                (not (member "tests/scheme/consent-eval-test.scm"
                             (testing-plan-files project-plan 'full-support))))
   (let ((programs (testing-plan-programs project-plan))
-        (compiled-files (testing-plan-files project-plan 'compiled)))
+        (compiled-files (testing-plan-files project-plan 'compiled))
+        (direct-shards
+         (map (lambda (name) (testing-plan-files project-plan name))
+              '(runtime evaluator integration agent library random property)))
+        (compiled-shards
+         (map (lambda (name) (testing-plan-files project-plan name))
+              '(compiled-runtime
+                compiled-integration
+                compiled-agent
+                compiled-library
+                compiled-random
+                compiled-property))))
     (test-equal "compiled project shard program count" 38
                 (length compiled-files))
     (test-assert "compiled project shard includes registered semantics"
@@ -109,7 +140,19 @@
     (test-equal "full programs carrying an explicit self-host gap" 18
                 (program-count-with-tag programs 'self-host-gap))
     (test-assert "full programs exactly partition compiled coverage and gaps"
-                 (every full-program-self-host-classified? programs)))
+                 (every full-program-self-host-classified? programs))
+    (test-equal "balanced direct shard program counts"
+                '(7 1 5 19 16 5 2)
+                (map length direct-shards))
+    (test-equal "balanced compiled shard program counts"
+                '(5 1 14 11 5 2)
+                (map length compiled-shards))
+    (test-assert "balanced direct shards exactly partition full programs"
+                 (programs-exactly-partitioned?
+                  programs 'full direct-shards))
+    (test-assert "balanced compiled shards exactly partition admitted programs"
+                 (programs-exactly-partitioned?
+                  programs 'compiled compiled-shards)))
   (test-equal "compiled live shard uses the self-hosted program"
               '("tests/scheme/consent-models-compiled-live-test.scm")
               (testing-plan-files project-plan 'live-compiled))
