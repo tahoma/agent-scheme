@@ -927,21 +927,34 @@
                       "test-portable-racket-self-host:"
                       "test-portable-guile-shards:"
                       "test-portable-gauche-shards:"
-                      "name: compiled-random"
-                      "name: compiled-property"
-                      "name: compiled-library"
-                      "name: compiled-runtime"
-                      "name: compiled-agent"
-                      "name: compiled-integration"
-                      "name: integration"
-                      "name: evaluator"
-                      "name: random"
-                      "name: property"
-                      "name: library"
-                      "name: agent"
-                      "name: runtime"
+                      "\"group\":\"compiled-random\""
+                      "\"group\":\"compiled-property\""
+                      "\"group\":\"compiled-library\""
+                      "\"group\":\"compiled-runtime\""
+                      "\"group\":\"compiled-agent\""
+                      "\"group\":\"compiled-integration\""
+                      "\"group\":\"integration\""
+                      "\"group\":\"evaluator\""
+                      "\"group\":\"random\""
+                      "\"group\":\"property\""
+                      "\"group\":\"library\""
+                      "\"group\":\"agent\""
+                      "\"group\":\"runtime\""
+                      "\"aggregate\":true"
+                      "Run exhaustive Gambit-compiled shard set"
+                      "Run exhaustive Racket-compiled shard set"
+                      "Run exhaustive Guile shard set"
+                      "Run exhaustive Gauche shard set"
                       "make test-portable-shard"))
-      (should (string-match-p (regexp-quote needle) workflow)))))
+      (should (string-match-p (regexp-quote needle) workflow)))
+    ;; Scheduled-only jobs with job-level guards are rendered as abstract
+    ;; skipped checks on pull requests because GitHub does not expand their
+    ;; matrixes.  Keep exhaustive cases inside the concrete host matrixes.
+    (dolist (job '("test-portable-compiled-cross"
+                   "test-portable-guile-cross"
+                   "test-portable-gauche-cross"))
+      (should-not
+       (string-match-p (format "^  %s:" (regexp-quote job)) workflow)))))
 
 (ert-deftest consent-ci-test-make-test-trims-default-and-keeps-full ()
   "Trim the default make test shard set with a make test-full escape hatch."
