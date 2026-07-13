@@ -131,6 +131,24 @@
 (check-external 'polar-infinite-angle "1@+inf.0" "+nan.0+nan.0i")
 (check-external 'polar-nan-magnitude "+nan.0@0" "+nan.0+nan.0i")
 (check-external 'bare-i-symbol "i" "i")
+(check-external 'ordinary-identifier
+                "number-parser-should-not-see-me"
+                "number-parser-should-not-see-me")
+(check-external 'signed-identifier
+                "+number-parser-should-not-see-me"
+                "+number-parser-should-not-see-me")
+(check-external 'dotted-identifier
+                ".number-parser-should-not-see-me"
+                ".number-parser-should-not-see-me")
+
+;; Exercise large-source cursor access without asserting a host-specific time.
+;; Multibyte contents also cover readers whose strings use UTF-8 storage.
+(let* ((length 1024)
+       (source (string-append "\"" (make-string length #\λ) "\""))
+       (value (consent-read source)))
+  (check 'large-unicode-string-length
+         (string-length value)
+         length))
 
 (check-external 'dotted-list "(alpha beta . gamma)" "(alpha beta . gamma)")
 (check-external 'quote "'alpha" "(quote alpha)")
