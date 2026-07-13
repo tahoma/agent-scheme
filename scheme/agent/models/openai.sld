@@ -838,8 +838,8 @@
        #f
        '()))
 
-    (define (model-openai-retrieve url request-json options)
-      "POST REQUEST-JSON to URL with bounded local retry OPTIONS."
+    (define (model-openai-retrieve url request-json options . maybe-attempt)
+      "POST REQUEST-JSON to URL with bounded retry OPTIONS and host adapter."
       (let ((attempts
              (+ 1 (max 0
                        (model-openai-option-integer options
@@ -849,17 +849,22 @@
              (model-openai-option-integer
               options
               '(timeout-seconds)
-              model-openai-default-timeout-seconds)))
+              model-openai-default-timeout-seconds))
+            (attempt
+             (if (null? maybe-attempt)
+                 model-openai-curl-attempt
+                 (car maybe-attempt))))
         (let loop ((remaining attempts) (last-result #f))
           (if (= remaining 0)
               last-result
               (let ((result
-                     (model-openai-curl-attempt url request-json timeout)))
+                     (attempt url request-json timeout)))
                 (if (= (car result) 0)
                     result
                     (loop (- remaining 1) result)))))))
 
-    (define (model-openai-compatible-http-complete provider model role prompt options)
+    (define (model-openai-compatible-http-complete
+             provider model role prompt options . maybe-attempt)
       "Complete PROMPT through local OpenAI-compatible PROVIDER and MODEL."
       #((parameters
          (provider (type list)
@@ -871,7 +876,11 @@
          (prompt (type string)
           (description "User prompt text to send as one chat message."))
          (options (type list)
-          (description "Model completion options, including tools.")))
+          (description "Model completion options, including tools."))
+         (maybe-attempt (type list)
+          (description
+           ("Optional singleton list containing a host retrieval"
+             "procedure for adapters and deterministic tests."))))
         (returns (type (or string model-message))
          (description "Completion text or a canonical model-message datum."))
         (effects host-eval error))
@@ -884,7 +893,8 @@
       (let ((endpoint (model-openai-field-value provider 'endpoint #f)))
         (if (not (model-openai-local-endpoint? endpoint))
             (error "local model endpoint must use a loopback host"))
-        (if (not (cli-host:cli-host-available?))
+        (if (and (null? maybe-attempt)
+                 (not (cli-host:cli-host-available?)))
             (error "portable model transport requires a process host"))
         (let* ((model-id
                 (model-openai-name-string
@@ -908,10 +918,12 @@
                             (model-openai-transport-detail-limit-for-options
                              options))
                            #f))))
-                  (model-openai-retrieve
-                   (model-openai-completion-url endpoint)
-                   request-json
-                   options)))
+                  (apply model-openai-retrieve
+                         (append
+                          (list (model-openai-completion-url endpoint)
+                                request-json
+                                options)
+                          maybe-attempt))))
                (status (car result))
                (stdout (cadr result))
                (stderr (model-openai-third result))
@@ -947,7 +959,7 @@
             (model-openai-parse-response body)))))
 
     (define (model-openai-compatible-http-completion-result
-             provider model role prompt options)
+             provider model role prompt options . maybe-attempt)
       "Return a result datum for an OpenAI-compatible completion attempt."
       #((parameters
          (provider (type list)
@@ -959,7 +971,11 @@
          (prompt (type string)
           (description "User prompt text to send as one chat message."))
          (options (type list)
-          (description "Model completion options, including tools.")))
+          (description "Model completion options, including tools."))
+         (maybe-attempt (type list)
+          (description
+           ("Optional singleton list containing a host retrieval"
+             "procedure for adapters and deterministic tests."))))
         (returns (type list)
          (description
           ("A model-completion-result datum with either an ok value or a"
@@ -982,5 +998,6 @@
         (list 'model-completion-result
               (list 'status 'ok)
               (list 'value
-                    (model-openai-compatible-http-complete
-                     provider model role prompt options)))))))
+                    (apply model-openai-compatible-http-complete
+                           (append (list provider model role prompt options)
+                                   maybe-attempt))))))))

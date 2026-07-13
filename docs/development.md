@@ -285,9 +285,12 @@ documented host boundary makes that impossible. Core runtime, reader,
 evaluator, macro, library, and standard-library changes should therefore add
 or update `tests/scheme/` coverage first. The Scheme runner and thin host
 launcher own those files; ERT continues to own Emacs adapter behavior such as
-buffers, windows, commands, and prompts. When host-neutral coverage must remain
-ERT-only temporarily, record the reason in the test and link the focused
-portable follow-up.
+buffers, windows, commands, and prompts. Every ERT file must have an ownership
+entry in `tests/scheme/ert-portable-parity-map.scm`. Mixed source-backed ERT
+cases must name a portable case/check marker or a concrete Emacs-only boundary.
+`consent-test-case-parity-audit-test.el` rejects unmapped files, incomplete
+mixed-case partitions, stale portable markers, and portable programs absent
+from the Scheme-native test plan.
 
 The current placement audit and justified ERT-only categories are recorded in
 [`docs/portable-test-audit.md`](portable-test-audit.md).

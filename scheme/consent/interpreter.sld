@@ -7414,19 +7414,28 @@ cursor across sessions."
     (define (primitive-model-complete arguments context)
       "Complete through the portable local OpenAI-compatible transport."
       (let* ((role (model-name (car arguments) "model role"))
-             (prompt (expect-string (cadr arguments) "model-complete prompt"))
+             (raw-prompt (cadr arguments))
              (options (if (null? (cddr arguments)) '() (third arguments)))
              (candidate (model-select role)))
         (if (not candidate)
             (eval-error "no registered provider model supports role" role)
-            (portable-library-call
-             model-openai:model-openai-compatible-http-complete
-             context
-             (car candidate)
-             (cdr candidate)
-             role
-             prompt
-             options))))
+            (let ((provider (car candidate)))
+              (if (and (eq? (model-entry-ref provider 'kind) 'remote)
+                       (not (redaction-model:safe-for-provider?
+                             raw-prompt
+                             (model-entry-ref provider 'id))))
+                  (eval-error
+                   "local-only context requires explicit approval"))
+              (let ((prompt
+                     (expect-string raw-prompt "model-complete prompt")))
+                (portable-library-call
+                 model-openai:model-openai-compatible-http-complete
+                 context
+                 provider
+                 (cdr candidate)
+                 role
+                 prompt
+                 options))))))
 
     (define (primitive-model-provider-diagnostics arguments context)
       "Return redacted portable model provider diagnostics."
