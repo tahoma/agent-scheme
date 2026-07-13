@@ -1266,8 +1266,8 @@
                 (status (vcs-raw-status-kind status-token))
                 (score (vcs-raw-status-score status-token)))
             (if (or (eq? status 'renamed) (eq? status 'copied))
-                (let ((orig-path (vcs-next-token/default tokens ""))
-                      (path (vcs-next-token/default tokens "")))
+                (let* ((orig-path (vcs-next-token/default tokens ""))
+                       (path (vcs-next-token/default tokens "")))
                   (make-vcs-diff-file
                    status
                    path
