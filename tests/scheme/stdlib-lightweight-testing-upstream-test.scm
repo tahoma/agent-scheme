@@ -13,26 +13,11 @@
 (import (scheme base)
         (scheme write)
         (stdlib eager-comprehensions)
-        (stdlib lightweight-testing))
-
-;; Number of failed adapted upstream SRFI 78 examples seen so far.
-(define upstream-failures 0)
-
-(define (record-upstream-failure name expected actual)
-  "Record one failed adapted upstream SRFI 78 example."
-  (set! upstream-failures (+ upstream-failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (upstream-verify name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-upstream-failure name expected actual)))
+        (stdlib lightweight-testing)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 (define (capture-upstream-output thunk)
   "Return the text THUNK writes to the current output port."
@@ -61,91 +46,109 @@
       1
       (+ (fib (- n 1)) (fib (- n 2)))))
 
-(define (finish-upstream-tests)
-  "Report the adapted upstream SRFI 78 examples result."
-  (if (= upstream-failures 0)
-      (begin
-        (display "Adapted upstream SRFI 78 examples passed")
-        (newline))
-      (begin
-        (display upstream-failures)
-        (display " adapted upstream SRFI 78 example failure(s)")
-        (newline)
-        (error "adapted upstream SRFI 78 examples failed" upstream-failures))))
-
-(upstream-verify 'simple-test-pass
-                 (upstream-example-passes?
+(testing-registry-case
+ 'simple-test-pass '(portable stdlib)
+ ("stdlib-lightweight-testing-upstream-test.scm" 49)
+(test-equal 'simple-test-pass
+             #t
+             (upstream-example-passes?
                   (lambda ()
-                    (check (+ 1 1) => 2)))
-                 #t)
+                    (check (+ 1 1) => 2)))))
 
-(upstream-verify 'simple-test-fail
-                 (upstream-example-fails?
+(testing-registry-case
+ 'simple-test-fail '(portable stdlib)
+ ("stdlib-lightweight-testing-upstream-test.scm" 58)
+(test-equal 'simple-test-fail
+             #t
+             (upstream-example-fails?
                   (lambda ()
-                    (check (+ 1 1) => 3)))
-                 #t)
+                    (check (+ 1 1) => 3)))))
 
-(upstream-verify 'default-vector-equality
-                 (upstream-example-passes?
+(testing-registry-case
+ 'default-vector-equality '(portable stdlib)
+ ("stdlib-lightweight-testing-upstream-test.scm" 67)
+(test-equal 'default-vector-equality
+             #t
+             (upstream-example-passes?
                   (lambda ()
-                    (check (vector 1) => (vector 1))))
-                 #t)
+                    (check (vector 1) => (vector 1))))))
 
-(upstream-verify 'custom-vector-equality
-                 (upstream-example-fails?
+(testing-registry-case
+ 'custom-vector-equality '(portable stdlib)
+ ("stdlib-lightweight-testing-upstream-test.scm" 76)
+(test-equal 'custom-vector-equality
+             #t
+             (upstream-example-fails?
                   (lambda ()
-                    (check (vector 1) (=> eq?) (vector 1))))
-                 #t)
+                    (check (vector 1) (=> eq?) (vector 1))))))
 
-(upstream-verify 'check-ec-no-qualifier
-                 (upstream-example-passes?
+(testing-registry-case
+ 'check-ec-no-qualifier '(portable stdlib)
+ ("stdlib-lightweight-testing-upstream-test.scm" 85)
+(test-equal 'check-ec-no-qualifier
+             #t
+             (upstream-example-passes?
                   (lambda ()
-                    (check-ec (+ 1 1) => 2)))
-                 #t)
+                    (check-ec (+ 1 1) => 2)))))
 
-(upstream-verify 'check-ec-range-argument-reporting
-                 (upstream-example-passes?
+(testing-registry-case
+ 'check-ec-range-argument-reporting '(portable stdlib)
+ ("stdlib-lightweight-testing-upstream-test.scm" 94)
+(test-equal 'check-ec-range-argument-reporting
+             #t
+             (upstream-example-passes?
                   (lambda ()
-                    (check-ec (: x 10) (+ x 1) => (+ x 1) (x))))
-                 #t)
+                    (check-ec (: x 10) (+ x 1) => (+ x 1) (x))))))
 
-(upstream-verify 'check-ec-distributive-law
-                 (upstream-example-passes?
+(testing-registry-case
+ 'check-ec-distributive-law '(portable stdlib)
+ ("stdlib-lightweight-testing-upstream-test.scm" 103)
+(test-equal 'check-ec-distributive-law
+             #t
+             (upstream-example-passes?
                   (lambda ()
                     (check-ec (: x 10)
                               (: y 10)
                               (: z 10)
                               (* x (+ y z))
                               => (+ (* x y) (* x z))
-                              (x y z))))
-                 #t)
+                              (x y z))))))
 
-(upstream-verify 'fib-simple-examples
-                 (begin
+(testing-registry-case
+ 'fib-simple-examples '(portable stdlib)
+ ("stdlib-lightweight-testing-upstream-test.scm" 117)
+(test-equal 'fib-simple-examples
+             #t
+             (begin
                    (check-reset!)
                    (check-set-mode! 'summary)
                    (check (fib 1) => 1)
                    (check (fib 2) => 1)
-                   (check-passed? 2))
-                 #t)
+                   (check-passed? 2))))
 
-(upstream-verify 'fib-parametric-example
-                 (upstream-example-passes?
+(testing-registry-case
+ 'fib-parametric-example '(portable stdlib)
+ ("stdlib-lightweight-testing-upstream-test.scm" 129)
+(test-equal 'fib-parametric-example
+             #t
+             (upstream-example-passes?
                   (lambda ()
                     (check-ec (: n 1 31)
                               (even? (fib n))
                               => (= (modulo n 3) 0)
-                              (n))))
-                 #t)
+                              (n))))))
 
-(upstream-verify 'check-report-example
-                 (capture-upstream-output
+(testing-registry-case
+ 'check-report-example '(portable stdlib)
+ ("stdlib-lightweight-testing-upstream-test.scm" 141)
+(test-equal 'check-report-example
+             "\n; *** checks *** : 2 correct, 0 failed.\n"
+             (capture-upstream-output
                   (lambda ()
                     (check-reset!)
                     (check-set-mode! 'summary)
                     (check (+ 1 1) => 2)
                     (check (fib 1) => 1)
-                    (check-report)))
-                 "\n; *** checks *** : 2 correct, 0 failed.\n")
+                    (check-report)))))
 
-(finish-upstream-tests)
+(testing-runner-main "Stdlib Lightweight Testing Upstream portable tests" (command-line))

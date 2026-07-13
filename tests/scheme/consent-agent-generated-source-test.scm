@@ -11,30 +11,11 @@
 
 (import (scheme base)
         (scheme write)
-        (agent generated-source))
-
-;; Count failed checks so the portable runner can report every mismatch.
-(define failures 0)
-
-;; Record one failed check and keep running the rest of the portable test file.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal?.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
+        (agent generated-source)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Return FIELD's value from RECORD, or #f when absent.
 (define (field record field)
@@ -82,73 +63,94 @@
 
 ;;;; Candidate normalization
 
+(testing-registry-case
+ 'plain-candidate-record '(portable agent)
+ ("consent-agent-generated-source-test.scm" 66)
 (let ((candidate
        (generated-source-candidate "(define answer 42)\nanswer\n")))
-  (check-true 'plain-candidate-record
-              (generated-source-candidate? candidate))
-  (check 'plain-candidate-status
-         (generated-source-candidate-status candidate)
-         'ready)
-  (check 'plain-candidate-kind (field candidate 'kind) 'plain)
-  (check 'plain-candidate-source
-         (generated-source-candidate-source candidate)
-         "(define answer 42)\nanswer\n")
-  (check 'plain-candidate-forms
-         (length (generated-source-candidate-forms candidate))
-         2))
+  (test-assert 'plain-candidate-record
+             (generated-source-candidate? candidate))
+  (test-equal 'plain-candidate-status
+             'ready
+             (generated-source-candidate-status candidate))
+  (test-equal 'plain-candidate-kind 'plain (field candidate 'kind))
+  (test-equal 'plain-candidate-source
+             "(define answer 42)\nanswer\n"
+             (generated-source-candidate-source candidate))
+  (test-equal 'plain-candidate-forms
+             2
+             (length (generated-source-candidate-forms candidate)))))
 
+(testing-registry-case
+ 'fenced-candidate-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 84)
 (let ((candidate
        (generated-source-candidate
         "```scheme\n(define answer 42)\nanswer\n```\n")))
-  (check 'fenced-candidate-status
-         (generated-source-candidate-status candidate)
-         'ready)
-  (check 'fenced-candidate-kind (field candidate 'kind) 'markdown-fence)
-  (check 'fenced-candidate-source
-         (generated-source-candidate-source candidate)
-         "(define answer 42)\nanswer\n"))
+  (test-equal 'fenced-candidate-status
+             'ready
+             (generated-source-candidate-status candidate))
+  (test-equal 'fenced-candidate-kind 'markdown-fence (field candidate 'kind))
+  (test-equal 'fenced-candidate-source
+             "(define answer 42)\nanswer\n"
+             (generated-source-candidate-source candidate))))
 
+(testing-registry-case
+ 'prose-candidate-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 98)
 (let ((candidate
        (generated-source-candidate
         "Here is the code:\n```scheme\n(define answer 42)\n```\n")))
-  (check 'prose-candidate-status
-         (generated-source-candidate-status candidate)
-         'rejected)
-  (check 'prose-candidate-diagnostic
-         (first-diagnostic-reason candidate)
-         'mixed-markdown-output))
+  (test-equal 'prose-candidate-status
+             'rejected
+             (generated-source-candidate-status candidate))
+  (test-equal 'prose-candidate-diagnostic
+             'mixed-markdown-output
+             (first-diagnostic-reason candidate))))
 
+(testing-registry-case
+ 'multiple-fence-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 111)
 (let ((candidate
        (generated-source-candidate
         "```scheme\n(define a 1)\n```\n```scheme\n(define b 2)\n```\n")))
-  (check 'multiple-fence-status
-         (generated-source-candidate-status candidate)
-         'rejected)
-  (check 'multiple-fence-diagnostic
-         (first-diagnostic-reason candidate)
-         'ambiguous-markdown-fences))
+  (test-equal 'multiple-fence-status
+             'rejected
+             (generated-source-candidate-status candidate))
+  (test-equal 'multiple-fence-diagnostic
+             'ambiguous-markdown-fences
+             (first-diagnostic-reason candidate))))
 
+(testing-registry-case
+ 'plain-prose-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 124)
 (let ((candidate
        (generated-source-candidate "This is explanatory prose.")))
-  (check 'plain-prose-status
-         (generated-source-candidate-status candidate)
-         'rejected)
-  (check 'plain-prose-diagnostic
-         (first-diagnostic-reason candidate)
-         'prose-output))
+  (test-equal 'plain-prose-status
+             'rejected
+             (generated-source-candidate-status candidate))
+  (test-equal 'plain-prose-diagnostic
+             'prose-output
+             (first-diagnostic-reason candidate))))
 
+(testing-registry-case
+ 'reader-error-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 136)
 (let ((candidate
        (generated-source-candidate "(define (broken x)\n")))
-  (check 'reader-error-status
-         (generated-source-candidate-status candidate)
-         'read-error)
-  (check 'reader-error-diagnostic
-         (field (car (generated-source-candidate-diagnostics candidate))
-                'stage)
-         'read))
+  (test-equal 'reader-error-status
+             'read-error
+             (generated-source-candidate-status candidate))
+  (test-equal 'reader-error-diagnostic
+             'read
+             (field (car (generated-source-candidate-diagnostics candidate))
+                'stage))))
 
 ;;;; Sandbox evaluation and contracts
 
+(testing-registry-case
+ 'sandbox-success-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 151)
 (let* ((loop
         (generated-source-run
          "(define deriv 1)\n(define differentiator-tests 'ok)\n"
@@ -162,20 +164,23 @@
                             (equal? (field evaluation 'value)
                                     'sandbox-ok)))))))
        (attempt (car (generated-source-run-attempts loop))))
-  (check 'sandbox-success-status
-         (generated-source-run-status loop)
-         'accepted)
-  (check 'sandbox-success-candidate
-         (generated-source-candidate-status
-          (generated-source-run-candidate loop))
-         'ready)
-  (check 'sandbox-success-stdout
-         (field (field attempt 'evaluation) 'stdout)
-         "sandbox output\n")
-  (check 'sandbox-success-diagnostics
-         (generated-source-run-diagnostics loop)
-         '()))
+  (test-equal 'sandbox-success-status
+             'accepted
+             (generated-source-run-status loop))
+  (test-equal 'sandbox-success-candidate
+             'ready
+             (generated-source-candidate-status
+          (generated-source-run-candidate loop)))
+  (test-equal 'sandbox-success-stdout
+             "sandbox output\n"
+             (field (field attempt 'evaluation) 'stdout))
+  (test-equal 'sandbox-success-diagnostics
+             '()
+             (generated-source-run-diagnostics loop))))
 
+(testing-registry-case
+ 'unbound-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 181)
 (let* ((loop
         (generated-source-run
          "(missing-helper 1)\n"
@@ -183,16 +188,19 @@
                      (lambda (candidate)
                        (unbound-evaluation 'missing-helper))))))
        (diagnostic (car (generated-source-run-diagnostics loop))))
-  (check 'unbound-status
-         (generated-source-run-status loop)
-         'rejected)
-  (check 'unbound-diagnostic-reason
-         (field diagnostic 'reason)
-         'unbound-variable)
-  (check 'unbound-missing-binding
-         (field diagnostic 'binding)
-         'missing-helper))
+  (test-equal 'unbound-status
+             'rejected
+             (generated-source-run-status loop))
+  (test-equal 'unbound-diagnostic-reason
+             'unbound-variable
+             (field diagnostic 'reason))
+  (test-equal 'unbound-missing-binding
+             'missing-helper
+             (field diagnostic 'binding))))
 
+(testing-registry-case
+ 'contract-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 201)
 (let* ((loop
         (generated-source-run
          "(define other 1)\n"
@@ -201,16 +209,19 @@
                        (ok-evaluation '(other))))
                (list 'required-bindings '(deriv)))))
        (diagnostic (car (generated-source-run-diagnostics loop))))
-  (check 'contract-status
-         (generated-source-run-status loop)
-         'rejected)
-  (check 'contract-diagnostic-reason
-         (field diagnostic 'reason)
-         'missing-binding)
-  (check 'contract-diagnostic-binding
-         (field diagnostic 'binding)
-         'deriv))
+  (test-equal 'contract-status
+             'rejected
+             (generated-source-run-status loop))
+  (test-equal 'contract-diagnostic-reason
+             'missing-binding
+             (field diagnostic 'reason))
+  (test-equal 'contract-diagnostic-binding
+             'deriv
+             (field diagnostic 'binding))))
 
+(testing-registry-case
+ 'import-contract-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 222)
 (let* ((loop
         (generated-source-run
          "(define deriv 1)\n"
@@ -219,18 +230,21 @@
                        (ok-evaluation '(deriv))))
                (list 'required-imports '((scheme base))))))
        (diagnostic (car (generated-source-run-diagnostics loop))))
-  (check 'import-contract-status
-         (generated-source-run-status loop)
-         'rejected)
-  (check 'import-contract-diagnostic-reason
-         (field diagnostic 'reason)
-         'missing-import)
-  (check 'import-contract-diagnostic-import
-         (field diagnostic 'import)
-         '(scheme base)))
+  (test-equal 'import-contract-status
+             'rejected
+             (generated-source-run-status loop))
+  (test-equal 'import-contract-diagnostic-reason
+             'missing-import
+             (field diagnostic 'reason))
+  (test-equal 'import-contract-diagnostic-import
+             '(scheme base)
+             (field diagnostic 'import))))
 
 ;;;; Bounded repair retries
 
+(testing-registry-case
+ 'repair-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 245)
 (let ((repair-inputs '()))
   (let* ((loop
           (generated-source-run
@@ -250,18 +264,21 @@
                                (cons repair-prompt repair-inputs))
                          "(define deriv 1)\n")))))
          (attempts (generated-source-run-attempts loop)))
-    (check 'repair-status (generated-source-run-status loop) 'accepted)
-    (check 'repair-attempt-count (length attempts) 2)
-    (check 'repair-prompt-count
-           (length (generated-source-run-repair-prompts loop))
-           1)
-    (check-true 'repair-prompt-includes-diagnostic
-                (contains?
+    (test-equal 'repair-status 'accepted (generated-source-run-status loop))
+    (test-equal 'repair-attempt-count 2 (length attempts))
+    (test-equal 'repair-prompt-count
+             1
+             (length (generated-source-run-repair-prompts loop)))
+    (test-assert 'repair-prompt-includes-diagnostic
+             (contains?
                  (field (car repair-inputs) 'diagnostic-reasons)
-                 'unbound-variable))))
+                 'unbound-variable)))))
 
 ;;;; Explicit apply gating
 
+(testing-registry-case
+ 'rejected-apply-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 279)
 (let ((applied '()))
   (let* ((rejected
           (generated-source-run
@@ -275,9 +292,12 @@
            (lambda (candidate)
              (set! applied (cons candidate applied))
              'applied))))
-    (check 'rejected-apply-status (field application 'status) 'rejected)
-    (check 'rejected-apply-not-called applied '())))
+    (test-equal 'rejected-apply-status 'rejected (field application 'status))
+    (test-equal 'rejected-apply-not-called '() applied))))
 
+(testing-registry-case
+ 'accepted-apply-status '(portable agent)
+ ("consent-agent-generated-source-test.scm" 298)
 (let ((applied '()))
   (let* ((accepted
           (generated-source-run
@@ -292,13 +312,8 @@
            (lambda (candidate)
              (set! applied (cons candidate applied))
              'applied))))
-    (check 'accepted-apply-status (field application 'status) 'applied)
-    (check 'accepted-apply-result (field application 'result) 'applied)
-    (check 'accepted-apply-called (length applied) 1)))
+    (test-equal 'accepted-apply-status 'applied (field application 'status))
+    (test-equal 'accepted-apply-result 'applied (field application 'result))
+    (test-equal 'accepted-apply-called 1 (length applied)))))
 
-(if (> failures 0)
-    (begin
-      (display failures)
-      (display " generated-source checks failed")
-      (newline)
-      (error "portable generated-source tests failed" failures)))
+(testing-runner-main "Consent Agent Generated Source portable tests" (command-line))

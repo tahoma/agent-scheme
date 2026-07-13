@@ -6,36 +6,15 @@
         (scheme inexact)
         (scheme write)
         (stdlib random-bits)
-        (stdlib random-distributions))
-
-;; Number of failed random distribution checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed random distribution check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-(define (check-true name value)
-  "Record failure unless VALUE is true."
-  (if (not value)
-      (record-failure name #t value)))
+        (stdlib random-distributions)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 (define (check-near name actual expected)
   "Compare inexact ACTUAL and EXPECTED with a small tolerance."
-  (if (not (< (abs (- actual expected)) 0.000000000001))
-      (record-failure name expected actual)))
+  (test-approximate name expected actual 0.000000000001))
 
 (define (raises? thunk)
   "Return #t when THUNK raises an exception."
@@ -115,43 +94,46 @@
                     (set! next (* scale v2))
                     (+ mu (* sigma scale v1))))))))))
 
-(define (finish-random-distribution-tests)
-  "Report the random distribution test result."
-  (if (= failures 0)
-      (begin
-        (display "Random distribution tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " random distribution test failure(s)")
-        (newline)
-        (error "random distribution tests failed" failures))))
-
+(testing-registry-case
+ 'source-permutation-reference '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 97)
 (let* ((state (random-source-state-ref (make-random-source)))
        (actual-source (source-at state))
        (expected-source (source-at state))
        (make-permutation (random-source-make-permutations actual-source))
        (actual (make-permutation 8))
        (expected (reference-permutation expected-source 8)))
-  (check 'source-permutation-reference actual expected)
-  (check-true 'source-permutation-has-each-image-once
-              (permutation-vector? actual 8)))
+  (test-equal 'source-permutation-reference expected actual)
+  (test-assert 'source-permutation-has-each-image-once
+             (permutation-vector? actual 8))))
 
-(check 'random-permutation-zero-length
-       (vector-length (random-permutation 0))
-       0)
+(testing-registry-case
+ 'random-permutation-zero-length '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 110)
+(test-equal 'random-permutation-zero-length
+             0
+             (vector-length (random-permutation 0))))
 
-(check-true 'random-permutation-has-each-image-once
-            (permutation-vector? (random-permutation 11) 11))
+(testing-registry-case
+ 'random-permutation-has-each-image-once '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 117)
+(test-assert 'random-permutation-has-each-image-once
+             (permutation-vector? (random-permutation 11) 11)))
 
+(testing-registry-case
+ 'source-exponential-reference '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 123)
 (let* ((state (random-source-state-ref (make-random-source)))
        (actual-source (source-at state))
        (expected-source (source-at state))
        (make-exponential (random-source-make-exponentials actual-source))
        (actual (make-exponential 3.5))
        (expected (reference-exponential expected-source #f 3.5)))
-  (check-near 'source-exponential-reference actual expected))
+  (check-near 'source-exponential-reference actual expected)))
 
+(testing-registry-case
+ 'source-exponential-unit-reference '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 134)
 (let* ((state (random-source-state-ref (make-random-source)))
        (actual-source (source-at state))
        (expected-source (source-at state))
@@ -159,14 +141,23 @@
         (random-source-make-exponentials actual-source 1/1024))
        (actual (make-exponential 0.75))
        (expected (reference-exponential expected-source 1/1024 0.75)))
-  (check-near 'source-exponential-unit-reference actual expected))
+  (check-near 'source-exponential-unit-reference actual expected)))
 
-(check-true 'random-exponential-positive
-            (< 0 (random-exponential 2.0)))
+(testing-registry-case
+ 'random-exponential-positive '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 146)
+(test-assert 'random-exponential-positive
+             (< 0 (random-exponential 2.0))))
 
-(check-true 'random-exponential-rejects-non-positive-mean
-            (raises? (lambda () (random-exponential 0))))
+(testing-registry-case
+ 'random-exponential-rejects-non-positive-mean '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 152)
+(test-assert 'random-exponential-rejects-non-positive-mean
+             (raises? (lambda () (random-exponential 0)))))
 
+(testing-registry-case
+ 'source-normal-first-reference '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 158)
 (let* ((state (random-source-state-ref (make-random-source)))
        (actual-source (source-at state))
        (expected-source (source-at state))
@@ -180,10 +171,13 @@
        (state-after-second (random-source-state-ref actual-source)))
   (check-near 'source-normal-first-reference actual-first expected-first)
   (check-near 'source-normal-second-reference actual-second expected-second)
-  (check 'source-normal-second-result-uses-cache
-         state-after-second
-         state-after-first))
+  (test-equal 'source-normal-second-result-uses-cache
+             state-after-first
+             state-after-second)))
 
+(testing-registry-case
+ 'source-normal-first-result-real '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 178)
 (let* ((state (random-source-state-ref (make-random-source)))
        (source (source-at state))
        (expected-source (source-at state))
@@ -192,25 +186,33 @@
        (ignored-actual (make-normal 0.0 1.0))
        (ignored-expected (reference-normal 0.0 1.0))
        (expected-cached (reference-normal 0.0 1.0)))
-  (if (not (real? ignored-actual))
-      (record-failure 'source-normal-first-result-real #t ignored-actual))
-  (if (not (real? ignored-expected))
-      (record-failure 'source-normal-reference-first-result-real #t ignored-expected))
+  (test-assert 'source-normal-first-result-real (real? ignored-actual))
+  (test-assert 'source-normal-reference-first-result-real
+               (real? ignored-expected))
   (random-source-state-set! source state)
   (check-near 'source-normal-cache-survives-state-reset
               (make-normal 0.0 1.0)
               expected-cached)
-  (check 'source-normal-cache-does-not-advance-reset-source
-         (random-source-state-ref source)
-         state))
+  (test-equal 'source-normal-cache-does-not-advance-reset-source
+             state
+             (random-source-state-ref source))))
 
-(check-true 'random-normal-produces-real
-            (real? (random-normal 0.0 1.0)))
+(testing-registry-case
+ 'random-normal-produces-real '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 200)
+(test-assert 'random-normal-produces-real
+             (real? (random-normal 0.0 1.0))))
 
-(check-true 'random-normal-rejects-negative-deviation
-            (raises? (lambda () (random-normal 0.0 -1.0))))
+(testing-registry-case
+ 'random-normal-rejects-negative-deviation '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 206)
+(test-assert 'random-normal-rejects-negative-deviation
+             (raises? (lambda () (random-normal 0.0 -1.0)))))
 
-(check-true 'random-permutation-rejects-negative-degree
-            (raises? (lambda () (random-permutation -1))))
+(testing-registry-case
+ 'random-permutation-rejects-negative-degree '(portable stdlib)
+ ("stdlib-random-distributions-test.scm" 212)
+(test-assert 'random-permutation-rejects-negative-degree
+             (raises? (lambda () (random-permutation -1)))))
 
-(finish-random-distribution-tests)
+(testing-runner-main "Stdlib Random Distributions portable tests" (command-line))

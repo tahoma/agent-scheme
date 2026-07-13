@@ -22,10 +22,10 @@
                 (consent-expand raw-consent-expand)
                 (consent-expand-source raw-consent-expand-source)
                 (consent-eval-result raw-consent-eval-result)
-                (consent-eval-source-result raw-consent-eval-source-result)))
-
-;; Count failed checks so the portable runner can report all fixture mismatches.
-(define failures 0)
+                (consent-eval-source-result raw-consent-eval-source-result))
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Unique marker for unset CI matrix defaults.
 (define consent-test-option-unset (list 'unset))
@@ -220,27 +220,6 @@
 (define fixture-required-fields
   '(id kind phase category section status oracle options source expect description))
 
-;; Record one failed portable fixture check and keep running the rest of the
-;; corpus so all malformed cases are visible in one run.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal? and record a named failure.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
-
 ;; Return the value for NAME in a fixture CASE alist.
 (define (field case name)
   (let ((entry (assq name case)))
@@ -424,8 +403,7 @@
 (define (run-case case)
   (let ((expect (field case 'expect))
         (actual-result (actual case)))
-    (if (not (matches? expect actual-result))
-        (record-failure (field case 'id) expect actual-result))))
+    (test-assert (field case 'id) (matches? expect actual-result))))
 
 ;; Canonical fixture suite loaded once for validation and execution.
 (define suite (read-suite))
@@ -433,28 +411,35 @@
 ;; Shared fixture case list extracted from the canonical suite.
 (define cases (suite-cases suite))
 
-(check 'fixture-suite-tag (car suite) 'consent-fixture-suite)
-(check-true 'fixture-suite-has-cases (pair? cases))
-(check-true 'fixture-suite-ids-unique (unique-ids? cases))
+(testing-registry-case
+ 'fixture-suite-tag '(portable core)
+ ("consent-fixture-test.scm" 414)
+(test-equal 'fixture-suite-tag 'consent-fixture-suite (car suite)))
+(testing-registry-case
+ 'fixture-suite-has-cases '(portable core)
+ ("consent-fixture-test.scm" 418)
+(test-assert 'fixture-suite-has-cases (pair? cases)))
+(testing-registry-case
+ 'fixture-suite-ids-unique '(portable core)
+ ("consent-fixture-test.scm" 422)
+(test-assert 'fixture-suite-ids-unique (unique-ids? cases)))
 
+(testing-registry-case
+ 'consent-fixture-case-4 '(portable core)
+ ("consent-fixture-test.scm" 427)
 (for-each
  (lambda (case)
-   (check-true (field case 'id) (case-valid? case)))
- cases)
+   (test-assert (field case 'id) (case-valid? case)))
+ cases))
 
+(testing-registry-case
+ 'consent-fixture-case-5 '(portable core)
+ ("consent-fixture-test.scm" 435)
 (for-each
  (lambda (case)
    (if (and (eq? (field case 'status) 'implemented)
             (eq? (field case 'oracle) 'shared))
        (run-case case)))
- cases)
+ cases))
 
-(if (= failures 0)
-    (begin
-      (display "Scheme fixture tests passed")
-      (newline))
-    (begin
-      (display failures)
-      (display " Scheme fixture test failure(s)")
-      (newline)
-      (error "Scheme fixture tests failed")))
+(testing-runner-main "Consent Fixture portable tests" (command-line))

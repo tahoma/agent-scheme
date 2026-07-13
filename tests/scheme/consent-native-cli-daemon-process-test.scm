@@ -21,26 +21,10 @@
         (scheme read)
         (scheme process-context)
         (cli native-cli)
-        (cli process-host))
-
-;; Count failed checks so one run reports every contract mismatch.
-(define failures 0)
-
-;; Record a failed check and keep going.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ") (write name)
-  (display ": expected ") (write expected)
-  (display ", got ") (write actual) (newline))
-
-;; Compare ACTUAL and EXPECTED with equal? and record a named failure.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to a canonical boolean.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
+        (cli process-host)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;;;; Datum navigation over the live record lists returned by execute
 
@@ -111,48 +95,65 @@
 
 ;;;; Host-neutral checks: denials fail closed before any host operation
 
+(testing-registry-case
+ 'batch-deny-exit '(portable core)
+ ("consent-native-cli-daemon-process-test.scm" 98)
 (let ((outcome (cli-native-cli-execute
                 '((subcommand . "process-run") (mode . "batch")
                   (command . "/bin/echo") (child-arguments "should-not-run")))))
-  (check 'batch-deny-exit (outcome-exit outcome) 3)
+  (test-equal 'batch-deny-exit 3 (outcome-exit outcome))
   (let ((decision (record-of (outcome-records outcome) 'capability-decision))
         (error-datum (record-of (outcome-records outcome) 'adapter-error)))
-    (check 'batch-deny-status (field-value decision 'status) 'denied)
-    (check 'batch-deny-kind (field-value error-datum 'kind)
-           'noninteractive-confirmation-unavailable)
-    (check-true 'batch-deny-audited
-                (record-of (outcome-records outcome) 'adapter-audit))
+    (test-equal 'batch-deny-status 'denied (field-value decision 'status))
+    (test-equal 'batch-deny-kind
+             'noninteractive-confirmation-unavailable
+             (field-value error-datum 'kind))
+    (test-assert 'batch-deny-audited
+             (record-of (outcome-records outcome) 'adapter-audit))
     ;; No result and no child-output event mean the child never spawned.
-    (check 'batch-deny-no-result
-           (record-of (outcome-records outcome) 'adapter-result) #f)
-    (check 'batch-deny-no-stdout
-           (event-of-kind (outcome-records outcome) 'stdout) #f)))
+    (test-equal 'batch-deny-no-result
+             #f
+             (record-of (outcome-records outcome) 'adapter-result))
+    (test-equal 'batch-deny-no-stdout
+             #f
+             (event-of-kind (outcome-records outcome) 'stdout)))))
 
+(testing-registry-case
+ 'stdin-deny-exit '(portable core)
+ ("consent-native-cli-daemon-process-test.scm" 121)
 (let ((outcome (cli-native-cli-execute
                 '((subcommand . "stdin-read") (mode . "batch")))))
-  (check 'stdin-deny-exit (outcome-exit outcome) 3)
-  (check 'stdin-deny-kind
-         (field-value (record-of (outcome-records outcome) 'adapter-error) 'kind)
-         'noninteractive-confirmation-unavailable)
-  (check 'stdin-deny-no-result
-         (record-of (outcome-records outcome) 'adapter-result) #f))
+  (test-equal 'stdin-deny-exit 3 (outcome-exit outcome))
+  (test-equal 'stdin-deny-kind
+             'noninteractive-confirmation-unavailable
+             (field-value (record-of (outcome-records outcome) 'adapter-error) 'kind))
+  (test-equal 'stdin-deny-no-result
+             #f
+             (record-of (outcome-records outcome) 'adapter-result))))
 
+(testing-registry-case
+ 'stale-exit '(portable core)
+ ("consent-native-cli-daemon-process-test.scm" 134)
 (let ((outcome (cli-native-cli-execute
                 '((subcommand . "process-status") (mode . "daemon")
                   (channel . #t) (job-id . "h-job-42")
                   (job-state . "stale")))))
-  (check 'stale-exit (outcome-exit outcome) 3)
+  (test-equal 'stale-exit 3 (outcome-exit outcome))
   (let* ((error-datum (record-of (outcome-records outcome) 'adapter-error))
          (condition (field-value error-datum 'condition)))
-    (check 'stale-kind (field-value error-datum 'kind) 'stale-handle)
-    (check 'stale-handle (field-value error-datum 'handle) 'h-job-42)
-    (check-true 'stale-condition condition)
-    (check 'stale-condition-kind (field-value condition 'kind) 'stale-handle)
-    (check 'stale-no-result
-           (record-of (outcome-records outcome) 'adapter-result) #f)))
+    (test-equal 'stale-kind 'stale-handle (field-value error-datum 'kind))
+    (test-equal 'stale-handle 'h-job-42 (field-value error-datum 'handle))
+    (test-assert 'stale-condition condition)
+    (test-equal 'stale-condition-kind 'stale-handle (field-value condition 'kind))
+    (test-equal 'stale-no-result
+             #f
+             (record-of (outcome-records outcome) 'adapter-result)))))
 
 ;;;; Host-neutral checks: vocabulary and interpreted/compiled record alignment
 
+(testing-registry-case
+ 'event-kind-in-vocabulary '(portable core)
+ ("consent-native-cli-daemon-process-test.scm" 154)
 (let* ((approval (cli-native-cli-execute
                   '((subcommand . "process-status") (mode . "cli")
                     (job-id . "h-job-1") (job-state . "live"))))
@@ -163,16 +164,19 @@
   (for-each
    (lambda (record)
      (if (eq? (car record) 'adapter-event)
-         (check-true 'event-kind-in-vocabulary
-                     (in-set? (field-value record 'kind)
+         (test-assert 'event-kind-in-vocabulary
+             (in-set? (field-value record 'kind)
                               (vocabulary 'event-kinds)))))
    (outcome-records approval))
-  (check-true 'error-kind-in-vocabulary
-              (in-set? (field-value
+  (test-assert 'error-kind-in-vocabulary
+             (in-set? (field-value
                         (record-of (outcome-records denial) 'adapter-error)
                         'kind)
-                       (vocabulary 'error-kinds))))
+                       (vocabulary 'error-kinds)))))
 
+(testing-registry-case
+ 'interpreted-execution '(portable core)
+ ("consent-native-cli-daemon-process-test.scm" 177)
 (let* ((interpreted (cli-native-cli-execute
                      '((subcommand . "process-status") (mode . "cli")
                        (job-id . "h-job-1") (job-state . "live")
@@ -185,20 +189,25 @@
                                       'adapter-result))
        (compiled-result (record-of (outcome-records compiled)
                                    'adapter-result)))
-  (check 'interpreted-execution
-         (field-value interpreted-result 'execution) 'interpreted)
-  (check 'compiled-execution
-         (field-value compiled-result 'execution) 'compiled)
+  (test-equal 'interpreted-execution
+             'interpreted
+             (field-value interpreted-result 'execution))
+  (test-equal 'compiled-execution
+             'compiled
+             (field-value compiled-result 'execution))
   ;; The decision and request records are identical across execution strategies.
-  (check 'request-shape-aligned
-         (record-of (outcome-records interpreted) 'capability-request)
-         (record-of (outcome-records compiled) 'capability-request))
-  (check 'decision-shape-aligned
-         (record-of (outcome-records interpreted) 'capability-decision)
-         (record-of (outcome-records compiled) 'capability-decision)))
+  (test-equal 'request-shape-aligned
+             (record-of (outcome-records compiled) 'capability-request)
+             (record-of (outcome-records interpreted) 'capability-request))
+  (test-equal 'decision-shape-aligned
+             (record-of (outcome-records compiled) 'capability-decision)
+             (record-of (outcome-records interpreted) 'capability-decision))))
 
 ;;;; Real process-boundary checks (only when a host process module is available)
 
+(testing-registry-case
+ 'run-exit '(portable core)
+ ("consent-native-cli-daemon-process-test.scm" 208)
 (if (not (cli-host-available?))
     (begin
       (display
@@ -210,40 +219,42 @@
                       '((subcommand . "process-run") (mode . "cli")
                         (terminal . #t) (command . "/bin/echo")
                         (child-arguments "portable-stdout")))))
-        (check 'run-exit (outcome-exit outcome) 0)
+        (test-equal 'run-exit 0 (outcome-exit outcome))
         (let ((stdout-event (event-of-kind (outcome-records outcome) 'stdout))
               (exit-event (event-of-kind (outcome-records outcome)
                                          'process-exit)))
-          (check-true 'run-stdout-event stdout-event)
-          (check 'run-stdout-payload
-                 (field-value stdout-event 'payload) "portable-stdout\n")
-          (check 'run-exit-status
-                 (field-value (field-value exit-event 'payload) 'exit-status) 0)
-          (check-true 'run-result
-                      (record-of (outcome-records outcome) 'adapter-result))))
+          (test-assert 'run-stdout-event stdout-event)
+          (test-equal 'run-stdout-payload
+             "portable-stdout\n"
+             (field-value stdout-event 'payload))
+          (test-equal 'run-exit-status
+             0
+             (field-value (field-value exit-event 'payload) 'exit-status))
+          (test-assert 'run-result
+             (record-of (outcome-records outcome) 'adapter-result))))
 
       ;; A nonzero child exit status is waited for and recorded.
       (let ((outcome (cli-native-cli-execute
                       '((subcommand . "process-run") (mode . "batch")
                         (approval . #t) (command . "/bin/sh")
                         (child-arguments "-c" "exit 7")))))
-        (check 'nonzero-exit-status
-               (field-value (field-value
+        (test-equal 'nonzero-exit-status
+             7
+             (field-value (field-value
                              (event-of-kind (outcome-records outcome)
                                             'process-exit)
                              'payload)
-                            'exit-status)
-               7))
+                            'exit-status)))
 
       ;; Child stderr streams as a stderr event.
       (let ((outcome (cli-native-cli-execute
                       '((subcommand . "process-run") (mode . "batch")
                         (approval . #t) (command . "/bin/sh")
                         (child-arguments "-c" "echo portable-stderr 1>&2")))))
-        (check 'stderr-payload
-               (field-value (event-of-kind (outcome-records outcome) 'stderr)
-                            'payload)
-               "portable-stderr\n"))
+        (test-equal 'stderr-payload
+             "portable-stderr\n"
+             (field-value (event-of-kind (outcome-records outcome) 'stderr)
+                            'payload)))
 
       ;; A host-backed stdin port reaches the child while the approval prompt
       ;; stays on the diagnostic stream, never on the record stream. Scratch
@@ -260,24 +271,24 @@
                         (list '(subcommand . "process-run") '(mode . "cli")
                               '(terminal . #t) '(command . "cat")
                               (cons 'stdin-file stdin-file)))))
-          (check 'stdin-payload
-                 (field-value (event-of-kind (outcome-records outcome) 'stdout)
-                              'payload)
-                 "portable-stdin-payload")
+          (test-equal 'stdin-payload
+             "portable-stdin-payload"
+             (field-value (event-of-kind (outcome-records outcome) 'stdout)
+                              'payload))
           ;; The prompt is returned for the diagnostic stream, separate from the
           ;; child's stdin port, which delivered the full payload above.
-          (check-true 'stdin-prompt-present
-                      (pair? (outcome-prompts outcome))))
+          (test-assert 'stdin-prompt-present
+             (pair? (outcome-prompts outcome))))
         (if (file-exists? stdin-file) (delete-file stdin-file)))
 
       ;; A granted cwd is observed by a real child.
       (let ((outcome (cli-native-cli-execute
                       '((subcommand . "process-run") (mode . "batch")
                         (approval . #t) (command . "pwd") (cwd . "/")))))
-        (check 'cwd-grant
-               (field-value (event-of-kind (outcome-records outcome) 'stdout)
-                            'payload)
-               "/\n"))
+        (test-equal 'cwd-grant
+             "/\n"
+             (field-value (event-of-kind (outcome-records outcome) 'stdout)
+                            'payload)))
 
       ;; A granted environment variable is observed by a real child.
       (let ((outcome (cli-native-cli-execute
@@ -286,10 +297,10 @@
                             '(child-arguments "-c" "printf %s \"$CONSENT_GRANT\"")
                             (list 'environment
                                   (cons "CONSENT_GRANT" "granted-value"))))))
-        (check 'environment-grant
-               (field-value (event-of-kind (outcome-records outcome) 'stdout)
-                            'payload)
-               "granted-value"))
+        (test-equal 'environment-grant
+             "granted-value"
+             (field-value (event-of-kind (outcome-records outcome) 'stdout)
+                            'payload)))
 
       ;; A real child is signaled and reaped; the status is signal-terminated.
       (let* ((outcome (cli-native-cli-execute
@@ -298,22 +309,15 @@
                          (signal . "TERM"))))
              (exit-event (event-of-kind (outcome-records outcome)
                                         'process-exit)))
-        (check 'signal-exit (outcome-exit outcome) 0)
-        (check 'signal-name
-               (field-value (field-value exit-event 'payload) 'signal) 'TERM)
-        (check-true 'signal-terminated
-                    (>= (field-value (field-value exit-event 'payload)
+        (test-equal 'signal-exit 0 (outcome-exit outcome))
+        (test-equal 'signal-name
+             'TERM
+             (field-value (field-value exit-event 'payload) 'signal))
+        (test-assert 'signal-terminated
+             (>= (field-value (field-value exit-event 'payload)
                                      'exit-status)
-                        128)))))
+                        128))))))
 
 ;;;; Report
 
-(if (= failures 0)
-    (begin
-      (display "native-cli-daemon process-boundary lane validated")
-      (newline))
-    (begin
-      (display failures)
-      (display " native-cli-daemon process-boundary failure(s)")
-      (newline)
-      (error "native-cli-daemon process-boundary lane failed")))
+(testing-runner-main "Consent Native Cli Daemon Process portable tests" (command-line))

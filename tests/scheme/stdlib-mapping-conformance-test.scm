@@ -12,34 +12,11 @@
 (import (scheme base)
         (scheme write)
         (stdlib comparator)
-        (stdlib mapping))
-
-;; Number of failed ordered mapping checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed ordered mapping check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-(define (check-true name value)
-  "Record NAME unless VALUE is true."
-  (check name (if value #t #f) #t))
-
-(define (check-false name value)
-  "Record NAME unless VALUE is false."
-  (check name (if value #t #f) #f))
+        (stdlib mapping)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 (define (raises? thunk)
   "Return #t when THUNK raises any condition."
@@ -64,18 +41,6 @@
   "Return the value lists for every mapping in MAPPINGS."
   (map mapping-values mappings))
 
-(define (finish-mapping-tests)
-  "Report the ordered mapping test result."
-  (if (= failures 0)
-      (begin
-        (display "Ordered mapping tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " ordered mapping test failure(s)")
-        (newline)
-        (error "ordered mapping tests failed" failures))))
-
 ;; Shared integer comparator for duplicate-key and model-oriented checks.
 (define integer-comparator
   (make-comparator integer? = < number-hash))
@@ -84,33 +49,42 @@
 (define default-comparator
   (make-default-comparator))
 
+(testing-registry-case
+ 'predicate-mapping '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 52)
 (let ((mapping0 (mapping default-comparator))
       (mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
       (mapping2 (mapping default-comparator 'c 1 'd 2 'e 3))
       (mapping3 (mapping default-comparator 'd 1 'e 2 'f 3)))
-  (check-true 'predicate-mapping (mapping? (mapping default-comparator)))
-  (check-false 'predicate-non-mapping (mapping? (list 1 2 3)))
-  (check-true 'predicate-empty (mapping-empty? mapping0))
-  (check-false 'predicate-non-empty (mapping-empty? mapping1))
-  (check-true 'predicate-contains (mapping-contains? mapping1 'b))
-  (check-false 'predicate-missing (mapping-contains? mapping1 'z))
-  (check-true 'predicate-disjoint (mapping-disjoint? mapping1 mapping3))
-  (check-false 'predicate-not-disjoint (mapping-disjoint? mapping1 mapping2)))
+  (test-assert 'predicate-mapping (mapping? (mapping default-comparator)))
+  (test-assert 'predicate-non-mapping (not (mapping? (list 1 2 3))))
+  (test-assert 'predicate-empty (mapping-empty? mapping0))
+  (test-assert 'predicate-non-empty (not (mapping-empty? mapping1)))
+  (test-assert 'predicate-contains (mapping-contains? mapping1 'b))
+  (test-assert 'predicate-missing (not (mapping-contains? mapping1 'z)))
+  (test-assert 'predicate-disjoint (mapping-disjoint? mapping1 mapping3))
+  (test-assert 'predicate-not-disjoint (not (mapping-disjoint? mapping1 mapping2)))))
 
+(testing-registry-case
+ 'ref-found '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 68)
 (let ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3)))
-  (check 'ref-found (mapping-ref mapping1 'b) 2)
-  (check 'ref-missing-failure
-         (mapping-ref mapping1 'd (lambda () 42))
-         42)
-  (check-true 'ref-missing-raises
-              (raises? (lambda () (mapping-ref mapping1 'd))))
-  (check 'ref-success
-         (mapping-ref mapping1 'b (lambda () #f) (lambda (value) (* value value)))
-         4)
-  (check 'ref/default-found (mapping-ref/default mapping1 'c 42) 3)
-  (check 'ref/default-missing (mapping-ref/default mapping1 'd 42) 42)
-  (check 'key-comparator (mapping-key-comparator mapping1) default-comparator))
+  (test-equal 'ref-found 2 (mapping-ref mapping1 'b))
+  (test-equal 'ref-missing-failure
+             42
+             (mapping-ref mapping1 'd (lambda () 42)))
+  (test-assert 'ref-missing-raises
+             (raises? (lambda () (mapping-ref mapping1 'd))))
+  (test-equal 'ref-success
+             4
+             (mapping-ref mapping1 'b (lambda () #f) (lambda (value) (* value value))))
+  (test-equal 'ref/default-found 3 (mapping-ref/default mapping1 'c 42))
+  (test-equal 'ref/default-missing 42 (mapping-ref/default mapping1 'd 42))
+  (test-equal 'key-comparator default-comparator (mapping-key-comparator mapping1))))
 
+(testing-registry-case
+ 'adjoin-existing '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 85)
 (let* ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
        (mapping2 (mapping-set mapping1 'c 4 'd 4 'd 5))
        (mapping3 (mapping-update mapping1 'b (lambda (value) (* value value))))
@@ -118,95 +92,99 @@
                   mapping1 'd (lambda (value) (* value value)) 4))
        (mapping5 (mapping-adjoin mapping1 'c 4 'd 4 'd 5))
        (mapping0 (mapping default-comparator)))
-  (check 'adjoin-existing (mapping-ref mapping5 'c) 3)
-  (check 'adjoin-first-new-duplicate (mapping-ref mapping5 'd) 4)
-  (check 'adjoin!-alias
-         (mapping->alist (mapping-adjoin! mapping1 'c 4 'd 4))
-         '((a . 1) (b . 2) (c . 3) (d . 4)))
-  (check 'set-existing (mapping-ref mapping2 'c) 4)
-  (check 'set-latest-new-duplicate (mapping-ref mapping2 'd) 5)
-  (check 'set!-alias
-         (mapping->alist (mapping-set! mapping1 'c 4 'd 4))
-         '((a . 1) (b . 2) (c . 4) (d . 4)))
-  (check 'replace-missing
-         (mapping-ref/default (mapping-replace mapping1 'd 4) 'd #f)
-         #f)
-  (check 'replace-present (mapping-ref (mapping-replace mapping1 'c 6) 'c) 6)
-  (check 'replace!-alias
-         (mapping->alist (mapping-replace! mapping1 'c 6))
-         '((a . 1) (b . 2) (c . 6)))
-  (check 'delete (mapping-ref/default (mapping-delete mapping1 'b) 'b 42) 42)
-  (check 'delete!-alias
-         (mapping->alist (mapping-delete! mapping1 'a 'c))
-         '((b . 2)))
-  (check 'delete-all
-         (mapping-ref/default (mapping-delete-all mapping1 '(a b)) 'b 42)
-         42)
-  (check 'delete-all!-alias
-         (mapping->alist (mapping-delete-all! mapping1 '(a b)))
-         '((c . 3)))
-  (check 'intern-present
-         (values-list
+  (test-equal 'adjoin-existing 3 (mapping-ref mapping5 'c))
+  (test-equal 'adjoin-first-new-duplicate 4 (mapping-ref mapping5 'd))
+  (test-equal 'adjoin!-alias
+             '((a . 1) (b . 2) (c . 3) (d . 4))
+             (mapping->alist (mapping-adjoin! mapping1 'c 4 'd 4)))
+  (test-equal 'set-existing 4 (mapping-ref mapping2 'c))
+  (test-equal 'set-latest-new-duplicate 5 (mapping-ref mapping2 'd))
+  (test-equal 'set!-alias
+             '((a . 1) (b . 2) (c . 4) (d . 4))
+             (mapping->alist (mapping-set! mapping1 'c 4 'd 4)))
+  (test-equal 'replace-missing
+             #f
+             (mapping-ref/default (mapping-replace mapping1 'd 4) 'd #f))
+  (test-equal 'replace-present 6 (mapping-ref (mapping-replace mapping1 'c 6) 'c))
+  (test-equal 'replace!-alias
+             '((a . 1) (b . 2) (c . 6))
+             (mapping->alist (mapping-replace! mapping1 'c 6)))
+  (test-equal 'delete 42 (mapping-ref/default (mapping-delete mapping1 'b) 'b 42))
+  (test-equal 'delete!-alias
+             '((b . 2))
+             (mapping->alist (mapping-delete! mapping1 'a 'c)))
+  (test-equal 'delete-all
+             42
+             (mapping-ref/default (mapping-delete-all mapping1 '(a b)) 'b 42))
+  (test-equal 'delete-all!-alias
+             '((c . 3))
+             (mapping->alist (mapping-delete-all! mapping1 '(a b))))
+  (test-equal 'intern-present
+             (list mapping1 2)
+             (values-list
           (lambda ()
             (mapping-intern
              mapping1
              'b
-             (lambda () (error "should not have been invoked")))))
-         (list mapping1 2))
-  (check 'intern-missing
-         (call-with-values
+             (lambda () (error "should not have been invoked"))))))
+  (test-equal 'intern-missing
+             '(42 42)
+             (call-with-values
           (lambda () (mapping-intern mapping1 'd (lambda () 42)))
           (lambda (mapping value)
-            (list value (mapping-ref mapping 'd))))
-         '(42 42))
-  (check 'intern!-alias
-         (call-with-values
+            (list value (mapping-ref mapping 'd)))))
+  (test-equal 'intern!-alias
+             '(42 42)
+             (call-with-values
           (lambda () (mapping-intern! mapping1 'd (lambda () 42)))
           (lambda (mapping value)
-            (list value (mapping-ref mapping 'd))))
-         '(42 42))
-  (check 'update (mapping-ref mapping3 'b) 4)
-  (check 'update-missing-with-failure
-         (mapping-ref (mapping-update mapping1 'd
+            (list value (mapping-ref mapping 'd)))))
+  (test-equal 'update 4 (mapping-ref mapping3 'b))
+  (test-equal 'update-missing-with-failure
+             16
+             (mapping-ref (mapping-update mapping1 'd
                                       (lambda (value) (* value value))
                                       (lambda () 4))
-                      'd)
-         16)
-  (check 'update-missing-without-failure-raises
-         (raises? (lambda () (mapping-update mapping1 'd (lambda (value) value))))
-         #t)
-  (check 'update!-alias
-         (mapping-ref (mapping-update! mapping1 'b (lambda (value) (+ value 1)))
-                      'b)
-         3)
-  (check 'update/default (mapping-ref mapping4 'd) 16)
-  (check 'update!/default-alias
-         (mapping-ref (mapping-update!/default
+                      'd))
+  (test-equal 'update-missing-without-failure-raises
+             #t
+             (raises? (lambda () (mapping-update mapping1 'd (lambda (value) value)))))
+  (test-equal 'update!-alias
+             3
+             (mapping-ref (mapping-update! mapping1 'b (lambda (value) (+ value 1)))
+                      'b))
+  (test-equal 'update/default 16 (mapping-ref mapping4 'd))
+  (test-equal 'update!/default-alias
+             16
+             (mapping-ref (mapping-update!/default
                        mapping1 'd (lambda (value) (* value value)) 4)
-                      'd)
-         16)
-  (check 'pop-empty-with-failure
-         (mapping-pop mapping0 (lambda () 'empty))
-         'empty)
-  (check-true 'pop-empty-raises
-              (raises? (lambda ()
+                      'd))
+  (test-equal 'pop-empty-with-failure
+             'empty
+             (mapping-pop mapping0 (lambda () 'empty)))
+  (test-assert 'pop-empty-raises
+             (raises? (lambda ()
                          (call-with-values
                           (lambda () (mapping-pop mapping0))
                           list))))
-  (check 'pop-non-empty
-         (call-with-values
+  (test-equal 'pop-non-empty
+             '(2 a 1)
+             (call-with-values
           (lambda () (mapping-pop mapping1))
           (lambda (mapping key value)
-            (list (mapping-size mapping) key value)))
-         '(2 a 1))
-  (check 'pop!-alias
-         (call-with-values
+            (list (mapping-size mapping) key value))))
+  (test-equal 'pop!-alias
+             '(2 a 1)
+             (call-with-values
           (lambda () (mapping-pop! mapping1))
           (lambda (mapping key value)
-            (list (mapping-size mapping) key value)))
-         '(2 a 1))
-  (check 'search-update-and-ignore
-         (let ((m1 (mapping integer-comparator
+            (list (mapping-size mapping) key value))))
+  (test-equal 'search-update-and-ignore
+             '("success updated"
+           "failure ignored"
+           ((0 . "zero") (1 . "one") (2 . "two [seen]") (3 . "three")
+            (4 . "four") (5 . "five")))
+             (let ((m1 (mapping integer-comparator
                             1 "one"
                             3 "three"
                             0 "zero"
@@ -227,13 +205,11 @@
                           (mapping-search m2 42
                                           failure/ignore
                                           success/update)))
-             (list v2 v3 (mapping->alist m3))))
-         '("success updated"
-           "failure ignored"
-           ((0 . "zero") (1 . "one") (2 . "two [seen]") (3 . "three")
-            (4 . "four") (5 . "five"))))
-  (check 'search-insert-and-remove
-         (let* ((inserted
+             (list v2 v3 (mapping->alist m3)))))
+  (test-equal 'search-insert-and-remove
+             '((inserted ((a . 1) (b . 2) (c . 3) (d . 4)))
+           (removed ((a . 1) (c . 3))))
+             (let* ((inserted
                  (call-with-values
                   (lambda ()
                     (mapping-search! mapping1
@@ -255,10 +231,11 @@
                                        (remove 'removed))))
                   (lambda (mapping status)
                     (list status (mapping->alist mapping))))))
-           (list inserted removed))
-         '((inserted ((a . 1) (b . 2) (c . 3) (d . 4)))
-           (removed ((a . 1) (c . 3))))))
+           (list inserted removed)))))
 
+(testing-registry-case
+ 'mapping-unfold '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 236)
 (let ((unfolded
        (mapping-unfold (lambda (seed) (> seed 3))
                        (lambda (seed) (values seed (* seed seed)))
@@ -273,129 +250,142 @@
                                (lambda (seed) (+ seed 1))
                                1
                                integer-comparator)))
-  (check 'mapping-unfold (mapping->alist unfolded) '((1 . 1) (2 . 4) (3 . 9)))
-  (check 'mapping/ordered (mapping->alist ordered)
-         '((1 . one) (2 . two) (3 . three)))
-  (check 'mapping-unfold/ordered
-         (mapping->alist unfolded/ordered)
-         '((1 . 1) (2 . 4) (3 . 9)))
-  (check-true 'constructor-odd-arguments-raises
-              (raises? (lambda () (mapping integer-comparator 1)))))
+  (test-equal 'mapping-unfold '((1 . 1) (2 . 4) (3 . 9)) (mapping->alist unfolded))
+  (test-equal 'mapping/ordered
+             '((1 . one) (2 . two) (3 . three))
+             (mapping->alist ordered))
+  (test-equal 'mapping-unfold/ordered
+             '((1 . 1) (2 . 4) (3 . 9))
+             (mapping->alist unfolded/ordered))
+  (test-assert 'constructor-odd-arguments-raises
+             (raises? (lambda () (mapping integer-comparator 1))))))
 
+(testing-registry-case
+ 'size-empty '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 263)
 (let ((mapping0 (mapping default-comparator))
       (mapping1 (mapping default-comparator 'a 1 'b 2 'c 3)))
-  (check 'size-empty (mapping-size mapping0) 0)
-  (check 'size-non-empty (mapping-size mapping1) 3)
-  (check 'find-present
-         (values-list
+  (test-equal 'size-empty 0 (mapping-size mapping0))
+  (test-equal 'size-non-empty 3 (mapping-size mapping1))
+  (test-equal 'find-present
+             '(b 2)
+             (values-list
           (lambda ()
             (mapping-find (lambda (key value)
                             (and (eq? key 'b) (= value 2)))
                           mapping1
-                          (lambda () (error "should not have been invoked")))))
-         '(b 2))
-  (check 'find-missing
-         (values-list
+                          (lambda () (error "should not have been invoked"))))))
+  (test-equal 'find-missing
+             '(42)
+             (values-list
           (lambda ()
             (mapping-find (lambda (key value) (eq? key 'd))
                           mapping1
-                          (lambda () 42))))
-         '(42))
-  (check 'count (mapping-count (lambda (key value) (>= value 2)) mapping1) 2)
-  (check-true 'any-present
-              (mapping-any? (lambda (key value) (= value 3)) mapping1))
-  (check-false 'any-missing
-               (mapping-any? (lambda (key value) (= value 4)) mapping1))
-  (check-true 'every-true
-              (mapping-every? (lambda (key value) (<= value 3)) mapping1))
-  (check-false 'every-false
-               (mapping-every? (lambda (key value) (<= value 2)) mapping1))
-  (check 'keys (mapping-keys mapping1) '(a b c))
-  (check 'values (mapping-values mapping1) '(1 2 3))
-  (check 'entries
-         (call-with-values
+                          (lambda () 42)))))
+  (test-equal 'count 2 (mapping-count (lambda (key value) (>= value 2)) mapping1))
+  (test-assert 'any-present
+             (mapping-any? (lambda (key value) (= value 3)) mapping1))
+  (test-assert 'any-missing
+             (not (mapping-any? (lambda (key value) (= value 4)) mapping1)))
+  (test-assert 'every-true
+             (mapping-every? (lambda (key value) (<= value 3)) mapping1))
+  (test-assert 'every-false
+             (not (mapping-every? (lambda (key value) (<= value 2)) mapping1)))
+  (test-equal 'keys '(a b c) (mapping-keys mapping1))
+  (test-equal 'values '(1 2 3) (mapping-values mapping1))
+  (test-equal 'entries
+             '((a b c) (1 2 3))
+             (call-with-values
           (lambda () (mapping-entries mapping1))
           (lambda (keys values)
-            (list keys values)))
-         '((a b c) (1 2 3))))
+            (list keys values))))))
 
+(testing-registry-case
+ 'map '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 303)
 (let* ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
        (mapping2 (mapping-map (lambda (key value)
                                 (values (symbol->string key) (* 10 value)))
                               default-comparator
                               mapping1)))
-  (check 'map (mapping-ref mapping2 "b") 20)
-  (check 'for-each
-         (let ((counter 0))
+  (test-equal 'map 20 (mapping-ref mapping2 "b"))
+  (test-equal 'for-each
+             6
+             (let ((counter 0))
            (mapping-for-each (lambda (key value)
                                (set! counter (+ counter value)))
                              mapping1)
-           counter)
-         6)
-  (check 'fold
-         (mapping-fold (lambda (key value total)
+           counter))
+  (test-equal 'fold
+             6
+             (mapping-fold (lambda (key value total)
                          (+ value total))
                        0
-                       mapping1)
-         6)
-  (check 'map->list
-         (sum (mapping-map->list (lambda (key value) (* value value))
-                                 mapping1))
-         14)
-  (check 'filter
-         (mapping->alist (mapping-filter (lambda (key value) (<= value 2))
-                                         mapping1))
-         '((a . 1) (b . 2)))
-  (check 'filter!-alias
-         (mapping->alist (mapping-filter! (lambda (key value) (<= value 2))
-                                          mapping1))
-         '((a . 1) (b . 2)))
-  (check 'remove
-         (mapping->alist (mapping-remove (lambda (key value) (<= value 2))
-                                         mapping1))
-         '((c . 3)))
-  (check 'remove!-alias
-         (mapping->alist (mapping-remove! (lambda (key value) (<= value 2))
-                                          mapping1))
-         '((c . 3)))
-  (check 'partition
-         (call-with-values
+                       mapping1))
+  (test-equal 'map->list
+             14
+             (sum (mapping-map->list (lambda (key value) (* value value))
+                                 mapping1)))
+  (test-equal 'filter
+             '((a . 1) (b . 2))
+             (mapping->alist (mapping-filter (lambda (key value) (<= value 2))
+                                         mapping1)))
+  (test-equal 'filter!-alias
+             '((a . 1) (b . 2))
+             (mapping->alist (mapping-filter! (lambda (key value) (<= value 2))
+                                          mapping1)))
+  (test-equal 'remove
+             '((c . 3))
+             (mapping->alist (mapping-remove (lambda (key value) (<= value 2))
+                                         mapping1)))
+  (test-equal 'remove!-alias
+             '((c . 3))
+             (mapping->alist (mapping-remove! (lambda (key value) (<= value 2))
+                                          mapping1)))
+  (test-equal 'partition
+             '(((b . 2)) ((a . 1) (c . 3)))
+             (call-with-values
           (lambda () (mapping-partition (lambda (key value) (eq? key 'b))
                                         mapping1))
           (lambda (matching removed)
-            (list (mapping->alist matching) (mapping->alist removed))))
-         '(((b . 2)) ((a . 1) (c . 3))))
-  (check 'partition!-alias
-         (call-with-values
+            (list (mapping->alist matching) (mapping->alist removed)))))
+  (test-equal 'partition!-alias
+             '(((b . 2)) ((a . 1) (c . 3)))
+             (call-with-values
           (lambda () (mapping-partition! (lambda (key value) (eq? key 'b))
                                          mapping1))
           (lambda (matching removed)
-            (list (mapping->alist matching) (mapping->alist removed))))
-         '(((b . 2)) ((a . 1) (c . 3)))))
+            (list (mapping->alist matching) (mapping->alist removed)))))))
 
+(testing-registry-case
+ 'copy-size '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 360)
 (let* ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
        (mapping2 (alist->mapping default-comparator
                                  '((a . 1) (b . 2) (c . 3))))
        (mapping3 (alist->mapping! (mapping-copy mapping1)
                                   '((d . 4) (c . 5)))))
-  (check 'copy-size (mapping-size (mapping-copy mapping1)) 3)
-  (check 'copy-comparator
-         (mapping-key-comparator (mapping-copy mapping1))
-         default-comparator)
-  (check 'mapping->alist (assq 'b (mapping->alist mapping1)) '(b . 2))
-  (check 'alist->mapping (mapping-ref mapping2 'b) 2)
-  (check 'alist->mapping!new (mapping-ref mapping3 'd) 4)
-  (check 'alist->mapping!existing (mapping-ref mapping3 'c) 5)
-  (check 'alist->mapping/ordered
-         (mapping->alist (alist->mapping/ordered integer-comparator
-                                                 '((2 . two) (1 . one))))
-         '((1 . one) (2 . two)))
-  (check 'alist->mapping/ordered!
-         (mapping->alist
+  (test-equal 'copy-size 3 (mapping-size (mapping-copy mapping1)))
+  (test-equal 'copy-comparator
+             default-comparator
+             (mapping-key-comparator (mapping-copy mapping1)))
+  (test-equal 'mapping->alist '(b . 2) (assq 'b (mapping->alist mapping1)))
+  (test-equal 'alist->mapping 2 (mapping-ref mapping2 'b))
+  (test-equal 'alist->mapping!new 4 (mapping-ref mapping3 'd))
+  (test-equal 'alist->mapping!existing 5 (mapping-ref mapping3 'c))
+  (test-equal 'alist->mapping/ordered
+             '((1 . one) (2 . two))
+             (mapping->alist (alist->mapping/ordered integer-comparator
+                                                 '((2 . two) (1 . one)))))
+  (test-equal 'alist->mapping/ordered!
+             '((1 . one) (2 . TWO))
+             (mapping->alist
           (alist->mapping/ordered! (mapping integer-comparator 2 'two)
-                                   '((1 . one) (2 . TWO))))
-         '((1 . one) (2 . TWO))))
+                                   '((1 . one) (2 . TWO)))))))
 
+(testing-registry-case
+ 'mapping=?-equal '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 386)
 (let ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
       (mapping2 (mapping default-comparator 'a 1 'b 2 'c 3))
       (mapping3 (mapping default-comparator 'a 1 'c 3))
@@ -407,82 +397,88 @@
                           (comparator-ordering-predicate default-comparator)
                           (lambda (obj) 42))
                          'a 1 'b 2 'c 3)))
-  (check-true 'mapping=?-equal
-              (mapping=? default-comparator mapping1 mapping2))
-  (check-false 'mapping=?-unequal
-               (mapping=? default-comparator mapping1 mapping4))
-  (check-false 'mapping=?-different-key-comparators
-               (mapping=? default-comparator mapping1 mapping6))
-  (check-true 'mapping<?-proper-subset
-              (mapping<? default-comparator mapping3 mapping1))
-  (check-false 'mapping<?-improper-subset
-               (mapping<? default-comparator mapping3 mapping1 mapping2))
-  (check-false 'mapping<?-overlap-not-subset
-               (mapping<? default-comparator
+  (test-assert 'mapping=?-equal
+             (mapping=? default-comparator mapping1 mapping2))
+  (test-assert 'mapping=?-unequal
+             (not (mapping=? default-comparator mapping1 mapping4)))
+  (test-assert 'mapping=?-different-key-comparators
+             (not (mapping=? default-comparator mapping1 mapping6)))
+  (test-assert 'mapping<?-proper-subset
+             (mapping<? default-comparator mapping3 mapping1))
+  (test-assert 'mapping<?-improper-subset
+             (not (mapping<? default-comparator mapping3 mapping1 mapping2)))
+  (test-assert 'mapping<?-overlap-not-subset
+             (not (mapping<? default-comparator
                           (mapping default-comparator 'a 1 'd 4)
-                          mapping1))
-  (check-true 'mapping>?-proper-superset
-              (mapping>? default-comparator mapping2 mapping3))
-  (check-false 'mapping>?-improper-superset
-               (mapping>? default-comparator mapping1 mapping2 mapping3))
-  (check-false 'mapping>?-overlap-not-superset
-               (mapping>? default-comparator
+                          mapping1)))
+  (test-assert 'mapping>?-proper-superset
+             (mapping>? default-comparator mapping2 mapping3))
+  (test-assert 'mapping>?-improper-superset
+             (not (mapping>? default-comparator mapping1 mapping2 mapping3)))
+  (test-assert 'mapping>?-overlap-not-superset
+             (not (mapping>? default-comparator
                           mapping1
-                          (mapping default-comparator 'a 1 'd 4)))
-  (check-true 'mapping<=?-subset
-              (mapping<=? default-comparator mapping3 mapping2 mapping1))
-  (check-false 'mapping<=?-non-matching-values
-               (mapping<=? default-comparator mapping3 mapping5))
-  (check-false 'mapping<=?-not-subset
-               (mapping<=? default-comparator mapping2 mapping4))
-  (check-true 'mapping>=?-superset
-              (mapping>=? default-comparator mapping4 mapping3))
-  (check-false 'mapping>=?-not-superset
-               (mapping>=? default-comparator mapping5 mapping3))
-  (check-false 'mapping>=?-overlap-not-superset
-               (mapping>=? default-comparator
+                          (mapping default-comparator 'a 1 'd 4))))
+  (test-assert 'mapping<=?-subset
+             (mapping<=? default-comparator mapping3 mapping2 mapping1))
+  (test-assert 'mapping<=?-non-matching-values
+             (not (mapping<=? default-comparator mapping3 mapping5)))
+  (test-assert 'mapping<=?-not-subset
+             (not (mapping<=? default-comparator mapping2 mapping4)))
+  (test-assert 'mapping>=?-superset
+             (mapping>=? default-comparator mapping4 mapping3))
+  (test-assert 'mapping>=?-not-superset
+             (not (mapping>=? default-comparator mapping5 mapping3)))
+  (test-assert 'mapping>=?-overlap-not-superset
+             (not (mapping>=? default-comparator
                            mapping1
-                           (mapping default-comparator 'a 1 'd 4))))
+                           (mapping default-comparator 'a 1 'd 4))))))
 
+(testing-registry-case
+ 'union-new '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 437)
 (let ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
       (mapping2 (mapping default-comparator 'a 1 'b 2 'd 4))
       (mapping4 (mapping default-comparator 'a 1 'b 2 'c 4))
       (mapping5 (mapping default-comparator 'a 1 'c 3))
       (mapping6 (mapping default-comparator 'd 4 'e 5 'f 6)))
-  (check 'union-new
-         (mapping-ref (mapping-union mapping1 mapping2) 'd)
-         4)
-  (check 'union-existing
-         (mapping-ref (mapping-union mapping1 mapping4) 'c)
-         3)
-  (check 'union-three
-         (mapping-size (mapping-union mapping1 mapping2 mapping6))
-         6)
-  (check 'union!-alias
-         (mapping-size (mapping-union! mapping1 mapping2 mapping6))
-         6)
-  (check 'intersection-existing
-         (mapping-ref (mapping-intersection mapping1 mapping4) 'c)
-         3)
-  (check 'intersection-removed
-         (mapping-ref/default (mapping-intersection mapping1 mapping5) 'b 42)
-         42)
-  (check 'intersection!-alias
-         (mapping->alist (mapping-intersection! mapping1 mapping5))
-         '((a . 1) (c . 3)))
-  (check 'difference
-         (mapping-size (mapping-difference mapping2 mapping6))
-         2)
-  (check 'difference!-alias
-         (mapping->alist (mapping-difference! mapping2 mapping6))
-         '((a . 1) (b . 2)))
-  (check 'xor
-         (mapping-size (mapping-xor mapping2 mapping6))
-         4)
-  (check 'xor!-alias
-         (mapping->alist (mapping-xor! mapping2 mapping6))
-         '((a . 1) (b . 2) (e . 5) (f . 6))))
+  (test-equal 'union-new
+             4
+             (mapping-ref (mapping-union mapping1 mapping2) 'd))
+  (test-equal 'union-existing
+             3
+             (mapping-ref (mapping-union mapping1 mapping4) 'c))
+  (test-equal 'union-three
+             6
+             (mapping-size (mapping-union mapping1 mapping2 mapping6)))
+  (test-equal 'union!-alias
+             6
+             (mapping-size (mapping-union! mapping1 mapping2 mapping6)))
+  (test-equal 'intersection-existing
+             3
+             (mapping-ref (mapping-intersection mapping1 mapping4) 'c))
+  (test-equal 'intersection-removed
+             42
+             (mapping-ref/default (mapping-intersection mapping1 mapping5) 'b 42))
+  (test-equal 'intersection!-alias
+             '((a . 1) (c . 3))
+             (mapping->alist (mapping-intersection! mapping1 mapping5)))
+  (test-equal 'difference
+             2
+             (mapping-size (mapping-difference mapping2 mapping6)))
+  (test-equal 'difference!-alias
+             '((a . 1) (b . 2))
+             (mapping->alist (mapping-difference! mapping2 mapping6)))
+  (test-equal 'xor
+             4
+             (mapping-size (mapping-xor mapping2 mapping6)))
+  (test-equal 'xor!-alias
+             '((a . 1) (b . 2) (e . 5) (f . 6))
+             (mapping->alist (mapping-xor! mapping2 mapping6)))))
 
+(testing-registry-case
+ 'min-key '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 479)
 (let ((mapping0 (mapping default-comparator))
       (mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
       (mapping2 (mapping default-comparator 'a 1 'b 2 'c 3 'd 4))
@@ -490,94 +486,99 @@
       (mapping4 (mapping default-comparator
                          'a 1 'b 2 'c 3 'd 4 'e 5 'f 6))
       (mapping5 (mapping default-comparator 'f 6 'g 7 'h 8)))
-  (check 'min-key (map mapping-min-key (list mapping1 mapping2 mapping3 mapping4))
-         '(a a a a))
-  (check 'max-key (map mapping-max-key (list mapping1 mapping2 mapping3 mapping4))
-         '(c d e f))
-  (check 'min-value
-         (map mapping-min-value (list mapping1 mapping2 mapping3 mapping4))
-         '(1 1 1 1))
-  (check 'max-value
-         (map mapping-max-value (list mapping1 mapping2 mapping3 mapping4))
-         '(3 4 5 6))
-  (check-true 'min-key-empty-raises
-              (raises? (lambda () (mapping-min-key mapping0))))
-  (check-true 'max-key-empty-raises
-              (raises? (lambda () (mapping-max-key mapping0))))
-  (check-true 'min-value-empty-raises
-              (raises? (lambda () (mapping-min-value mapping0))))
-  (check-true 'max-value-empty-raises
-              (raises? (lambda () (mapping-max-value mapping0))))
-  (check 'key-predecessor
-         (map (lambda (mapping)
+  (test-equal 'min-key
+             '(a a a a)
+             (map mapping-min-key (list mapping1 mapping2 mapping3 mapping4)))
+  (test-equal 'max-key
+             '(c d e f)
+             (map mapping-max-key (list mapping1 mapping2 mapping3 mapping4)))
+  (test-equal 'min-value
+             '(1 1 1 1)
+             (map mapping-min-value (list mapping1 mapping2 mapping3 mapping4)))
+  (test-equal 'max-value
+             '(3 4 5 6)
+             (map mapping-max-value (list mapping1 mapping2 mapping3 mapping4)))
+  (test-assert 'min-key-empty-raises
+             (raises? (lambda () (mapping-min-key mapping0))))
+  (test-assert 'max-key-empty-raises
+             (raises? (lambda () (mapping-max-key mapping0))))
+  (test-assert 'min-value-empty-raises
+             (raises? (lambda () (mapping-min-value mapping0))))
+  (test-assert 'max-value-empty-raises
+             (raises? (lambda () (mapping-max-value mapping0))))
+  (test-equal 'key-predecessor
+             '(c d d d)
+             (map (lambda (mapping)
                 (mapping-key-predecessor mapping 'e (lambda () #f)))
-              (list mapping1 mapping2 mapping3 mapping4))
-         '(c d d d))
-  (check 'key-successor
-         (map (lambda (mapping)
+              (list mapping1 mapping2 mapping3 mapping4)))
+  (test-equal 'key-successor
+             '(#f #f e e)
+             (map (lambda (mapping)
                 (mapping-key-successor mapping 'd (lambda () #f)))
-              (list mapping1 mapping2 mapping3 mapping4))
-         '(#f #f e e))
-  (check 'key-predecessor-edge
-         (mapping-key-predecessor mapping4 'a (lambda () 'none))
-         'none)
-  (check 'key-successor-edge
-         (mapping-key-successor mapping4 'f (lambda () 'none))
-         'none)
-  (check 'range=present (mapping-values (mapping-range= mapping4 'd)) '(4))
-  (check 'range=absent (mapping-values (mapping-range= mapping4 'z)) '())
-  (check 'range< (mapping-values (mapping-range< mapping4 'd)) '(1 2 3))
-  (check 'range<= (mapping-values (mapping-range<= mapping4 'd)) '(1 2 3 4))
-  (check 'range> (mapping-values (mapping-range> mapping4 'd)) '(5 6))
-  (check 'range>= (mapping-values (mapping-range>= mapping4 'd)) '(4 5 6))
-  (check 'range=! (mapping-values (mapping-range=! mapping4 'd)) '(4))
-  (check 'range<! (mapping-values (mapping-range<! mapping4 'd)) '(1 2 3))
-  (check 'range<=! (mapping-values (mapping-range<=! mapping4 'd)) '(1 2 3 4))
-  (check 'range>! (mapping-values (mapping-range>! mapping4 'd)) '(5 6))
-  (check 'range>=! (mapping-values (mapping-range>=! mapping4 'd)) '(4 5 6))
-  (check 'split
-         (call-with-values
+              (list mapping1 mapping2 mapping3 mapping4)))
+  (test-equal 'key-predecessor-edge
+             'none
+             (mapping-key-predecessor mapping4 'a (lambda () 'none)))
+  (test-equal 'key-successor-edge
+             'none
+             (mapping-key-successor mapping4 'f (lambda () 'none)))
+  (test-equal 'range=present '(4) (mapping-values (mapping-range= mapping4 'd)))
+  (test-equal 'range=absent '() (mapping-values (mapping-range= mapping4 'z)))
+  (test-equal 'range< '(1 2 3) (mapping-values (mapping-range< mapping4 'd)))
+  (test-equal 'range<= '(1 2 3 4) (mapping-values (mapping-range<= mapping4 'd)))
+  (test-equal 'range> '(5 6) (mapping-values (mapping-range> mapping4 'd)))
+  (test-equal 'range>= '(4 5 6) (mapping-values (mapping-range>= mapping4 'd)))
+  (test-equal 'range=! '(4) (mapping-values (mapping-range=! mapping4 'd)))
+  (test-equal 'range<! '(1 2 3) (mapping-values (mapping-range<! mapping4 'd)))
+  (test-equal 'range<=! '(1 2 3 4) (mapping-values (mapping-range<=! mapping4 'd)))
+  (test-equal 'range>! '(5 6) (mapping-values (mapping-range>! mapping4 'd)))
+  (test-equal 'range>=! '(4 5 6) (mapping-values (mapping-range>=! mapping4 'd)))
+  (test-equal 'split
+             '((1 2 3) (1 2 3 4) (4) (4 5 6) (5 6))
+             (call-with-values
           (lambda () (mapping-split mapping4 'd))
           (lambda mappings
-            (mapping-values-list mappings)))
-         '((1 2 3) (1 2 3 4) (4) (4 5 6) (5 6)))
-  (check 'split-absent
-         (call-with-values
+            (mapping-values-list mappings))))
+  (test-equal 'split-absent
+             '((1 2 3 4 5 6) (1 2 3 4 5 6) () () ())
+             (call-with-values
           (lambda () (mapping-split mapping4 'z))
           (lambda mappings
-            (mapping-values-list mappings)))
-         '((1 2 3 4 5 6) (1 2 3 4 5 6) () () ()))
-  (check 'catenate
-         (mapping->alist
-          (mapping-catenate default-comparator mapping2 'e 5 mapping5))
-         '((a . 1) (b . 2) (c . 3) (d . 4)
-           (e . 5) (f . 6) (g . 7) (h . 8)))
-  (check 'catenate!-alias
-         (mapping->alist
-          (mapping-catenate! default-comparator mapping2 'e 5 mapping5))
-         '((a . 1) (b . 2) (c . 3) (d . 4)
-           (e . 5) (f . 6) (g . 7) (h . 8)))
-  (check 'map/monotone
-         (mapping->alist
+            (mapping-values-list mappings))))
+  (test-equal 'catenate
+             '((a . 1) (b . 2) (c . 3) (d . 4)
+           (e . 5) (f . 6) (g . 7) (h . 8))
+             (mapping->alist
+          (mapping-catenate default-comparator mapping2 'e 5 mapping5)))
+  (test-equal 'catenate!-alias
+             '((a . 1) (b . 2) (c . 3) (d . 4)
+           (e . 5) (f . 6) (g . 7) (h . 8))
+             (mapping->alist
+          (mapping-catenate! default-comparator mapping2 'e 5 mapping5)))
+  (test-equal 'map/monotone
+             '((1 . 1) (2 . 4) (3 . 9))
+             (mapping->alist
           (mapping-map/monotone (lambda (key value)
                                   (values value (* value value)))
                                 default-comparator
-                                mapping1))
-         '((1 . 1) (2 . 4) (3 . 9)))
-  (check 'map/monotone!-alias
-         (mapping->alist
+                                mapping1)))
+  (test-equal 'map/monotone!-alias
+             '((1 . 1) (2 . 4) (3 . 9))
+             (mapping->alist
           (mapping-map/monotone! (lambda (key value)
                                    (values value (* value value)))
                                  default-comparator
-                                 mapping1))
-         '((1 . 1) (2 . 4) (3 . 9)))
-  (check 'fold/reverse
-         (mapping-fold/reverse (lambda (key value values)
+                                 mapping1)))
+  (test-equal 'fold/reverse
+             '(1 2 3)
+             (mapping-fold/reverse (lambda (key value values)
                                  (cons value values))
                                '()
-                               mapping1)
-         '(1 2 3)))
+                               mapping1))))
 
+(testing-registry-case
+ 'mapping-comparator-predicate '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 579)
 (let* ((mapping1 (mapping default-comparator 'a 1 'b 2 'c 3))
        (mapping2 (mapping default-comparator 'a 1 'b 2 'c 3))
        (mapping3 (mapping default-comparator 'a 1 'b 2))
@@ -591,57 +592,60 @@
                           mapping5 "e"))
        (custom-mapping-comparator
         (make-mapping-comparator default-comparator)))
-  (check-true 'mapping-comparator-predicate
-              (comparator? mapping-comparator))
-  (check-true 'make-mapping-comparator-predicate
-              (comparator? custom-mapping-comparator))
-  (check 'mapping-keyed-mapping
-         (list (mapping-ref mapping0 mapping1)
+  (test-assert 'mapping-comparator-predicate
+             (comparator? mapping-comparator))
+  (test-assert 'make-mapping-comparator-predicate
+             (comparator? custom-mapping-comparator))
+  (test-equal 'mapping-keyed-mapping
+             '("a" "a" "c" "d" "e")
+             (list (mapping-ref mapping0 mapping1)
                (mapping-ref mapping0 mapping2)
                (mapping-ref mapping0 mapping3)
                (mapping-ref mapping0 mapping4)
-               (mapping-ref mapping0 mapping5))
-         '("a" "a" "c" "d" "e"))
-  (check-true 'comparator-equal
-              (=? custom-mapping-comparator mapping1 mapping2))
-  (check-false 'comparator-unequal
-               (=? custom-mapping-comparator mapping1 mapping4))
-  (check-true 'comparator-less-subset
-              (<? custom-mapping-comparator mapping3 mapping4))
-  (check-true 'comparator-less-value-order
-              (<? custom-mapping-comparator mapping1 mapping4))
-  (check-true 'comparator-less-key-order
-              (<? custom-mapping-comparator mapping1 mapping5)))
+               (mapping-ref mapping0 mapping5)))
+  (test-assert 'comparator-equal
+             (=? custom-mapping-comparator mapping1 mapping2))
+  (test-assert 'comparator-unequal
+             (not (=? custom-mapping-comparator mapping1 mapping4)))
+  (test-assert 'comparator-less-subset
+             (<? custom-mapping-comparator mapping3 mapping4))
+  (test-assert 'comparator-less-value-order
+             (<? custom-mapping-comparator mapping1 mapping4))
+  (test-assert 'comparator-less-key-order
+             (<? custom-mapping-comparator mapping1 mapping5))))
 
+(testing-registry-case
+ 'constructor-preserves-earlier-duplicate '(portable stdlib)
+ ("stdlib-mapping-conformance-test.scm" 617)
 (let* ((mapping1 (mapping integer-comparator 3 'three 1 'one 2 'two 2 'TWO))
        (mapping2 (mapping-set mapping1 4 'four 2 'TWO))
        (without-one (mapping-delete mapping2 1)))
-  (check 'constructor-preserves-earlier-duplicate
-         (list (mapping? mapping1)
+  (test-equal 'constructor-preserves-earlier-duplicate
+             '(#t 3 two)
+             (list (mapping? mapping1)
                (mapping-size mapping1)
-               (mapping-ref mapping1 2))
-         '(#t 3 two))
-  (check 'alist-conversion-is-ordered
-         (mapping->alist mapping2)
-         '((1 . one) (2 . TWO) (3 . three) (4 . four)))
-  (check 'keys-and-values-follow-key-order
-         (call-with-values
+               (mapping-ref mapping1 2)))
+  (test-equal 'alist-conversion-is-ordered
+             '((1 . one) (2 . TWO) (3 . three) (4 . four))
+             (mapping->alist mapping2))
+  (test-equal 'keys-and-values-follow-key-order
+             '((1 2 3 4) (one TWO three four))
+             (call-with-values
           (lambda () (mapping-entries mapping2))
           (lambda (keys values)
-            (list keys values)))
-         '((1 2 3 4) (one TWO three four)))
-  (check 'range-and-boundary-operations
-         (list (mapping-min-key mapping2)
+            (list keys values))))
+  (test-equal 'range-and-boundary-operations
+             '(1 4 2 4 ((3 . three) (4 . four)))
+             (list (mapping-min-key mapping2)
                (mapping-max-key mapping2)
                (mapping-key-predecessor mapping2 3 (lambda () 'none))
                (mapping-key-successor mapping2 3 (lambda () 'none))
-               (mapping->alist (mapping-range>= mapping2 3)))
-         '(1 4 2 4 ((3 . three) (4 . four))))
-  (check 'set-operations-and-delete
-         (let ((overlap (mapping integer-comparator 2 'TWO 4 'four 9 'nine)))
+               (mapping->alist (mapping-range>= mapping2 3))))
+  (test-equal 'set-operations-and-delete
+             '(missing ((2 . TWO) (4 . four)) ((1 . one) (3 . three)))
+             (let ((overlap (mapping integer-comparator 2 'TWO 4 'four 9 'nine)))
            (list (mapping-ref/default without-one 1 'missing)
                  (mapping->alist (mapping-intersection mapping2 overlap))
-                 (mapping->alist (mapping-difference mapping2 overlap))))
-         '(missing ((2 . TWO) (4 . four)) ((1 . one) (3 . three)))))
+                 (mapping->alist (mapping-difference mapping2 overlap)))))))
 
-(finish-mapping-tests)
+(testing-runner-main "Stdlib Mapping Conformance portable tests" (command-line))

@@ -15,38 +15,15 @@
               consent-datum->external
               consent-number-value)
         (cli repl-shell)
-        (cli repl-chrome))
-
-;; Count failed checks so the portable runner can report all mismatches.
-(define failures 0)
-
-;; Record one failed check and keep running the rest of the portable test file.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal?.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
+        (cli repl-chrome)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Normalize a numeric literal across direct hosts and self-hosted runners.
 (define (portable-host-number datum)
   (consent-number-value datum))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
-
-;; Assert VALUE is false after normalizing to canonical booleans.
-(define (check-false name value)
-  (check name (if value #t #f) #f))
 
 ;;;; Record helpers
 
@@ -84,32 +61,38 @@
 
 ;;;; Simple expression evaluation through the runtime writer/result path
 
+(testing-registry-case
+ 'simple-eval-display '(portable core)
+ ("consent-repl-test.scm" 64)
 (let ((records (drive "(+ 1 2)\n")))
   (let ((result (car (records-of records 'repl-result))))
-    (check 'simple-eval-display (field result 'display) "3")
-    (check 'simple-eval-submission (field result 'submission) 'sub-1)
+    (test-equal 'simple-eval-display "3" (field result 'display))
+    (test-equal 'simple-eval-submission 'sub-1 (field result 'submission))
     (let ((evaluation (field result 'evaluation-result)))
-      (check-true 'simple-eval-wraps-evaluation-result
-                  (and (pair? evaluation)
+      (test-assert 'simple-eval-wraps-evaluation-result
+             (and (pair? evaluation)
                        (eq? (car evaluation) 'evaluation-result)))
-      (check 'simple-eval-status (field evaluation 'status) 'ok)))
+      (test-equal 'simple-eval-status 'ok (field evaluation 'status))))
   ;; The first prompt is a ready primary prompt; exactly one exit closes cleanly.
   (let ((prompt (car (records-of records 'repl-prompt))))
-    (check 'simple-eval-prompt-state (field prompt 'state) 'ready)
-    (check 'simple-eval-prompt-pending (field prompt 'pending) #f)
-    (check 'simple-eval-prompt-ordinal
-           (consent-number-value (field prompt 'ordinal))
-           (portable-host-number 1)))
-  (check 'simple-eval-one-exit (count-of records 'repl-exit) 1)
+    (test-equal 'simple-eval-prompt-state 'ready (field prompt 'state))
+    (test-equal 'simple-eval-prompt-pending #f (field prompt 'pending))
+    (test-equal 'simple-eval-prompt-ordinal
+             (portable-host-number 1)
+             (consent-number-value (field prompt 'ordinal))))
+  (test-equal 'simple-eval-one-exit 1 (count-of records 'repl-exit))
   (let ((exit (car (records-of records 'repl-exit))))
-    (check 'simple-eval-exit-reason (field exit 'reason) 'eof)
-    (check 'simple-eval-exit-status (field exit 'status) 'closed-ok)
-    (check 'simple-eval-exit-count
-           (consent-number-value (field exit 'count))
-           (portable-host-number 1))))
+    (test-equal 'simple-eval-exit-reason 'eof (field exit 'reason))
+    (test-equal 'simple-eval-exit-status 'closed-ok (field exit 'status))
+    (test-equal 'simple-eval-exit-count
+             (portable-host-number 1)
+             (consent-number-value (field exit 'count))))))
 
 ;;;; Definitions, imports, and macros persist across submissions
 
+(testing-registry-case
+ 'persist-result-count '(portable core)
+ ("consent-repl-test.scm" 93)
 (let ((records
        (drive
         (string-append
@@ -118,15 +101,18 @@
          "(define-syntax inc (syntax-rules () ((_ v) (+ v 1))))\n"
          "(inc base)\n"))))
   (let ((results (records-of records 'repl-result)))
-    (check 'persist-result-count (length results) 4)
+    (test-equal 'persist-result-count 4 (length results))
     ;; The fourth submission uses the macro and the earlier definition.
-    (check 'persist-macro-and-definition
-           (field (list-ref results 3) 'display)
-           "21"))
-  (check 'persist-no-conditions (count-of records 'repl-condition) 0))
+    (test-equal 'persist-macro-and-definition
+             "21"
+             (field (list-ref results 3) 'display)))
+  (test-equal 'persist-no-conditions 0 (count-of records 'repl-condition))))
 
 ;;;; Session-gated interaction-environment resolves inside the session
 
+(testing-registry-case
+ 'interaction-environment-value '(portable core)
+ ("consent-repl-test.scm" 113)
 (let ((records
        (drive
         (string-append
@@ -134,155 +120,195 @@
          "(eval (quote (define made 5)) (interaction-environment))\n"
          "made\n"))))
   (let ((results (records-of records 'repl-result)))
-    (check 'interaction-environment-value
-           (field (list-ref results 2) 'display)
-           "5"))
-  (check 'interaction-environment-no-conditions
-         (count-of records 'repl-condition) 0))
+    (test-equal 'interaction-environment-value
+             "5"
+             (field (list-ref results 2) 'display)))
+  (test-equal 'interaction-environment-no-conditions
+             0
+             (count-of records 'repl-condition))))
 
 ;;;; A recoverable evaluator condition keeps the session open
 
+(testing-registry-case
+ 'eval-condition-phase '(portable core)
+ ("consent-repl-test.scm" 132)
 (let ((records (drive "undefined-name\n(+ 4 5)\n")))
   (let ((condition (car (records-of records 'repl-condition))))
-    (check 'eval-condition-phase (field condition 'phase) 'eval)
-    (check 'eval-condition-recoverable (field condition 'recoverable) #t)
-    (check 'eval-condition-submission (field condition 'submission) 'sub-1))
+    (test-equal 'eval-condition-phase 'eval (field condition 'phase))
+    (test-equal 'eval-condition-recoverable #t (field condition 'recoverable))
+    (test-equal 'eval-condition-submission 'sub-1 (field condition 'submission)))
   ;; The session keeps running: the following form still evaluates.
   (let ((result (car (records-of records 'repl-result))))
-    (check 'eval-condition-session-continues (field result 'display) "9"))
-  (check 'eval-condition-clean-close
-         (field (car (records-of records 'repl-exit)) 'status)
-         'closed-ok))
+    (test-equal 'eval-condition-session-continues "9" (field result 'display)))
+  (test-equal 'eval-condition-clean-close
+             'closed-ok
+             (field (car (records-of records 'repl-exit)) 'status))))
 
+(testing-registry-case
+ 'unbound-identifier-display-names-symbol '(portable core)
+ ("consent-repl-test.scm" 147)
 (let ((records (drive (string-append
                        "(define (uses-missing-helper value)\n"
                        "  (missing-helper value))\n"
                        "(uses-missing-helper '(a b))\n"))))
   (let* ((condition-record (car (records-of records 'repl-condition)))
          (condition (field condition-record 'condition)))
-    (check 'unbound-identifier-display-names-symbol
-           (field condition-record 'display)
-           "consent eval error: unbound identifier: missing-helper")
-    (check 'unbound-identifier-condition-symbol
-           (field condition 'symbol)
-           'missing-helper)))
+    (test-equal 'unbound-identifier-display-names-symbol
+             "consent eval error: unbound identifier: missing-helper"
+             (field condition-record 'display))
+    (test-equal 'unbound-identifier-condition-symbol
+             'missing-helper
+             (field condition 'symbol)))))
 
 ;;;; A recoverable reader condition keeps the session open
 
+(testing-registry-case
+ 'read-condition-phase '(portable core)
+ ("consent-repl-test.scm" 165)
 (let ((records (drive ")\n(+ 6 7)\n")))
   (let ((condition (car (records-of records 'repl-condition))))
-    (check 'read-condition-phase (field condition 'phase) 'read)
-    (check 'read-condition-recoverable (field condition 'recoverable) #t))
+    (test-equal 'read-condition-phase 'read (field condition 'phase))
+    (test-equal 'read-condition-recoverable #t (field condition 'recoverable)))
   (let ((result (car (records-of records 'repl-result))))
-    (check 'read-condition-session-continues (field result 'display) "13")))
+    (test-equal 'read-condition-session-continues "13" (field result 'display)))))
 
 ;;;; An incomplete form is continued, not reported as a hard error
 
+(testing-registry-case
+ 'continuation-second-prompt-state '(portable core)
+ ("consent-repl-test.scm" 177)
 (let ((records (drive "(+ 1\n2)\n")))
   (let ((prompts (records-of records 'repl-prompt)))
-    (check 'continuation-second-prompt-state
-           (field (list-ref prompts 1) 'state) 'continuation)
-    (check 'continuation-second-prompt-pending
-           (field (list-ref prompts 1) 'pending) #t)
-    (check 'continuation-keeps-ordinal
-           (consent-number-value (field (list-ref prompts 1) 'ordinal))
-           (portable-host-number 1)))
+    (test-equal 'continuation-second-prompt-state
+             'continuation
+             (field (list-ref prompts 1) 'state))
+    (test-equal 'continuation-second-prompt-pending
+             #t
+             (field (list-ref prompts 1) 'pending))
+    (test-equal 'continuation-keeps-ordinal
+             (portable-host-number 1)
+             (consent-number-value (field (list-ref prompts 1) 'ordinal))))
   (let ((submission (car (records-of records 'repl-submission))))
-    (check 'continuation-submission-complete (field submission 'complete) #t)
-    (check 'continuation-submission-source (field submission 'source) "(+ 1\n2)"))
-  (check 'continuation-result (field (car (records-of records 'repl-result))
-                                     'display)
-         "3"))
+    (test-equal 'continuation-submission-complete #t (field submission 'complete))
+    (test-equal 'continuation-submission-source "(+ 1\n2)" (field submission 'source)))
+  (test-equal 'continuation-result
+             "3"
+             (field (car (records-of records 'repl-result))
+                                     'display))))
 
 ;;;; Blank ready-prompt input redraws a same-ordinal ready prompt
 
+(testing-registry-case
+ 'blank-ready-prompt-count '(portable core)
+ ("consent-repl-test.scm" 201)
 (let ((records (drive "\n(+ 1 2)\n")))
   (let ((prompts (records-of records 'repl-prompt)))
-    (check 'blank-ready-prompt-count (length prompts) 3)
-    (check 'blank-ready-first-state (field (list-ref prompts 0) 'state) 'ready)
-    (check 'blank-ready-second-state (field (list-ref prompts 1) 'state) 'ready)
-    (check 'blank-ready-third-state (field (list-ref prompts 2) 'state) 'ready)
-    (check 'blank-ready-first-ordinal
-           (consent-number-value (field (list-ref prompts 0) 'ordinal))
-           (portable-host-number 1))
-    (check 'blank-ready-second-ordinal
-           (consent-number-value (field (list-ref prompts 1) 'ordinal))
-           (portable-host-number 1))
-    (check 'blank-ready-third-ordinal
-           (consent-number-value (field (list-ref prompts 2) 'ordinal))
-           (portable-host-number 2)))
-  (check 'blank-ready-submission-count
-         (count-of records 'repl-submission) 1)
-  (check 'blank-ready-result
-         (field (car (records-of records 'repl-result)) 'display)
-         "3"))
+    (test-equal 'blank-ready-prompt-count 3 (length prompts))
+    (test-equal 'blank-ready-first-state 'ready (field (list-ref prompts 0) 'state))
+    (test-equal 'blank-ready-second-state 'ready (field (list-ref prompts 1) 'state))
+    (test-equal 'blank-ready-third-state 'ready (field (list-ref prompts 2) 'state))
+    (test-equal 'blank-ready-first-ordinal
+             (portable-host-number 1)
+             (consent-number-value (field (list-ref prompts 0) 'ordinal)))
+    (test-equal 'blank-ready-second-ordinal
+             (portable-host-number 1)
+             (consent-number-value (field (list-ref prompts 1) 'ordinal)))
+    (test-equal 'blank-ready-third-ordinal
+             (portable-host-number 2)
+             (consent-number-value (field (list-ref prompts 2) 'ordinal))))
+  (test-equal 'blank-ready-submission-count
+             1
+             (count-of records 'repl-submission))
+  (test-equal 'blank-ready-result
+             "3"
+             (field (car (records-of records 'repl-result)) 'display))))
 
+(testing-registry-case
+ 'line-comment-ready-prompt-count '(portable core)
+ ("consent-repl-test.scm" 226)
 (let ((records (drive "  ;; comment\n(+ 1 2)\n")))
   (let ((prompts (records-of records 'repl-prompt)))
-    (check 'line-comment-ready-prompt-count (length prompts) 3)
-    (check 'line-comment-ready-first-state
-           (field (list-ref prompts 0) 'state) 'ready)
-    (check 'line-comment-ready-second-state
-           (field (list-ref prompts 1) 'state) 'ready)
-    (check 'line-comment-ready-third-state
-           (field (list-ref prompts 2) 'state) 'ready)
-    (check 'line-comment-ready-first-ordinal
-           (consent-number-value (field (list-ref prompts 0) 'ordinal))
-           (portable-host-number 1))
-    (check 'line-comment-ready-second-ordinal
-           (consent-number-value (field (list-ref prompts 1) 'ordinal))
-           (portable-host-number 1))
-    (check 'line-comment-ready-third-ordinal
-           (consent-number-value (field (list-ref prompts 2) 'ordinal))
-           (portable-host-number 2)))
-  (check 'line-comment-ready-submission-count
-         (count-of records 'repl-submission) 1)
-  (check 'line-comment-ready-submission-source
-         (field (car (records-of records 'repl-submission)) 'source)
-         "(+ 1 2)")
-  (check 'line-comment-ready-result
-         (field (car (records-of records 'repl-result)) 'display)
-         "3"))
+    (test-equal 'line-comment-ready-prompt-count 3 (length prompts))
+    (test-equal 'line-comment-ready-first-state
+             'ready
+             (field (list-ref prompts 0) 'state))
+    (test-equal 'line-comment-ready-second-state
+             'ready
+             (field (list-ref prompts 1) 'state))
+    (test-equal 'line-comment-ready-third-state
+             'ready
+             (field (list-ref prompts 2) 'state))
+    (test-equal 'line-comment-ready-first-ordinal
+             (portable-host-number 1)
+             (consent-number-value (field (list-ref prompts 0) 'ordinal)))
+    (test-equal 'line-comment-ready-second-ordinal
+             (portable-host-number 1)
+             (consent-number-value (field (list-ref prompts 1) 'ordinal)))
+    (test-equal 'line-comment-ready-third-ordinal
+             (portable-host-number 2)
+             (consent-number-value (field (list-ref prompts 2) 'ordinal))))
+  (test-equal 'line-comment-ready-submission-count
+             1
+             (count-of records 'repl-submission))
+  (test-equal 'line-comment-ready-submission-source
+             "(+ 1 2)"
+             (field (car (records-of records 'repl-submission)) 'source))
+  (test-equal 'line-comment-ready-result
+             "3"
+             (field (car (records-of records 'repl-result)) 'display))))
 
 ;;;; The continuation prompt carries the reader's pending-nesting indicator
 
 ;; The depth narrows as constructs close (two open lists, then one), the kind
 ;; names the innermost pending construct, and a ready prompt omits both fields.
+(testing-registry-case
+ 'nesting-ready-prompt-omits-field '(portable core)
+ ("consent-repl-test.scm" 264)
 (let ((records (drive "(+ (* 2\n3)\n4)\n")))
   (let ((prompts (records-of records 'repl-prompt)))
-    (check 'nesting-ready-prompt-omits-field
-           (field (list-ref prompts 0) 'nesting) #f)
-    (check 'nesting-depth-two
-           (consent-number-value (field (list-ref prompts 1) 'nesting))
-           (portable-host-number 2))
-    (check 'nesting-kind-list
-           (field (list-ref prompts 1) 'pending-kind) 'list)
-    (check 'nesting-narrows-to-one
-           (consent-number-value (field (list-ref prompts 2) 'nesting))
-           (portable-host-number 1))))
+    (test-equal 'nesting-ready-prompt-omits-field
+             #f
+             (field (list-ref prompts 0) 'nesting))
+    (test-equal 'nesting-depth-two
+             (portable-host-number 2)
+             (consent-number-value (field (list-ref prompts 1) 'nesting)))
+    (test-equal 'nesting-kind-list
+             'list
+             (field (list-ref prompts 1) 'pending-kind))
+    (test-equal 'nesting-narrows-to-one
+             (portable-host-number 1)
+             (consent-number-value (field (list-ref prompts 2) 'nesting))))))
 
 ;; An unterminated string is the innermost pending construct even inside a
 ;; list, so a chrome can distinguish "inside a string" from list nesting.
+(testing-registry-case
+ 'nesting-string-depth '(portable core)
+ ("consent-repl-test.scm" 284)
 (let ((records (drive "(string-length \"a\nb\")\n")))
   (let ((prompts (records-of records 'repl-prompt)))
-    (check 'nesting-string-depth
-           (consent-number-value (field (list-ref prompts 1) 'nesting))
-           (portable-host-number 2))
-    (check 'nesting-string-kind
-           (field (list-ref prompts 1) 'pending-kind) 'string)))
+    (test-equal 'nesting-string-depth
+             (portable-host-number 2)
+             (consent-number-value (field (list-ref prompts 1) 'nesting)))
+    (test-equal 'nesting-string-kind
+             'string
+             (field (list-ref prompts 1) 'pending-kind)))))
 
 ;; A pending datum prefix (a lone quote) keeps the session continuing with an
 ;; empty construct stack: depth zero and the `datum' pending kind.
+(testing-registry-case
+ 'nesting-datum-prefix-depth '(portable core)
+ ("consent-repl-test.scm" 298)
 (let ((records (drive "'\n1\n")))
   (let ((prompts (records-of records 'repl-prompt)))
-    (check 'nesting-datum-prefix-depth
-           (consent-number-value (field (list-ref prompts 1) 'nesting))
-           (portable-host-number 0))
-    (check 'nesting-datum-prefix-kind
-           (field (list-ref prompts 1) 'pending-kind) 'datum))
-  (check 'nesting-datum-prefix-result
-         (field (car (records-of records 'repl-result)) 'display)
-         "1"))
+    (test-equal 'nesting-datum-prefix-depth
+             (portable-host-number 0)
+             (consent-number-value (field (list-ref prompts 1) 'nesting)))
+    (test-equal 'nesting-datum-prefix-kind
+             'datum
+             (field (list-ref prompts 1) 'pending-kind)))
+  (test-equal 'nesting-datum-prefix-result
+             "1"
+             (field (car (records-of records 'repl-result)) 'display))))
 
 ;;;; The continuation prompt is emitted before the read it requests
 
@@ -294,6 +320,9 @@
 ;; order of records is identical either way.  Instrument the read/emit
 ;; interleaving directly -- log each chunk read alongside the continuation prompt
 ;; -- and assert exactly one chunk is read before the prompt is emitted.
+(testing-registry-case
+ 'continuation-prompt-precedes-read '(portable core)
+ ("consent-repl-test.scm" 323)
 (let* ((chunks (list "(+ 1\n" "2)\n"))
        (events '())
        (note (lambda (event) (set! events (cons event events))))
@@ -315,54 +344,67 @@
    "repl-main")
   ;; The first chunk is read, then the gutter is emitted, then the continued
   ;; line is read: the prompt fronts the second line rather than trailing it.
-  (check 'continuation-prompt-precedes-read
-         (reverse events)
-         (list (list 'read "(+ 1\n")
+  (test-equal 'continuation-prompt-precedes-read
+             (list (list 'read "(+ 1\n")
                'continuation-prompt
-               (list 'read "2)\n"))))
+               (list 'read "2)\n"))
+             (reverse events))))
 
 ;;;; EOF mid-form closes with the documented error status
 
+(testing-registry-case
+ 'eof-incomplete-submission-complete '(portable core)
+ ("consent-repl-test.scm" 355)
 (let ((records (drive "(+ 1\n")))
   (let ((submission (car (records-of records 'repl-submission))))
-    (check 'eof-incomplete-submission-complete (field submission 'complete) #f)
-    (check 'eof-incomplete-submission-eof (field submission 'eof) #t))
+    (test-equal 'eof-incomplete-submission-complete #f (field submission 'complete))
+    (test-equal 'eof-incomplete-submission-eof #t (field submission 'eof)))
   (let ((condition (car (records-of records 'repl-condition))))
-    (check 'eof-incomplete-condition-phase (field condition 'phase) 'read)
-    (check 'eof-incomplete-condition-unrecoverable
-           (field condition 'recoverable) #f))
+    (test-equal 'eof-incomplete-condition-phase 'read (field condition 'phase))
+    (test-equal 'eof-incomplete-condition-unrecoverable
+             #f
+             (field condition 'recoverable)))
   (let ((exit (car (records-of records 'repl-exit))))
-    (check 'eof-incomplete-exit-reason (field exit 'reason) 'eof)
-    (check 'eof-incomplete-exit-status (field exit 'status) 'closed-error)))
+    (test-equal 'eof-incomplete-exit-reason 'eof (field exit 'reason))
+    (test-equal 'eof-incomplete-exit-status 'closed-error (field exit 'status)))))
 
 ;;;; Explicit exit closes with the explicit reason and clean status
 
+(testing-registry-case
+ 'explicit-exit-one-exit '(portable core)
+ ("consent-repl-test.scm" 373)
 (let ((records (drive "(+ 1 2)\n(exit)\n")))
-  (check 'explicit-exit-one-exit (count-of records 'repl-exit) 1)
+  (test-equal 'explicit-exit-one-exit 1 (count-of records 'repl-exit))
   (let ((exit (car (records-of records 'repl-exit))))
-    (check 'explicit-exit-reason (field exit 'reason) 'explicit)
-    (check 'explicit-exit-status (field exit 'status) 'closed-ok)
-    (check 'explicit-exit-count
-           (consent-number-value (field exit 'count))
-           (portable-host-number 2))))
+    (test-equal 'explicit-exit-reason 'explicit (field exit 'reason))
+    (test-equal 'explicit-exit-status 'closed-ok (field exit 'status))
+    (test-equal 'explicit-exit-count
+             (portable-host-number 2)
+             (consent-number-value (field exit 'count))))))
 
 ;;;; Default policy denies an ungranted host effect, fail closed
 
+(testing-registry-case
+ 'policy-denied-phase '(portable core)
+ ("consent-repl-test.scm" 387)
 (let ((records
        (drive
         "(begin (import (scheme file)) (open-output-file \"/tmp/consent-repl-denied\"))\n")))
   (let ((condition (car (records-of records 'repl-condition))))
-    (check 'policy-denied-phase (field condition 'phase) 'eval)
-    (check 'policy-denied-recoverable (field condition 'recoverable) #t)
+    (test-equal 'policy-denied-phase 'eval (field condition 'phase))
+    (test-equal 'policy-denied-recoverable #t (field condition 'recoverable))
     (let ((datum (field condition 'condition)))
-      (check 'policy-denied-type (field datum 'type) 'policy-denial)))
+      (test-equal 'policy-denied-type 'policy-denial (field datum 'type))))
   ;; A denied effect does not crash the loop; the session still closes cleanly.
-  (check 'policy-denied-clean-close
-         (field (car (records-of records 'repl-exit)) 'status)
-         'closed-ok))
+  (test-equal 'policy-denied-clean-close
+             'closed-ok
+             (field (car (records-of records 'repl-exit)) 'status))))
 
 ;;;; A session-policy denial of interaction-environment fails closed
 
+(testing-registry-case
+ 'denied-interaction-environment-phase '(portable core)
+ ("consent-repl-test.scm" 405)
 (let ((records
        (drive
         (string-append
@@ -370,13 +412,17 @@
          "(interaction-environment)\n")
         '((policy-actions . ((standard-host-effect . deny)))))))
   (let ((condition (car (records-of records 'repl-condition))))
-    (check 'denied-interaction-environment-phase (field condition 'phase) 'eval)
+    (test-equal 'denied-interaction-environment-phase 'eval (field condition 'phase))
     (let ((datum (field condition 'condition)))
-      (check 'denied-interaction-environment-type
-             (field datum 'type) 'policy-denial))))
+      (test-equal 'denied-interaction-environment-type
+             'policy-denial
+             (field datum 'type))))))
 
 ;;;; Program output is separated from the interaction record stream
 
+(testing-registry-case
+ 'stream-separation-exit-code '(portable core)
+ ("consent-repl-test.scm" 423)
 (let ((records '())
       (output '()))
   (let* ((lines (list "(import (scheme base) (scheme write))\n"
@@ -394,17 +440,19 @@
            (lambda (record) (set! records (cons record records)))
            (lambda (text) (set! output (cons text output)))
            "project-main")))
-    (check 'stream-separation-exit-code exit-code 0)
+    (test-equal 'stream-separation-exit-code 0 exit-code)
     ;; Program output reached the program-output stream...
-    (check 'stream-separation-program-output
-           (apply string-append (reverse output)) "emitted")
+    (test-equal 'stream-separation-program-output
+             "emitted"
+             (apply string-append (reverse output)))
     ;; ...and the record stream carries only contract records (one per evaluated
     ;; submission: import, display, and the sum), never the program output text.
     (let ((records (reverse records)))
-      (check 'stream-separation-result-count
-             (count-of records 'repl-result) 3)
-      (check-true 'stream-separation-has-exit
-                  (> (count-of records 'repl-exit) 0)))))
+      (test-equal 'stream-separation-result-count
+             3
+             (count-of records 'repl-result))
+      (test-assert 'stream-separation-has-exit
+             (> (count-of records 'repl-exit) 0))))))
 
 ;;;; Pluggable chrome layer (presentation over the canonical record stream)
 
@@ -432,6 +480,9 @@
 
 ;;;; Model transport diagnostics stay specific and structured
 
+(testing-registry-case
+ 'model-transport-condition-phase '(portable core)
+ ("consent-repl-test.scm" 483)
 (let* ((input
         (string-append
          "(import (scheme base) (agent models))\n"
@@ -461,51 +512,56 @@
         (cli-repl-chrome-paint
          ((cli-repl-chrome-lookup 'comment) condition-record)
          #f)))
-  (check 'model-transport-condition-phase
-         (field condition-record 'phase) 'eval)
-  (check 'model-transport-condition-type
-         (field condition 'type) 'evaluation-error)
-  (check-true 'model-transport-display-specific
-              (string-contains? (field condition-record 'display)
+  (test-equal 'model-transport-condition-phase
+             'eval
+             (field condition-record 'phase))
+  (test-equal 'model-transport-condition-type
+             'evaluation-error
+             (field condition 'type))
+  (test-assert 'model-transport-display-specific
+             (string-contains? (field condition-record 'display)
                                 "local model transport failed"))
-  (check-true 'model-transport-display-provider
-              (string-contains? (field condition-record 'display)
+  (test-assert 'model-transport-display-provider
+             (string-contains? (field condition-record 'display)
                                 "local-fail"))
-  (check-true 'model-transport-comment-specific
-              (string-contains? comment-rendered
+  (test-assert 'model-transport-comment-specific
+             (string-contains? comment-rendered
                                 "local model transport failed"))
-  (check-true 'model-transport-comment-request-path
-              (string-contains? comment-rendered
+  (test-assert 'model-transport-comment-request-path
+             (string-contains? comment-rendered
                                 "/v1/chat/completions"))
-  (check 'model-transport-detail-head
-         (and (pair? detail) (car detail))
-         'model-provider-error)
-  (check 'model-transport-detail-provider
-         (field detail 'provider) 'local-fail)
-  (check 'model-transport-detail-model
-         (field detail 'model) 'qwen-coder)
-  (check 'model-transport-detail-transport
-         (field detail 'transport) 'openai-compatible-http)
-  (check 'model-transport-process-head
-         (and (pair? process) (car process))
-         'process-failure)
-  (check-true 'model-transport-process-detail-bounded
-              (let ((detail-text (field process 'detail)))
+  (test-equal 'model-transport-detail-head
+             'model-provider-error
+             (and (pair? detail) (car detail)))
+  (test-equal 'model-transport-detail-provider
+             'local-fail
+             (field detail 'provider))
+  (test-equal 'model-transport-detail-model
+             'qwen-coder
+             (field detail 'model))
+  (test-equal 'model-transport-detail-transport
+             'openai-compatible-http
+             (field detail 'transport))
+  (test-equal 'model-transport-process-head
+             'process-failure
+             (and (pair? process) (car process)))
+  (test-assert 'model-transport-process-detail-bounded
+             (let ((detail-text (field process 'detail)))
                 (and (string? detail-text)
                      (> (string-length detail-text) 0)
                      (<= (string-length detail-text) 240))))
-  (check-false 'model-transport-process-detail-not-generic
-               (string-contains? (field process 'detail)
-                                 "no process detail"))
-  (check-true 'model-transport-detail-budget-recorded
-              (string-contains? (consent-datum->external detail)
+  (test-assert 'model-transport-process-detail-not-generic
+             (not (string-contains? (field process 'detail)
+                                 "no process detail")))
+  (test-assert 'model-transport-detail-budget-recorded
+             (string-contains? (consent-datum->external detail)
                                 "(max-transport-detail-bytes"))
-  (check-true 'model-transport-detail-request-path
-              (string-contains? (consent-datum->external detail)
+  (test-assert 'model-transport-detail-request-path
+             (string-contains? (consent-datum->external detail)
                                 "/v1/chat/completions"))
-  (check-false 'model-transport-detail-no-prompt
-               (string-contains? (consent-datum->external detail)
-                                 "transport diagnostic prompt")))
+  (test-assert 'model-transport-detail-no-prompt
+             (not (string-contains? (consent-datum->external detail)
+                                 "transport diagnostic prompt")))))
 
 ;; Render RECORDS as the raw datum stream the `datum' chrome must reproduce.
 (define (datum-stream records)
@@ -523,23 +579,41 @@
 
 ;;;; The registry: built-in chromes are ordinary registered procedures
 
-(check 'chrome-default-name (cli-repl-chrome-default-name) 'comment)
-(check-true 'chrome-comment-procedure
-            (procedure? (cli-repl-chrome-lookup 'comment)))
-(check-true 'chrome-lookup-by-string
-            (procedure? (cli-repl-chrome-lookup "classic")))
-(check-false 'chrome-unknown-lookup (cli-repl-chrome-lookup 'no-such-chrome))
+(testing-registry-case
+ 'chrome-default-name '(portable core)
+ ("consent-repl-test.scm" 582)
+(test-equal 'chrome-default-name 'comment (cli-repl-chrome-default-name)))
+(testing-registry-case
+ 'chrome-comment-procedure '(portable core)
+ ("consent-repl-test.scm" 586)
+(test-assert 'chrome-comment-procedure
+             (procedure? (cli-repl-chrome-lookup 'comment))))
+(testing-registry-case
+ 'chrome-lookup-by-string '(portable core)
+ ("consent-repl-test.scm" 591)
+(test-assert 'chrome-lookup-by-string
+             (procedure? (cli-repl-chrome-lookup "classic"))))
+(testing-registry-case
+ 'chrome-unknown-lookup '(portable core)
+ ("consent-repl-test.scm" 596)
+(test-assert 'chrome-unknown-lookup (not (cli-repl-chrome-lookup 'no-such-chrome))))
+(testing-registry-case
+ 'chrome-names-complete '(portable core)
+ ("consent-repl-test.scm" 600)
 (let ((names (cli-repl-chrome-names)))
-  (check-true 'chrome-names-complete
-              (and (memq 'comment names) (memq 'datum names)
+  (test-assert 'chrome-names-complete
+             (and (memq 'comment names) (memq 'datum names)
                    (memq 'classic names) (memq 'quiet names)
-                   (memq 'silent names) #t)))
+                   (memq 'silent names) #t))))
 
 ;;;; The `datum' chrome reproduces the raw record stream and stays reachable
 
 ;; Paint each record with the datum chrome over the SAME record objects the raw
 ;; stream writes, so the comparison is stable on hosts whose `write' embeds a
 ;; per-object address for opaque values.
+(testing-registry-case
+ 'datum-recovers-raw-stream '(portable core)
+ ("consent-repl-test.scm" 614)
 (let* ((records (drive "(+ 1 2)\n(exit)\n"))
        (datum (cli-repl-chrome-lookup 'datum))
        (render (lambda (color?)
@@ -551,146 +625,200 @@
                               accumulated
                               (cli-repl-chrome-paint (datum (car records))
                                                      color?))))))))
-  (check 'datum-recovers-raw-stream (render #f) (datum-stream records))
+  (test-equal 'datum-recovers-raw-stream (datum-stream records) (render #f))
   ;; The datum chrome is never colored, even with color forced on.
-  (check-false 'datum-never-colored (string-contains? (render #t) escape))
+  (test-assert 'datum-never-colored (not (string-contains? (render #t) escape)))
   ;; The canonical view is reachable regardless of any default chrome change.
-  (check-true 'datum-always-reachable
-              (procedure? (cli-repl-chrome-lookup 'datum))))
+  (test-assert 'datum-always-reachable
+             (procedure? (cli-repl-chrome-lookup 'datum)))))
 
 ;;;; The `comment' chrome is valid, replayable Consent Scheme
 
+(testing-registry-case
+ 'comment-uses-block-comments '(portable core)
+ ("consent-repl-test.scm" 637)
 (let* ((input "(+ 1 2)\n(define base 7)\n(* base 3)\n")
        (rendered (cli-repl-rendered-from-string input "repl-main" 'comment #f)))
   ;; Prompts, results, and diagnostics are block comments.
-  (check-true 'comment-uses-block-comments (string-contains? rendered "#| "))
+  (test-assert 'comment-uses-block-comments (string-contains? rendered "#| "))
   ;; Re-driving the rendered control stream reproduces the same results: the
   ;; comments are ignored and the echoed forms re-evaluate identically.
-  (check 'comment-replays-unedited
-         (result-displays (drive rendered))
-         (result-displays (drive input))))
+  (test-equal 'comment-replays-unedited
+             (result-displays (drive input))
+             (result-displays (drive rendered)))))
 
 ;; On an interactive TTY the terminal already echoes each typed form, so the
 ;; comment chrome suppresses its own submission echo: the captured transcript
 ;; then holds exactly one copy of each form and replays once, not twice.  The
 ;; string-driven hook models that input-echoed posture with its optional flag.
+(testing-registry-case
+ 'comment-echoed-suppresses-submission-echo '(portable core)
+ ("consent-repl-test.scm" 654)
 (let* ((input "(+ 1 2)\n(define base 7)\n(set! base 9)\n(* base 3)\n")
        (echoed (cli-repl-rendered-from-string input "repl-main" 'comment #f #t))
        (piped (cli-repl-rendered-from-string input "repl-main" 'comment #f)))
   ;; The piped render carries one bare echo per form (the chrome's single copy);
   ;; the interactive render carries none, since the terminal supplies that copy.
-  (check 'comment-echoed-suppresses-submission-echo
-         (result-displays (drive echoed))
-         '())
-  (check-true 'comment-piped-still-echoes
-              (> (length (result-displays (drive piped))) 0))
+  (test-equal 'comment-echoed-suppresses-submission-echo
+             '()
+             (result-displays (drive echoed)))
+  (test-assert 'comment-piped-still-echoes
+             (> (length (result-displays (drive piped))) 0))
   ;; Prompts, results, and diagnostics are still rendered as line comments;
   ;; only the redundant submission echo is dropped.
-  (check-true 'comment-echoed-keeps-result-comments
-              (string-contains? echoed ";;   => "))
+  (test-assert 'comment-echoed-keeps-result-comments
+             (string-contains? echoed ";;   => "))
   ;; The single replayable copy lives in the terminal echo (the input itself);
   ;; replaying input + the echo-suppressed chrome evaluates each form exactly
   ;; once, matching the original session.
-  (check 'comment-echoed-replays-once
-         (result-displays (drive input))
-         (result-displays (drive (string-append input echoed)))))
+  (test-equal 'comment-echoed-replays-once
+             (result-displays (drive (string-append input echoed)))
+             (result-displays (drive input)))))
 
 ;; The default-session prompt shows the ordinal alone; the result is its own
 ;; `;;'-aligned line comment followed by a `;;' separator, and the EOF exit is a
 ;; `;;   __ ' line aligned from the close count.
-(check 'comment-default-session-prompt
-       (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f)
-       "#| 1 |# (+ 1 2)\n;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n")
+(testing-registry-case
+ 'comment-default-session-prompt '(portable core)
+ ("consent-repl-test.scm" 681)
+(test-equal 'comment-default-session-prompt
+             "#| 1 |# (+ 1 2)\n;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f)))
 ;; Under the input-echoed posture the same session drops the bare submission
 ;; echo: the terminal's own echo lands in that exact slot after the prompt.
-(check 'comment-echoed-default-session-prompt
-       (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f #t)
-       "#| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n")
+(testing-registry-case
+ 'comment-echoed-default-session-prompt '(portable core)
+ ("consent-repl-test.scm" 689)
+(test-equal 'comment-echoed-default-session-prompt
+             "#| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f #t)))
 ;; A blank line at an input-echoed ready prompt does not start a submission and
 ;; does not mean continuation.  The control-channel helper shows adjacent
 ;; same-ordinal prompts; in a live TTY the echoed blank line sits between them.
-(check 'comment-echoed-blank-ready-reprompts
-       (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'comment #f #t)
-       "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n")
-(check 'comment-echoed-line-comment-ready-reprompts
-       (cli-repl-rendered-from-string
-        "  ;; comment\n(+ 1 2)\n" "repl-main" 'comment #f #t)
-       "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n")
+(testing-registry-case
+ 'comment-echoed-blank-ready-reprompts '(portable core)
+ ("consent-repl-test.scm" 698)
+(test-equal 'comment-echoed-blank-ready-reprompts
+             "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"
+             (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'comment #f #t)))
+(testing-registry-case
+ 'comment-echoed-line-comment-ready-reprompts '(portable core)
+ ("consent-repl-test.scm" 704)
+(test-equal 'comment-echoed-line-comment-ready-reprompts
+             "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"
+             (cli-repl-rendered-from-string
+        "  ;; comment\n(+ 1 2)\n" "repl-main" 'comment #f #t)))
 ;; A named session grows a `<session>:<ordinal>' body, and the markers align to
 ;; that wider gutter so the value still lands under the echoed form.
-(check 'comment-named-session-prompt
-       (cli-repl-rendered-from-string "(+ 1 2)\n" "project-main" 'comment #f)
-       (string-append
+(testing-registry-case
+ 'comment-named-session-prompt '(portable core)
+ ("consent-repl-test.scm" 713)
+(test-equal 'comment-named-session-prompt
+             (string-append
         "#| project-main:1 |# (+ 1 2)\n;;                => 3\n;;\n"
-        "#| project-main:2 |# ;;                __ exit closed-ok\n"))
+        "#| project-main:2 |# ;;                __ exit closed-ok\n")
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "project-main" 'comment #f)))
 ;; Marker alignment tracks the ordinal width: a 1-digit ordinal gives `;;   => '
 ;; (3 pad) and a 2-digit ordinal `;;    => ' (4 pad), with the continuation dots
 ;; widening to match.
-(check 'comment-two-digit-ordinal-alignment
-       (cli-repl-rendered-from-string
-        "1\n2\n3\n4\n5\n6\n7\n8\n9\n(+ 1 1)\n" "repl-main" 'comment #f)
-       (string-append
+(testing-registry-case
+ 'comment-two-digit-ordinal-alignment '(portable core)
+ ("consent-repl-test.scm" 724)
+(test-equal 'comment-two-digit-ordinal-alignment
+             (string-append
         "#| 1 |# 1\n;;   => 1\n;;\n#| 2 |# 2\n;;   => 2\n;;\n"
         "#| 3 |# 3\n;;   => 3\n;;\n#| 4 |# 4\n;;   => 4\n;;\n"
         "#| 5 |# 5\n;;   => 5\n;;\n#| 6 |# 6\n;;   => 6\n;;\n"
         "#| 7 |# 7\n;;   => 7\n;;\n#| 8 |# 8\n;;   => 8\n;;\n"
         "#| 9 |# 9\n;;   => 9\n;;\n#| 10 |# (+ 1 1)\n;;    => 2\n;;\n"
-        "#| 11 |# ;;    __ exit closed-ok\n"))
+        "#| 11 |# ;;    __ exit closed-ok\n")
+             (cli-repl-rendered-from-string
+        "1\n2\n3\n4\n5\n6\n7\n8\n9\n(+ 1 1)\n" "repl-main" 'comment #f)))
 
 ;;;; The `classic', `quiet', and `silent' chromes
 
 ;; `classic' echoes the whole form after `> ', marks the value with `= ', and
 ;; closes with a `_ ' exit line; a blank line separates turns.
-(check 'classic-prompts-and-values
-       (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'classic #f)
-       "> (+ 1 2)\n= 3\n\n> _ exit closed-ok\n")
+(testing-registry-case
+ 'classic-prompts-and-values '(portable core)
+ ("consent-repl-test.scm" 742)
+(test-equal 'classic-prompts-and-values
+             "> (+ 1 2)\n= 3\n\n> _ exit closed-ok\n"
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'classic #f)))
 ;; The same blank-ready-prompt redraw applies to `classic'.  The helper omits
 ;; terminal echo, so it shows the repeated ready prompts next to each other.
-(check 'classic-echoed-blank-ready-reprompts
-       (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'classic #f #t)
-       "> > = 3\n\n> _ exit closed-ok\n")
-(check 'classic-echoed-line-comment-ready-reprompts
-       (cli-repl-rendered-from-string
-        "  ;; comment\n(+ 1 2)\n" "repl-main" 'classic #f #t)
-       "> > = 3\n\n> _ exit closed-ok\n")
+(testing-registry-case
+ 'classic-echoed-blank-ready-reprompts '(portable core)
+ ("consent-repl-test.scm" 750)
+(test-equal 'classic-echoed-blank-ready-reprompts
+             "> > = 3\n\n> _ exit closed-ok\n"
+             (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'classic #f #t)))
+(testing-registry-case
+ 'classic-echoed-line-comment-ready-reprompts '(portable core)
+ ("consent-repl-test.scm" 756)
+(test-equal 'classic-echoed-line-comment-ready-reprompts
+             "> > = 3\n\n> _ exit closed-ok\n"
+             (cli-repl-rendered-from-string
+        "  ;; comment\n(+ 1 2)\n" "repl-main" 'classic #f #t)))
 ;; A condition is marked `! ' (not `- '), so it pops in a colorless capture.  The
 ;; diagnostic text is now cross-host identical for an error whose wording agrees
 ;; (the `consent eval error: ' prefix matches the Emacs twin after its message
 ;; convergence), so assert the whole line exactly.
-(check 'classic-condition-marker
-       (cli-repl-rendered-from-string "(/ 1 0)\n" "repl-main" 'classic #f)
-       (string-append "> (/ 1 0)\n! consent eval error: / division by zero"
-                      "\n\n> _ exit closed-ok\n"))
+(testing-registry-case
+ 'classic-condition-marker '(portable core)
+ ("consent-repl-test.scm" 767)
+(test-equal 'classic-condition-marker
+             (string-append "> (/ 1 0)\n! consent eval error: / division by zero"
+                      "\n\n> _ exit closed-ok\n")
+             (cli-repl-rendered-from-string "(/ 1 0)\n" "repl-main" 'classic #f)))
 ;; `> ' and `. ' are both two columns, so a continued form's code aligns with
 ;; the first submission's code; the open-construct count is dropped.
-(check 'classic-continuation-aligns
-       (cli-repl-rendered-from-string "(+ 1\n2)\n" "repl-main" 'classic #f)
-       "> . (+ 1\n2)\n= 3\n\n> _ exit closed-ok\n")
+(testing-registry-case
+ 'classic-continuation-aligns '(portable core)
+ ("consent-repl-test.scm" 776)
+(test-equal 'classic-continuation-aligns
+             "> . (+ 1\n2)\n= 3\n\n> _ exit closed-ok\n"
+             (cli-repl-rendered-from-string "(+ 1\n2)\n" "repl-main" 'classic #f)))
 ;; A deeper continuation just adds another `. ' gutter -- no nesting count.
-(check 'classic-continuation-no-count
-       (cli-repl-rendered-from-string "(+ (* 2\n3)\n4)\n" "repl-main"
-                                      'classic #f)
-       "> . . (+ (* 2\n3)\n4)\n= 10\n\n> _ exit closed-ok\n")
+(testing-registry-case
+ 'classic-continuation-no-count '(portable core)
+ ("consent-repl-test.scm" 783)
+(test-equal 'classic-continuation-no-count
+             "> . . (+ (* 2\n3)\n4)\n= 10\n\n> _ exit closed-ok\n"
+             (cli-repl-rendered-from-string "(+ (* 2\n3)\n4)\n" "repl-main"
+                                      'classic #f)))
 ;; The comment chrome's continuation gutter is width-matched alignment dots
 ;; (one dot per ordinal digit), with no nesting count.
-(check-true 'comment-continuation-dots
-            (string-contains?
+(testing-registry-case
+ 'comment-continuation-dots '(portable core)
+ ("consent-repl-test.scm" 792)
+(test-assert 'comment-continuation-dots
+             (string-contains?
              (cli-repl-rendered-from-string "(+ (* 2\n3)\n4)\n" "repl-main"
                                             'comment #f)
-             "#| . |# "))
-(check 'quiet-results-only
-       (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'quiet #f)
-       "3\n")
-(check 'silent-suppresses-all
-       (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'silent #f)
-       "")
+             "#| . |# ")))
+(testing-registry-case
+ 'quiet-results-only '(portable core)
+ ("consent-repl-test.scm" 800)
+(test-equal 'quiet-results-only
+             "3\n"
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'quiet #f)))
+(testing-registry-case
+ 'silent-suppresses-all '(portable core)
+ ("consent-repl-test.scm" 806)
+(test-equal 'silent-suppresses-all
+             ""
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'silent #f)))
 
 ;;;; A recoverable condition still renders under a human chrome
 
+(testing-registry-case
+ 'comment-condition-marker '(portable core)
+ ("consent-repl-test.scm" 815)
 (let ((rendered
        (cli-repl-rendered-from-string "undefined-name\n" "repl-main"
                                       'comment #f)))
-  (check-true 'comment-condition-marker (string-contains? rendered ";;   !! ")))
+  (test-assert 'comment-condition-marker (string-contains? rendered ";;   !! "))))
 
 ;;;; Program output: `comment' owns it (control channel), others keep it raw
 
@@ -701,101 +829,155 @@
 ;; `comment' renders each printed line as a `;;   :: ' comment aligned to the
 ;; result marker, on the control channel, so the whole transcript -- program
 ;; output included -- is line comments and bare source.
-(check 'comment-output-on-control-channel
-       (cli-repl-rendered-from-string
-        (string-append output-prelude "(display \"hi\\n\")\n(+ 1 1)\n")
-        "repl-main" 'comment #f)
-       (string-append
+(testing-registry-case
+ 'comment-output-on-control-channel '(portable core)
+ ("consent-repl-test.scm" 832)
+(test-equal 'comment-output-on-control-channel
+             (string-append
         "#| 1 |# (import (scheme base) (scheme write))\n;;   => (unspecified)\n;;\n"
         "#| 2 |# (display \"hi\\n\")\n;;   :: hi\n;;   => (unspecified)\n;;\n"
-        "#| 3 |# (+ 1 1)\n;;   => 2\n;;\n#| 4 |# ;;   __ exit closed-ok\n"))
+        "#| 3 |# (+ 1 1)\n;;   => 2\n;;\n#| 4 |# ;;   __ exit closed-ok\n")
+             (cli-repl-rendered-from-string
+        (string-append output-prelude "(display \"hi\\n\")\n(+ 1 1)\n")
+        "repl-main" 'comment #f)))
 ;; Because `comment' owns program output, stdout (the program-output stream)
 ;; carries nothing under it.
-(check 'comment-output-leaves-stdout-clean
-       (cdr (cli-repl-capture-from-string
+(testing-registry-case
+ 'comment-output-leaves-stdout-clean '(portable core)
+ ("consent-repl-test.scm" 845)
+(test-equal 'comment-output-leaves-stdout-clean
+             ""
+             (cdr (cli-repl-capture-from-string
              (string-append output-prelude "(display \"hi\\n\")\n(+ 1 1)\n")
-             "repl-main" 'comment #f))
-       "")
+             "repl-main" 'comment #f))))
 ;; Multi-line output is one `;;   :: ' comment per line.
-(check-true 'comment-output-multi-line
-            (string-contains?
+(testing-registry-case
+ 'comment-output-multi-line '(portable core)
+ ("consent-repl-test.scm" 854)
+(test-assert 'comment-output-multi-line
+             (string-contains?
              (cli-repl-rendered-from-string
               (string-append output-prelude
                              "(begin (display \"a\")(newline)(display \"b\")"
                              "(newline) 0)\n")
               "repl-main" 'comment #f)
-             ";;   :: a\n;;   :: b\n;;   => 0"))
+             ";;   :: a\n;;   :: b\n;;   => 0")))
 ;; Output that ends without a newline still gets a terminating one so the comment
 ;; closes before the result line.
-(check-true 'comment-output-no-trailing-newline
-            (string-contains?
+(testing-registry-case
+ 'comment-output-no-trailing-newline '(portable core)
+ ("consent-repl-test.scm" 867)
+(test-assert 'comment-output-no-trailing-newline
+             (string-contains?
              (cli-repl-rendered-from-string
               (string-append output-prelude "(begin (display \"x\") 5)\n")
               "repl-main" 'comment #f)
-             ";;   :: x\n;;   => 5"))
+             ";;   :: x\n;;   => 5")))
 ;; `classic' (and every non-`comment' chrome) leaves program output raw on its
 ;; own stream; the control channel carries records only, not the printed text.
 ;; The printed value (12321) is computed so it is absent from the echoed source.
+(testing-registry-case
+ 'classic-output-raw-on-stdout '(portable core)
+ ("consent-repl-test.scm" 879)
 (let ((classic (cli-repl-capture-from-string
                 (string-append output-prelude
                                "(begin (display (* 111 111))(newline) 1)\n")
                 "repl-main" 'classic #f)))
-  (check 'classic-output-raw-on-stdout (cdr classic) "12321\n")
-  (check-false 'classic-output-not-on-control-channel
-               (string-contains? (car classic) "12321")))
+  (test-equal 'classic-output-raw-on-stdout "12321\n" (cdr classic))
+  (test-assert 'classic-output-not-on-control-channel
+             (not (string-contains? (car classic) "12321")))))
 ;; The `comment' control-channel transcript round-trips through a fresh session:
 ;; the commented output is inert on replay and the re-evaluated forms regenerate
 ;; it, so the per-submission results match the original input's.
+(testing-registry-case
+ 'comment-output-transcript-replays '(portable core)
+ ("consent-repl-test.scm" 892)
 (let* ((input (string-append output-prelude
                              "(display \"hello\\n\")\n"
                              "(begin (display \"x\")(newline) 42)\n"
                              "(+ 2 3)\n"))
        (transcript (cli-repl-rendered-from-string input "repl-main" 'comment #f)))
-  (check 'comment-output-transcript-replays
-         (result-displays (drive transcript))
-         (result-displays (drive input))))
+  (test-equal 'comment-output-transcript-replays
+             (result-displays (drive input))
+             (result-displays (drive transcript)))))
 
 ;;;; Color is TTY-gated, overridable, and strips when piped or NO_COLOR is set
 
-(check 'color-never-off (cli-repl-chrome-color? 'never #f #t) #f)
-(check 'color-always-on (cli-repl-chrome-color? 'always #t #f) #t)
-(check 'color-auto-tty-on (cli-repl-chrome-color? 'auto #f #t) #t)
-(check 'color-auto-piped-off (cli-repl-chrome-color? 'auto #f #f) #f)
-(check 'color-auto-no-color-off (cli-repl-chrome-color? 'auto #t #t) #f)
+(testing-registry-case
+ 'color-never-off '(portable core)
+ ("consent-repl-test.scm" 906)
+(test-equal 'color-never-off #f (cli-repl-chrome-color? 'never #f #t)))
+(testing-registry-case
+ 'color-always-on '(portable core)
+ ("consent-repl-test.scm" 910)
+(test-equal 'color-always-on #t (cli-repl-chrome-color? 'always #t #f)))
+(testing-registry-case
+ 'color-auto-tty-on '(portable core)
+ ("consent-repl-test.scm" 914)
+(test-equal 'color-auto-tty-on #t (cli-repl-chrome-color? 'auto #f #t)))
+(testing-registry-case
+ 'color-auto-piped-off '(portable core)
+ ("consent-repl-test.scm" 918)
+(test-equal 'color-auto-piped-off #f (cli-repl-chrome-color? 'auto #f #f)))
+(testing-registry-case
+ 'color-auto-no-color-off '(portable core)
+ ("consent-repl-test.scm" 922)
+(test-equal 'color-auto-no-color-off #f (cli-repl-chrome-color? 'auto #t #t)))
 
 ;; The painter adds ANSI SGR only when color is enabled.
-(check-true 'paint-color-emits-escape
-            (string-contains?
-             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #t)
-             escape))
-(check-false 'paint-plain-has-no-escape
+(testing-registry-case
+ 'paint-color-emits-escape '(portable core)
+ ("consent-repl-test.scm" 928)
+(test-assert 'paint-color-emits-escape
              (string-contains?
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #t)
+             escape)))
+(testing-registry-case
+ 'paint-plain-has-no-escape '(portable core)
+ ("consent-repl-test.scm" 935)
+(test-assert 'paint-plain-has-no-escape
+             (not (string-contains?
               (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main"
                                              'comment #f)
-              escape))
+              escape))))
 
 ;;;; Option parsing: --session, --chrome, --color (inline and spaced)
 
+(testing-registry-case
+ 'parse-session '(portable core)
+ ("consent-repl-test.scm" 946)
 (let ((options (cli-repl-parse-options
                 (list "--chrome" "classic" "--color=always" "--session" "demo"))))
-  (check 'parse-session (cdr (assq 'session options)) "demo")
-  (check 'parse-chrome (cdr (assq 'chrome options)) 'classic)
-  (check 'parse-color-inline (cdr (assq 'color options)) 'always))
+  (test-equal 'parse-session "demo" (cdr (assq 'session options)))
+  (test-equal 'parse-chrome 'classic (cdr (assq 'chrome options)))
+  (test-equal 'parse-color-inline 'always (cdr (assq 'color options)))))
+(testing-registry-case
+ 'parse-color-spaced '(portable core)
+ ("consent-repl-test.scm" 954)
 (let ((options (cli-repl-parse-options (list "--color" "never"))))
-  (check 'parse-color-spaced (cdr (assq 'color options)) 'never)
-  (check 'parse-chrome-default (cdr (assq 'chrome options)) 'comment)
-  (check 'parse-session-default (cdr (assq 'session options)) "repl-main"))
+  (test-equal 'parse-color-spaced 'never (cdr (assq 'color options)))
+  (test-equal 'parse-chrome-default 'comment (cdr (assq 'chrome options)))
+  (test-equal 'parse-session-default "repl-main" (cdr (assq 'session options)))))
 ;; A bare `--repl' token (passed through from the compiled host dispatch) and any
 ;; unrecognized argument are ignored, leaving the defaults intact.
+(testing-registry-case
+ 'parse-ignores-repl-token '(portable core)
+ ("consent-repl-test.scm" 963)
 (let ((options (cli-repl-parse-options (list "--repl"))))
-  (check 'parse-ignores-repl-token (cdr (assq 'chrome options)) 'comment))
+  (test-equal 'parse-ignores-repl-token 'comment (cdr (assq 'chrome options)))))
 ;; `--replay FILE' carries the transcript path; the default is #f (stdin session).
-(check 'parse-replay
-       (cdr (assq 'replay (cli-repl-parse-options (list "--replay" "t.scm"))))
-       "t.scm")
-(check 'parse-replay-default
-       (cdr (assq 'replay (cli-repl-parse-options '())))
-       #f)
+(testing-registry-case
+ 'parse-replay '(portable core)
+ ("consent-repl-test.scm" 969)
+(test-equal 'parse-replay
+             "t.scm"
+             (cdr (assq 'replay (cli-repl-parse-options (list "--replay" "t.scm"))))))
+(testing-registry-case
+ 'parse-replay-default '(portable core)
+ ("consent-repl-test.scm" 975)
+(test-equal 'parse-replay-default
+             #f
+             (cdr (assq 'replay (cli-repl-parse-options '())))))
 
 ;;;; Transcript capture and replay (docs/repl-interaction-contract.md)
 
@@ -809,46 +991,58 @@
 ;; A captured transcript, serialized to the datum stream, reloads with the
 ;; standard reader (plain data) and carries exactly the complete submissions a
 ;; replay re-feeds, so the saved-file round-trip replays to the same stream.
+(testing-registry-case
+ 'reload-record-count '(portable core)
+ ("consent-repl-test.scm" 994)
 (let* ((captured (drive "(define base 7)\n(* base 3)\n"))
        (text (apply string-append
                     (map (lambda (r)
                            (string-append (consent-datum->external r) "\n"))
                          captured)))
        (reloaded (cli-repl-records-from-datum-stream text)))
-  (check 'reload-record-count (length reloaded) (length captured))
-  (check 'reload-extracts-submissions
-         (cli-repl-submissions-from-records reloaded)
-         '("(define base 7)" "(* base 3)"))
+  (test-equal 'reload-record-count (length captured) (length reloaded))
+  (test-equal 'reload-extracts-submissions
+             '("(define base 7)" "(* base 3)")
+             (cli-repl-submissions-from-records reloaded))
   ;; Replaying the reloaded transcript reproduces the captured record stream.
-  (check 'reload-replays-equal
-         (serialize (cli-repl-replay-records reloaded "project-main"))
-         (serialize captured)))
+  (test-equal 'reload-replays-equal
+             (serialize captured)
+             (serialize (cli-repl-replay-records reloaded "project-main")))))
 
 ;; An EOF-truncated partial form is not a complete submission, so it contributes
 ;; no replayable source.
-(check 'submissions-skip-incomplete
-       (cli-repl-submissions-from-records (drive "(+ 1\n"))
-       '())
+(testing-registry-case
+ 'submissions-skip-incomplete '(portable core)
+ ("consent-repl-test.scm" 1014)
+(test-equal 'submissions-skip-incomplete
+             '()
+             (cli-repl-submissions-from-records (drive "(+ 1\n"))))
 
 ;; A pure transcript replays to an EQUAL record stream, and the report says so.
+(testing-registry-case
+ 'replay-input '(portable core)
+ ("consent-repl-test.scm" 1022)
 (let* ((captured (drive "(import (scheme base))\n(define base 20)\n(* base 3)\n"))
        (replayed (cli-repl-replay-records captured "project-main"))
        (report (cli-repl-replay-report captured replayed)))
-  (check 'replay-input
-         (cli-repl-replay-input captured)
-         "(import (scheme base))\n(define base 20)\n(* base 3)\n")
-  (check 'replay-pure-roundtrip (serialize replayed) (serialize captured))
-  (check 'replay-report-reproduced (field report 'status) 'reproduced)
-  (check 'replay-report-no-divergences (field report 'divergences) '())
-  (check 'replay-report-submission-count
-         (consent-number-value (field report 'submissions))
-         (portable-host-number 3)))
+  (test-equal 'replay-input
+             "(import (scheme base))\n(define base 20)\n(* base 3)\n"
+             (cli-repl-replay-input captured))
+  (test-equal 'replay-pure-roundtrip (serialize captured) (serialize replayed))
+  (test-equal 'replay-report-reproduced 'reproduced (field report 'status))
+  (test-equal 'replay-report-no-divergences '() (field report 'divergences))
+  (test-equal 'replay-report-submission-count
+             (portable-host-number 3)
+             (consent-number-value (field report 'submissions)))))
 
 ;; A live host effect cannot be reproduced under a weaker replay posture.  A
 ;; submission that resolved the session interaction environment as a result when
 ;; captured fails closed as a condition when replayed under a denying posture;
 ;; the report records that divergence rather than letting it pass silently
 ;; (docs "Capture and Replay": effectful forms fail closed, not silently).
+(testing-registry-case
+ 'replay-effect-captured-results '(portable core)
+ ("consent-repl-test.scm" 1043)
 (let* ((captured (drive (string-append
                          "(import (scheme base) (scheme repl))\n"
                          "(interaction-environment)\n")))
@@ -857,21 +1051,24 @@
                   '((policy-actions (standard-host-effect . deny)))))
        (report (cli-repl-replay-report captured replayed)))
   ;; Capture: both forms succeeded (two results, no conditions).
-  (check 'replay-effect-captured-results (count-of captured 'repl-result) 2)
-  (check 'replay-effect-captured-no-conditions
-         (count-of captured 'repl-condition) 0)
+  (test-equal 'replay-effect-captured-results 2 (count-of captured 'repl-result))
+  (test-equal 'replay-effect-captured-no-conditions
+             0
+             (count-of captured 'repl-condition))
   ;; Replay denied the effect: the interaction-environment form is a condition.
-  (check 'replay-effect-replayed-results (count-of replayed 'repl-result) 1)
-  (check 'replay-effect-replayed-conditions (count-of replayed 'repl-condition) 1)
+  (test-equal 'replay-effect-replayed-results 1 (count-of replayed 'repl-result))
+  (test-equal 'replay-effect-replayed-conditions 1 (count-of replayed 'repl-condition))
   ;; The report flags the result -> condition divergence with its source.
-  (check 'replay-report-status-diverged (field report 'status) 'diverged)
+  (test-equal 'replay-report-status-diverged 'diverged (field report 'status))
   (let ((divergence (car (field report 'divergences))))
-    (check 'replay-divergence-source
-           (field divergence 'source) "(interaction-environment)")
-    (check 'replay-divergence-captured-kind
-           (field (assq 'captured (cdr divergence)) 'kind) 'result)
-    (check 'replay-divergence-replayed-kind
-           (field (assq 'replayed (cdr divergence)) 'kind) 'condition)))
+    (test-equal 'replay-divergence-source
+             "(interaction-environment)"
+             (field divergence 'source))
+    (test-equal 'replay-divergence-captured-kind
+             'result
+             (field (assq 'captured (cdr divergence)) 'kind))
+    (test-equal 'replay-divergence-replayed-kind
+             'condition
+             (field (assq 'replayed (cdr divergence)) 'kind)))))
 
-(if (> failures 0)
-    (error "portable terminal REPL tests failed" failures))
+(testing-runner-main "Consent Repl portable tests" (command-line))

@@ -4,31 +4,11 @@
 
 (import (scheme base)
         (scheme write)
-        (stdlib random-bits))
-
-;; Number of failed SRFI 27 checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed SRFI 27 check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-(define (check-true name value)
-  "Record failure unless VALUE is true."
-  (if (not value)
-      (record-failure name #t value)))
+        (stdlib random-bits)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 (define (draw-integers source ranges)
   "Return random integers drawn from SOURCE for each range in RANGES."
@@ -37,18 +17,6 @@
       (if (null? rest)
           (reverse values)
           (loop (cdr rest) (cons (rand (car rest)) values))))))
-
-(define (finish-random-bits-tests)
-  "Report the SRFI 27 random-bits result."
-  (if (= failures 0)
-      (begin
-        (display "SRFI 27 random-bits tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " SRFI 27 random-bits test failure(s)")
-        (newline)
-        (error "SRFI 27 random-bits tests failed" failures))))
 
 ;; First fresh random source under test.
 (define source-a (make-random-source))
@@ -59,59 +27,89 @@
 ;; Integer ranges used for deterministic stream checks.
 (define ranges '(2 3 5 17 97 1000000))
 
-(check 'random-source-predicate-true
-       (random-source? source-a)
-       #t)
+(testing-registry-case
+ 'random-source-predicate-true '(portable stdlib)
+ ("stdlib-random-bits-test.scm" 30)
+(test-equal 'random-source-predicate-true
+             #t
+             (random-source? source-a)))
 
-(check 'random-source-predicate-false
-       (random-source? '(not a source))
-       #f)
+(testing-registry-case
+ 'random-source-predicate-false '(portable stdlib)
+ ("stdlib-random-bits-test.scm" 37)
+(test-equal 'random-source-predicate-false
+             #f
+             (random-source? '(not a source))))
 
-(check 'fresh-sources-share-deterministic-stream
-       (draw-integers source-a ranges)
-       (draw-integers source-b ranges))
+(testing-registry-case
+ 'fresh-sources-share-deterministic-stream '(portable stdlib)
+ ("stdlib-random-bits-test.scm" 44)
+(test-equal 'fresh-sources-share-deterministic-stream
+             (draw-integers source-b ranges)
+             (draw-integers source-a ranges)))
 
+(testing-registry-case
+ 'state-ref-set-replays-stream '(portable stdlib)
+ ("stdlib-random-bits-test.scm" 51)
 (let* ((source (make-random-source))
        (state (random-source-state-ref source))
        (first (draw-integers source ranges)))
   (random-source-state-set! source state)
-  (check 'state-ref-set-replays-stream
-         (draw-integers source ranges)
-         first)
-  (check 'state-external-representation
-         (car state)
-         'lecuyer-mrg32k3a))
+  (test-equal 'state-ref-set-replays-stream
+             first
+             (draw-integers source ranges))
+  (test-equal 'state-external-representation
+             'lecuyer-mrg32k3a
+             (car state))))
 
+(testing-registry-case
+ 'pseudo-randomize-is-deterministic '(portable stdlib)
+ ("stdlib-random-bits-test.scm" 65)
 (let ((left (make-random-source))
       (right (make-random-source)))
   (random-source-pseudo-randomize! left 7 11)
   (random-source-pseudo-randomize! right 7 11)
-  (check 'pseudo-randomize-is-deterministic
-         (draw-integers left ranges)
-         (draw-integers right ranges)))
+  (test-equal 'pseudo-randomize-is-deterministic
+             (draw-integers right ranges)
+             (draw-integers left ranges))))
 
+(testing-registry-case
+ 'random-real-is-in-range '(portable stdlib)
+ ("stdlib-random-bits-test.scm" 76)
 (let* ((source (make-random-source))
        (rand-real (random-source-make-reals source))
        (value (rand-real)))
-  (check-true 'random-real-is-in-range
-              (and (real? value) (< 0 value) (< value 1))))
+  (test-assert 'random-real-is-in-range
+             (and (real? value) (< 0 value) (< value 1)))))
 
+(testing-registry-case
+ 'random-real-with-unit-is-in-range '(portable stdlib)
+ ("stdlib-random-bits-test.scm" 85)
 (let* ((source (make-random-source))
        (rand-real (random-source-make-reals source 1/1024))
        (value (rand-real)))
-  (check-true 'random-real-with-unit-is-in-range
-              (and (real? value) (< 0 value) (< value 1))))
+  (test-assert 'random-real-with-unit-is-in-range
+             (and (real? value) (< 0 value) (< value 1)))))
 
-(check 'default-random-source-is-source
-       (random-source? default-random-source)
-       #t)
+(testing-registry-case
+ 'default-random-source-is-source '(portable stdlib)
+ ("stdlib-random-bits-test.scm" 94)
+(test-equal 'default-random-source-is-source
+             #t
+             (random-source? default-random-source)))
 
-(check-true 'random-integer-default-range
-            (let ((value (random-integer 37)))
-              (and (integer? value) (<= 0 value) (< value 37))))
+(testing-registry-case
+ 'random-integer-default-range '(portable stdlib)
+ ("stdlib-random-bits-test.scm" 101)
+(test-assert 'random-integer-default-range
+             (let ((value (random-integer 37)))
+              (and (integer? value) (<= 0 value) (< value 37)))))
 
-(check-true 'random-real-default-range
-            (let ((value (random-real)))
-              (and (real? value) (< 0 value) (< value 1))))
+(testing-registry-case
+ 'random-real-default-range '(portable stdlib)
+ ("stdlib-random-bits-test.scm" 108)
+(test-assert 'random-real-default-range
+             (let ((value (random-real)))
+              (and (real? value) (< 0 value) (< value 1)))))
 
-(finish-random-bits-tests)
+(testing-runner-main "Stdlib Random Bits portable tests" (command-line))

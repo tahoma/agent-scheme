@@ -4,30 +4,11 @@
 
 (import (scheme base)
         (scheme write)
-        (stdlib assume))
-
-;; Number of failed SRFI 145 checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed assume check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-(define (check-true name value)
-  "Record NAME unless VALUE is true."
-  (check name (if value #t #f) #t))
+        (stdlib assume)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 (define (raises? thunk)
   "Return #t when calling THUNK raises any condition."
@@ -37,33 +18,33 @@
       (lambda (condition) (return #t))
       (lambda () (thunk) #f)))))
 
-(define (finish-assume-tests)
-  "Report the SRFI 145 test result."
-  (if (= failures 0)
-      (begin
-        (display "SRFI 145 assume tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " SRFI 145 assume test failure(s)")
-        (newline)
-        (error "SRFI 145 assume tests failed" failures))))
+(testing-registry-case
+ 'truthy-object '(portable stdlib)
+ ("stdlib-assume-test.scm" 21)
+(test-equal 'truthy-object '(a b) (assume '(a b) "list is true")))
+(testing-registry-case
+ 'false-is-the-only-false-value '(portable stdlib)
+ ("stdlib-assume-test.scm" 25)
+(test-equal 'false-is-the-only-false-value 0 (assume 0 "zero is true")))
 
-(check 'truthy-object (assume '(a b) "list is true") '(a b))
-(check 'false-is-the-only-false-value (assume 0 "zero is true") 0)
-
-(check 'message-expressions-are-lazy-on-success
-       (let ((events '()))
+(testing-registry-case
+ 'message-expressions-are-lazy-on-success '(portable stdlib)
+ ("stdlib-assume-test.scm" 30)
+(test-equal 'message-expressions-are-lazy-on-success
+             '(ok (assumption))
+             (let ((events '()))
          (define (record tag value)
            (set! events (cons tag events))
            value)
          (let ((value
                 (assume (record 'assumption 'ok)
                         (record 'message 'unreached))))
-           (list value events)))
-       '(ok (assumption)))
+           (list value events)))))
 
-(check-true 'false-assumption-raises
-            (raises? (lambda () (assume #f "invalid path" 'payload))))
+(testing-registry-case
+ 'false-assumption-raises '(portable stdlib)
+ ("stdlib-assume-test.scm" 44)
+(test-assert 'false-assumption-raises
+             (raises? (lambda () (assume #f "invalid path" 'payload)))))
 
-(finish-assume-tests)
+(testing-runner-main "Stdlib Assume portable tests" (command-line))

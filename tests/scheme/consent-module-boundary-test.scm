@@ -20,26 +20,11 @@
         (prefix (agent redaction) redaction:)
         (prefix (agent session) session:)
         (prefix (agent task) task:)
-        (prefix (consent interpreter) interpreter:))
-
-;; Record one failed portable module-boundary check.
-(define failures 0)
-
-;; Record one failed portable module-boundary check and keep running.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal? and record a named failure.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
+        (prefix (consent interpreter) interpreter:)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Report whether THUNK raises a Scheme condition.
 (define (raises? thunk)
@@ -48,21 +33,33 @@
     (thunk)
     #f))
 
-(check 'runtime-boundary
-       (procedure? runtime:consent-make-empty-environment)
-       #t)
+(testing-registry-case
+ 'runtime-boundary '(portable core)
+ ("consent-module-boundary-test.scm" 36)
+(test-equal 'runtime-boundary
+             #t
+             (procedure? runtime:consent-make-empty-environment)))
 
-(check 'base-boundary
-       (if (memq '+ (base:consent-base-primitive-names)) #t #f)
-       #t)
+(testing-registry-case
+ 'base-boundary '(portable core)
+ ("consent-module-boundary-test.scm" 43)
+(test-equal 'base-boundary
+             #t
+             (if (memq '+ (base:consent-base-primitive-names)) #t #f)))
 
-(check 'library-boundary
-       (pair? (library:consent-standard-source-library-specs))
-       #t)
+(testing-registry-case
+ 'library-boundary '(portable core)
+ ("consent-module-boundary-test.scm" 50)
+(test-equal 'library-boundary
+             #t
+             (pair? (library:consent-standard-source-library-specs))))
 
-(check 'macro-boundary
-       (procedure? macro:consent-expand-source)
-       #t)
+(testing-registry-case
+ 'macro-boundary '(portable core)
+ ("consent-module-boundary-test.scm" 57)
+(test-equal 'macro-boundary
+             #t
+             (procedure? macro:consent-expand-source)))
 
 ;; Store for exercising the portable approval boundary.
 (define approval-store (approval:consent-make-approval-store))
@@ -76,25 +73,40 @@
       (effect (buffer-replace! h-1 1 2 "x"))
       (reason "Replace text?"))))
 
-(check 'approval-boundary-request-status
-       (approval:approval-store-status approval-store portable-approval-id)
-       'pending)
+(testing-registry-case
+ 'approval-boundary-request-status '(portable core)
+ ("consent-module-boundary-test.scm" 76)
+(test-equal 'approval-boundary-request-status
+             'pending
+             (approval:approval-store-status approval-store portable-approval-id)))
 
-(check 'approval-boundary-pending
-       (length (approval:approval-store-pending approval-store))
-       1)
+(testing-registry-case
+ 'approval-boundary-pending '(portable core)
+ ("consent-module-boundary-test.scm" 83)
+(test-equal 'approval-boundary-pending
+             1
+             (length (approval:approval-store-pending approval-store))))
 
-(approval:approval-store-resolve! approval-store portable-approval-id 'denied)
+(testing-registry-case
+ 'consent-module-boundary-case-7 '(portable core)
+ ("consent-module-boundary-test.scm" 90)
+(approval:approval-store-resolve! approval-store portable-approval-id 'denied))
 
-(check 'approval-boundary-resolved-status
-       (approval:approval-store-status approval-store portable-approval-id)
-       'denied)
+(testing-registry-case
+ 'approval-boundary-resolved-status '(portable core)
+ ("consent-module-boundary-test.scm" 95)
+(test-equal 'approval-boundary-resolved-status
+             'denied
+             (approval:approval-store-status approval-store portable-approval-id)))
 
-(check 'approval-boundary-cancel-resolved-denied
-       (raises?
+(testing-registry-case
+ 'approval-boundary-cancel-resolved-denied '(portable core)
+ ("consent-module-boundary-test.scm" 102)
+(test-equal 'approval-boundary-cancel-resolved-denied
+             #t
+             (raises?
         (lambda ()
-          (approval:approval-store-cancel! approval-store portable-approval-id)))
-       #t)
+          (approval:approval-store-cancel! approval-store portable-approval-id)))))
 
 ;; Store for exercising the portable job boundary.
 (define job-store (job:consent-make-job-store))
@@ -110,30 +122,54 @@
 ;; Id of the portable job record under test.
 (define portable-job-id (job:job-datum-id portable-job))
 
-(check 'job-boundary-start-status
-       (job:job-store-status job-store portable-job-id)
-       'queued)
+(testing-registry-case
+ 'job-boundary-start-status '(portable core)
+ ("consent-module-boundary-test.scm" 125)
+(test-equal 'job-boundary-start-status
+             'queued
+             (job:job-store-status job-store portable-job-id)))
 
-(job:job-store-mark-running! job-store portable-job-id)
-(job:job-store-record-yield! job-store portable-job-id '(yield (phase ready)))
+(testing-registry-case
+ 'consent-module-boundary-case-11 '(portable core)
+ ("consent-module-boundary-test.scm" 132)
+(job:job-store-mark-running! job-store portable-job-id))
+(testing-registry-case
+ 'consent-module-boundary-case-12 '(portable core)
+ ("consent-module-boundary-test.scm" 136)
+(job:job-store-record-yield! job-store portable-job-id '(yield (phase ready))))
 
-(check 'job-boundary-stream-yield
-       (job:job-store-yields job-store portable-job-id '())
-       '((yield (phase ready))))
+(testing-registry-case
+ 'job-boundary-stream-yield '(portable core)
+ ("consent-module-boundary-test.scm" 141)
+(test-equal 'job-boundary-stream-yield
+             '((yield (phase ready)))
+             (job:job-store-yields job-store portable-job-id '())))
 
-(job:job-store-cancel! job-store portable-job-id)
+(testing-registry-case
+ 'consent-module-boundary-case-14 '(portable core)
+ ("consent-module-boundary-test.scm" 148)
+(job:job-store-cancel! job-store portable-job-id))
 
-(check 'job-boundary-cancel-requested
-       (job:job-store-status job-store portable-job-id)
-       'cancel-requested)
+(testing-registry-case
+ 'job-boundary-cancel-requested '(portable core)
+ ("consent-module-boundary-test.scm" 153)
+(test-equal 'job-boundary-cancel-requested
+             'cancel-requested
+             (job:job-store-status job-store portable-job-id)))
 
+(testing-registry-case
+ 'consent-module-boundary-case-16 '(portable core)
+ ("consent-module-boundary-test.scm" 160)
 (job:job-store-finish-cancelled! job-store
                                   portable-job-id
-                                  "job cancelled: j-1")
+                                  "job cancelled: j-1"))
 
-(check 'job-boundary-cancelled-status
-       (job:job-store-status job-store portable-job-id)
-       'cancelled)
+(testing-registry-case
+ 'job-boundary-cancelled-status '(portable core)
+ ("consent-module-boundary-test.scm" 167)
+(test-equal 'job-boundary-cancelled-status
+             'cancelled
+             (job:job-store-status job-store portable-job-id)))
 
 ;; Store for exercising the portable memory boundary.
 (define memory-store (memory:consent-make-memory-store))
@@ -147,20 +183,29 @@
                               (value "portable memory")
                               (confidence high))))
 
-(check 'memory-boundary-put-ref
-       (memory:memory-record-id
-        (memory:memory-store-ref memory-store 'instance 'portable-key))
-       'portable-key)
+(testing-registry-case
+ 'memory-boundary-put-ref '(portable core)
+ ("consent-module-boundary-test.scm" 186)
+(test-equal 'memory-boundary-put-ref
+             'portable-key
+             (memory:memory-record-id
+        (memory:memory-store-ref memory-store 'instance 'portable-key))))
 
-(check 'memory-boundary-by-tag
-       (length (memory:memory-store-by-tag memory-store 'instance 'portable))
-       1)
+(testing-registry-case
+ 'memory-boundary-by-tag '(portable core)
+ ("consent-module-boundary-test.scm" 194)
+(test-equal 'memory-boundary-by-tag
+             1
+             (length (memory:memory-store-by-tag memory-store 'instance 'portable))))
 
-(check 'memory-boundary-find
-       (length (memory:memory-store-find memory-store
+(testing-registry-case
+ 'memory-boundary-find '(portable core)
+ ("consent-module-boundary-test.scm" 201)
+(test-equal 'memory-boundary-find
+             1
+             (length (memory:memory-store-find memory-store
                                          'instance
-                                         "portable memory"))
-       1)
+                                         "portable memory"))))
 
 ;; Store for exercising the portable helper/artifact boundary.
 (define helper-store (helper:consent-make-helper-store))
@@ -173,16 +218,22 @@
                              '((define (portable-helper x) (+ x 1)))
                              '(session portable-main)))
 
-(check 'helper-boundary-save-ref
-       (helper:helper-record-name
+(testing-registry-case
+ 'helper-boundary-save-ref '(portable core)
+ ("consent-module-boundary-test.scm" 221)
+(test-equal 'helper-boundary-save-ref
+             '(agent helpers portable)
+             (helper:helper-record-name
         (helper:helper-store-ref helper-store
                                  'session
-                                 '(agent helpers portable)))
-       '(agent helpers portable))
+                                 '(agent helpers portable)))))
 
-(check 'helper-boundary-list-is-scoped
-       (length (helper:helper-store-list helper-store 'session))
-       1)
+(testing-registry-case
+ 'helper-boundary-list-is-scoped '(portable core)
+ ("consent-module-boundary-test.scm" 231)
+(test-equal 'helper-boundary-list-is-scoped
+             1
+             (length (helper:helper-store-list helper-store 'session))))
 
 ;; Artifact record used for exercising portable helper artifact storage.
 (define portable-artifact
@@ -194,19 +245,25 @@
                                         (expect "42"))
                                       '(session portable-main)))
 
-(check 'helper-boundary-artifact-record
-       (car portable-artifact)
-       'agent-artifact)
+(testing-registry-case
+ 'helper-boundary-artifact-record '(portable core)
+ ("consent-module-boundary-test.scm" 248)
+(test-equal 'helper-boundary-artifact-record
+             'agent-artifact
+             (car portable-artifact)))
 
-(check 'helper-boundary-skill-candidate
-       (car (helper:helper-promote-to-skill
+(testing-registry-case
+ 'helper-boundary-skill-candidate '(portable core)
+ ("consent-module-boundary-test.scm" 255)
+(test-equal 'helper-boundary-skill-candidate
+             'agent-skill-candidate
+             (car (helper:helper-promote-to-skill
              portable-helper
              '((name "portable-helper")
                (examples ((example (source "(portable-helper 41)")
                                    (expect "42"))))
                (references ((r7rs "docs/r7rs-small-report.md")))
-               (tests (((source "(portable-helper 41)") (expect "42")))))))
-       'agent-skill-candidate)
+               (tests (((source "(portable-helper 41)") (expect "42")))))))))
 
 ;; Store for exercising the portable plan boundary.
 (define plan-store (plan:consent-make-plan-store))
@@ -221,25 +278,37 @@
       (goal "Exercise portable plan store.")
       (steps (((id first) (status pending)))))))
 
-(check 'plan-boundary-ref
-       (plan:plan-record-id
-        (plan:plan-store-ref plan-store 'boundary-plan))
-       'boundary-plan)
+(testing-registry-case
+ 'plan-boundary-ref '(portable core)
+ ("consent-module-boundary-test.scm" 281)
+(test-equal 'plan-boundary-ref
+             'boundary-plan
+             (plan:plan-record-id
+        (plan:plan-store-ref plan-store 'boundary-plan))))
 
-(plan:plan-store-step-status! plan-store 'boundary-plan 'first 'done)
+(testing-registry-case
+ 'consent-module-boundary-case-26 '(portable core)
+ ("consent-module-boundary-test.scm" 289)
+(plan:plan-store-step-status! plan-store 'boundary-plan 'first 'done))
 
-(check 'plan-boundary-step-status
-       (plan:plan-step-status
+(testing-registry-case
+ 'plan-boundary-step-status '(portable core)
+ ("consent-module-boundary-test.scm" 294)
+(test-equal 'plan-boundary-step-status
+             'done
+             (plan:plan-step-status
         (car (plan:plan-record-steps
-              (plan:plan-store-ref plan-store 'boundary-plan))))
-       'done)
+              (plan:plan-store-ref plan-store 'boundary-plan))))))
 
 ;; Context helpers preserve canonical Scheme-readable record shape.
-(check 'context-boundary-request-record
-       (car (context:make-request-context 'portable-req
+(testing-registry-case
+ 'context-boundary-request-record '(portable core)
+ ("consent-module-boundary-test.scm" 304)
+(test-equal 'context-boundary-request-record
+             'request-context
+             (car (context:make-request-context 'portable-req
                                           #f
-                                          "portable request"))
-       'request-context)
+                                          "portable request"))))
 
 ;; Portable redaction records never reveal the original secret.
 (define portable-secret
@@ -251,25 +320,37 @@
 (define redacted-secret
   (redaction:redact portable-secret 'remote-provider))
 
-(check 'redaction-boundary-secret-source
-       (redaction:secret-source? portable-secret)
-       #t)
+(testing-registry-case
+ 'redaction-boundary-secret-source '(portable core)
+ ("consent-module-boundary-test.scm" 323)
+(test-equal 'redaction-boundary-secret-source
+             #t
+             (redaction:secret-source? portable-secret)))
 
-(check 'redaction-boundary-redact-record
-       (car redacted-secret)
-       'redaction)
+(testing-registry-case
+ 'redaction-boundary-redact-record '(portable core)
+ ("consent-module-boundary-test.scm" 330)
+(test-equal 'redaction-boundary-redact-record
+             'redaction
+             (car redacted-secret)))
 
-(check 'redaction-boundary-provider-safe
-       (redaction:safe-for-provider? portable-secret 'openai)
-       #f)
+(testing-registry-case
+ 'redaction-boundary-provider-safe '(portable core)
+ ("consent-module-boundary-test.scm" 337)
+(test-equal 'redaction-boundary-provider-safe
+             #f
+             (redaction:safe-for-provider? portable-secret 'openai)))
 
-(check 'redaction-boundary-local-only-provider-safe
-       (redaction:safe-for-provider?
+(testing-registry-case
+ 'redaction-boundary-local-only-provider-safe '(portable core)
+ ("consent-module-boundary-test.scm" 344)
+(test-equal 'redaction-boundary-local-only-provider-safe
+             #f
+             (redaction:safe-for-provider?
         (redaction:context-local-only!
          '((buffer "private-notes") (text "do not send"))
          "private buffer")
-        'openai)
-       #f)
+        'openai)))
 
 ;; Store for exercising the portable session lifecycle boundary.
 (define session-store (session:consent-make-session-store))
@@ -280,16 +361,22 @@
                                  'named
                                  '((id portable-main))))
 
-(check 'session-boundary-create-ref
-       (session:session-datum-id
-        (session:session-store-ref session-store 'portable-main))
-       'portable-main)
+(testing-registry-case
+ 'session-boundary-create-ref '(portable core)
+ ("consent-module-boundary-test.scm" 364)
+(test-equal 'session-boundary-create-ref
+             'portable-main
+             (session:session-datum-id
+        (session:session-store-ref session-store 'portable-main))))
 
-(check 'session-boundary-snapshot
-       (car (session:session-store-snapshot! session-store
+(testing-registry-case
+ 'session-boundary-snapshot '(portable core)
+ ("consent-module-boundary-test.scm" 372)
+(test-equal 'session-boundary-snapshot
+             'session-snapshot
+             (car (session:session-store-snapshot! session-store
                                        'portable-main
-                                       '((id portable-snap))))
-       'session-snapshot)
+                                       '((id portable-snap))))))
 
 ;; Task lifecycle records are canonical datums with explicit transitions.
 (define portable-task
@@ -314,43 +401,56 @@
      (approval-store-status . none)
      (verifier-result . not-run))))
 
-(check 'task-boundary-transition-allowed
-       (task:task-transition-allowed? 'created 'observing)
-       #t)
+(testing-registry-case
+ 'task-boundary-transition-allowed '(portable core)
+ ("consent-module-boundary-test.scm" 404)
+(test-equal 'task-boundary-transition-allowed
+             #t
+             (task:task-transition-allowed? 'created 'observing)))
 
-(check 'task-boundary-transition-rejected
-       (task:task-transition-allowed? 'created 'complete)
-       #f)
+(testing-registry-case
+ 'task-boundary-transition-rejected '(portable core)
+ ("consent-module-boundary-test.scm" 411)
+(test-equal 'task-boundary-transition-rejected
+             #f
+             (task:task-transition-allowed? 'created 'complete)))
 
-(check 'task-boundary-task-record
-       (task:agent-task? portable-task)
-       #t)
+(testing-registry-case
+ 'task-boundary-task-record '(portable core)
+ ("consent-module-boundary-test.scm" 418)
+(test-equal 'task-boundary-task-record
+             #t
+             (task:agent-task? portable-task)))
 
-(check 'task-boundary-pause-record
-       (task:task-pause? portable-pause)
-       #t)
+(testing-registry-case
+ 'task-boundary-pause-record '(portable core)
+ ("consent-module-boundary-test.scm" 425)
+(test-equal 'task-boundary-pause-record
+             #t
+             (task:task-pause? portable-pause)))
 
-(check 'task-boundary-record-valid
-       (task:task-record-valid? portable-task)
-       #t)
+(testing-registry-case
+ 'task-boundary-record-valid '(portable core)
+ ("consent-module-boundary-test.scm" 432)
+(test-equal 'task-boundary-record-valid
+             #t
+             (task:task-record-valid? portable-task)))
 
-(check 'task-boundary-invalid-transition-raises
-       (raises?
+(testing-registry-case
+ 'task-boundary-invalid-transition-raises '(portable core)
+ ("consent-module-boundary-test.scm" 439)
+(test-equal 'task-boundary-invalid-transition-raises
+             #t
+             (raises?
         (lambda ()
-          (task:validate-task-transition 'created 'complete)))
-       #t)
+          (task:validate-task-transition 'created 'complete)))))
 
-(check 'interpreter-boundary
-       (interpreter:consent-value->external
-        (interpreter:consent-eval-source "(+ 1 2)"))
-       "3")
+(testing-registry-case
+ 'interpreter-boundary '(portable core)
+ ("consent-module-boundary-test.scm" 448)
+(test-equal 'interpreter-boundary
+             "3"
+             (interpreter:consent-value->external
+        (interpreter:consent-eval-source "(+ 1 2)"))))
 
-(if (= failures 0)
-    (begin
-      (display "Scheme module-boundary tests passed")
-      (newline))
-    (begin
-      (display failures)
-      (display " Scheme module-boundary test failure(s)")
-      (newline)
-      (error "Scheme module-boundary tests failed")))
+(testing-runner-main "Consent Module Boundary portable tests" (command-line))

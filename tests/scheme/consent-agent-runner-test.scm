@@ -15,30 +15,11 @@
 (import (scheme base)
         (scheme write)
         (agent runner)
-        (agent task))
-
-;; Count failed checks so the portable runner can report every mismatch.
-(define failures 0)
-
-;; Record one failed check and keep running the rest of the portable test file.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal?.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
+        (agent task)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Host-operation table shared by the gated-call scenarios.
 (define ops
@@ -70,138 +51,177 @@
 
 ;;;; Successful completion: a gated action then a verifier-stamped finish
 
+(testing-registry-case
+ 'success-is-run '(portable agent)
+ ("consent-agent-runner-test.scm" 54)
 (let ((run (run-task 'replace-helper
                      (list (list 'provider
                                  '((code-action (file-write "out.txt" payload))
                                    (finish done)))
                            (list 'operations ops)
                            (list 'verifier 'passed)))))
-  (check-true 'success-is-run (task-run? run))
-  (check 'success-state (task-run-state run) 'complete)
-  (check-true 'success-receipt-is-stop (task-stop? (task-run-receipt run)))
-  (check 'success-stop-reason (stop-reason run) 'completed-goal)
-  (check-true 'success-completion (agent-completion? (task-run-completion run)))
-  (check 'success-host-calls (used run 'used-host-calls) 1)
-  (check-true 'success-transcript (pair? (task-run-transcript run)))
-  (check-true 'success-final-task (agent-task? (task-run-task run))))
+  (test-assert 'success-is-run (task-run? run))
+  (test-equal 'success-state 'complete (task-run-state run))
+  (test-assert 'success-receipt-is-stop (task-stop? (task-run-receipt run)))
+  (test-equal 'success-stop-reason 'completed-goal (stop-reason run))
+  (test-assert 'success-completion (agent-completion? (task-run-completion run)))
+  (test-equal 'success-host-calls 1 (used run 'used-host-calls))
+  (test-assert 'success-transcript (pair? (task-run-transcript run)))
+  (test-assert 'success-final-task (agent-task? (task-run-task run)))))
 
 ;;;; D3: a proposed finish without a verifier pass does NOT complete
 
 ;; The model may PROPOSE finish (and may even self-assert a pass); only the
 ;; non-proposable verifier authorizes `complete'.  Here the verifier is
 ;; `insufficient', so the task blocks for evidence rather than completing.
+(testing-registry-case
+ 'finish-unverified-state '(portable agent)
+ ("consent-agent-runner-test.scm" 77)
 (let ((run (run-task 'answer-question
                      (list (list 'provider '((finish "FINAL ANSWER")))
                            (list 'verifier 'insufficient)))))
-  (check 'finish-unverified-state (task-run-state run) 'blocked)
-  (check-true 'finish-unverified-pause (task-pause? (task-run-receipt run)))
-  (check 'finish-unverified-reason (pause-reason run) 'insufficient-evidence)
-  (check 'finish-unverified-no-completion (task-run-completion run) 'none))
+  (test-equal 'finish-unverified-state 'blocked (task-run-state run))
+  (test-assert 'finish-unverified-pause (task-pause? (task-run-receipt run)))
+  (test-equal 'finish-unverified-reason 'insufficient-evidence (pause-reason run))
+  (test-equal 'finish-unverified-no-completion 'none (task-run-completion run))))
 
 ;; The same finish with a verifier pass DOES complete.
+(testing-registry-case
+ 'finish-verified-state '(portable agent)
+ ("consent-agent-runner-test.scm" 89)
 (let ((run (run-task 'answer-question
                      (list (list 'provider '((finish "FINAL ANSWER")))
                            (list 'verifier 'passed)))))
-  (check 'finish-verified-state (task-run-state run) 'complete)
-  (check-true 'finish-verified-completion
-              (agent-completion? (task-run-completion run))))
+  (test-equal 'finish-verified-state 'complete (task-run-state run))
+  (test-assert 'finish-verified-completion
+             (agent-completion? (task-run-completion run)))))
 
 ;;;; Blocked approval: a gated host call awaiting approval
 
+(testing-registry-case
+ 'approval-state '(portable agent)
+ ("consent-agent-runner-test.scm" 101)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
                            (list 'policy '((file-write needs-approval)))))))
-  (check 'approval-state (task-run-state run) 'waiting-for-approval)
-  (check-true 'approval-pause (task-pause? (task-run-receipt run)))
-  (check 'approval-reason (pause-reason run) 'approval-required))
+  (test-equal 'approval-state 'waiting-for-approval (task-run-state run))
+  (test-assert 'approval-pause (task-pause? (task-run-receipt run)))
+  (test-equal 'approval-reason 'approval-required (pause-reason run))))
 
 ;;;; User-input wait is represented as blocked, not a separate state
 
+(testing-registry-case
+ 'user-input-state '(portable agent)
+ ("consent-agent-runner-test.scm" 114)
 (let ((run (run-task 'summarize
                      (list (list 'provider '((code-action (read-file "x"))))
                            (list 'operations ops)
                            (list 'policy '((read-file needs-user-input)))))))
-  (check 'user-input-state (task-run-state run) 'blocked)
-  (check-true 'user-input-pause (task-pause? (task-run-receipt run)))
-  (check 'user-input-reason (pause-reason run) 'waiting-for-user-input))
+  (test-equal 'user-input-state 'blocked (task-run-state run))
+  (test-assert 'user-input-pause (task-pause? (task-run-receipt run)))
+  (test-equal 'user-input-reason 'waiting-for-user-input (pause-reason run))))
 
 ;;;; Waiting-for-host: a pending host effect
 
+(testing-registry-case
+ 'host-state '(portable agent)
+ ("consent-agent-runner-test.scm" 127)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
                            (list 'policy '((file-write host-pending)))))))
-  (check 'host-state (task-run-state run) 'waiting-for-host)
-  (check 'host-reason (pause-reason run) 'host-effect-timeout))
+  (test-equal 'host-state 'waiting-for-host (task-run-state run))
+  (test-equal 'host-reason 'host-effect-timeout (pause-reason run))))
 
 ;;;; Waiting-for-model / provider-unavailable
 
+(testing-registry-case
+ 'model-state '(portable agent)
+ ("consent-agent-runner-test.scm" 139)
 (let ((run (run-task 'plan-it
                      (list (list 'provider
                                  '((model-unavailable "endpoint did not respond")))))))
-  (check 'model-state (task-run-state run) 'waiting-for-model)
-  (check-true 'model-pause (task-pause? (task-run-receipt run)))
-  (check 'model-reason (pause-reason run) 'model-provider-unavailable))
+  (test-equal 'model-state 'waiting-for-model (task-run-state run))
+  (test-assert 'model-pause (task-pause? (task-run-receipt run)))
+  (test-equal 'model-reason 'model-provider-unavailable (pause-reason run))))
 
 ;;;; Missing or stale authority blocks for a new grant
 
+(testing-registry-case
+ 'authority-state '(portable agent)
+ ("consent-agent-runner-test.scm" 151)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
                            (list 'policy '((file-write authority-missing)))))))
-  (check 'authority-state (task-run-state run) 'blocked)
-  (check 'authority-reason (pause-reason run) 'authority-unavailable))
+  (test-equal 'authority-state 'blocked (task-run-state run))
+  (test-equal 'authority-reason 'authority-unavailable (pause-reason run))))
 
+(testing-registry-case
+ 'stale-state '(portable agent)
+ ("consent-agent-runner-test.scm" 161)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
                            (list 'policy '((file-write stale)))))))
-  (check 'stale-state (task-run-state run) 'blocked)
-  (check 'stale-reason (pause-reason run) 'authority-unavailable))
+  (test-equal 'stale-state 'blocked (task-run-state run))
+  (test-equal 'stale-reason 'authority-unavailable (pause-reason run))))
 
 ;;;; Denied authority stops as cancelled with approval-denied
 
+(testing-registry-case
+ 'denied-state '(portable agent)
+ ("consent-agent-runner-test.scm" 173)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
                            (list 'policy '((file-write denied)))))))
-  (check 'denied-state (task-run-state run) 'cancelled)
-  (check-true 'denied-stop (task-stop? (task-run-receipt run)))
-  (check 'denied-reason (stop-reason run) 'approval-denied))
+  (test-equal 'denied-state 'cancelled (task-run-state run))
+  (test-assert 'denied-stop (task-stop? (task-run-receipt run)))
+  (test-equal 'denied-reason 'approval-denied (stop-reason run))))
 
 ;;;; A failed approved effect stops as failed
 
+(testing-registry-case
+ 'failed-state '(portable agent)
+ ("consent-agent-runner-test.scm" 186)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
                            (list 'effects '((file-write failed)))))))
-  (check 'failed-state (task-run-state run) 'failed)
-  (check-true 'failed-stop (task-stop? (task-run-receipt run)))
-  (check 'failed-reason (stop-reason run) 'condition-failed))
+  (test-equal 'failed-state 'failed (task-run-state run))
+  (test-assert 'failed-stop (task-stop? (task-run-receipt run)))
+  (test-equal 'failed-reason 'condition-failed (stop-reason run))))
 
 ;;;; Cancellation by a control directive
 
+(testing-registry-case
+ 'cancel-state '(portable agent)
+ ("consent-agent-runner-test.scm" 199)
 (let ((run (run-task 'anything
                      (list (list 'provider '((finish done)))
                            (list 'control '(cancel))))))
-  (check 'cancel-state (task-run-state run) 'cancelled)
-  (check-true 'cancel-stop (task-stop? (task-run-receipt run)))
-  (check 'cancel-reason (stop-reason run) 'cancelled-by-user))
+  (test-equal 'cancel-state 'cancelled (task-run-state run))
+  (test-assert 'cancel-stop (task-stop? (task-run-receipt run)))
+  (test-equal 'cancel-reason 'cancelled-by-user (stop-reason run))))
 
 ;;;; D2: a control-plane proposal is quarantined with no effect
 
+(testing-registry-case
+ 'quarantine-state '(portable agent)
+ ("consent-agent-runner-test.scm" 211)
 (let ((run (run-task 'escalate
                      (list (list 'provider
                                  '((code-action (grant-capability! token authority))))
                            (list 'operations ops)))))
-  (check 'quarantine-state (task-run-state run) 'failed)
-  (check-true 'quarantine-stop (task-stop? (task-run-receipt run)))
-  (check 'quarantine-reason (stop-reason run) 'condition-failed)
-  (check 'quarantine-no-effect (used run 'used-host-calls) 0)
-  (check 'quarantine-observed-tag
-         (car (task-field-value (task-run-receipt run) 'observed-state))
-         'quarantine))
+  (test-equal 'quarantine-state 'failed (task-run-state run))
+  (test-assert 'quarantine-stop (task-stop? (task-run-receipt run)))
+  (test-equal 'quarantine-reason 'condition-failed (stop-reason run))
+  (test-equal 'quarantine-no-effect 0 (used run 'used-host-calls))
+  (test-equal 'quarantine-observed-tag
+             'quarantine
+             (car (task-field-value (task-run-receipt run) 'observed-state)))))
 
 ;;;; Signature admission failures produce typed capability-decision receipts
 
@@ -210,32 +230,43 @@
    (task-field-value (task-run-receipt run) 'capability-gate)
    'reason))
 
+(testing-registry-case
+ 'hallucinated-tool-state '(portable agent)
+ ("consent-agent-runner-test.scm" 233)
 (let ((run (run-task 'call-tool
                      (list (list 'provider
                                  '((code-action
                                     (imaginary-tool "notes.txt"))))
                            (list 'capability-signatures
                                  capability-signatures)))))
-  (check 'hallucinated-tool-state (task-run-state run) 'failed)
-  (check 'hallucinated-tool-reason
-         (capability-gate-reason run)
-         'hallucinated-tool)
-  (check 'hallucinated-tool-no-effect
-         (used run 'used-host-calls) 0))
+  (test-equal 'hallucinated-tool-state 'failed (task-run-state run))
+  (test-equal 'hallucinated-tool-reason
+             'hallucinated-tool
+             (capability-gate-reason run))
+  (test-equal 'hallucinated-tool-no-effect
+             0
+             (used run 'used-host-calls))))
 
+(testing-registry-case
+ 'misapplied-tool-state '(portable agent)
+ ("consent-agent-runner-test.scm" 250)
 (let ((run (run-task 'call-tool
                      (list (list 'provider
                                  '((code-action
                                     (file-write 42 "payload"))))
                            (list 'capability-signatures
                                  capability-signatures)))))
-  (check 'misapplied-tool-state (task-run-state run) 'failed)
-  (check 'misapplied-tool-reason
-         (capability-gate-reason run)
-         'misapplied-tool)
-  (check 'misapplied-tool-no-effect
-         (used run 'used-host-calls) 0))
+  (test-equal 'misapplied-tool-state 'failed (task-run-state run))
+  (test-equal 'misapplied-tool-reason
+             'misapplied-tool
+             (capability-gate-reason run))
+  (test-equal 'misapplied-tool-no-effect
+             0
+             (used run 'used-host-calls))))
 
+(testing-registry-case
+ 'unauthorized-tool-state '(portable agent)
+ ("consent-agent-runner-test.scm" 267)
 (let ((run (run-task 'call-tool
                      (list (list 'provider
                                  '((code-action
@@ -243,20 +274,23 @@
                            (list 'capability-signatures
                                  capability-signatures)
                            (list 'policy '((file-write denied)))))))
-  (check 'unauthorized-tool-state (task-run-state run) 'cancelled)
-  (check 'unauthorized-tool-reason
-         (capability-gate-reason run)
-         'unauthorized-tool)
-  (check 'unauthorized-tool-no-effect
-         (used run 'used-host-calls) 0))
+  (test-equal 'unauthorized-tool-state 'cancelled (task-run-state run))
+  (test-equal 'unauthorized-tool-reason
+             'unauthorized-tool
+             (capability-gate-reason run))
+  (test-equal 'unauthorized-tool-no-effect
+             0
+             (used run 'used-host-calls))))
 
 ;;;; Runs are deterministic and replayable
 
-(check 'runner-deterministic
-       (run-task 'replay
+(testing-registry-case
+ 'runner-deterministic '(portable agent)
+ ("consent-agent-runner-test.scm" 287)
+(test-equal 'runner-deterministic
+             (run-task 'replay
                  (list (list 'provider '((finish done))) (list 'verifier 'passed)))
-       (run-task 'replay
-                 (list (list 'provider '((finish done))) (list 'verifier 'passed))))
+             (run-task 'replay
+                 (list (list 'provider '((finish done))) (list 'verifier 'passed)))))
 
-(if (> failures 0)
-    (error "portable agent runner tests failed" failures))
+(testing-runner-main "Consent Agent Runner portable tests" (command-line))

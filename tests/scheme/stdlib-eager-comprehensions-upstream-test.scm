@@ -9,10 +9,11 @@
 (import (scheme base)
         (scheme read)
         (scheme write)
-        (stdlib eager-comprehensions))
-
-;; Number of failed adapted upstream SRFI checks seen so far.
-(define upstream-failures 0)
+        (stdlib eager-comprehensions)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 (define (upstream-equal? actual expected)
   "Return true when ACTUAL and EXPECTED match upstream SRFI 42 examples."
@@ -42,34 +43,13 @@
    (else
     (equal? actual expected))))
 
-(define (record-upstream-failure name expected actual)
-  "Record one failed adapted upstream SRFI 42 example."
-  (set! upstream-failures (+ upstream-failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
 (define (upstream-check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (upstream-equal? actual expected))
-      (record-upstream-failure name expected actual)))
+  "Compare ACTUAL and EXPECTED with the upstream equality predicate."
+  (test-assert name (upstream-equal? actual expected)))
 
-(define (finish-upstream-tests)
-  "Report the adapted upstream SRFI 42 result."
-  (if (= upstream-failures 0)
-      (begin
-        (display "Adapted upstream SRFI 42 examples passed")
-        (newline))
-      (begin
-        (display upstream-failures)
-        (display " adapted upstream SRFI 42 example failure(s)")
-        (newline)
-        (error "adapted upstream SRFI 42 examples failed" upstream-failures))))
-
+(testing-registry-case
+ 'do-ec-counts '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 50)
 (upstream-check 'do-ec-counts
                 (list (let ((x 0))
                         (do-ec (:range i 10) (set! x (+ x 1)))
@@ -79,8 +59,11 @@
                                (:range k n)
                                (set! x (+ x 1)))
                         x))
-                '(10 45))
+                '(10 45)))
 
+(testing-registry-case
+ 'list-ec-basic-qualifiers '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 64)
 (upstream-check 'list-ec-basic-qualifiers
                 (list (list-ec 1)
                       (list-ec (:range i 4) i)
@@ -99,8 +82,11 @@
                   (0 1 2 3)
                   ((0 0) (1 0) (1 1) (2 0) (2 1) (2 2))
                   ((4 0) (4 1) (4 2) (4 3) (4 4))
-                  ((0 0) (2 0) (2 1) (2 2) (4 0) (4 1) (4 2) (4 3) (4 4))))
+                  ((0 0) (2 0) (2 1) (2 2) (4 0) (4 1) (4 2) (4 3) (4 4)))))
 
+(testing-registry-case
+ 'collector-boundaries '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 87)
 (upstream-check 'collector-boundaries
                 (list (append-ec '(a b))
                       (append-ec (:range i 0) '(a b))
@@ -116,8 +102,11 @@
                       (min-ec 1)
                       (max-ec (:range i 2) i))
                 (list '(a b) '() "a" "" "abab" (vector 1) (vector)
-                      (vector 0 1) 1 3 6 1 1))
+                      (vector 0 1) 1 3 6 1 1)))
 
+(testing-registry-case
+ 'early-and-folding-comprehensions '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 107)
 (upstream-check 'early-and-folding-comprehensions
                 (list (first-ec #f 1)
                       (first-ec #f (:range i 0) i)
@@ -142,8 +131,11 @@
                                   i
                                   minus-1
                                   sum-sqr)))
-                '(1 #f 1 1 #f #t #f #f 0 infinity 284))
+                '(1 #f 1 1 #f #t #f #f 0 infinity 284)))
 
+(testing-registry-case
+ 'typed-generator-boundaries '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 136)
 (upstream-check 'typed-generator-boundaries
                 (list (list-ec (:list x '()) x)
                       (list-ec (:list x '(1) '(2) '(3)) x)
@@ -165,8 +157,11 @@
                 '(() (1 2 3) () (#\1 #\2 #\3) () (1 2 3) ()
                   (1 3 5) (6 4 2) (0.0 1.0 2.0) (0.0 1.0 2.0)
                   (0.0 1.0 2.0) "abcdefghijklmnopqrstuvwxyz"
-                  (0 1 2) (0 1 2)))
+                  (0 1 2) (0 1 2))))
 
+(testing-registry-case
+ 'special-generators '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 162)
 (upstream-check 'special-generators
                 (list (list-ec (:do ((i 0)) (< i 4) ((+ i 1))) i)
                       (list-ec
@@ -184,8 +179,11 @@
                                           (:list x '(a b c)))
                                (list i x)))
                 '((0 1 2 3) (10 9 8 7) (1) (2) (2)
-                  ((1 a) (2 b) (3 c))))
+                  ((1 a) (2 b) (3 c)))))
 
+(testing-registry-case
+ 'while-until-stop-behavior '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 184)
 (upstream-check 'while-until-stop-behavior
                 (list (list-ec (:until (:list i '(1 2 3 4 5 6 7 8 9))
                                        (>= i 5))
@@ -214,8 +212,11 @@
                                        (>= i 5))
                                (if #f #f))
                         n))
-                '((1 2 3 4 5) ((1 1) (2 2) (3 3) (4 4) (5 5)) 5 5))
+                '((1 2 3 4 5) ((1 1) (2 2) (3 3) (4 4) (5 5)) 5 5)))
 
+(testing-registry-case
+ 'dispatching-generator-boundaries '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 217)
 (upstream-check 'dispatching-generator-boundaries
                 (list (list-ec (: c '(a b)) c)
                       (list-ec (: c '(a b) '(c d)) c)
@@ -232,8 +233,11 @@
                         (list-ec (: x input read) x)))
                 '((a b) (a b c d) (#\a #\b) (#\a #\b #\c #\d)
                   (a b) (a b c) () (0) (0 1 2 3 4 5 6 7 8 9)
-                  (1) (0.0 0.2 0.4 0.6 0.8) (0 1 2)))
+                  (1) (0.0 0.2 0.4 0.6 0.8) (0 1 2))))
 
+(testing-registry-case
+ 'index-variable-examples '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 238)
 (upstream-check 'index-variable-examples
                 (list (list-ec (:list c (index i) '(a b)) (list c i))
                       (list-ec (:string c (index i) "a") (list c i))
@@ -250,8 +254,11 @@
                   ((0.0 0) (0.2 1) (0.4 2) (0.6 3) (0.8 4))
                   ((#\a 0) (#\b 1) (#\c 2))
                   ((a 0) (b 1) (c 2) (d 3))
-                  ((#\a . 0) (#\b . 1))))
+                  ((#\a . 0) (#\b . 1)))))
 
+(testing-registry-case
+ 'little-shop-examples '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 259)
 (upstream-check 'little-shop-examples
                 (list (list-ec (:range x 5) (:range x x) x)
                       (list-ec (:list x '(2 "23" (4))) (: y x) y)
@@ -260,7 +267,7 @@
                                (list x i)))
                 '((0 0 1 0 1 2 0 1 2 3)
                   (0 1 #\2 #\3 4)
-                  ((0 10) (1 9) (2 8) (3 7) (4 6))))
+                  ((0 10) (1 9) (2 8) (3 7) (4 6)))))
 
 (define (factorial n)
   "Return N factorial using an upstream SRFI 42 example."
@@ -301,6 +308,9 @@
          (list pivot)
          (qsort (list-ec (:list x xrest) (if (>= x pivot)) x))))))
 
+(testing-registry-case
+ 'less-artificial-examples '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 311)
 (upstream-check 'less-artificial-examples
                 (list (factorial 0)
                       (factorial 5)
@@ -311,7 +321,7 @@
                   120
                   (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)
                   ((3 4 5) (5 12 13) (6 8 10) (9 12 15))
-                  (1 1 2 2 3 3 4 4 5 5)))
+                  (1 1 2 2 3 3 4 4 5 5))))
 
 ;; Extension dispatcher from the upstream extension examples.
 (define (example-dispatch args)
@@ -401,6 +411,9 @@
                               upstream-fold3-result)))))
        (if upstream-fold3-empty? x0 upstream-fold3-result)))))
 
+(testing-registry-case
+ 'extension-examples '(portable stdlib)
+ ("stdlib-eager-comprehensions-upstream-test.scm" 414)
 (upstream-check 'extension-examples
                 (let ((original-dispatch (:-dispatch-ref)))
                   (dynamic-wind
@@ -428,6 +441,6 @@
                   (3 2 1)
                   (0 1 2 3 4)
                   0
-                  (f2 4 (f2 3 (f2 2 (f2 1 (f1 0)))))))
+                  (f2 4 (f2 3 (f2 2 (f2 1 (f1 0))))))))
 
-(finish-upstream-tests)
+(testing-runner-main "Stdlib Eager Comprehensions Upstream portable tests" (command-line))

@@ -15,30 +15,11 @@
 
 (import (scheme base)
         (scheme write)
-        (cli repl-shell))
-
-;; Count failed checks so the portable runner can report all mismatches.
-(define failures 0)
-
-;; Record one failed check and keep running the rest of the portable test file.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal?.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
+        (cli repl-shell)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Return the single value of field NAME in tagged list DATUM, or #f.
 (define (field datum name)
@@ -97,6 +78,9 @@
 ;; runs.  A fresh session is its own sandbox, so the verbs must be imported into
 ;; each session that uses them; switching back proves the two sessions keep
 ;; independent environments.
+(testing-registry-case
+ 'switch-result-count '(portable core)
+ ("consent-session-test.scm" 81)
 (let ((records
        (drive-authorized
         (string-append
@@ -110,16 +94,21 @@
          "(switch-session 'project-main)\n"
          "marker\n"))))
   (let ((results (records-of records 'repl-result)))
-    (check 'switch-result-count (length results) 9)
+    (test-equal 'switch-result-count 9 (length results))
     ;; `marker' reads 2 in `work-a' and 1 back in `project-main': switching
     ;; redirected the defines and neither session leaked into the other.
-    (check 'switch-defines-in-current-session
-           (field (list-ref results 6) 'display) "2")
-    (check 'switch-back-keeps-isolation
-           (field (list-ref results 8) 'display) "1"))
-  (check 'switch-no-conditions (count-of records 'repl-condition) 0))
+    (test-equal 'switch-defines-in-current-session
+             "2"
+             (field (list-ref results 6) 'display))
+    (test-equal 'switch-back-keeps-isolation
+             "1"
+             (field (list-ref results 8) 'display)))
+  (test-equal 'switch-no-conditions 0 (count-of records 'repl-condition))))
 
 ;; `set-default-session!' is a synonym for `switch-session'.
+(testing-registry-case
+ 'set-default-redirects '(portable core)
+ ("consent-session-test.scm" 109)
 (let ((records
        (drive-authorized
         (string-append
@@ -133,11 +122,14 @@
          "(set-default-session! 'project-main)\n"
          "y\n"))))
   (let ((results (records-of records 'repl-result)))
-    (check 'set-default-redirects (field (list-ref results 6) 'display) "70")
-    (check 'set-default-back (field (list-ref results 8) 'display) "7")))
+    (test-equal 'set-default-redirects "70" (field (list-ref results 6) 'display))
+    (test-equal 'set-default-back "7" (field (list-ref results 8) 'display)))))
 
 ;;;; The verbs return Scheme-readable records and emit audit entries
 
+(testing-registry-case
+ 'create-returns-session-record '(portable core)
+ ("consent-session-test.scm" 130)
 (let ((records
        (drive-authorized
         (string-append
@@ -151,51 +143,62 @@
     (let* ((created-result (list-ref results 1))
            (value (result-value created-result))
            (events (field (field created-result 'evaluation-result) 'events)))
-      (check 'create-returns-session-record (kind value) 'session)
-      (check 'create-record-id (field value 'id) 'inspect-a)
-      (check 'create-record-status (field value 'status) 'new)
-      (check-true 'create-emits-capability-request
-                  (has-audit? events 'capability-request "create-session"))
-      (check-true 'create-emits-lifecycle-audit
-                  (has-audit? events 'session-lifecycle 'create)))
+      (test-equal 'create-returns-session-record 'session (kind value))
+      (test-equal 'create-record-id 'inspect-a (field value 'id))
+      (test-equal 'create-record-status 'new (field value 'status))
+      (test-assert 'create-emits-capability-request
+             (has-audit? events 'capability-request "create-session"))
+      (test-assert 'create-emits-lifecycle-audit
+             (has-audit? events 'session-lifecycle 'create)))
     ;; current-session (no switch yet) names the initial project-main session.
-    (check 'current-before-switch-id
-           (field (result-value (list-ref results 2)) 'id) 'project-main)
+    (test-equal 'current-before-switch-id
+             'project-main
+             (field (result-value (list-ref results 2)) 'id))
     ;; list-sessions returns a list of session records including both sessions.
     (let ((listed (result-value (list-ref results 3))))
-      (check-true 'list-sessions-is-list (list? listed))
-      (check 'list-sessions-count (length listed) 2))))
+      (test-assert 'list-sessions-is-list (list? listed))
+      (test-equal 'list-sessions-count 2 (length listed))))))
 
 ;;;; The verbs fail closed without window-session authority
 
 ;; Without the grant, create-session denies fail-closed: the form is reported as
 ;; a recoverable evaluator condition (a Scheme-readable error record) and the
 ;; session keeps running.
+(testing-registry-case
+ 'deny-create-emits-condition '(portable core)
+ ("consent-session-test.scm" 167)
 (let ((records
        (drive-unauthorized
         (string-append
          "(import (agent session))\n"
          "(create-session 'named '((id denied-a)))\n"
          "(+ 1 1)\n"))))
-  (check 'deny-create-emits-condition (count-of records 'repl-condition) 1)
+  (test-equal 'deny-create-emits-condition 1 (count-of records 'repl-condition))
   (let ((condition (car (records-of records 'repl-condition))))
-    (check 'deny-create-phase (field condition 'phase) 'eval))
+    (test-equal 'deny-create-phase 'eval (field condition 'phase)))
   ;; The session continues: the trailing arithmetic (the last result, after the
   ;; import result and the denied create) still evaluates.
   (let ((results (records-of records 'repl-result)))
-    (check 'deny-session-continues
-           (field (list-ref results (- (length results) 1)) 'display) "2")))
+    (test-equal 'deny-session-continues
+             "2"
+             (field (list-ref results (- (length results) 1)) 'display)))))
 
 ;; switch-session is likewise gated and fails closed without authority.
+(testing-registry-case
+ 'deny-switch-emits-condition '(portable core)
+ ("consent-session-test.scm" 187)
 (let ((records
        (drive-unauthorized
         (string-append
          "(import (agent session))\n"
          "(switch-session 'project-main)\n"))))
-  (check 'deny-switch-emits-condition (count-of records 'repl-condition) 1))
+  (test-equal 'deny-switch-emits-condition 1 (count-of records 'repl-condition))))
 
 ;;;; close-session retires a session and returns its record
 
+(testing-registry-case
+ 'close-returns-session-record '(portable core)
+ ("consent-session-test.scm" 199)
 (let ((records
        (drive-authorized
         (string-append
@@ -204,10 +207,9 @@
          "(close-session 'close-a)\n"))))
   (let ((results (records-of records 'repl-result)))
     (let ((closed (result-value (list-ref results 2))))
-      (check 'close-returns-session-record (kind closed) 'session)
-      (check 'close-record-id (field closed 'id) 'close-a)
-      (check 'close-record-status (field closed 'status) 'retired)))
-  (check 'close-no-conditions (count-of records 'repl-condition) 0))
+      (test-equal 'close-returns-session-record 'session (kind closed))
+      (test-equal 'close-record-id 'close-a (field closed 'id))
+      (test-equal 'close-record-status 'retired (field closed 'status))))
+  (test-equal 'close-no-conditions 0 (count-of records 'repl-condition))))
 
-(if (> failures 0)
-    (error "portable session management tests failed" failures))
+(testing-runner-main "Consent Session portable tests" (command-line))

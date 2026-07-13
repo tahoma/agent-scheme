@@ -23,30 +23,11 @@
         (scheme write)
         (only (consent reader)
               consent-number? consent-number-value consent-datum->external)
-        (cli repl-shell))
-
-;; Count failed checks so the runner can report every mismatch in one run.
-(define failures 0)
-
-;; Record one failed check and keep running the rest of the suite.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal?.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
+        (cli repl-shell)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;;;; Tagged-list helpers (records and expectation patterns share this shape)
 
@@ -186,8 +167,8 @@
      (let* ((fname (car entry))
             (expected (cadr entry))
             (got (field actual fname)))
-       (if (not (value-match? got expected))
-           (record-failure (list id (kind pattern) fname) expected got))))
+       (test-assert (list id (kind pattern) fname)
+                    (value-match? got expected))))
    (cdr pattern)))
 
 ;; Drive one CASE against the portable REPL and assert its expected records.
@@ -201,7 +182,7 @@
          (queues (make-kind-queues actual)))
     (for-each
      (lambda (k)
-       (check (list id 'count k) (count-of actual k) (count-of expect k)))
+       (test-equal (list id 'count k) (count-of expect k) (count-of actual k)))
      (union-kinds expect actual))
     (for-each
      (lambda (pattern)
@@ -210,12 +191,12 @@
                   (rec (find-by-submission actual (kind pattern) sub)))
              (if rec
                  (match-record id pattern rec)
-                 (record-failure (list id (kind pattern) 'submission sub)
-                                 'present 'missing)))
+                 (test-equal (list id (kind pattern) 'submission sub)
+                             'present 'missing)))
            (let ((rec (pop-queue! queues (kind pattern))))
              (if rec
                  (match-record id pattern rec)
-                 (record-failure (list id (kind pattern)) 'present 'missing)))))
+                 (test-equal (list id (kind pattern)) 'present 'missing)))))
      expect)
     (run-roundtrip id case actual session options)))
 
@@ -238,10 +219,10 @@
          (replayed (cli-repl-replay-records actual session options))
          (same? (equal? (serialize-records actual)
                         (serialize-records replayed))))
-    (check-true (list id 'has-replay-field) (if mode #t #f))
+    (test-assert (list id 'has-replay-field) (if mode #t #f))
     (if (eq? mode 'reproduced)
-        (check-true (list id 'replay-reproduced) same?)
-        (check-true (list id 'replay-partial) (not same?)))))
+        (test-assert (list id 'replay-reproduced) same?)
+        (test-assert (list id 'replay-partial) (not same?)))))
 
 ;;;; Stream-separation parity check (not record-stream shaped, asserted directly)
 
@@ -265,17 +246,18 @@
              (lambda (record) (set! records (cons record records)))
              (lambda (text) (set! output (cons text output)))
              "project-main")))
-      (check 'stream-separation-exit-code exit-code 0)
-      (check 'stream-separation-program-output
-             (apply string-append (reverse output)) "emitted")
+      (test-equal 'stream-separation-exit-code 0 exit-code)
+      (test-equal 'stream-separation-program-output
+             "emitted"
+             (apply string-append (reverse output)))
       (let ((records (reverse records)))
-        (check 'stream-separation-result-count (count-of records 'repl-result) 3)
-        (check-true 'stream-separation-has-exit
-                    (> (count-of records 'repl-exit) 0))
+        (test-equal 'stream-separation-result-count 3 (count-of records 'repl-result))
+        (test-assert 'stream-separation-has-exit
+             (> (count-of records 'repl-exit) 0))
         (for-each
          (lambda (result)
-           (check-true 'stream-separation-clean-result
-                       (not (equal? (field result 'display) "emitted"))))
+           (test-assert 'stream-separation-clean-result
+             (not (equal? (field result 'display) "emitted"))))
          (records-of records 'repl-result))))))
 
 ;;;; Drive the corpus
@@ -286,33 +268,49 @@
 ;; Shared parity case list extracted from the canonical suite.
 (define cases (suite-cases suite))
 
-(check 'parity-suite-tag (car suite) 'consent-fixture-suite)
-(check 'parity-suite-kind (field suite 'kind) 'repl-parity)
-(check 'parity-suite-version (field suite 'version) 1)
-(check-true 'parity-suite-has-cases (pair? cases))
+(testing-registry-case
+ 'parity-suite-tag '(portable core)
+ ("consent-repl-parity-test.scm" 271)
+(test-equal 'parity-suite-tag 'consent-fixture-suite (car suite)))
+(testing-registry-case
+ 'parity-suite-kind '(portable core)
+ ("consent-repl-parity-test.scm" 275)
+(test-equal 'parity-suite-kind 'repl-parity (field suite 'kind)))
+(testing-registry-case
+ 'parity-suite-version '(portable core)
+ ("consent-repl-parity-test.scm" 279)
+(test-equal 'parity-suite-version 1 (field suite 'version)))
+(testing-registry-case
+ 'parity-suite-has-cases '(portable core)
+ ("consent-repl-parity-test.scm" 283)
+(test-assert 'parity-suite-has-cases (pair? cases)))
+(testing-registry-case
+ 'parity-suite-contract '(portable core)
+ ("consent-repl-parity-test.scm" 287)
 (let ((contract (field suite 'contract)))
-  (check-true 'parity-suite-contract
-              (and (pair? contract)
+  (test-assert 'parity-suite-contract
+             (and (pair? contract)
                    (eq? (car contract) 'repl-interaction-contract)))
-  (check 'parity-suite-contract-version (field contract 'version) 1))
+  (test-equal 'parity-suite-contract-version 1 (field contract 'version))))
 
 ;; Case ids are unique so a divergence is reported against a stable name.
+(testing-registry-case
+ 'duplicate-case-id '(portable core)
+ ("consent-repl-parity-test.scm" 297)
 (let loop ((rest cases) (seen '()))
   (cond
    ((null? rest) #t)
    ((memq (case-field (car rest) 'id) seen)
-    (record-failure 'duplicate-case-id (case-field (car rest) 'id) 'unique))
-   (else (loop (cdr rest) (cons (case-field (car rest) 'id) seen)))))
+    (test-equal 'duplicate-case-id 'unique (case-field (car rest) 'id)))
+   (else (loop (cdr rest) (cons (case-field (car rest) 'id) seen))))))
 
-(for-each run-case cases)
-(run-stream-separation-check)
+(testing-registry-case
+ 'consent-repl-parity-case-7 '(portable core)
+ ("consent-repl-parity-test.scm" 307)
+(for-each run-case cases))
+(testing-registry-case
+ 'consent-repl-parity-case-8 '(portable core)
+ ("consent-repl-parity-test.scm" 311)
+(run-stream-separation-check))
 
-(if (= failures 0)
-    (begin
-      (display "REPL parity tests passed")
-      (newline))
-    (begin
-      (display failures)
-      (display " REPL parity test failure(s)")
-      (newline)
-      (error "REPL parity tests failed")))
+(testing-runner-main "Consent Repl Parity portable tests" (command-line))

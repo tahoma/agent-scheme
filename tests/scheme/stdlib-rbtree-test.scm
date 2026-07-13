@@ -8,38 +8,11 @@
 (import (scheme base)
         (scheme write)
         (stdlib comparator)
-        (stdlib rbtree))
-
-;; Number of failed red-black tree helper checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed red-black tree check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-(define (finish-rbtree-tests)
-  "Report the red-black tree helper test result."
-  (if (= failures 0)
-      (begin
-        (display "Red-black tree helper tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " red-black tree helper test failure(s)")
-        (newline)
-        (error "red-black tree helper tests failed" failures))))
+        (stdlib rbtree)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Comparator shared by the tree-search tests.
 (define integer-comparator
@@ -219,40 +192,59 @@
    2
    'two))
 
-(check 'folds-in-key-order
-       (tree-items tree)
-       '((1 . one) (2 . two) (3 . three) (4 . four)))
+(testing-registry-case
+ 'folds-in-key-order '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 195)
+(test-equal 'folds-in-key-order
+             '((1 . one) (2 . two) (3 . three) (4 . four))
+             (tree-items tree)))
 
-(check 'inserts-report-status
-       (call-with-values
+(testing-registry-case
+ 'inserts-report-status '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 202)
+(test-equal 'inserts-report-status
+             '(inserted ((1 . one) (2 . two) (3 . three) (4 . four) (5 . five)))
+             (call-with-values
         (lambda () (tree-insert/update tree 5 'five))
         (lambda (next status)
-          (list status (tree-items next))))
-       '(inserted ((1 . one) (2 . two) (3 . three) (4 . four) (5 . five))))
+          (list status (tree-items next))))))
 
-(check 'updates-existing-key
-       (call-with-values
+(testing-registry-case
+ 'updates-existing-key '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 212)
+(test-equal 'updates-existing-key
+             '(updated ((1 . one) (2 . two) (3 . THREE) (4 . four)))
+             (call-with-values
         (lambda () (tree-insert/update tree 3 'THREE))
         (lambda (next status)
-          (list status (tree-items next))))
-       '(updated ((1 . one) (2 . two) (3 . THREE) (4 . four))))
+          (list status (tree-items next))))))
 
-(check 'removes-existing-key
-       (call-with-values
+(testing-registry-case
+ 'removes-existing-key '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 222)
+(test-equal 'removes-existing-key
+             '(two ((1 . one) (3 . three) (4 . four)))
+             (call-with-values
         (lambda () (tree-remove-key tree 2))
         (lambda (next removed)
-          (list removed (tree-items next))))
-       '(two ((1 . one) (3 . three) (4 . four))))
+          (list removed (tree-items next))))))
 
-(check 'missing-remove-returns-failure-status
-       (call-with-values
+(testing-registry-case
+ 'missing-remove-returns-failure-status '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 232)
+(test-equal 'missing-remove-returns-failure-status
+             '(missing ((1 . one) (2 . two) (3 . three) (4 . four)))
+             (call-with-values
         (lambda () (tree-remove-key tree 9))
         (lambda (next status)
-          (list status (tree-items next))))
-       '(missing ((1 . one) (2 . two) (3 . three) (4 . four))))
+          (list status (tree-items next))))))
 
-(check 'empty-tree-behavior
-       (let ((empty (make-tree)))
+(testing-registry-case
+ 'empty-tree-behavior '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 242)
+(test-equal 'empty-tree-behavior
+             '(() seed seed #t none none (missing ()))
+             (let ((empty (make-tree)))
          (list (tree-items empty)
                (tree-fold (lambda (key value acc) 'called) 'seed empty)
                (tree-fold/reverse (lambda (key value acc) 'called) 'seed empty)
@@ -268,18 +260,24 @@
                                (lambda (insert ignore) (ignore 'missing))
                                (lambda (key value update remove) 'unexpected)))
                 (lambda (next status)
-                  (list status (tree-items next))))))
-       '(() seed seed #t none none (missing ())))
+                  (list status (tree-items next))))))))
 
-(check 'successor-and-predecessor
-       (list (tree-key-successor integer-comparator tree 2 (lambda () 'none))
+(testing-registry-case
+ 'successor-and-predecessor '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 265)
+(test-equal 'successor-and-predecessor
+             '(3 2 none none)
+             (list (tree-key-successor integer-comparator tree 2 (lambda () 'none))
              (tree-key-predecessor integer-comparator tree 3 (lambda () 'none))
              (tree-key-successor integer-comparator tree 4 (lambda () 'none))
-             (tree-key-predecessor integer-comparator tree 1 (lambda () 'none)))
-       '(3 2 none none))
+             (tree-key-predecessor integer-comparator tree 1 (lambda () 'none)))))
 
-(check 'successor-and-predecessor-gaps
-       (let ((gap-tree
+(testing-registry-case
+ 'successor-and-predecessor-gaps '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 275)
+(test-equal 'successor-and-predecessor-gaps
+             '(3 3 1 5 none none)
+             (let ((gap-tree
               (pairs->tree integer-comparator
                            '((1 . one) (3 . three) (5 . five)))))
          (list (tree-key-successor integer-comparator gap-tree 2 (lambda () 'none))
@@ -287,95 +285,129 @@
                (tree-key-successor integer-comparator gap-tree 0 (lambda () 'none))
                (tree-key-predecessor integer-comparator gap-tree 6 (lambda () 'none))
                (tree-key-successor integer-comparator gap-tree 5 (lambda () 'none))
-               (tree-key-predecessor integer-comparator gap-tree 1 (lambda () 'none))))
-       '(3 3 1 5 none none))
+               (tree-key-predecessor integer-comparator gap-tree 1 (lambda () 'none))))))
 
-(check 'for-each-visits-in-key-order
-       (let ((seen '()))
+(testing-registry-case
+ 'for-each-visits-in-key-order '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 290)
+(test-equal 'for-each-visits-in-key-order
+             '((1 one) (2 two) (3 three) (4 four))
+             (let ((seen '()))
          (tree-for-each
           (lambda (key value)
             (set! seen (cons (list key value) seen)))
           tree)
-         (reverse seen))
-       '((1 one) (2 two) (3 three) (4 four)))
+         (reverse seen))))
 
-(check 'generator-yields-key-value-lists
-       (let ((gen (tree-generator tree)))
-         (list (gen) (gen) (gen) (gen) (eof-object? (gen))))
-       '((1 one) (2 two) (3 three) (4 four) #t))
+(testing-registry-case
+ 'generator-yields-key-value-lists '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 302)
+(test-equal 'generator-yields-key-value-lists
+             '((1 one) (2 two) (3 three) (4 four) #t)
+             (let ((gen (tree-generator tree)))
+         (list (gen) (gen) (gen) (gen) (eof-object? (gen))))))
 
-(check 'map-transforms-values
-       (tree-items
+(testing-registry-case
+ 'map-transforms-values '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 310)
+(test-equal 'map-transforms-values
+             '((1 one 1) (2 two 2) (3 three 3) (4 four 4))
+             (tree-items
         (tree-map
          (lambda (key value)
            (values key (list value key)))
-         tree))
-       '((1 one 1) (2 two 2) (3 three 3) (4 four 4)))
+         tree))))
 
-(check 'map-transforms-monotone-keys
-       (tree-items
+(testing-registry-case
+ 'map-transforms-monotone-keys '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 321)
+(test-equal 'map-transforms-monotone-keys
+             '((11 . one) (12 . two) (13 . three) (14 . four))
+             (tree-items
         (tree-map
          (lambda (key value)
            (values (+ key 10) value))
-         tree))
-       '((11 . one) (12 . two) (13 . three) (14 . four)))
+         tree))))
 
-(check 'catenate-joins-trees
-       (tree-items
+(testing-registry-case
+ 'catenate-joins-trees '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 332)
+(test-equal 'catenate-joins-trees
+             '((1 . one) (2 . two) (3 . three) (4 . four) (5 . five))
+             (tree-items
         (tree-catenate
          (pairs->tree integer-comparator '((1 . one) (2 . two)))
          3
          'three
-         (pairs->tree integer-comparator '((4 . four) (5 . five)))))
-       '((1 . one) (2 . two) (3 . three) (4 . four) (5 . five)))
+         (pairs->tree integer-comparator '((4 . four) (5 . five)))))))
 
-(check 'catenate-allows-empty-left-tree
-       (tree-items
+(testing-registry-case
+ 'catenate-allows-empty-left-tree '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 344)
+(test-equal 'catenate-allows-empty-left-tree
+             '((1 . one) (2 . two) (3 . three))
+             (tree-items
         (tree-catenate
          (make-tree)
          1
          'one
-         (pairs->tree integer-comparator '((2 . two) (3 . three)))))
-       '((1 . one) (2 . two) (3 . three)))
+         (pairs->tree integer-comparator '((2 . two) (3 . three)))))))
 
-(check 'catenate-allows-empty-right-tree
-       (tree-items
+(testing-registry-case
+ 'catenate-allows-empty-right-tree '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 356)
+(test-equal 'catenate-allows-empty-right-tree
+             '((1 . one) (2 . two) (3 . three))
+             (tree-items
         (tree-catenate
          (pairs->tree integer-comparator '((1 . one) (2 . two)))
          3
          'three
-         (make-tree)))
-       '((1 . one) (2 . two) (3 . three)))
+         (make-tree)))))
 
-(check 'catenate-balances-unequal-heights
-       (tree-items
+(testing-registry-case
+ 'catenate-balances-unequal-heights '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 368)
+(test-equal 'catenate-balances-unequal-heights
+             '((1 . one) (2 . two) (3 . three) (4 . four) (5 . five)
+         (6 . six) (7 . seven) (8 . eight) (9 . nine) (10 . ten))
+             (tree-items
         (tree-catenate
          (pairs->tree integer-comparator '((1 . one) (2 . two)))
          3
          'three
          (pairs->tree integer-comparator
                       '((4 . four) (5 . five) (6 . six) (7 . seven)
-                        (8 . eight) (9 . nine) (10 . ten)))))
-       '((1 . one) (2 . two) (3 . three) (4 . four) (5 . five)
-         (6 . six) (7 . seven) (8 . eight) (9 . nine) (10 . ten)))
+                        (8 . eight) (9 . nine) (10 . ten)))))))
 
-(check 'split-partitions-tree
-       (call-with-values
+(testing-registry-case
+ 'split-partitions-tree '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 383)
+(test-equal 'split-partitions-tree
+             '(((1 . one) (2 . two))
+         ((1 . one) (2 . two) (3 . three))
+         ((3 . three))
+         ((3 . three) (4 . four))
+         ((4 . four)))
+             (call-with-values
         (lambda () (tree-split integer-comparator tree 3))
         (lambda (less less/equal equal greater/equal greater)
           (list (tree-items less)
                 (tree-items less/equal)
                 (tree-items equal)
                 (tree-items greater/equal)
-                (tree-items greater))))
-       '(((1 . one) (2 . two))
-         ((1 . one) (2 . two) (3 . three))
-         ((3 . three))
-         ((3 . three) (4 . four))
-         ((4 . four))))
+                (tree-items greater))))))
 
-(check 'split-partitions-absent-boundary
-       (let ((gap-tree
+(testing-registry-case
+ 'split-partitions-absent-boundary '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 401)
+(test-equal 'split-partitions-absent-boundary
+             '(((1 . one))
+         ((1 . one))
+         ()
+         ((3 . three) (5 . five))
+         ((3 . three) (5 . five)))
+             (let ((gap-tree
               (pairs->tree integer-comparator
                            '((1 . one) (3 . three) (5 . five)))))
          (call-with-values
@@ -385,26 +417,32 @@
                   (tree-items less/equal)
                   (tree-items equal)
                   (tree-items greater/equal)
-                  (tree-items greater)))))
-       '(((1 . one))
-         ((1 . one))
-         ()
-         ((3 . three) (5 . five))
-         ((3 . three) (5 . five))))
+                  (tree-items greater)))))))
 
-(check 'split-empty-tree
-       (call-with-values
+(testing-registry-case
+ 'split-empty-tree '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 422)
+(test-equal 'split-empty-tree
+             '(() () () () ())
+             (call-with-values
         (lambda () (tree-split integer-comparator (make-tree) 3))
         (lambda (less less/equal equal greater/equal greater)
           (list (tree-items less)
                 (tree-items less/equal)
                 (tree-items equal)
                 (tree-items greater/equal)
-                (tree-items greater))))
-       '(() () () () ()))
+                (tree-items greater))))))
 
-(check 'string-key-comparator
-       (let* ((string-comparator
+(testing-registry-case
+ 'string-key-comparator '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 436)
+(test-equal 'string-key-comparator
+             '(updated
+         (("alpha" . a) ("bravo" . b) ("charlie" . c))
+         (("alpha" . a) ("bravo" . B) ("charlie" . c))
+         "charlie"
+         "alpha")
+             (let* ((string-comparator
                (make-comparator string? string=? string<? string-hash))
               (string-tree
                (pairs->tree string-comparator
@@ -425,15 +463,18 @@
                   (tree-key-predecessor string-comparator
                                         string-tree
                                         "bravo"
-                                        (lambda () 'none))))))
-       '(updated
-         (("alpha" . a) ("bravo" . b) ("charlie" . c))
-         (("alpha" . a) ("bravo" . B) ("charlie" . c))
-         "charlie"
-         "alpha"))
+                                        (lambda () 'none))))))))
 
-(check 'operation-sequence-matches-sorted-model
-       (run-operation-sequence
+(testing-registry-case
+ 'operation-sequence-matches-sorted-model '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 468)
+(test-equal 'operation-sequence-matches-sorted-model
+             '(#t
+         (inserted inserted inserted inserted inserted inserted inserted updated
+                   two inserted eight one missing inserted)
+         ((3 . three) (4 . four) (5 . FIVE) (6 . six)
+          (7 . seven) (9 . nine)))
+             (run-operation-sequence
         '((put 5 five)
           (put 2 two)
           (put 8 eight)
@@ -447,17 +488,15 @@
           (delete 8)
           (delete 1)
           (delete 42)
-          (put 4 four)))
-       '(#t
-         (inserted inserted inserted inserted inserted inserted inserted updated
-                   two inserted eight one missing inserted)
-         ((3 . three) (4 . four) (5 . FIVE) (6 . six)
-          (7 . seven) (9 . nine))))
+          (put 4 four)))))
 
-(check 'deletion-sequence-rebalances-tree
-       (run-deletion-sequence '(8 1 15 4 12 2 14 6 10 3 5 7 9 11 13))
-       '(#t
+(testing-registry-case
+ 'deletion-sequence-rebalances-tree '(portable stdlib)
+ ("stdlib-rbtree-test.scm" 493)
+(test-equal 'deletion-sequence-rebalances-tree
+             '(#t
          (8 1 15 4 12 2 14 6 10 3 5 7 9 11 13)
-         ()))
+         ())
+             (run-deletion-sequence '(8 1 15 4 12 2 14 6 10 3 5 7 9 11 13))))
 
-(finish-rbtree-tests)
+(testing-runner-main "Stdlib Rbtree portable tests" (command-line))

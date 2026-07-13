@@ -15,41 +15,20 @@
         (scheme write)
         (stdlib random-bits)
         (stdlib generator)
-        (stdlib random-data-generators))
-
-;; Number of failed adapted-upstream SRFI 194 checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed adapted-upstream random-data-generator check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-(define (check-true name value)
-  "Record failure unless VALUE is true."
-  (if (not value)
-      (record-failure name #t value)))
+        (stdlib random-data-generators)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 (define (check-near name actual expected tolerance)
-  "Record failure unless ACTUAL is within TOLERANCE of EXPECTED."
-  (if (> (abs (- actual expected)) tolerance)
-      (record-failure name expected actual)))
+  "Assert that ACTUAL is within TOLERANCE of EXPECTED."
+  (test-approximate name expected actual tolerance))
 
 (define (check-ratio-near name actual expected tolerance)
   "Record failure unless ACTUAL/EXPECTED is within TOLERANCE of 1."
   (if (= expected 0)
-      (check name actual expected)
+      (test-equal name expected actual)
       (check-near name (/ actual expected) 1.0 tolerance)))
 
 (define (raises? thunk)
@@ -198,18 +177,6 @@
                 tolerance)
                (loop (+ index 1)))))))))
 
-(define (finish-random-data-generator-upstream-tests)
-  "Report the adapted-upstream SRFI 194 random-data-generator test result."
-  (if (= failures 0)
-      (begin
-        (display "SRFI 194 adapted upstream tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " SRFI 194 adapted upstream test failure(s)")
-        (newline)
-        (error "SRFI 194 adapted upstream tests failed" failures))))
-
 ;; Fixed-width integer generator cases: name, constructor, lower bound, upper bound.
 (define fixed-integer-cases
   (list
@@ -223,6 +190,9 @@
    (list 'u64 make-random-u64-generator 0 (expt 2 64))
    (list 's64 make-random-s64-generator (- (expt 2 63)) (expt 2 63))))
 
+(testing-registry-case
+ 'stdlib-random-data-generators-upstream-case-1 '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 193)
 (let loop ((index 0) (cases fixed-integer-cases))
   (if (not (null? cases))
       (let ((case (car cases)))
@@ -230,14 +200,16 @@
          10
          index
          (lambda ()
-           (check-true
-            (list 'fixed-integer-range (car case))
-            (values-in-range?
+           (test-assert (list 'fixed-integer-range (car case))
+             (values-in-range?
              (generator->fixed-list ((cadr case)) 200)
              (caddr case)
              (cadddr case)))))
-        (loop (+ index 1) (cdr cases)))))
+        (loop (+ index 1) (cdr cases))))))
 
+(testing-registry-case
+ 'seeded-integer-replay '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 210)
 (with-seeded-random-source
  11
  0
@@ -248,27 +220,33 @@
       11
       0
       (lambda ()
-        (check 'seeded-integer-replay
-               (generator->fixed-list (make-random-integer-generator -100 100) 16)
-               left))))))
+        (test-equal 'seeded-integer-replay
+             left
+             (generator->fixed-list (make-random-integer-generator -100 100) 16))))))))
 
+(testing-registry-case
+ 'random-real-generator-broad-range '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 227)
 (with-seeded-random-source
  12
  0
  (lambda ()
    (let ((values (generator->fixed-list (make-random-real-generator -2.5 7.5) 400)))
-     (check-true 'random-real-generator-broad-range
-                 (all-real-values-in-range? values -2.5 7.5))
-     (check-true 'random-real-generator-hits-lower-half
-                 (not (= 0 (generator-count-if
+     (test-assert 'random-real-generator-broad-range
+             (all-real-values-in-range? values -2.5 7.5))
+     (test-assert 'random-real-generator-hits-lower-half
+             (not (= 0 (generator-count-if
                             (let ((rest values))
                               (lambda ()
                                 (let ((value (car rest)))
                                   (set! rest (cdr rest))
                                   value)))
                             400
-                            (lambda (value) (< value 2.5)))))))))
+                            (lambda (value) (< value 2.5))))))))))
 
+(testing-registry-case
+ 'bernoulli-statistical-frequency '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 247)
 (with-seeded-random-source
  13
  0
@@ -277,8 +255,11 @@
           (generator-count-if (make-bernoulli-generator 0.7)
                               3000
                               (lambda (value) (= value 1)))))
-     (check-ratio-near 'bernoulli-statistical-frequency successes 2100 0.12))))
+     (check-ratio-near 'bernoulli-statistical-frequency successes 2100 0.12)))))
 
+(testing-registry-case
+ 'categorical-first-frequency '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 260)
 (with-seeded-random-source
  14
  0
@@ -297,8 +278,11 @@
      (check-ratio-near 'categorical-third-frequency
                        (vector-ref counts 2)
                        1500
-                       0.15))))
+                       0.15)))))
 
+(testing-registry-case
+ 'binomial-zero-frequency '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 283)
 (with-seeded-random-source
  15
  0
@@ -306,8 +290,11 @@
    (let ((counts (categorical-counts (make-binomial-generator 10 0.25) 11 8000)))
      (check-ratio-near 'binomial-zero-frequency (vector-ref counts 0) 450.508 0.30)
      (check-ratio-near 'binomial-two-frequency (vector-ref counts 2) 2252.541 0.20)
-     (check-ratio-near 'binomial-five-frequency (vector-ref counts 5) 467.011 0.30))))
+     (check-ratio-near 'binomial-five-frequency (vector-ref counts 5) 467.011 0.30)))))
 
+(testing-registry-case
+ 'normal-mean '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 295)
 (with-seeded-random-source
  16
  0
@@ -315,8 +302,11 @@
    (let ((summary (generator-mean-and-variance (make-normal-generator 2.0 0.5)
                                                6000)))
      (check-near 'normal-mean (car summary) 2.0 0.05)
-     (check-near 'normal-variance (cadr summary) 0.25 0.05))))
+     (check-near 'normal-variance (cadr summary) 0.25 0.05)))))
 
+(testing-registry-case
+ 'exponential-mean '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 307)
 (with-seeded-random-source
  17
  0
@@ -324,8 +314,11 @@
    (check-near 'exponential-mean
                (generator-mean (make-exponential-generator 1.5) 6000)
                1.5
-               0.08)))
+               0.08))))
 
+(testing-registry-case
+ 'geometric-mean '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 319)
 (with-seeded-random-source
  18
  0
@@ -333,8 +326,11 @@
    (check-near 'geometric-mean
                (generator-mean (make-geometric-generator 0.4) 10000)
                2.5
-               0.12)))
+               0.12))))
 
+(testing-registry-case
+ 'poisson-small-mean '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 331)
 (with-seeded-random-source
  19
  0
@@ -346,12 +342,24 @@
      (check-near 'poisson-small-mean (car small-summary) 4.0 0.15)
      (check-near 'poisson-small-variance (cadr small-summary) 4.0 0.35)
      (check-near 'poisson-large-mean (car large-summary) 40.0 0.5)
-     (check-near 'poisson-large-variance (cadr large-summary) 40.0 1.5))))
+     (check-near 'poisson-large-variance (cadr large-summary) 40.0 1.5)))))
 
-(check-zipf-distribution 'zipf-harmonic 8 1.0 0.0 8000 0.25)
-(check-zipf-distribution 'zipf-hurwicz 8 1.2 0.5 8000 0.25)
-(check-zipf-distribution 'zipf-flat-ish 8 0.1 0.0 8000 0.25)
+(testing-registry-case
+ 'stdlib-random-data-generators-upstream-case-11 '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 347)
+(check-zipf-distribution 'zipf-harmonic 8 1.0 0.0 8000 0.25))
+(testing-registry-case
+ 'stdlib-random-data-generators-upstream-case-12 '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 351)
+(check-zipf-distribution 'zipf-hurwicz 8 1.2 0.5 8000 0.25))
+(testing-registry-case
+ 'stdlib-random-data-generators-upstream-case-13 '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 355)
+(check-zipf-distribution 'zipf-flat-ish 8 0.1 0.0 8000 0.25))
 
+(testing-registry-case
+ 'sphere-point-on-surface '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 360)
 (with-seeded-random-source
  20
  0
@@ -368,8 +376,11 @@
      (check-near 'sphere-second-coordinate-mean
                  (vector-mean sphere-points 1 600)
                  0.0
-                 0.08))))
+                 0.08)))))
 
+(testing-registry-case
+ 'ellipsoid-point-on-surface '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 381)
 (with-seeded-random-source
  21
  0
@@ -383,8 +394,11 @@
      (check-near 'ellipsoid-first-coordinate-mean
                  (vector-mean points 0 500)
                  0.0
-                 0.5))))
+                 0.5)))))
 
+(testing-registry-case
+ 'ball-point-inside-ellipsoid '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 399)
 (with-seeded-random-source
  22
  0
@@ -393,11 +407,11 @@
           (points (generator->fixed-list (make-ball-generator axes) 500)))
      (for-each
       (lambda (point)
-        (check-true 'ball-point-inside-ellipsoid
-                    (<= (ellipsoid-sum point axes) 1.0)))
+        (test-assert 'ball-point-inside-ellipsoid
+             (<= (ellipsoid-sum point axes) 1.0)))
       points)
-     (check-true 'ball-reaches-inner-radius
-                 (< 0
+     (test-assert 'ball-reaches-inner-radius
+             (< 0
                     (generator-count-if
                      (let ((rest points))
                        (lambda ()
@@ -406,8 +420,8 @@
                            value)))
                      500
                      (lambda (point) (< (ellipsoid-sum point axes) 0.25)))))
-     (check-true 'ball-reaches-outer-radius
-                 (< 0
+     (test-assert 'ball-reaches-outer-radius
+             (< 0
                     (generator-count-if
                      (let ((rest points))
                        (lambda ()
@@ -415,24 +429,33 @@
                            (set! rest (cdr rest))
                            value)))
                      500
-                     (lambda (point) (> (ellipsoid-sum point axes) 0.75))))))))
+                     (lambda (point) (> (ellipsoid-sum point axes) 0.75)))))))))
 
-(check 'gsampling-empty
-       (eof-object? ((gsampling)))
-       #t)
+(testing-registry-case
+ 'gsampling-empty '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 434)
+(test-equal 'gsampling-empty
+             #t
+             (eof-object? ((gsampling)))))
 
-(check-true 'gsampling-mixed-finite-generators
-            (let ((sample (gsampling (generator 'a) (generator) (generator 'b 'c))))
+(testing-registry-case
+ 'gsampling-mixed-finite-generators '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 441)
+(test-assert 'gsampling-mixed-finite-generators
+             (let ((sample (gsampling (generator 'a) (generator) (generator 'b 'c))))
               (let* ((values (generator->fixed-list sample 4))
                      (draws (list (car values) (cadr values) (caddr values))))
                 (and (member 'a draws)
                      (member 'b draws)
                      (member 'c draws)
-                     (eof-object? (cadddr values))))))
+                     (eof-object? (cadddr values)))))))
 
+(testing-registry-case
+ 'stdlib-random-data-generators-upstream-case-19 '(portable stdlib)
+ ("stdlib-random-data-generators-upstream-test.scm" 453)
 (for-each
  (lambda (case)
-   (check-true (car case) (raises? (cadr case))))
+   (test-assert (car case) (raises? (cadr case))))
  (list
   (list 'invalid-with-random-source
         (lambda () (with-random-source 'not-a-source (lambda () #t))))
@@ -497,6 +520,6 @@
   (list 'invalid-ball-dimension
         (lambda () (make-ball-generator 0)))
   (list 'invalid-ball-axes
-        (lambda () (make-ball-generator '#(1.0 -1.0))))))
+        (lambda () (make-ball-generator '#(1.0 -1.0)))))))
 
-(finish-random-data-generator-upstream-tests)
+(testing-runner-main "Stdlib Random Data Generators Upstream portable tests" (command-line))
