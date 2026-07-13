@@ -400,6 +400,10 @@ an OpenAI-compatible local server such as Ollama and run:
 make test-live-model-ci
 ```
 
+That aggregate runs independent Emacs-host, portable Racket, and compiled
+Consent lanes. To run only the Scheme-native live lanes, without ERT discovery
+or orchestration, use `make test-live-model-portable`.
+
 To run the quick-start profile you pulled, use the matching opt-in local shard:
 
 ```sh

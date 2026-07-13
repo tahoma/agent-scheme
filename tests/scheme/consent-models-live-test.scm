@@ -3,7 +3,7 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; This file is intentionally kept out of the default portable suite and run by
-;;; the opt-in live model ERT bridge.  It reaches a real local
+;;; the opt-in Scheme-native live model shard.  It reaches a real local
 ;;; OpenAI-compatible endpoint through `(model-complete)' so the portable Scheme
 ;;; backend cannot satisfy the check with a fake transport.
 
@@ -13,31 +13,9 @@
         (only (consent eval)
               consent-eval-source-result)
         (only (consent result)
-              consent-result->external))
-
-;; Number of failed checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed live model check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check-value name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-(define (check-true name actual)
-  "Require ACTUAL to be true for NAME."
-  (if (not actual)
-      (record-failure name #t actual)))
+              consent-result->external)
+        (testing harness)
+        (stdlib testing))
 
 (define (field-value datum field)
   "Return FIELD from a Scheme-readable result or record datum."
@@ -125,32 +103,23 @@
            '((docstring-retention . full))))
          (status (field-value result 'status))
          (value (field-value result 'value)))
-    (check-value 'portable-live-model-tool-call-status status 'ok)
+    (test-equal "portable live model tool-call status" 'ok status)
     (if (equal? status 'ok)
         (begin
-          (check-true 'portable-live-model-message
-                      (and (pair? value) (car value)))
-          (check-value 'portable-live-model-tool-name
-                       (and (pair? value) (pair? (cdr value)) (cadr value))
-                       'local-echo)
-          (check-true 'portable-live-model-tool-argument-string
-                      (and (pair? value)
-                           (pair? (cdr value))
-                           (pair? (cddr value))
-                           (third value))))
+          (test-assert "portable live model message"
+                       (and (pair? value) (car value)))
+          (test-equal "portable live model tool name"
+                      'local-echo
+                      (and (pair? value) (pair? (cdr value)) (cadr value)))
+          (test-assert "portable live model tool argument string"
+                       (and (pair? value)
+                            (pair? (cdr value))
+                            (pair? (cddr value))
+                            (third value))))
         (begin
           (display "Portable live model result: ")
           (display (consent-result->external result))
           (newline)))))
 
-(run-live-tool-call-check)
-
-(if (= failures 0)
-    (begin
-      (display "Portable live model tool-call test passed")
-      (newline))
-    (begin
-      (display failures)
-      (display " portable live model test failure(s)")
-      (newline)
-      (error "portable live model tests failed")))
+(testing-harness-run "Portable live model tool call"
+  (run-live-tool-call-check))

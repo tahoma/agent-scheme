@@ -59,11 +59,11 @@
     ("Portable R7RS Gambit full suite" . 3)
     ("Portable R7RS Gambit reflection contract" . 4)
     ("Portable R7RS Gambit reflection stress" . 5)
-    ("Portable R7RS Gambit-compiled Consent Scheme full suite" . 6)
+    ("Portable R7RS Gambit-compiled Consent Scheme self-host corpus" . 6)
     ("Portable R7RS Racket full suite" . 7)
     ("Portable R7RS Racket reflection contract" . 8)
     ("Portable R7RS Racket reflection stress" . 9)
-    ("Portable R7RS Racket-compiled Consent Scheme full suite" . 10)
+    ("Portable R7RS Racket-compiled Consent Scheme self-host corpus" . 10)
     ("Portable R7RS Guile full suite" . 11)
     ("Portable R7RS Guile reflection contract" . 12)
     ("Portable R7RS Guile reflection stress" . 13)
@@ -76,8 +76,6 @@
     ("Portable Gambit-backed suite" . 19)
     ("Emacs core language/runtime" . 20)
     ("Emacs library/conformance" . 21)
-    ("Emacs stdlib/reference corpus" . 22)
-    ("Emacs stdlib/reference stress" . 23)
     ("Emacs agent control" . 24)
     ("Emacs agent reliability" . 25)
     ("Emacs capability boundary" . 26)
@@ -143,11 +141,36 @@ Markers use the shell-friendly shape KEY=value on their own line."
           :skipped (consent-ci--number-or-zero (match-string 4 line))
           :ert-seconds (string-to-number (match-string 5 line))))
    ((string-match consent-ci--portable-summary-line-regexp line)
-    (list :ran (string-to-number (match-string 1 line))
+    (list :portable t
+          :ran (string-to-number (match-string 1 line))
           :expected (string-to-number (match-string 2 line))
           :unexpected (string-to-number (match-string 3 line))
           :skipped (string-to-number (match-string 4 line))
           :ert-seconds (string-to-number (match-string 5 line))))))
+
+(defun consent-ci--combine-summaries (summaries)
+  "Combine parallel portable SUMMARIES into one shard summary."
+  (if (or (null summaries) (null (cdr summaries)))
+      (car summaries)
+    (unless (seq-every-p (lambda (summary) (plist-get summary :portable))
+                         summaries)
+      (error "Multiple non-portable summaries in one shard log"))
+    (list :portable t
+          :ran (apply #'+ (mapcar (lambda (summary)
+                                    (plist-get summary :ran))
+                                  summaries))
+          :expected (apply #'+ (mapcar (lambda (summary)
+                                         (plist-get summary :expected))
+                                       summaries))
+          :unexpected (apply #'+ (mapcar (lambda (summary)
+                                           (plist-get summary :unexpected))
+                                         summaries))
+          :skipped (apply #'+ (mapcar (lambda (summary)
+                                        (plist-get summary :skipped))
+                                      summaries))
+          :ert-seconds (apply #'max (mapcar (lambda (summary)
+                                              (plist-get summary :ert-seconds))
+                                            summaries)))))
 
 (defun consent-ci--parse-check-timing-line (line)
   "Parse LINE as one portable Scheme check timing plist, or nil."
@@ -162,7 +185,7 @@ durations, and optional wall-clock seconds recorded by the workflow."
   (let* ((contents (consent-ci--file-string path))
          (tests nil)
          (check-timings nil)
-         (summary nil))
+         (summaries nil))
     (dolist (line (split-string contents "\n"))
       (let ((test (consent-ci--parse-test-line line))
             (line-summary (consent-ci--parse-summary-line line))
@@ -172,7 +195,7 @@ durations, and optional wall-clock seconds recorded by the workflow."
         (when check-timing
           (push check-timing check-timings))
         (when line-summary
-          (setq summary line-summary))))
+          (push line-summary summaries))))
     (append
      (list :path path
            :name (or (consent-ci--metadata-value
@@ -188,7 +211,7 @@ durations, and optional wall-clock seconds recorded by the workflow."
                              (string-to-number value)))
            :check-timings (nreverse check-timings)
            :tests (nreverse tests))
-     (or summary
+     (or (consent-ci--combine-summaries (nreverse summaries))
          '(:ran 0 :expected 0 :unexpected 0 :skipped 0 :ert-seconds 0.0)))))
 
 (defun consent-ci-shard-slowest-tests (shard limit)

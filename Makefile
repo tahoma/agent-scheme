@@ -57,9 +57,7 @@ CONSENT_PARALLEL_MAKE = $(MAKE) --no-print-directory
 CONSENT_ELISP_SOURCES := $(sort $(wildcard lisp/*.el))
 CONSENT_EMACS_HOSTED_TEST_SELECTOR ?= (not "consent-scheme-.*")
 CONSENT_EMACS_CORE_TEST_SELECTOR ?= (or "consent-base.*" "consent-budget.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")
-CONSENT_EMACS_LIBRARY_TEST_SELECTOR ?= (and (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*") (not "consent-library-test-srfi-180-reference-.*"))
-CONSENT_EMACS_STDLIB_REFERENCE_TEST_SELECTOR ?= (and "consent-library-test-srfi-180-reference-.*" (not "consent-library-test-srfi-180-reference-valid-stress-corpus"))
-CONSENT_EMACS_STDLIB_REFERENCE_STRESS_TEST_SELECTOR ?= "consent-library-test-srfi-180-reference-valid-stress-corpus"
+CONSENT_EMACS_LIBRARY_TEST_SELECTOR ?= (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*")
 CONSENT_EMACS_AGENT_CONTROL_TEST_SELECTOR ?= (or "consent-agent-prompt.*" "consent-agent-proposal.*" "consent-agent-registry.*" "consent-task.*")
 CONSENT_EMACS_AGENT_RELIABILITY_TEST_SELECTOR ?= (or "consent-agent-reliability.*" "consent-agent-runner.*")
 CONSENT_EMACS_CAPABILITY_BOUNDARY_TEST_SELECTOR ?= (or "consent-approval.*" "consent-capability.*" "consent-network.*" "consent-policy.*")
@@ -100,8 +98,8 @@ CONSENT_EMACS_INTEGRATION_TEST_SELECTOR ?= (or "consent-native-cli-daemon.*" "co
 # install-without-binary-fails) stay in `test-emacs-tools' since they are fast.
 CONSENT_EMACS_NATIVE_BUILD_TEST_SELECTOR ?= "^consent-compile-portable-test-\\(racket\\|gambit\\)-\\(builds-runner\\|install-and-dist\\)$$"
 CONSENT_PARITY_TEST_SELECTOR ?= "^consent-parity-test-.*"
-CONSENT_LIVE_MODEL_CI_SELECTOR ?= (or "consent-models-test-live-local-openai-compatible-completion" "consent-models-test-live-local-openai-compatible-tool-call" "consent-models-test-live-portable-racket-local-openai-compatible-tool-call" "consent-models-test-live-portable-compiled-local-openai-compatible-tool-call")
-CONSENT_LIVE_MODEL_SELECTOR ?= (or "consent-models-test-live-local-.*" "consent-models-test-live-portable-.*")
+CONSENT_LIVE_MODEL_EMACS_CI_SELECTOR ?= (or "consent-models-test-live-local-openai-compatible-completion" "consent-models-test-live-local-openai-compatible-tool-call")
+CONSENT_LIVE_MODEL_EMACS_SELECTOR ?= "consent-models-test-live-local-.*"
 CONSENT_LIVE_MODEL_SMALL_SET ?= scheme-scripter=qwen2.5-coder:7b,planner=qwen3:4b,memory-curator=gemma3:4b
 CONSENT_LIVE_MODEL_RECOMMENDED_SET ?= scheme-scripter=qwen2.5-coder:14b,planner=qwen3:8b,memory-curator=gemma3:12b
 CONSENT_LIVE_MODEL_LARGE_SET ?= scheme-scripter=qwen2.5-coder:32b,planner=qwen3:30b,memory-curator=gemma3:12b
@@ -111,7 +109,7 @@ CONSENT_LIVE_MODEL_RECOMMENDED_SMOKE_ID ?= $(if $(strip $(CONSENT_LIVE_MODEL_ID)
 CONSENT_LIVE_MODEL_LARGE_SMOKE_ID ?= $(if $(strip $(CONSENT_LIVE_MODEL_ID)),$(CONSENT_LIVE_MODEL_ID),qwen3:30b)
 CONSENT_LIVE_MODEL_SMOKE_ID ?= $(CONSENT_LIVE_MODEL_RECOMMENDED_SMOKE_ID)
 CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect test-portable-gauche-reflect-stress
-CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-stdlib-reference-stress test-emacs-reflect-dynamic-manifest-stress test-emacs-stdlib-reference test-emacs-reflect-documentation-stress test-emacs-library test-emacs-agent-control test-emacs-agent-reliability test-emacs-integration test-emacs-agent-state test-emacs-reflect-catalog-stress test-emacs-core test-emacs-reflect-binding-crosswalk-stress test-emacs-tools test-emacs-capability-boundary test-emacs-reflect
+CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-reflect-dynamic-manifest-stress test-emacs-reflect-documentation-stress test-emacs-library test-emacs-agent-control test-emacs-agent-reliability test-emacs-integration test-emacs-agent-state test-emacs-reflect-catalog-stress test-emacs-core test-emacs-reflect-binding-crosswalk-stress test-emacs-tools test-emacs-capability-boundary test-emacs-reflect
 # Representative portable host kept in the trimmed default make test shard set.
 # The reader/writer/docstring machinery exercised by the portable shards is
 # host-independent, so one host is enough for the fast local loop; the full host
@@ -139,7 +137,7 @@ CONSENT_FULL_TEST_JOBS ?= 16
 
 .DEFAULT_GOAL := help
 
-.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect test-portable-gauche-reflect-stress test-emacs-hosted test-emacs-core test-emacs-library test-emacs-stdlib-reference test-emacs-stdlib-reference-stress test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-capabilities test-emacs-tools test-emacs-reflect test-emacs-reflect-catalog-stress test-emacs-reflect-documentation-stress test-emacs-reflect-binding-crosswalk-stress test-emacs-reflect-dynamic-manifest-stress test-emacs-reflect-stress test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model test-live-model-small test-live-model-recommended test-live-model-large conformance-oracle
+.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-evaluator test-portable-gambit-support test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-gambit-native-run test-portable-racket test-portable-racket-evaluator test-portable-racket-support test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-compiled-run test-portable-guile test-portable-guile-evaluator test-portable-guile-support test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-evaluator test-portable-gauche-support test-portable-gauche-reflect test-portable-gauche-reflect-stress test-emacs-hosted test-emacs-core test-emacs-library test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-capabilities test-emacs-tools test-emacs-reflect test-emacs-reflect-catalog-stress test-emacs-reflect-documentation-stress test-emacs-reflect-binding-crosswalk-stress test-emacs-reflect-dynamic-manifest-stress test-emacs-reflect-stress test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model test-live-model-portable test-live-model-portable-racket test-live-model-portable-compiled test-live-model-emacs-ci test-live-model-emacs test-live-model-small test-live-model-recommended test-live-model-large conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -165,11 +163,11 @@ help:
 	@printf '  %-26s %s\n' 'test-portable-gambit' 'Run the portable R7RS Gambit full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit-reflect' 'Run the portable R7RS Gambit reflection contract shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit-reflect-stress' 'Run the portable R7RS Gambit reflection stress shard.'
-	@printf '  %-26s %s\n' 'test-portable-gambit-native' 'Build and run the Gambit-compiled Consent Scheme full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-gambit-native' 'Build and run the Gambit-compiled self-host corpus.'
 	@printf '  %-26s %s\n' 'test-portable-racket' 'Run the portable R7RS Racket full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-racket-reflect' 'Run the portable R7RS Racket reflection contract shard.'
 	@printf '  %-26s %s\n' 'test-portable-racket-reflect-stress' 'Run the portable R7RS Racket reflection stress shard.'
-	@printf '  %-26s %s\n' 'test-portable-compiled' 'Build and run the Racket-compiled Consent Scheme full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-compiled' 'Build and run the Racket-compiled self-host corpus.'
 	@printf '  %-26s %s\n' 'test-portable-guile' 'Run the portable R7RS Guile full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-guile-reflect' 'Run the portable R7RS Guile reflection contract shard.'
 	@printf '  %-26s %s\n' 'test-portable-guile-reflect-stress' 'Run the portable R7RS Guile reflection stress shard.'
@@ -179,8 +177,6 @@ help:
 	@printf '  %-26s %s\n' 'test-emacs-hosted' 'Run all non-portable Emacs-hosted ERT tests.'
 	@printf '  %-26s %s\n' 'test-emacs-core' 'Run the Emacs-hosted core language/runtime shard.'
 	@printf '  %-26s %s\n' 'test-emacs-library' 'Run the Emacs-hosted library/conformance shard.'
-	@printf '  %-26s %s\n' 'test-emacs-stdlib-reference' 'Run the Emacs-hosted stdlib reference corpus shard.'
-	@printf '  %-26s %s\n' 'test-emacs-stdlib-reference-stress' 'Run the Emacs-hosted stdlib reference stress shard.'
 	@printf '  %-26s %s\n' 'test-emacs-agent-control' 'Run the Emacs-hosted agent control shard.'
 	@printf '  %-26s %s\n' 'test-emacs-agent-reliability' 'Run the Emacs-hosted agent reliability shard.'
 	@printf '  %-26s %s\n' 'test-emacs-capability-boundary' 'Run the Emacs-hosted capability boundary shard.'
@@ -198,6 +194,7 @@ help:
 	@printf '  %-26s %s\n' 'test-parity' 'Diff the Emacs and portable cores over the shared corpus (#374).'
 	@printf '  %-26s %s\n' 'test-live-model-ci' 'Run the CI live local model smoke test.'
 	@printf '  %-26s %s\n' 'test-live-model' 'Run all opt-in live local model tests.'
+	@printf '  %-26s %s\n' 'test-live-model-portable' 'Run Scheme-native direct and compiled live model tests.'
 	@printf '  %-26s %s\n' 'test-live-model-small' 'Run opt-in live tests for the quick-start small profile.'
 	@printf '  %-26s %s\n' 'test-live-model-recommended' 'Run opt-in live tests for the quick-start recommended profile.'
 	@printf '  %-26s %s\n' 'test-live-model-large' 'Run opt-in live tests for the quick-start large profile.'
@@ -228,8 +225,6 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_HOSTED_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-hosted.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_CORE_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-core.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_LIBRARY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-library.'
-	@printf '  %-50s %s\n' 'CONSENT_EMACS_STDLIB_REFERENCE_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-stdlib-reference.'
-	@printf '  %-50s %s\n' 'CONSENT_EMACS_STDLIB_REFERENCE_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-stdlib-reference-stress.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_AGENT_CONTROL_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-agent-control.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_AGENT_RELIABILITY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-agent-reliability.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_CAPABILITY_BOUNDARY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-capability-boundary.'
@@ -246,8 +241,8 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_NATIVE_BUILD_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-native-build.'
 	@printf '  %-50s %s\n' 'CONSENT_PARITY_TEST_SELECTOR=SEL' 'ERT selector used by make test-parity.'
 	@printf '  %-50s %s\n' 'CONSENT_PARITY_HOST=chibi|gauche|guile' 'Portable host that runs the parity emitter (auto-discovered when unset).'
-	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_CI_SELECTOR=SEL' 'ERT selector used by make test-live-model-ci.'
-	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_SELECTOR=SEL' 'ERT selector used by make test-live-model.'
+	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_EMACS_CI_SELECTOR=SEL' 'ERT selector for the Emacs-host live smoke lane.'
+	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_EMACS_SELECTOR=SEL' 'ERT selector for the Emacs-host live profile lane.'
 	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_ENDPOINT=URL' 'OpenAI-compatible endpoint for live local model tests.'
 	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_ID=ID' 'Model id used by the live local smoke test.'
 	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_MATRIX_CASES=ROLE=MODEL,...' 'Cases used by the opt-in live model matrix.'
@@ -455,7 +450,13 @@ test-portable-chibi:
 	CONSENT_PORTABLE_HOST=chibi CONSENT_PORTABLE_GROUP=full $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gambit:
-	CONSENT_PORTABLE_HOST=gambit CONSENT_PORTABLE_GROUP=full $(CONSENT_PORTABLE_RUNNER)
+	$(CONSENT_PARALLEL_MAKE) -j2 test-portable-gambit-evaluator test-portable-gambit-support
+
+test-portable-gambit-evaluator:
+	CONSENT_PORTABLE_HOST=gambit CONSENT_PORTABLE_GROUP=full-evaluator $(CONSENT_PORTABLE_RUNNER)
+
+test-portable-gambit-support:
+	CONSENT_PORTABLE_HOST=gambit CONSENT_PORTABLE_GROUP=full-support $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gambit-reflect:
 	CONSENT_PORTABLE_HOST=gambit CONSENT_PORTABLE_GROUP=reflect $(CONSENT_PORTABLE_RUNNER)
@@ -471,10 +472,19 @@ test-portable-gambit-native:
 	fi
 	@if [ -f '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/compile.log' ]; then cat '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/compile.log'; fi
 	@if [ -f '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/smoke.log' ]; then cat '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/smoke.log'; fi
+	$(CONSENT_PARALLEL_MAKE) test-portable-gambit-native-run
+
+test-portable-gambit-native-run:
 	CONSENT_GAMBIT_NATIVE='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/gambit/bin/consent)' CONSENT_PORTABLE_HOST=gambit-native CONSENT_PORTABLE_GROUP=compiled $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-racket:
-	CONSENT_PORTABLE_HOST=racket CONSENT_PORTABLE_GROUP=full $(CONSENT_PORTABLE_RUNNER)
+	$(CONSENT_PARALLEL_MAKE) -j2 test-portable-racket-evaluator test-portable-racket-support
+
+test-portable-racket-evaluator:
+	CONSENT_PORTABLE_HOST=racket CONSENT_PORTABLE_GROUP=full-evaluator $(CONSENT_PORTABLE_RUNNER)
+
+test-portable-racket-support:
+	CONSENT_PORTABLE_HOST=racket CONSENT_PORTABLE_GROUP=full-support $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-racket-reflect:
 	CONSENT_PORTABLE_HOST=racket CONSENT_PORTABLE_GROUP=reflect $(CONSENT_PORTABLE_RUNNER)
@@ -488,10 +498,19 @@ test-portable-compiled:
 	else \
 		printf '%s\n' 'Racket compile prerequisites are not available; compiled host shard will skip if no runner exists.'; \
 	fi
+	$(CONSENT_PARALLEL_MAKE) test-portable-compiled-run
+
+test-portable-compiled-run:
 	CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_PORTABLE_HOST=compiled CONSENT_PORTABLE_GROUP=compiled $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-guile:
-	CONSENT_PORTABLE_HOST=guile CONSENT_PORTABLE_GROUP=full $(CONSENT_PORTABLE_RUNNER)
+	$(CONSENT_PARALLEL_MAKE) -j2 test-portable-guile-evaluator test-portable-guile-support
+
+test-portable-guile-evaluator:
+	CONSENT_PORTABLE_HOST=guile CONSENT_PORTABLE_GROUP=full-evaluator $(CONSENT_PORTABLE_RUNNER)
+
+test-portable-guile-support:
+	CONSENT_PORTABLE_HOST=guile CONSENT_PORTABLE_GROUP=full-support $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-guile-reflect:
 	CONSENT_PORTABLE_HOST=guile CONSENT_PORTABLE_GROUP=reflect $(CONSENT_PORTABLE_RUNNER)
@@ -500,7 +519,13 @@ test-portable-guile-reflect-stress:
 	CONSENT_PORTABLE_HOST=guile CONSENT_PORTABLE_GROUP=reflect-stress $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gauche:
-	CONSENT_PORTABLE_HOST=gauche CONSENT_PORTABLE_GROUP=full $(CONSENT_PORTABLE_RUNNER)
+	$(CONSENT_PARALLEL_MAKE) -j2 test-portable-gauche-evaluator test-portable-gauche-support
+
+test-portable-gauche-evaluator:
+	CONSENT_PORTABLE_HOST=gauche CONSENT_PORTABLE_GROUP=full-evaluator $(CONSENT_PORTABLE_RUNNER)
+
+test-portable-gauche-support:
+	CONSENT_PORTABLE_HOST=gauche CONSENT_PORTABLE_GROUP=full-support $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gauche-reflect:
 	CONSENT_PORTABLE_HOST=gauche CONSENT_PORTABLE_GROUP=reflect $(CONSENT_PORTABLE_RUNNER)
@@ -521,12 +546,6 @@ test-emacs-core:
 
 test-emacs-library:
 	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_LIBRARY_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
-
-test-emacs-stdlib-reference:
-	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_STDLIB_REFERENCE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
-
-test-emacs-stdlib-reference-stress:
-	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_STDLIB_REFERENCE_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-emacs-agent-control:
 	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_AGENT_CONTROL_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
@@ -588,7 +607,7 @@ test-live-model-ci:
 	else \
 		printf '%s\n' 'Racket compile prerequisites are not available; compiled live model shard will skip if no runner exists.'; \
 	fi
-	CONSENT_LIVE_MODEL_TEST=1 CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_CI_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_LIVE_MODEL_TEST=1 CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' $(CONSENT_PARALLEL_MAKE) -j3 test-live-model-emacs-ci test-live-model-portable-racket test-live-model-portable-compiled
 
 test-live-model:
 	@if command -v '$(CONSENT_RACKET)' >/dev/null 2>&1 && command -v '$(CONSENT_RACO)' >/dev/null 2>&1; then \
@@ -596,7 +615,27 @@ test-live-model:
 	else \
 		printf '%s\n' 'Racket compile prerequisites are not available; compiled live model shard will skip if no runner exists.'; \
 	fi
-	CONSENT_LIVE_MODEL_TEST=1 CONSENT_LIVE_MODEL_MATRIX=1 CONSENT_LIVE_MODEL_ID='$(CONSENT_LIVE_MODEL_SMOKE_ID)' CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_MATRIX_CASES)' CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_LIVE_MODEL_TEST=1 CONSENT_LIVE_MODEL_MATRIX=1 CONSENT_LIVE_MODEL_ID='$(CONSENT_LIVE_MODEL_SMOKE_ID)' CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_MATRIX_CASES)' CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' $(CONSENT_PARALLEL_MAKE) -j3 test-live-model-emacs test-live-model-portable-racket test-live-model-portable-compiled
+
+test-live-model-portable:
+	@if command -v '$(CONSENT_RACKET)' >/dev/null 2>&1 && command -v '$(CONSENT_RACO)' >/dev/null 2>&1; then \
+		CONSENT_COMPILE_HOST=racket $(CONSENT_PARALLEL_MAKE) compile; \
+	else \
+		printf '%s\n' 'Racket compile prerequisites are not available; compiled live model shard will skip if no runner exists.'; \
+	fi
+	CONSENT_LIVE_MODEL_TEST=1 CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' $(CONSENT_PARALLEL_MAKE) -j2 test-live-model-portable-racket test-live-model-portable-compiled
+
+test-live-model-portable-racket:
+	CONSENT_PORTABLE_HOST=racket CONSENT_PORTABLE_GROUP=live-direct $(CONSENT_PORTABLE_RUNNER)
+
+test-live-model-portable-compiled:
+	CONSENT_PORTABLE_HOST=compiled CONSENT_PORTABLE_GROUP=live-compiled $(CONSENT_PORTABLE_RUNNER)
+
+test-live-model-emacs-ci:
+	CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_EMACS_CI_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-live-model-emacs:
+	CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_EMACS_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-live-model-small:
 	$(CONSENT_PARALLEL_MAKE) test-live-model CONSENT_LIVE_MODEL_ID='$(CONSENT_LIVE_MODEL_SMALL_SMOKE_ID)' CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_SMALL_SET)'

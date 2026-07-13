@@ -5,8 +5,8 @@
 ;;; Commentary:
 
 ;; Host-independent module-boundary check for the portable runtime.  The
-;; portable module-boundary test file itself runs through the shared aggregate
-;; host suite (`consent--scheme-host-run-suite'); the out-of-repository load
+;; portable module-boundary test file itself runs through the Scheme-native
+;; test plan; the out-of-repository load
 ;; check below spawns Chibi directly because it must run from a working
 ;; directory outside the repository tree.
 

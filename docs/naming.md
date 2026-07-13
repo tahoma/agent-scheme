@@ -112,8 +112,9 @@ diff)`, `scheme/agent/diagnostics.sld` for `(agent diagnostics)`, and
 `scheme/agent/task.sld` for `(agent task)`, and
 `scheme/agent/transcript.sld` for `(agent transcript)`.
 
-Scheme-side tests live under `tests/scheme/`; their ERT bridge files still use
-the normal `tests/consent-*-test.el` naming pattern.
+Scheme-side tests live under `tests/scheme/` and run from the Scheme-native test
+plan. Emacs-host-specific tests use the normal `tests/consent-*-test.el` naming
+pattern; they do not serve as bridge launchers for portable suites.
 
 If future bootstrap work touches files named `lisp/config-agent*.el`, treat
 those files as host-configuration integration. Any durable Consent Scheme API

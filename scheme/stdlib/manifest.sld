@@ -74,9 +74,11 @@
           (local-patches ())))
         (verification
          ((test-status
-           (import-resolution representative-read-write emacs-json-oracle
-                              portable-host-suite imported-reference-corpus
-                              json-lines json-text-sequences))))
+           (import-resolution representative-read-write portable-host-suite
+                              compiled-self-host-corpus
+                              imported-reference-corpus
+                              invalid-reference-corpus json-lines
+                              json-text-sequences))))
         (status direct-portable-implementation)
         (canonical #t))
        (manifest-index-entry

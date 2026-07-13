@@ -651,10 +651,13 @@ surface each shard covers.
 
 The official stdlib reference corpus has canonical portable coverage in
 `tests/scheme/stdlib-json-reference-test.scm`, including the FoundationDB JSON
-sample. The `test-emacs-stdlib-reference` and
-`test-emacs-stdlib-reference-stress` shards remain as Emacs-bootstrap
-compatibility and budget coverage, so moving semantics portable-first does not
-reduce bootstrap coverage. Portable host failures are reported by the named
+sample, invalid inputs and their explicit exclusions, implementation-defined
+fixture classifications, JSON Lines, and JSON Text Sequences. The complete
+corpus runs through the Gambit- and Racket-compiled self-hosted lanes as the
+gold-standard proof that the shipped evaluator can load and exercise its own
+JSON library. SRFI 180 reference semantics no longer run through ERT; the old
+eight-minute Emacs stress shard and its smaller companion shard were removed.
+Portable host failures are reported by the named
 `test-portable-*` shard and test file; Emacs adapter/bootstrap failures remain
 reported by the named `test-emacs-*` shard.
 
@@ -924,8 +927,6 @@ CONSENT_GAUCHE=gosh make test-portable-gauche-reflect
 CONSENT_GAUCHE=gosh make test-portable-gauche-reflect-stress
 make test-emacs-core
 make test-emacs-library
-make test-emacs-stdlib-reference
-make test-emacs-stdlib-reference-stress
 make test-emacs-agent-control
 make test-emacs-agent-reliability
 make test-emacs-capability-boundary
@@ -957,16 +958,19 @@ CONSENT_CHIBI=chibi-scheme make test-portable-chibi
 ```
 
 The full-suite host shards run the same portable Scheme test files so their
-timing rows compare host behavior rather than different test scopes. The Racket
-bridge generates
+timing rows compare host behavior rather than different test scopes. Each host
+aggregate resolves `full-evaluator` and `full-support` from the Scheme plan and
+runs those measured subsets concurrently; the evaluator program was the common
+critical path, while the aggregate log still reports one complete host suite.
+The Racket bridge generates
 temporary `#lang r7rs` collection wrappers for checked-in `.sld` libraries
 because Racket's R7RS package resolves imports as Racket collection modules.
-The Racket compiled host shard runs `make compile` first, then executes that
-same full-suite file list through
-`build/compile/racket/bin/consent --script`. The Gambit-native shard runs
-`CONSENT_COMPILE_HOST=gambit make compile`, emits the build tree's
-`logs/compile.log` and `logs/smoke.log` timing datums, and executes the same
-file list through `build/compile/gambit/bin/consent --script`.
+The compiled self-host plan is a focused product corpus: reader behavior,
+manifest/import smoke coverage, and the complete SRFI 180 reference corpus.
+Local `test-portable-compiled` and `test-portable-gambit-native` targets compile
+before invoking the matching `*-run` consumer through `consent --host-run`. CI
+exposes the phases separately and prioritizes each compile step before direct
+host work and the compiled test consumer.
 Compiled-build CI caches are intentionally intermediate-only: fallback restores
 may warm generated sources, compiled objects, incremental hashes, or Racket
 bytecode, but they must not restore a runnable `bin/consent` for the shard to
@@ -981,8 +985,8 @@ container base image is pulled from the AWS ECR Public Ubuntu mirror
 matrix runs one shard at a time to avoid registry pull throttling during job
 provisioning. These shards contribute required host timing data. The
 Emacs-hosted shards split the non-portable ERT suite into core
-language/runtime, library/conformance, stdlib reference corpus, stdlib reference
-stress, agent/capability, tools/docs, and integration groups.
+language/runtime, library/conformance, agent/capability, tools/docs, and
+integration groups.
 `make test-emacs-hosted`
 remains available as the local aggregate for all non-portable ERT tests with
 `(not "consent-scheme-.*")`.
@@ -1014,10 +1018,18 @@ the field set, the schema-version discipline, and the durable-sink plan.
 Live local model tests require an OpenAI-compatible local model endpoint. The
 CI smoke target exercises ordinary completion plus forced tool-calling through
 the Emacs host, the portable Racket host, and the Racket-compiled Consent
-Scheme host. Run the CI smoke selector with:
+Scheme host. The two portable programs are selected and run directly by the
+Scheme test plan and portable launcher; ERT only runs the separate Emacs-host
+checks. Run the CI smoke selector with:
 
 ```sh
 make test-live-model-ci
+```
+
+Run only the Scheme-native direct and compiled live lanes with:
+
+```sh
+make test-live-model-portable
 ```
 
 Run one quick-start profile shard after pulling that profile's models:

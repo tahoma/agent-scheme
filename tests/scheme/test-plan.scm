@@ -151,13 +151,13 @@
     (tags (full direct stdlib testing upstream)))
    (program
     (path "tests/scheme/stdlib-json-reference-test.scm")
-    (tags (full direct stdlib reference slow)))
+    (tags (full direct compiled stdlib reference stress slow)))
    (program
     (path "tests/scheme/stdlib-generator-test.scm")
     (tags (full direct stdlib)))
    (program
     (path "tests/scheme/consent-eval-test.scm")
-    (tags (full direct core slow)))
+    (tags (full direct core evaluator slow)))
    (program
     (path "tests/scheme/stdlib-mapping-conformance-test.scm")
     (tags (full direct stdlib conformance slow)))
@@ -178,6 +178,12 @@
     (tags (live-compiled agent models integration self-hosted)))))
  (shards
   ((shard (name full) (selector (tag full)))
+   (shard
+    (name full-evaluator)
+    (selector (and (tag full) (tag evaluator))))
+   (shard
+    (name full-support)
+    (selector (and (tag full) (not (tag evaluator)))))
    (shard (name compiled) (selector (tag compiled)))
    (shard (name reflect) (selector (tag reflect)))
    (shard (name reflect-stress) (selector (tag reflect-stress)))
