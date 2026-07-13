@@ -198,8 +198,9 @@
     ;; programs. It grants access to the runtime's own internal libraries and
     ;; raises the per-run budgets so a test file that drives the runtime hard
     ;; can complete. Program output is captured per form through the interaction
-    ;; context rather than written to a raw host port, so the host runner stays
-    ;; inside the capability model.
+    ;; context rather than written to a raw host port.  Program input is a
+    ;; granted textual stream already at EOF: test programs receive an ordinary
+    ;; current input port without exposing the host runner's own stdin.
     (define cli-script-host-run-base-options
       '((internal-libraries-allowed . #t)
         (max-steps . 1000000000)
@@ -222,7 +223,9 @@
       "on every read/write rather than failing closed mid-stream. A"
       "process-environment grant is included so a host-runner test can read"
       "its CI configuration from the host environment; that capability remains"
-      "denied to ordinary scripts."
+      "denied to ordinary scripts. A mediated stdin port already at EOF lets"
+      "portable tests observe and dynamically bind `current-input-port' without"
+      "receiving ambient access to the host runner's stdin."
       #((parameters
          (root (type string)
           (description
@@ -239,7 +242,9 @@
         (effects allocation))
       (let ((options
              (cons
-              (cons 'include-directory root)
+              (cons 'program-input-reader (lambda () #f))
+              (cons
+               (cons 'include-directory root)
               (cons (list 'capability-grants
                           (list 'capability-grant
                                 (list 'id 'host-run-file-grant)
@@ -266,8 +271,14 @@
                                       '(current-second
                                         current-jiffy
                                         jiffies-per-second))
+                                (list 'expires 'never))
+                          (list 'capability-grant
+                                (list 'id 'host-run-stdin-grant)
+                                (list 'domain 'port)
+                                (cons 'operations '(read))
+                                (list 'scope (list 'backing 'stdin))
                                 (list 'expires 'never)))
-                    cli-script-host-run-base-options))))
+                    cli-script-host-run-base-options)))))
         (if (null? maybe-path)
             options
             (cons (cons 'command-line (list (car maybe-path))) options))))

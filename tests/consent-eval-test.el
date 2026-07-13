@@ -186,6 +186,102 @@ fails closed without a grant.  Parity twin of the portable program-output checks
      (consent-eval-source "(current-error-port)" nil nil)
      :type 'consent-eval-error)))
 
+(ert-deftest consent-eval-test-current-ports-are-dynamically-bindable ()
+  "Current ports bind dynamically while granted host streams stay mediated."
+  (let ((output "")
+        (error-output "")
+        (grants '((capability-grant
+                   (id program-input) (domain port) (operations read close)
+                   (scope (backing stdin)) (expires never))
+                  (capability-grant
+                   (id program-output) (domain port)
+                   (operations write flush close)
+                   (scope (backing stdout)) (expires never))
+                  (capability-grant
+                   (id program-error) (domain port)
+                   (operations write flush close)
+                   (scope (backing stderr)) (expires never)))))
+    (should
+     (equal
+      (consent-eval-test--external
+       "(let ((default-input (current-input-port))
+              (default-output (current-output-port))
+              (default-error (current-error-port))
+              (input (open-input-string \"i\"))
+              (output (open-output-string))
+              (error-port (open-output-string)))
+          (let ((inside
+                 (parameterize ((current-input-port input)
+                                (current-output-port output)
+                                (current-error-port error-port))
+                   (write-string \"out\")
+                   (write-string \"err\" (current-error-port))
+                   (list (read-char)
+                         (eq? (current-input-port) input)
+                         (eq? (current-output-port) output)
+                         (eq? (current-error-port) error-port)))))
+            (write-string \"host-out\")
+            (write-string \"host-err\" (current-error-port))
+            (list inside
+                  (read-char)
+                  (get-output-string output)
+                  (get-output-string error-port)
+                  (eq? (current-input-port) default-input)
+                  (eq? (current-output-port) default-output)
+                  (eq? (current-error-port) default-error))))"
+       (list :program-input-reader
+             (consent-program-input-from-string "h")
+             :program-output-writer
+             (lambda (chunk) (setq output (concat output chunk)))
+             :program-error-writer
+             (lambda (chunk)
+               (setq error-output (concat error-output chunk)))
+             :capability-grants grants))
+      "((#\\i #t #t #t) #\\h \"out\" \"err\" #t #t #t)"))
+    (should (equal output "host-out"))
+    (should (equal error-output "host-err"))))
+
+(ert-deftest consent-eval-test-current-port-unwind-and-reentry ()
+  "Current output follows exception unwinding and continuation re-entry."
+  (let ((grants '((capability-grant
+                   (id program-output) (domain port)
+                   (operations write flush close)
+                   (scope (backing stdout)) (expires never)))))
+    (should
+     (equal
+      (consent-eval-test--external
+       "(let ((default-output (current-output-port))
+              (bound-output (open-output-string))
+              (again #f)
+              (outside #f)
+              (observed '()))
+          (let ((unwound?
+                 (guard (condition
+                         (else (eq? (current-output-port) default-output)))
+                   (parameterize ((current-output-port bound-output))
+                     (raise 'current-port-test-exception)))))
+            (call/cc
+             (lambda (escape)
+               (set! outside escape)
+               (parameterize ((current-output-port bound-output))
+                 (call/cc
+                  (lambda (continuation) (set! again continuation)))
+                 (set! observed
+                       (cons (eq? (current-output-port) bound-output)
+                             observed))
+                 (outside 'escaped))))
+            (set! observed
+                  (cons (eq? (current-output-port) default-output)
+                        observed))
+            (if again
+                (let ((resume again))
+                  (set! again #f)
+                  (resume 'resumed))
+                (list unwound? (reverse observed)))))"
+       (list :program-output-writer (lambda (_chunk) nil)
+             :capability-grants grants))
+      "(#t (#t #t #t #t))"))))
+
 (ert-deftest consent-eval-test-program-binary-input-stream ()
   "Binary program input connects current-input-port under a stdin-backed grant.
 A `:program-input-byte-reader' plus an active `port'/`read' grant scoped to
