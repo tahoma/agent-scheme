@@ -146,3 +146,12 @@ self-hosted interaction-context programs explicit instead of hiding that host
 execution distinction in ERT. `make test-live-model-portable` invokes those
 Scheme-plan shards directly; the aggregate live targets run the Emacs-host
 checks beside them, never as their discovery or process-control parent.
+
+The same plan makes compiled self-host coverage auditable rather than an
+allowlist hidden in shell orchestration. All 55 ordinary `full` programs carry
+exactly one of `compiled` or `self-host-gap`; the separate manifest smoke makes
+the compiled shard 38 programs total. The 18 current gaps are acceptance inputs
+to #346 (7 programs), #350 (1), #432 (8), and #901 (2). Their issue comments
+name the exact registered cases or first failing manual checks. As those runtime
+defects ship, their programs move into `compiled`; the plan test rejects an
+unclassified full-suite program or a program tagged both ways.

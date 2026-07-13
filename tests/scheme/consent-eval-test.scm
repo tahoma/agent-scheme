@@ -6373,6 +6373,20 @@
                  'program-error-byte-writer program-error-grant)))
   (check 'program-binary-error-granted-bytes (car captured) '(33)))
 
+;; Durable interactions capture current-error-port alongside ordinary output;
+;; this is required by SRFI test runners executing inside compiled --host-run.
+(let* ((interaction (consent-make-interaction-context))
+       (result
+        (consent-interaction-eval-form
+         interaction
+         '(write-string "diagnostic" (current-error-port)))))
+  (check 'interaction-current-error-port-status
+         (field-value result 'status)
+         'ok)
+  (check 'interaction-current-error-port-output
+         (consent-interaction-program-output interaction)
+         "diagnostic"))
+
 ;; Keep this import-error regression at the end: Racket's R7RS host preserves
 ;; enough handler state after this rejected import to perturb later checks.
 (check 'consent-json-read-subset-excludes-write

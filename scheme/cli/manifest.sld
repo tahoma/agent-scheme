@@ -36,6 +36,136 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (cli native-cli))
+        (owner cli)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer cli)
+        (source-kind source-library)
+        (source (path "native-cli.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (cli-native-cli-execute
+          cli-native-cli-parse-arguments
+          cli-native-cli-main))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme write))
+          (library (scheme read))
+          (library (scheme file))
+          (library (scheme process-context))
+          (library (cli process-host))))
+        (provenance ((origin repo)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (cli repl-chrome))
+        (owner cli)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer cli)
+        (source-kind source-library)
+        (source (path "repl-chrome.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (cli-repl-chrome-lookup
+          cli-repl-chrome-names
+          cli-repl-chrome-default-name
+          cli-repl-chrome-input-echoed?
+          cli-repl-chrome-output-ordinal
+          cli-repl-chrome-output-formatter
+          cli-repl-chrome-paint
+          cli-repl-chrome-color?))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme write))
+          (library (consent reader))))
+        (provenance ((origin repo)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (cli repl-shell))
+        (owner cli)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer cli)
+        (source-kind source-library)
+        (source (path "repl-shell.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (cli-repl-drive
+          cli-repl-records-from-string
+          cli-repl-records-from-datum-stream
+          cli-repl-submissions-from-records
+          cli-repl-replay-input
+          cli-repl-replay-records
+          cli-repl-replay-report
+          cli-repl-run
+          cli-repl-parse-options
+          cli-repl-rendered-from-string
+          cli-repl-capture-from-string
+          cli-repl-replay-main
+          cli-repl-main))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme case-lambda))
+          (library (scheme write))
+          (library (scheme read))
+          (library (scheme file))
+          (library (scheme process-context))
+          (library (consent eval))
+          (library (consent reader))
+          (library (consent result))
+          (library (stdlib generator))
+          (library (stdlib receive))
+          (library (consent library))
+          (library (cli repl-chrome))))
+        (provenance ((origin repo)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (cli script))
+        (owner cli)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer cli)
+        (source-kind source-library)
+        (source (path "script.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (cli-script-shebang-line?
+          cli-script-strip-shebang
+          cli-script-source-from-file
+          cli-script-run-file
+          cli-script-host-run-options
+          cli-script-host-run-file))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme case-lambda))
+          (library (scheme file))
+          (library (consent eval))
+          (library (consent reader))
+          (library (stdlib generator))))
+        (provenance ((origin repo)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (cli process-host))
         (owner cli)
         (provider repo-source)

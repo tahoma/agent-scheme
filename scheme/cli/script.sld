@@ -210,7 +210,7 @@
         (max-source-metadata . 1000000000)
         (max-interned-symbols . 1000000000)))
 
-    (define (cli-script-host-run-options root)
+    (define (cli-script-host-run-options root . maybe-path)
       "Return the host-run capability options rooted at absolute directory"
       "ROOT.  ROOT becomes the include directory and the sole file-access"
       "root, so a host runner reads fixtures and writes scratch files only"
@@ -227,41 +227,50 @@
          (root (type string)
           (description
            ("Absolute directory the host run is scoped to; becomes the"
-             "include directory and sole file-access root."))))
+             "include directory and sole file-access root.")))
+         (maybe-path (type list)
+          (description
+           ("Optional singleton test-program path used as the complete"
+             "Scheme command line."))))
         (returns (type list)
          (description
           ("An options alist of include-directory, capability grants,"
             "and raised per-run budgets for the host runner.")))
         (effects allocation))
-      (cons (cons 'include-directory root)
-            (cons (list 'capability-grants
-                        (list 'capability-grant
-                              (list 'id 'host-run-file-grant)
-                              (list 'domain 'file)
-                              (cons 'operations
-                                    '(read create write metadata delete load))
-                              (list 'scope
-                                    (list 'file-root root)
-                                    (list 'paths (list "."))
-                                    (list 'remote 'denied)
-                                    (list 'symlinks 'resolve-within-root))
-                              (list 'expires 'never))
-                        (list 'capability-grant
-                              (list 'id 'host-run-process-environment-grant)
-                              (list 'domain 'process-environment)
-                              (cons 'operations '(read))
-                              (list 'expires 'never))
-                        ;; Host-runner tests time their checks through
-                        ;; (scheme time), so the bundle grants clock reads.
-                        (list 'capability-grant
-                              (list 'id 'host-run-clock-grant)
-                              (list 'domain 'clock)
-                              (cons 'operations
-                                    '(current-second
-                                      current-jiffy
-                                      jiffies-per-second))
-                              (list 'expires 'never)))
-                  cli-script-host-run-base-options)))
+      (let ((options
+             (cons
+              (cons 'include-directory root)
+              (cons (list 'capability-grants
+                          (list 'capability-grant
+                                (list 'id 'host-run-file-grant)
+                                (list 'domain 'file)
+                                (cons 'operations
+                                      '(read create write metadata delete load))
+                                (list 'scope
+                                      (list 'file-root root)
+                                      (list 'paths (list "."))
+                                      (list 'remote 'denied)
+                                      (list 'symlinks 'resolve-within-root))
+                                (list 'expires 'never))
+                          (list 'capability-grant
+                                (list 'id 'host-run-process-environment-grant)
+                                (list 'domain 'process-environment)
+                                (cons 'operations '(read))
+                                (list 'expires 'never))
+                          ;; Host-runner tests time their checks through
+                          ;; (scheme time), so the bundle grants clock reads.
+                          (list 'capability-grant
+                                (list 'id 'host-run-clock-grant)
+                                (list 'domain 'clock)
+                                (cons 'operations
+                                      '(current-second
+                                        current-jiffy
+                                        jiffies-per-second))
+                                (list 'expires 'never)))
+                    cli-script-host-run-base-options))))
+        (if (null? maybe-path)
+            options
+            (cons (cons 'command-line (list (car maybe-path))) options))))
 
     (define (script--result-field datum name)
       "Return the single value of field NAME in tagged-list DATUM, or #f."
@@ -298,7 +307,7 @@
       (let ((source (cli-script-source-from-file path))
             (interaction
              (consent-make-interaction-context
-              (cli-script-host-run-options root))))
+              (cli-script-host-run-options root path))))
         (let loop ((rest (consent-read-all source)))
           (if (null? rest)
               #t
