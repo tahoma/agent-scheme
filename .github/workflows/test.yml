@@ -28,13 +28,10 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  # The compiled and gambit-native shard targets build the non-shipped
-  # host-execution test runner and run the white-box suite against the COMPILED
-  # interpreter on every lane, including per-push: that compiled-interpreter
-  # coverage (did gsc/raco miscompile the evaluator?) is the reason those shards
-  # exist, and the interpreted hosts only cover the host-agnostic source logic, so
-  # it must not be skipped. (A plain `make compile`, the install path, still does
-  # not build the runner.)
+  # Compiled self-host build jobs publish the product interpreter before their
+  # Scheme-native test matrices start. Those matrices exercise the same named
+  # plan shards as direct hosts, making compiled/direct timings comparable while
+  # keeping the compiled evaluator itself under test.
 
 jobs:
   license-reuse:
@@ -99,12 +96,11 @@ jobs:
     name: portable R7RS / Gambit full suite / syntax ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    # Gambit is the canonical portable host: on the per-push lane its full-suite
-    # shard runs the canonical on/full combo plus a single fully-stripped off/none
-    # de-feature smoke leg, while its reflection contract/stress and
-    # recompile-bound native shards run on/full only (#481). The scheduled /
-    # workflow_dispatch lane expands the full-suite and native shards back to the
-    # full 2×3 syntax/docstring cross-product. The reader/writer/docstring
+    # Gambit is the canonical portable host: on the per-push lane its suite runs
+    # the canonical on/full combo plus a single fully-stripped off/none de-feature
+    # smoke leg, while its reflection contract/stress shards run on/full only
+    # (#481). The scheduled / workflow_dispatch lane expands the suite back to
+    # the full 2×3 syntax/docstring cross-product. The reader/writer/docstring
     # machinery that axis exercises is host-independent, so the other portable
     # hosts only run the canonical combo on the per-push lane (see
     # test-portable-extra-hosts).
@@ -114,22 +110,16 @@ jobs:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
       CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
-      CONSENT_CI_LOG_FILE: portable-gambit-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
       CONSENT_CI_REFLECT_LOG_FILE: portable-gambit-reflect-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
       CONSENT_CI_REFLECT_STRESS_LOG_FILE: portable-gambit-reflect-stress-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
-      CONSENT_CI_NATIVE_LOG_FILE: portable-gambit-native-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit full suite / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
       CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection contract / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
       CONSENT_CI_REFLECT_STRESS_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection stress / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
-      CONSENT_CI_NATIVE_SHARD_SUMMARY_NAME: Portable R7RS Gambit-compiled Consent Scheme self-host corpus / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
     strategy:
       fail-fast: false
       # Per-push lane: canonical on/full plus a single fully-stripped off/none
-      # smoke leg on the full-suite shard only (`native: false` skips the
-      # recompile-bound native shard there). Scheduled / workflow_dispatch lane:
-      # full 2×3 cross on the full-suite and native shards.
+      # smoke leg. Scheduled / workflow_dispatch lane: full 2×3 cross.
       matrix:
-        combo: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"source_metadata":"on","docstring_retention":"full","native":true},{"source_metadata":"on","docstring_retention":"simple","native":true},{"source_metadata":"on","docstring_retention":"none","native":true},{"source_metadata":"off","docstring_retention":"full","native":true},{"source_metadata":"off","docstring_retention":"simple","native":true},{"source_metadata":"off","docstring_retention":"none","native":true}]') || fromJSON('[{"source_metadata":"on","docstring_retention":"full","native":true},{"source_metadata":"off","docstring_retention":"none","native":false}]') }}
+        combo: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"on","docstring_retention":"simple"},{"source_metadata":"on","docstring_retention":"none"},{"source_metadata":"off","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"simple"},{"source_metadata":"off","docstring_retention":"none"}]') || fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"none"}]') }}
 
     steps:
       - name: Check out repository
@@ -170,40 +160,17 @@ jobs:
           "${gambit_prefix}/bin/gsc" -v
           "${gambit_prefix}/bin/gsi" -:r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
-      # Warm only non-runnable Gambit intermediate state. Fallback restores may
-      # come from another ref, so the cache intentionally excludes bin/consent;
-      # the compile step must relink and smoke-test the product binary for this
-      # checkout before any compiled self-host consumer runs.
-      - name: Cache Gambit compiled build tree
-        if: ${{ matrix.combo.native }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            build/compile/gambit/src
-            build/compile/gambit/incremental
-          key: ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-
-
-      - name: Compile Gambit self-host
-        if: ${{ matrix.combo.native }}
-        run: CONSENT_COMPILE_HOST=gambit make compile
-
       - name: Run portable R7RS Gambit shard
         shell: bash
+        env:
+          CONSENT_CI_LOG_DIR: ci-logs
+          CONSENT_CI_LOG_PREFIX: portable-gambit-direct
+          CONSENT_CI_LOG_SUFFIX: ${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
+          CONSENT_CI_SHARD_PREFIX: Portable R7RS Gambit
+          CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}"
         run: |
           mkdir -p ci-logs
-          started=$SECONDS
-          set +e
-          make test-portable-gambit 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
-          status=${PIPESTATUS[0]}
-          wall=$((SECONDS - started))
-          {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-scheme-gambit-host-test-r7rs-suite$"'
-            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
-          exit "$status"
+          make test-portable-gambit
 
       - name: Run portable R7RS Gambit reflection stress shard
         if: ${{ matrix.combo.source_metadata == 'on' && matrix.combo.docstring_retention == 'full' }}
@@ -239,29 +206,12 @@ jobs:
           } >> "ci-logs/${CONSENT_CI_REFLECT_LOG_FILE}"
           exit "$status"
 
-      - name: Run portable R7RS Gambit-compiled shard
-        if: ${{ matrix.combo.native }}
-        shell: bash
-        run: |
-          mkdir -p ci-logs
-          started=$SECONDS
-          set +e
-          make test-portable-gambit-native-run 2>&1 | tee "ci-logs/${CONSENT_CI_NATIVE_LOG_FILE}"
-          status=${PIPESTATUS[0]}
-          wall=$((SECONDS - started))
-          {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_NATIVE_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-scheme-gambit-native-host-test-r7rs-suite$"'
-            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> "ci-logs/${CONSENT_CI_NATIVE_LOG_FILE}"
-          exit "$status"
-
       - name: Upload portable Gambit shard log
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: test-log-portable-gambit-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
-          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
+          path: ci-logs/portable-gambit-direct-*-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
           if-no-files-found: warn
 
       - name: Upload portable Gambit reflection contract shard log
@@ -280,32 +230,346 @@ jobs:
           path: ci-logs/${{ env.CONSENT_CI_REFLECT_STRESS_LOG_FILE }}
           if-no-files-found: warn
 
-      - name: Upload portable Gambit-compiled shard log
-        if: ${{ always() && matrix.combo.native }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-log-portable-gambit-native-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
-          path: ci-logs/${{ env.CONSENT_CI_NATIVE_LOG_FILE }}
-          if-no-files-found: warn
-
       - name: Render portable Gambit shard timing summary
         if: always()
         shell: bash
         run: |
-          logs=()
-          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
-            logs+=("ci-logs/${CONSENT_CI_LOG_FILE}")
-          fi
-          if [ -f "ci-logs/${CONSENT_CI_REFLECT_STRESS_LOG_FILE}" ]; then
-            logs+=("ci-logs/${CONSENT_CI_REFLECT_STRESS_LOG_FILE}")
-          fi
-          if [ -f "ci-logs/${CONSENT_CI_NATIVE_LOG_FILE}" ]; then
-            logs+=("ci-logs/${CONSENT_CI_NATIVE_LOG_FILE}")
-          fi
+          logs=(ci-logs/*.log)
           if [ "${#logs[@]}" -gt 0 ]; then
             emacs -Q --batch -L lisp \
               --eval "(require 'consent-ci)" \
               --funcall consent-ci-summary-batch-main -- "${logs[@]}"
+          fi
+
+  build-gambit-self-host:
+    name: build / Gambit-compiled self-host / syntax ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CONSENT_GAMBIT_VERSION: "4.9.7"
+      CONSENT_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        combo: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"on","docstring_retention":"simple"},{"source_metadata":"on","docstring_retention":"none"},{"source_metadata":"off","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"simple"},{"source_metadata":"off","docstring_retention":"none"}]') || fromJSON('[{"source_metadata":"on","docstring_retention":"full"}]') }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Cache Gambit
+        id: cache-gambit
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/gambit/${{ env.CONSENT_GAMBIT_VERSION }}
+          key: ${{ runner.os }}-gambit-${{ env.CONSENT_GAMBIT_VERSION }}
+
+      - name: Install Gambit build dependencies
+        uses: ./.github/actions/apt-install
+        with:
+          packages: build-essential ca-certificates curl libssl-dev make
+
+      - name: Install Gambit
+        run: |
+          gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${CONSENT_GAMBIT_VERSION}"
+          if [ ! -x "${gambit_prefix}/bin/gsi" ]; then
+            curl -fsSL \
+              "https://github.com/gambit/gambit/archive/refs/tags/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
+              -o /tmp/gambit.tar.gz
+            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | sha256sum -c -
+            rm -rf /tmp/gambit-src
+            mkdir -p /tmp/gambit-src "${gambit_prefix}"
+            tar -xzf /tmp/gambit.tar.gz -C /tmp/gambit-src --strip-components=1
+            cd /tmp/gambit-src
+            ./configure --prefix="${gambit_prefix}" --enable-single-host --enable-openssl
+            make -j"$(nproc)"
+            make install
+          fi
+          echo "${gambit_prefix}/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Gambit compiled build tree
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/compile/gambit/src
+            build/compile/gambit/incremental
+          key: ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}-${{ matrix.combo.source_metadata }}-${{ matrix.combo.docstring_retention }}
+          restore-keys: |
+            ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-
+
+      - name: Compile Gambit self-host
+        run: CONSENT_COMPILE_HOST=gambit make compile
+
+      - name: Upload Gambit self-host
+        uses: actions/upload-artifact@v7
+        with:
+          name: gambit-self-host-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
+          path: build/compile/gambit/bin/consent
+          if-no-files-found: error
+
+  test-portable-gambit-self-host:
+    name: portable R7RS / Gambit-compiled self-host / ${{ matrix.group.label }}
+    needs: build-gambit-self-host
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CONSENT_TEST_SOURCE_METADATA: "on"
+      CONSENT_TEST_DOCSTRING_RETENTION: "full"
+      CONSENT_TEST_MAX_SOURCE_METADATA: "250000"
+      CONSENT_PORTABLE_HOST: gambit-native
+      CONSENT_PORTABLE_GROUP: ${{ matrix.group.name }}
+      CONSENT_GAMBIT_NATIVE: ${{ github.workspace }}/build/compile/gambit/bin/consent
+      CONSENT_CI_LOG_FILE: portable-gambit-native-${{ matrix.group.name }}-on-docstrings-full.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit-compiled self-host ${{ matrix.group.label }} / source metadata on / docstrings full
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - { name: compiled-random, label: random-data libraries }
+          - { name: compiled-property, label: property-testing libraries }
+          - { name: compiled-library, label: standard libraries }
+          - { name: compiled-runtime, label: runtime/testing infrastructure }
+          - { name: compiled-agent, label: agent libraries }
+          - { name: compiled-integration, label: integration/REPL }
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install test reporting tools
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox libssl-dev make
+
+      - name: Download Gambit self-host
+        uses: actions/download-artifact@v8
+        with:
+          name: gambit-self-host-on-docstrings-full
+          path: build/compile/gambit/bin
+
+      - name: Run Gambit-compiled Scheme-native shard
+        shell: bash
+        run: |
+          chmod +x "$CONSENT_GAMBIT_NATIVE"
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make test-portable-shard 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' "${CONSENT_PORTABLE_GROUP}"
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
+          exit "$status"
+
+      - name: Upload Gambit-compiled shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-portable-gambit-native-${{ matrix.group.name }}-on-docstrings-full
+          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
+          if-no-files-found: warn
+
+      - name: Render Gambit-compiled shard timing summary
+        if: always()
+        run: |
+          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'consent-ci)" \
+              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+          fi
+
+  build-racket-self-host:
+    name: build / Racket-compiled self-host / syntax ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        combo: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"on","docstring_retention":"simple"},{"source_metadata":"on","docstring_retention":"none"},{"source_metadata":"off","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"simple"},{"source_metadata":"off","docstring_retention":"none"}]') || fromJSON('[{"source_metadata":"on","docstring_retention":"full"}]') }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Racket build dependencies
+        uses: ./.github/actions/apt-install
+        with:
+          packages: make racket
+
+      - name: Cache Racket R7RS package
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/racket
+            ~/.cache/racket
+          key: ${{ runner.os }}-racket-r7rs-v1
+
+      - name: Install Racket R7RS package
+        run: raco pkg install --batch --auto --skip-installed --no-docs r7rs
+
+      - name: Cache Racket compiled build tree
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/compile/racket/src
+            build/compile/racket/collections
+          key: ${{ runner.os }}-racket-build-v2-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}-${{ matrix.combo.source_metadata }}-${{ matrix.combo.docstring_retention }}
+          restore-keys: |
+            ${{ runner.os }}-racket-build-v2-
+
+      - name: Compile Racket self-host
+        run: CONSENT_COMPILE_HOST=racket make compile
+
+      - name: Upload Racket self-host
+        uses: actions/upload-artifact@v7
+        with:
+          name: racket-self-host-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
+          path: build/compile/racket/bin/consent
+          if-no-files-found: error
+
+  test-portable-racket-self-host:
+    name: portable R7RS / Racket-compiled self-host / ${{ matrix.group.label }}
+    needs: build-racket-self-host
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CONSENT_TEST_SOURCE_METADATA: "on"
+      CONSENT_TEST_DOCSTRING_RETENTION: "full"
+      CONSENT_TEST_MAX_SOURCE_METADATA: "250000"
+      CONSENT_PORTABLE_HOST: compiled
+      CONSENT_PORTABLE_GROUP: ${{ matrix.group.name }}
+      CONSENT_COMPILED: ${{ github.workspace }}/build/compile/racket/bin/consent
+      CONSENT_CI_LOG_FILE: portable-compiled-${{ matrix.group.name }}-on-docstrings-full.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Racket-compiled self-host ${{ matrix.group.label }} / source metadata on / docstrings full
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - { name: compiled-random, label: random-data libraries }
+          - { name: compiled-property, label: property-testing libraries }
+          - { name: compiled-library, label: standard libraries }
+          - { name: compiled-runtime, label: runtime/testing infrastructure }
+          - { name: compiled-agent, label: agent libraries }
+          - { name: compiled-integration, label: integration/REPL }
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install test reporting tools
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox make
+
+      - name: Download Racket self-host
+        uses: actions/download-artifact@v8
+        with:
+          name: racket-self-host-on-docstrings-full
+          path: build/compile/racket/bin
+
+      - name: Run Racket-compiled Scheme-native shard
+        shell: bash
+        run: |
+          chmod +x "$CONSENT_COMPILED"
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make test-portable-shard 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' "${CONSENT_PORTABLE_GROUP}"
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
+          exit "$status"
+
+      - name: Upload Racket-compiled shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-portable-compiled-${{ matrix.group.name }}-on-docstrings-full
+          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
+          if-no-files-found: warn
+
+      - name: Render Racket-compiled shard timing summary
+        if: always()
+        run: |
+          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'consent-ci)" \
+              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+          fi
+
+  test-portable-guile-shards:
+    name: portable R7RS / Guile / ${{ matrix.group.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CONSENT_TEST_SOURCE_METADATA: "on"
+      CONSENT_TEST_DOCSTRING_RETENTION: "full"
+      CONSENT_TEST_MAX_SOURCE_METADATA: "250000"
+      CONSENT_PORTABLE_HOST: guile
+      CONSENT_PORTABLE_GROUP: ${{ matrix.group.name }}
+      CONSENT_CI_LOG_FILE: portable-guile-${{ matrix.group.name }}-on-docstrings-full.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Guile ${{ matrix.group.label }} / source metadata on / docstrings full
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - { name: integration, label: integration/REPL }
+          - { name: evaluator, label: evaluator }
+          - { name: random, label: random-data libraries }
+          - { name: property, label: property-testing libraries }
+          - { name: library, label: standard libraries }
+          - { name: agent, label: agent libraries }
+          - { name: runtime, label: runtime/testing infrastructure }
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Guile and test reporting tools
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox guile-3.0 make
+
+      - name: Run Guile Scheme-native shard
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make test-portable-shard 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' "${CONSENT_PORTABLE_GROUP}"
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
+          exit "$status"
+
+      - name: Upload Guile shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-portable-guile-${{ matrix.group.name }}-on-docstrings-full
+          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
+          if-no-files-found: warn
+
+      - name: Render Guile shard timing summary
+        if: always()
+        run: |
+          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'consent-ci)" \
+              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
   test-portable-extra-hosts:
@@ -329,48 +593,41 @@ jobs:
         source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
         docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
         host:
-          - host: compiled
-            host_name: Racket-compiled Consent Scheme
-            apt_package: racket
-            make_target: test-portable-compiled-run
-            summary_name: Portable R7RS Racket-compiled Consent Scheme self-host corpus
-            selector: '"^consent-scheme-compiled-host-test-r7rs-suite$"'
-          - host: guile
-            host_name: Guile
-            apt_package: guile-3.0
-            make_target: test-portable-guile
-            summary_name: Portable R7RS Guile full suite
-            selector: '"^consent-scheme-guile-host-test-r7rs-suite$"'
           - host: racket
             host_name: Racket
             apt_package: racket
             make_target: test-portable-racket
-            summary_name: Portable R7RS Racket full suite
-            selector: '"^consent-scheme-racket-host-test-r7rs-suite$"'
+            group_set: direct
+            log_prefix: portable-racket
+            shard_prefix: Portable R7RS Racket
           - host: guile-reflect-stress
             host_name: Guile reflection stress
             apt_package: guile-3.0
             make_target: test-portable-guile-reflect-stress
             summary_name: Portable R7RS Guile reflection stress
             selector: '"^consent-scheme-guile-host-test-r7rs-reflect-stress$"'
+            group_set: single
           - host: racket-reflect-stress
             host_name: Racket reflection stress
             apt_package: racket
             make_target: test-portable-racket-reflect-stress
             summary_name: Portable R7RS Racket reflection stress
             selector: '"^consent-scheme-racket-host-test-r7rs-reflect-stress$"'
+            group_set: single
           - host: guile-reflect
             host_name: Guile reflection contract
             apt_package: guile-3.0
             make_target: test-portable-guile-reflect
             summary_name: Portable R7RS Guile reflection contract
             selector: '"^consent-scheme-guile-host-test-r7rs-reflect$"'
+            group_set: single
           - host: racket-reflect
             host_name: Racket reflection contract
             apt_package: racket
             make_target: test-portable-racket-reflect
             summary_name: Portable R7RS Racket reflection contract
             selector: '"^consent-scheme-racket-host-test-r7rs-reflect$"'
+            group_set: single
 
     steps:
       - name: Install checkout tools
@@ -395,29 +652,13 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Cache Racket R7RS package
-        if: matrix.host.host == 'racket' || matrix.host.host == 'racket-reflect' || matrix.host.host == 'racket-reflect-stress' || matrix.host.host == 'compiled'
+        if: matrix.host.host == 'racket' || matrix.host.host == 'racket-reflect' || matrix.host.host == 'racket-reflect-stress'
         uses: actions/cache@v4
         with:
           path: |
             ~/.local/share/racket
             ~/.cache/racket
           key: ${{ runner.os }}-racket-r7rs-v1
-
-      # Warm only non-runnable Racket intermediate state (collection sources plus
-      # the bytecode raco make writes under their compiled/ directories).
-      # Fallback restores intentionally exclude bin/consent, so raco exe must
-      # write the tested product binary for the current checkout. Only the
-      # Racket-compiled host builds it.
-      - name: Cache Racket compiled build tree
-        if: matrix.host.host == 'compiled'
-        uses: actions/cache@v4
-        with:
-          path: |
-            build/compile/racket/src
-            build/compile/racket/collections
-          key: ${{ runner.os }}-racket-build-v2-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-racket-build-v2-
 
       - name: Install portable R7RS host
         uses: ./.github/actions/apt-install
@@ -428,7 +669,7 @@ jobs:
         shell: bash
         run: |
           case "${{ matrix.host.host }}" in
-            racket|racket-reflect|racket-reflect-stress|compiled)
+            racket|racket-reflect|racket-reflect-stress)
               raco pkg install --batch --auto --skip-installed --no-docs r7rs
               racket -I r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
               ;;
@@ -437,11 +678,21 @@ jobs:
               ;;
           esac
 
-      - name: Compile Racket self-host
-        if: matrix.host.host == 'compiled'
-        run: CONSENT_COMPILE_HOST=racket make compile
+      - name: Run balanced portable R7RS host shard set
+        if: matrix.host.group_set != 'single'
+        shell: bash
+        env:
+          CONSENT_CI_LOG_DIR: ci-logs
+          CONSENT_CI_LOG_PREFIX: ${{ matrix.host.log_prefix }}
+          CONSENT_CI_LOG_SUFFIX: ${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          CONSENT_CI_SHARD_PREFIX: ${{ matrix.host.shard_prefix }}
+          CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}"
+        run: |
+          mkdir -p ci-logs
+          make "${{ matrix.host.make_target }}"
 
-      - name: Run portable R7RS host shard
+      - name: Run portable R7RS reflection shard
+        if: matrix.host.group_set == 'single'
         shell: bash
         run: |
           mkdir -p ci-logs
@@ -462,10 +713,87 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-log-portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
-          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
+          path: ci-logs/*.log
           if-no-files-found: warn
 
       - name: Render portable R7RS host shard timing summary
+        if: always()
+        run: |
+          logs=(ci-logs/*.log)
+          if [ -e "${logs[0]}" ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'consent-ci)" \
+              --funcall consent-ci-summary-batch-main -- "${logs[@]}"
+          fi
+
+  test-portable-gauche-shards:
+    name: portable R7RS / Gauche / ${{ matrix.group.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: public.ecr.aws/ubuntu/ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      CONSENT_TEST_SOURCE_METADATA: "on"
+      CONSENT_TEST_DOCSTRING_RETENTION: "full"
+      CONSENT_TEST_MAX_SOURCE_METADATA: "250000"
+      CONSENT_PORTABLE_HOST: gauche
+      CONSENT_PORTABLE_GROUP: ${{ matrix.group.name }}
+      CONSENT_CI_LOG_FILE: portable-gauche-${{ matrix.group.name }}-on-docstrings-full.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gauche ${{ matrix.group.label }} / source metadata on / docstrings full
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        group:
+          # Put the historical 262-second REPL program first so GitHub assigns
+          # it a runner before the smaller semantic groups.
+          - { name: integration, label: integration/REPL }
+          - { name: evaluator, label: evaluator }
+          - { name: random, label: random-data libraries }
+          - { name: property, label: property-testing libraries }
+          - { name: library, label: standard libraries }
+          - { name: agent, label: agent libraries }
+          - { name: runtime, label: runtime/testing infrastructure }
+    steps:
+      - name: Install checkout tools
+        shell: bash
+        run: |
+          apt-get update -o Acquire::Retries=3
+          apt-get install -y --no-install-recommends ca-certificates git
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Gauche and test reporting tools
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox gauche make
+
+      - name: Run Gauche Scheme-native shard
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make test-portable-shard 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' "${CONSENT_PORTABLE_GROUP}"
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
+          exit "$status"
+
+      - name: Upload Gauche shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-portable-gauche-${{ matrix.group.name }}-on-docstrings-full
+          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
+          if-no-files-found: warn
+
+      - name: Render Gauche shard timing summary
         if: always()
         run: |
           if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
@@ -500,24 +828,20 @@ jobs:
         source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
         docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
         host:
-          - host: gauche
-            host_name: Gauche
-            apt_package: gauche
-            make_target: test-portable-gauche
-            summary_name: Portable R7RS Gauche full suite
-            selector: '"^consent-scheme-gauche-host-test-r7rs-suite$"'
           - host: gauche-reflect-stress
             host_name: Gauche reflection stress
             apt_package: gauche
             make_target: test-portable-gauche-reflect-stress
             summary_name: Portable R7RS Gauche reflection stress
             selector: '"^consent-scheme-gauche-host-test-r7rs-reflect-stress$"'
+            group_set: single
           - host: gauche-reflect
             host_name: Gauche reflection contract
             apt_package: gauche
             make_target: test-portable-gauche-reflect
             summary_name: Portable R7RS Gauche reflection contract
             selector: '"^consent-scheme-gauche-host-test-r7rs-reflect$"'
+            group_set: single
 
     steps:
       - name: Install checkout tools
@@ -549,7 +873,7 @@ jobs:
         run: |
           gosh -r7 -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
-      - name: Run portable R7RS host shard
+      - name: Run portable R7RS reflection shard
         shell: bash
         run: |
           mkdir -p ci-logs
@@ -570,16 +894,196 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-log-portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
-          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
+          path: ci-logs/*.log
           if-no-files-found: warn
 
       - name: Render portable R7RS host shard timing summary
         if: always()
         run: |
-          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
+          logs=(ci-logs/*.log)
+          if [ -e "${logs[0]}" ]; then
             emacs -Q --batch -L lisp \
               --eval "(require 'consent-ci)" \
-              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --funcall consent-ci-summary-batch-main -- "${logs[@]}"
+          fi
+
+  test-portable-guile-cross:
+    name: portable R7RS / Guile exhaustive / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_PORTABLE_HOST: guile
+      CONSENT_PORTABLE_GROUP_SET: direct
+      CONSENT_CI_LOG_DIR: ci-logs
+      CONSENT_CI_LOG_PREFIX: portable-guile
+      CONSENT_CI_LOG_SUFFIX: ${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+      CONSENT_CI_SHARD_PREFIX: Portable R7RS Guile
+      CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        source_metadata: [on, off]
+        docstring_retention: [full, simple, none]
+        exclude:
+          - source_metadata: on
+            docstring_retention: full
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Guile and test reporting tools
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox guile-3.0 make
+
+      - name: Run exhaustive Guile shard set
+        run: tools/run-portable-test-set.sh
+
+      - name: Upload exhaustive Guile shard logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-portable-guile-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ci-logs/*.log
+          if-no-files-found: warn
+
+  test-portable-gauche-cross:
+    name: portable R7RS / Gauche exhaustive / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container: public.ecr.aws/ubuntu/ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_PORTABLE_HOST: gauche
+      CONSENT_PORTABLE_GROUP_SET: direct
+      CONSENT_CI_LOG_DIR: ci-logs
+      CONSENT_CI_LOG_PREFIX: portable-gauche
+      CONSENT_CI_LOG_SUFFIX: ${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+      CONSENT_CI_SHARD_PREFIX: Portable R7RS Gauche
+      CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}"
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        source_metadata: [on, off]
+        docstring_retention: [full, simple, none]
+        exclude:
+          - source_metadata: on
+            docstring_retention: full
+    steps:
+      - name: Install checkout tools
+        run: |
+          apt-get update -o Acquire::Retries=3
+          apt-get install -y --no-install-recommends ca-certificates git
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Gauche and test reporting tools
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox gauche make
+
+      - name: Run exhaustive Gauche shard set
+        run: tools/run-portable-test-set.sh
+
+      - name: Upload exhaustive Gauche shard logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-portable-gauche-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ci-logs/*.log
+          if-no-files-found: warn
+
+  test-portable-compiled-cross:
+    name: portable R7RS / ${{ matrix.host.host_name }} / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs:
+      - build-gambit-self-host
+      - build-racket-self-host
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_PORTABLE_HOST: ${{ matrix.host.host }}
+      CONSENT_PORTABLE_GROUP_SET: compiled
+      CONSENT_GAMBIT_NATIVE: ${{ github.workspace }}/build/compile/gambit/bin/consent
+      CONSENT_COMPILED: ${{ github.workspace }}/build/compile/racket/bin/consent
+      CONSENT_CI_LOG_DIR: ci-logs
+      CONSENT_CI_LOG_PREFIX: portable-${{ matrix.host.host }}
+      CONSENT_CI_LOG_SUFFIX: ${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+      CONSENT_CI_SHARD_PREFIX: Portable R7RS ${{ matrix.host.shard_prefix }}
+      CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        source_metadata: [on, off]
+        docstring_retention: [full, simple, none]
+        host:
+          - host: gambit-native
+            host_name: Gambit-compiled self-host
+            artifact_prefix: gambit-self-host
+            binary_dir: build/compile/gambit/bin
+            binary: build/compile/gambit/bin/consent
+            shard_prefix: Gambit-compiled self-host
+          - host: compiled
+            host_name: Racket-compiled self-host
+            artifact_prefix: racket-self-host
+            binary_dir: build/compile/racket/bin
+            binary: build/compile/racket/bin/consent
+            shard_prefix: Racket-compiled self-host
+        exclude:
+          - source_metadata: on
+            docstring_retention: full
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install test reporting tools
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox libssl-dev make
+
+      - name: Download compiled self-host
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.host.artifact_prefix }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ${{ matrix.host.binary_dir }}
+
+      - name: Run exhaustive compiled self-host shard set
+        shell: bash
+        run: |
+          chmod +x "${{ matrix.host.binary }}"
+          mkdir -p ci-logs
+          tools/run-portable-test-set.sh
+
+      - name: Upload compiled self-host shard logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ci-logs/*.log
+          if-no-files-found: warn
+
+      - name: Render compiled self-host timing summary
+        if: always()
+        shell: bash
+        run: |
+          logs=(ci-logs/*.log)
+          if [ -e "${logs[0]}" ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'consent-ci)" \
+              --funcall consent-ci-summary-batch-main -- "${logs[@]}"
           fi
 
   test-emacs-hosted:
@@ -605,48 +1109,76 @@ jobs:
         shard:
           # Longest expected wall-time shards appear first so GitHub starts
           # them in the first runner wave when matrix capacity is constrained.
-          - shard: emacs-reflect-dynamic-manifest-stress
-            label: reflection dynamic manifest stress
-            make_target: test-emacs-reflect-dynamic-manifest-stress
-            summary_name: Emacs reflection dynamic manifest stress
-            selector: '"consent-reflect-test-dynamic-manifest-inputs-stress"'
           - shard: emacs-reflect-documentation-stress
             label: reflection docs/apropos stress
             make_target: test-emacs-reflect-documentation-stress
             summary_name: Emacs reflection documentation stress
             selector: '"consent-reflect-test-documented-bindings-and-apropos-stress"'
-          - shard: emacs-library
-            label: library/conformance
-            make_target: test-emacs-library
-            summary_name: Emacs library/conformance
-            selector: '(or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*")'
-          # The agent/capability surface used to run as one capabilities/policy
-          # shard. It dominated per-push wall time, so the default lane splits
-          # it into behavior-focused shards that can run in parallel.
-          - shard: emacs-agent-control
-            label: agent control
-            make_target: test-emacs-agent-control
-            summary_name: Emacs agent control
-            selector: '(or "consent-agent-prompt.*" "consent-agent-proposal.*" "consent-agent-registry.*" "consent-task.*")'
-          - shard: emacs-agent-reliability
-            label: agent reliability
-            make_target: test-emacs-agent-reliability
-            summary_name: Emacs agent reliability
-            selector: '(or "consent-agent-reliability.*" "consent-agent-runner.*")'
-          - shard: emacs-integration
-            label: integration/REPL
-            make_target: test-emacs-integration
-            summary_name: Emacs integration/REPL
-            selector: '(or "consent-native-cli-daemon.*" "consent-repl.*" "consent-vcs.*")'
           - shard: emacs-agent-state
             label: agent state
             make_target: test-emacs-agent-state
             summary_name: Emacs agent state
             selector: '(or "consent-agent-io.*" "consent-context.*" "consent-helper.*" "consent-memory.*" "consent-models.*" "consent-plan.*" "consent-redaction.*" "consent-session.*" "consent-test.*" "consent-transcript.*")'
-          # #556 split the heavyweight Emacs-hosted integration surface out of
-          # the tools shard. Reflection now has contract and stress shards so
-          # manifest-backed discovery can parallelize with REPL, VCS,
-          # native-CLI daemon, and the rest of the Emacs-hosted suite.
+          - shard: emacs-integration
+            label: integration/REPL
+            make_target: test-emacs-integration
+            summary_name: Emacs integration/REPL
+            selector: '(or "consent-native-cli-daemon.*" "consent-repl.*" "consent-vcs.*")'
+          - shard: emacs-agent-reliability
+            label: agent reliability
+            make_target: test-emacs-agent-reliability
+            summary_name: Emacs agent reliability
+            selector: '(or "consent-agent-reliability.*" "consent-agent-runner.*")'
+          - shard: emacs-agent-control
+            label: agent control
+            make_target: test-emacs-agent-control
+            summary_name: Emacs agent control
+            selector: '(or "consent-agent-prompt.*" "consent-agent-proposal.*" "consent-agent-registry.*" "consent-task.*")'
+          - shard: emacs-reflect
+            label: reflection contract
+            make_target: test-emacs-reflect
+            summary_name: Emacs reflection contract
+            selector: '(and "consent-reflect.*" (not "consent-reflect-test-.*stress.*"))'
+          - shard: emacs-library-runtime
+            label: library runtime
+            make_target: test-emacs-library-runtime
+            summary_name: Emacs library runtime
+            selector: '(and "consent-library.*" (not (or "consent-library-test-srfi-.*" "consent-library-test-stdlib-.*" "consent-library-test-vendored-srfi.*")))'
+          - shard: emacs-tools
+            label: tools/docs/integration
+            make_target: test-emacs-tools
+            summary_name: Emacs tools/docs/integration
+            selector: '(and (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-repl-agent-quickstart-doc.*" "consent-skill.*" "consent-smoke.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$") (not "^consent-compile-portable-test-\(racket\|gambit\)-\(builds-runner\|install-and-dist\)$"))'
+          - shard: emacs-library-stdlib-manifest
+            label: standard-library manifests
+            make_target: test-emacs-library-stdlib-manifest
+            summary_name: Emacs standard-library manifests
+            selector: '(or "consent-library-test-stdlib-manifest.*" "consent-library-test-vendored-srfi.*")'
+          - shard: emacs-library-stdlib-core
+            label: standard-library behavior
+            make_target: test-emacs-library-stdlib-core
+            summary_name: Emacs standard-library behavior
+            selector: '(or (and "consent-library-test-srfi-.*" (not "consent-library-test-srfi-\(27\|194\|252\)-.*")) (and "consent-library-test-stdlib-.*" (not (or "consent-library-test-stdlib-manifest.*" "consent-library-test-stdlib-random-distributions.*"))))'
+          - shard: emacs-capability-boundary
+            label: capability boundary
+            make_target: test-emacs-capability-boundary
+            summary_name: Emacs capability boundary
+            selector: '(or "consent-approval.*" "consent-capability.*" "consent-network.*" "consent-policy.*")'
+          - shard: emacs-conformance
+            label: fixture/conformance
+            make_target: test-emacs-conformance
+            summary_name: Emacs fixture/conformance
+            selector: '(or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-oracle.*")'
+          - shard: emacs-library-stdlib-property
+            label: random/property libraries
+            make_target: test-emacs-library-stdlib-property
+            summary_name: Emacs random/property libraries
+            selector: '(or "consent-library-test-srfi-\(27\|194\|252\)-.*" "consent-library-test-stdlib-random-distributions.*")'
+          - shard: emacs-reflect-dynamic-manifest-stress
+            label: reflection dynamic manifest stress
+            make_target: test-emacs-reflect-dynamic-manifest-stress
+            summary_name: Emacs reflection dynamic manifest stress
+            selector: '"consent-reflect-test-dynamic-manifest-inputs-stress"'
           - shard: emacs-reflect-catalog-stress
             label: reflection catalog stress
             make_target: test-emacs-reflect-catalog-stress
@@ -657,21 +1189,6 @@ jobs:
             make_target: test-emacs-reflect-binding-crosswalk-stress
             summary_name: Emacs reflection binding crosswalk stress
             selector: '"consent-reflect-test-binding-libraries-crosswalk-stress"'
-          - shard: emacs-tools
-            label: tools/docs/integration
-            make_target: test-emacs-tools
-            summary_name: Emacs tools/docs/integration
-            selector: '(and (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-repl-agent-quickstart-doc.*" "consent-skill.*" "consent-smoke.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$") (not "^consent-compile-portable-test-\(racket\|gambit\)-\(builds-runner\|install-and-dist\)$"))'
-          - shard: emacs-capability-boundary
-            label: capability boundary
-            make_target: test-emacs-capability-boundary
-            summary_name: Emacs capability boundary
-            selector: '(or "consent-approval.*" "consent-capability.*" "consent-network.*" "consent-policy.*")'
-          - shard: emacs-reflect
-            label: reflection contract
-            make_target: test-emacs-reflect
-            summary_name: Emacs reflection contract
-            selector: '(and "consent-reflect.*" (not "consent-reflect-test-.*stress.*"))'
           # The native-build shard isolates the four full host-compile +
           # install/dist tests so they only run in `make test-full' locally
           # (#556). On CI's emacs-hosted runners neither gsc/gsi nor raco/racket
@@ -876,6 +1393,13 @@ jobs:
     timeout-minutes: 15
     needs:
       - test-portable-gambit
+      - test-portable-gambit-self-host
+      - test-portable-racket-self-host
+      - test-portable-compiled-cross
+      - test-portable-guile-shards
+      - test-portable-guile-cross
+      - test-portable-gauche-shards
+      - test-portable-gauche-cross
       - test-portable-extra-hosts
       - test-portable-gauche-hosts
       - test-emacs-hosted
@@ -1084,7 +1608,7 @@ jobs:
       - name: Start Ollama
         run: |
           ollama serve > /tmp/ollama.log 2>&1 &
-          for attempt in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:11434/api/version; then
               exit 0
             fi

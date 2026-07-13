@@ -221,11 +221,15 @@ test command instead of adding a second top-level verification path.
 
 Portable R7RS tests live under `tests/scheme/` and are launched directly by
 `tools/run-portable-tests.sh`; ERT is not part of their execution path. The
-default portable shards run the full suite under Gambit, Racket with its `r7rs`
-package, Guile, and Gauche. Chibi runs the same aggregate host suite as its
-peers but stays opt-in through `make test-portable-chibi`; that target uses
-`chibi-scheme` on `PATH`, or the command named by `CONSENT_CHIBI`, and skips
-when Chibi is unavailable.
+aggregate local targets run the full suite under Gambit, Racket with its `r7rs`
+package, Guile, and Gauche. CI schedules the longest direct and compiled hosts
+as first-class semantic plan shards (`runtime`, `evaluator`, `integration`,
+`agent`, `library`, `random`, and `property`, or their compiled counterparts),
+so failures and timings compare the same behavior surfaces instead of one
+host-sized total. Chibi runs the same aggregate host suite as its peers but
+stays opt-in through `make test-portable-chibi`; that target uses `chibi-scheme`
+on `PATH`, or the command named by `CONSENT_CHIBI`, and skips when Chibi is
+unavailable.
 
 Portable test bodies use SRFI 64 through `(stdlib testing)` as their result
 engine, with SRFI 252 property tests and SRFI 78/SRFI 42 table checks where
@@ -246,6 +250,15 @@ is manifested. `tools/run-portable-tests.sh` asks `(testing runner)` to resolve
 that plan and then supplies the irreducible host-specific process invocation.
 R7RS provides `(scheme load)`, but separate processes remain a deliberate test
 isolation policy rather than a language limitation.
+
+`tools/run-portable-test-set.sh` is the local aggregate adapter: it launches the
+same named plan shards concurrently and retains one log per semantic group.
+CI invokes `make test-portable-shard` once per group for the historically long
+Guile, Gauche, Gambit-compiled, and Racket-compiled lanes. Compiled build jobs
+publish a freshly linked `bin/consent` artifact first; the downstream group
+matrix downloads that exact product instead of recompiling it in every test
+job. Scheduled noncanonical source-metadata/docstring combinations retain the
+full cross through aggregate shard-set jobs.
 
 Every ordinary `full` program is also classified as either `compiled` or
 `self-host-gap`, never both. The compiled selector is evidence-based: a program
@@ -479,8 +492,9 @@ Generated outputs stay under `build/compile/<host>/` by default:
 
 CI caches only the non-runnable intermediate subdirectories that speed up a
 rebuild (`src/`, `incremental/`, and Racket `collections/` as applicable). It
-does not cache `bin/consent`; every compiled shard relinks and smoke-tests the
-product binary from the current checkout before running tests.
+does not cache `bin/consent`: a dedicated build job relinks and smoke-tests the
+product binary from the current checkout, then publishes that run-scoped binary
+as an artifact consumed by the compiled Scheme-native shard matrix.
 
 Use `CONSENT_COMPILE_BUILD_DIR` to place those generated files elsewhere:
 
@@ -659,6 +673,13 @@ process, reused across the runner-smoke and install/dist tests).
 longest expected wall-time shards first. That ordering is a scheduling hint so
 constrained runner pools start tail rows early; it does not change the behavior
 surface each shard covers.
+
+The former library/conformance aggregate is likewise only a compatibility
+target for ad hoc local runs. Default and CI execution split its exact 212-test
+union into fixture/conformance, library runtime, standard-library behavior,
+random/property libraries, and standard-library manifest/vendor shards. These
+names intentionally align with the portable plan's behavior surfaces wherever
+the two implementations exercise comparable semantics.
 
 The official stdlib reference corpus has canonical portable coverage in
 `tests/scheme/stdlib-json-reference-test.scm`, including the FoundationDB JSON
@@ -918,8 +939,9 @@ job (#421) is its portable twin: it installs Guile and runs `make lint-portable`
 on every lane as an equally lightweight required check, so the portable libraries
 are gated for compiler warnings on the same per-push cadence.
 
-CI runs the aggregate suite as host/runtime-oriented shards so timing and
-failures stay visible by architectural path:
+CI and the local aggregates share Scheme-defined behavior shards so timing and
+failures stay visible by architectural path. The aggregate targets remain the
+convenient local entry points:
 
 ```sh
 CONSENT_GAMBIT=gsi make test-portable-gambit
@@ -937,7 +959,11 @@ CONSENT_GAUCHE=gosh make test-portable-gauche
 CONSENT_GAUCHE=gosh make test-portable-gauche-reflect
 CONSENT_GAUCHE=gosh make test-portable-gauche-reflect-stress
 make test-emacs-core
-make test-emacs-library
+make test-emacs-conformance
+make test-emacs-library-runtime
+make test-emacs-library-stdlib-core
+make test-emacs-library-stdlib-property
+make test-emacs-library-stdlib-manifest
 make test-emacs-agent-control
 make test-emacs-agent-reliability
 make test-emacs-capability-boundary
@@ -958,11 +984,13 @@ through `make test-full`; the trimmed `make test` skips it.
 
 `make test` runs those shard targets in parallel by default. `make
 test-portable` remains available as the local aggregate for the default
-portable R7RS host shards. CI runs full portable-suite host shards under
-Gambit, the Gambit-native compiled Consent Scheme runner, Racket with its `r7rs`
-package, the Racket-built compiled Consent Scheme runner, Guile, and Gauche.
-Optional Chibi shard targets remain available for manual timing and
-compatibility checks:
+portable R7RS hosts. CI records one log and check per semantic group for the
+historically longest Guile, Gauche, Gambit-compiled, and Racket-compiled suites;
+the compiled group jobs consume product binaries built earlier in the workflow.
+Gambit and Racket direct-host aggregates emit the same per-group logs, allowing
+the timing summary to compare equivalent plan selectors even where the CI job
+remains host-aggregated. Optional Chibi shard targets remain available for
+manual timing and compatibility checks:
 
 ```sh
 CONSENT_CHIBI=chibi-scheme make test-portable-chibi

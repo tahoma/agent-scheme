@@ -32,6 +32,10 @@
   "^CONSENT_CI_CHECK_SECONDS=\\([^[:space:]]+\\)[[:space:]]+\\([+-]?\\(?:[0-9]+\\(?:\\.[0-9]*\\)?\\|\\.[0-9]+\\)\\(?:[eE][+-]?[0-9]+\\)?\\)$"
   "Regexp matching one portable Scheme fine-grained timing line.")
 
+(defconst consent-ci--program-timing-regexp
+  "^CONSENT_CI_PROGRAM_SECONDS=\\([^[:space:]]+\\)[[:space:]]+\\([0-9.]+\\)$"
+  "Regexp matching one portable Scheme program timing line.")
+
 (defconst consent-ci--surface-groups
   '((:name "Reader"
      :emacs ("consent-reader-test-")
@@ -76,19 +80,24 @@
     ("Portable Gambit-backed suite" . 19)
     ("Emacs core language/runtime" . 20)
     ("Emacs library/conformance" . 21)
-    ("Emacs agent control" . 24)
-    ("Emacs agent reliability" . 25)
-    ("Emacs capability boundary" . 26)
-    ("Emacs agent state" . 27)
-    ("Emacs capabilities/policy" . 28)
-    ("Emacs tools/docs/integration" . 29)
-    ("Emacs reflection contract" . 30)
-    ("Emacs reflection catalog stress" . 31)
-    ("Emacs reflection documentation stress" . 32)
-    ("Emacs reflection binding crosswalk stress" . 33)
-    ("Emacs reflection dynamic manifest stress" . 34)
-    ("Emacs native-build/install-dist" . 35)
-    ("Emacs integration/REPL" . 36))
+    ("Emacs fixture/conformance" . 21)
+    ("Emacs library runtime" . 22)
+    ("Emacs standard-library behavior" . 23)
+    ("Emacs random/property libraries" . 24)
+    ("Emacs standard-library manifests" . 25)
+    ("Emacs agent control" . 26)
+    ("Emacs agent reliability" . 27)
+    ("Emacs capability boundary" . 28)
+    ("Emacs agent state" . 29)
+    ("Emacs capabilities/policy" . 30)
+    ("Emacs tools/docs/integration" . 31)
+    ("Emacs reflection contract" . 32)
+    ("Emacs reflection catalog stress" . 33)
+    ("Emacs reflection documentation stress" . 34)
+    ("Emacs reflection binding crosswalk stress" . 35)
+    ("Emacs reflection dynamic manifest stress" . 36)
+    ("Emacs native-build/install-dist" . 37)
+    ("Emacs integration/REPL" . 38))
   "Preferred display order for CI shard summaries.")
 
 (defconst consent-ci--source-metadata-order
@@ -178,6 +187,12 @@ Markers use the shell-friendly shape KEY=value on their own line."
     (list :name (match-string 1 line)
           :seconds (string-to-number (match-string 2 line)))))
 
+(defun consent-ci--parse-program-timing-line (line)
+  "Parse LINE as one portable Scheme program timing plist, or nil."
+  (when (string-match consent-ci--program-timing-regexp line)
+    (list :path (match-string 1 line)
+          :seconds (string-to-number (match-string 2 line)))))
+
 (defun consent-ci-parse-log-file (path)
   "Parse an Consent Scheme CI shard log at PATH.
 The returned plist includes shard metadata, ERT result counts, test
@@ -185,15 +200,19 @@ durations, and optional wall-clock seconds recorded by the workflow."
   (let* ((contents (consent-ci--file-string path))
          (tests nil)
          (check-timings nil)
+         (program-timings nil)
          (summaries nil))
     (dolist (line (split-string contents "\n"))
       (let ((test (consent-ci--parse-test-line line))
             (line-summary (consent-ci--parse-summary-line line))
-            (check-timing (consent-ci--parse-check-timing-line line)))
+            (check-timing (consent-ci--parse-check-timing-line line))
+            (program-timing (consent-ci--parse-program-timing-line line)))
         (when test
           (push test tests))
         (when check-timing
           (push check-timing check-timings))
+        (when program-timing
+          (push program-timing program-timings))
         (when line-summary
           (push line-summary summaries))))
     (append
@@ -210,6 +229,7 @@ durations, and optional wall-clock seconds recorded by the workflow."
                            (when value
                              (string-to-number value)))
            :check-timings (nreverse check-timings)
+           :program-timings (nreverse program-timings)
            :tests (nreverse tests))
      (or (consent-ci--combine-summaries (nreverse summaries))
          '(:ran 0 :expected 0 :unexpected 0 :skipped 0 :ert-seconds 0.0)))))
@@ -310,6 +330,44 @@ durations, and optional wall-clock seconds recorded by the workflow."
         "\n")
        "\n"))))
 
+(defun consent-ci--slowest-program-timings (shards limit)
+  "Return up to LIMIT slowest portable program timings from SHARDS."
+  (let (rows)
+    (dolist (shard shards)
+      (dolist (timing (plist-get shard :program-timings))
+        (push (list :shard (plist-get shard :name)
+                    :path (plist-get timing :path)
+                    :seconds (plist-get timing :seconds))
+              rows)))
+    (cl-subseq
+     (sort rows
+           (lambda (left right)
+             (> (plist-get left :seconds)
+                (plist-get right :seconds))))
+     0
+     (min limit (length rows)))))
+
+(defun consent-ci--render-slow-program-timings (shards)
+  "Return Markdown for portable program timings in SHARDS."
+  (let ((rows (consent-ci--slowest-program-timings shards 10)))
+    (when rows
+      (concat
+       "\n\n"
+       "## Slow Portable Programs\n\n"
+       "Program-level timings expose balancing units inside Scheme-native shards.\n\n"
+       "| Shard | Program | Seconds |\n"
+       "| --- | --- | ---: |\n"
+       (mapconcat
+        (lambda (row)
+          (format "| %s | `%s` | %s |"
+                  (consent-ci--markdown-cell (plist-get row :shard))
+                  (consent-ci--markdown-cell (plist-get row :path))
+                  (consent-ci--format-seconds
+                   (plist-get row :seconds))))
+        rows
+        "\n")
+       "\n"))))
+
 (defun consent-ci--split-option-variant-name (name)
   "Return plist for NAME split into base name and option variant fields."
   (if (string-match
@@ -345,9 +403,23 @@ durations, and optional wall-clock seconds recorded by the workflow."
 
 (defun consent-ci--shard-sort-key (shard)
   "Return display sort key for SHARD."
-  (or (cdr (assoc (consent-ci--shard-base-name shard)
-                  consent-ci--shard-order))
-      99))
+  (let ((name (consent-ci--shard-base-name shard)))
+    (or (cdr (assoc name consent-ci--shard-order))
+        (cond
+         ((or (string-prefix-p
+               "Portable R7RS Gambit-compiled Consent Scheme " name)
+              (string-prefix-p "Portable R7RS Gambit-compiled self-host " name))
+          6)
+         ((string-prefix-p "Portable R7RS Gambit " name) 3)
+         ((or (string-prefix-p
+               "Portable R7RS Racket-compiled Consent Scheme " name)
+              (string-prefix-p "Portable R7RS Racket-compiled self-host " name))
+          10)
+         ((string-prefix-p "Portable R7RS Racket " name) 7)
+         ((string-prefix-p "Portable R7RS Guile " name) 11)
+         ((string-prefix-p "Portable R7RS Gauche " name) 14)
+         ((string-prefix-p "Portable R7RS Chibi " name) 0)
+         (t 99)))))
 
 (defun consent-ci--shard-less-p (left right)
   "Return non-nil when LEFT should display before RIGHT."
@@ -457,6 +529,7 @@ the case for whole-suite portable host shards."
       "\n")
      "\n\n"
      (or (consent-ci--render-paired-validation-surfaces shards) "")
+     (or (consent-ci--render-slow-program-timings shards) "")
      (or (consent-ci--render-slow-check-timings shards) ""))))
 
 (defun consent-ci--render-compact-shard-row (shard)
