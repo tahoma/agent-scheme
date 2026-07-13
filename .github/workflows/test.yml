@@ -121,7 +121,7 @@ jobs:
       CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit full suite / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
       CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection contract / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
       CONSENT_CI_REFLECT_STRESS_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection stress / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
-      CONSENT_CI_NATIVE_SHARD_SUMMARY_NAME: Portable R7RS Gambit-compiled Consent Scheme full suite / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
+      CONSENT_CI_NATIVE_SHARD_SUMMARY_NAME: Portable R7RS Gambit-compiled Consent Scheme self-host corpus / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
     strategy:
       fail-fast: false
       # Per-push lane: canonical on/full plus a single fully-stripped off/none
@@ -170,6 +170,25 @@ jobs:
           "${gambit_prefix}/bin/gsc" -v
           "${gambit_prefix}/bin/gsi" -:r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
+      # Warm only non-runnable Gambit intermediate state. Fallback restores may
+      # come from another ref, so the cache intentionally excludes bin/consent;
+      # the compile step must relink and smoke-test the product binary for this
+      # checkout before any compiled self-host consumer runs.
+      - name: Cache Gambit compiled build tree
+        if: ${{ matrix.combo.native }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/compile/gambit/src
+            build/compile/gambit/incremental
+          key: ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-
+
+      - name: Compile Gambit self-host
+        if: ${{ matrix.combo.native }}
+        run: CONSENT_COMPILE_HOST=gambit make compile
+
       - name: Run portable R7RS Gambit shard
         shell: bash
         run: |
@@ -184,23 +203,6 @@ jobs:
             printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-scheme-gambit-host-test-r7rs-suite$"'
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
-          exit "$status"
-
-      - name: Run portable R7RS Gambit reflection contract shard
-        if: ${{ matrix.combo.source_metadata == 'on' && matrix.combo.docstring_retention == 'full' }}
-        shell: bash
-        run: |
-          mkdir -p ci-logs
-          started=$SECONDS
-          set +e
-          make test-portable-gambit-reflect 2>&1 | tee "ci-logs/${CONSENT_CI_REFLECT_LOG_FILE}"
-          status=${PIPESTATUS[0]}
-          wall=$((SECONDS - started))
-          {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-scheme-gambit-host-test-r7rs-reflect$"'
-            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> "ci-logs/${CONSENT_CI_REFLECT_LOG_FILE}"
           exit "$status"
 
       - name: Run portable R7RS Gambit reflection stress shard
@@ -220,22 +222,22 @@ jobs:
           } >> "ci-logs/${CONSENT_CI_REFLECT_STRESS_LOG_FILE}"
           exit "$status"
 
-      # Warm only non-runnable Gambit intermediate state. Fallback restores may
-      # come from another ref, so the cache intentionally excludes bin/consent;
-      # make compile must relink and smoke-test the product binary for the
-      # current checkout before the native shard can run it. Only the compiling
-      # (native) leg participates; the binary is independent of the
-      # source-metadata/docstring matrix axes, so the key omits them.
-      - name: Cache Gambit compiled build tree
-        if: ${{ matrix.combo.native }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            build/compile/gambit/src
-            build/compile/gambit/incremental
-          key: ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-
+      - name: Run portable R7RS Gambit reflection contract shard
+        if: ${{ matrix.combo.source_metadata == 'on' && matrix.combo.docstring_retention == 'full' }}
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make test-portable-gambit-reflect 2>&1 | tee "ci-logs/${CONSENT_CI_REFLECT_LOG_FILE}"
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-scheme-gambit-host-test-r7rs-reflect$"'
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_REFLECT_LOG_FILE}"
+          exit "$status"
 
       - name: Run portable R7RS Gambit-compiled shard
         if: ${{ matrix.combo.native }}
@@ -244,7 +246,7 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make test-portable-gambit-native 2>&1 | tee "ci-logs/${CONSENT_CI_NATIVE_LOG_FILE}"
+          make test-portable-gambit-native-run 2>&1 | tee "ci-logs/${CONSENT_CI_NATIVE_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
@@ -327,29 +329,11 @@ jobs:
         source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
         docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
         host:
-          - host: racket
-            host_name: Racket
-            apt_package: racket
-            make_target: test-portable-racket
-            summary_name: Portable R7RS Racket full suite
-            selector: '"^consent-scheme-racket-host-test-r7rs-suite$"'
-          - host: racket-reflect
-            host_name: Racket reflection contract
-            apt_package: racket
-            make_target: test-portable-racket-reflect
-            summary_name: Portable R7RS Racket reflection contract
-            selector: '"^consent-scheme-racket-host-test-r7rs-reflect$"'
-          - host: racket-reflect-stress
-            host_name: Racket reflection stress
-            apt_package: racket
-            make_target: test-portable-racket-reflect-stress
-            summary_name: Portable R7RS Racket reflection stress
-            selector: '"^consent-scheme-racket-host-test-r7rs-reflect-stress$"'
           - host: compiled
             host_name: Racket-compiled Consent Scheme
             apt_package: racket
-            make_target: test-portable-compiled
-            summary_name: Portable R7RS Racket-compiled Consent Scheme full suite
+            make_target: test-portable-compiled-run
+            summary_name: Portable R7RS Racket-compiled Consent Scheme self-host corpus
             selector: '"^consent-scheme-compiled-host-test-r7rs-suite$"'
           - host: guile
             host_name: Guile
@@ -357,18 +341,36 @@ jobs:
             make_target: test-portable-guile
             summary_name: Portable R7RS Guile full suite
             selector: '"^consent-scheme-guile-host-test-r7rs-suite$"'
-          - host: guile-reflect
-            host_name: Guile reflection contract
-            apt_package: guile-3.0
-            make_target: test-portable-guile-reflect
-            summary_name: Portable R7RS Guile reflection contract
-            selector: '"^consent-scheme-guile-host-test-r7rs-reflect$"'
+          - host: racket
+            host_name: Racket
+            apt_package: racket
+            make_target: test-portable-racket
+            summary_name: Portable R7RS Racket full suite
+            selector: '"^consent-scheme-racket-host-test-r7rs-suite$"'
           - host: guile-reflect-stress
             host_name: Guile reflection stress
             apt_package: guile-3.0
             make_target: test-portable-guile-reflect-stress
             summary_name: Portable R7RS Guile reflection stress
             selector: '"^consent-scheme-guile-host-test-r7rs-reflect-stress$"'
+          - host: racket-reflect-stress
+            host_name: Racket reflection stress
+            apt_package: racket
+            make_target: test-portable-racket-reflect-stress
+            summary_name: Portable R7RS Racket reflection stress
+            selector: '"^consent-scheme-racket-host-test-r7rs-reflect-stress$"'
+          - host: guile-reflect
+            host_name: Guile reflection contract
+            apt_package: guile-3.0
+            make_target: test-portable-guile-reflect
+            summary_name: Portable R7RS Guile reflection contract
+            selector: '"^consent-scheme-guile-host-test-r7rs-reflect$"'
+          - host: racket-reflect
+            host_name: Racket reflection contract
+            apt_package: racket
+            make_target: test-portable-racket-reflect
+            summary_name: Portable R7RS Racket reflection contract
+            selector: '"^consent-scheme-racket-host-test-r7rs-reflect$"'
 
     steps:
       - name: Install checkout tools
@@ -435,6 +437,10 @@ jobs:
               ;;
           esac
 
+      - name: Compile Racket self-host
+        if: matrix.host.host == 'compiled'
+        run: CONSENT_COMPILE_HOST=racket make compile
+
       - name: Run portable R7RS host shard
         shell: bash
         run: |
@@ -500,18 +506,18 @@ jobs:
             make_target: test-portable-gauche
             summary_name: Portable R7RS Gauche full suite
             selector: '"^consent-scheme-gauche-host-test-r7rs-suite$"'
-          - host: gauche-reflect
-            host_name: Gauche reflection contract
-            apt_package: gauche
-            make_target: test-portable-gauche-reflect
-            summary_name: Portable R7RS Gauche reflection contract
-            selector: '"^consent-scheme-gauche-host-test-r7rs-reflect$"'
           - host: gauche-reflect-stress
             host_name: Gauche reflection stress
             apt_package: gauche
             make_target: test-portable-gauche-reflect-stress
             summary_name: Portable R7RS Gauche reflection stress
             selector: '"^consent-scheme-gauche-host-test-r7rs-reflect-stress$"'
+          - host: gauche-reflect
+            host_name: Gauche reflection contract
+            apt_package: gauche
+            make_target: test-portable-gauche-reflect
+            summary_name: Portable R7RS Gauche reflection contract
+            selector: '"^consent-scheme-gauche-host-test-r7rs-reflect$"'
 
     steps:
       - name: Install checkout tools
@@ -599,25 +605,11 @@ jobs:
         shard:
           # Longest expected wall-time shards appear first so GitHub starts
           # them in the first runner wave when matrix capacity is constrained.
-          # The SRFI 180 official reference corpus is intentionally isolated
-          # from the broader library/conformance shard. The FoundationDB valid
-          # fixture remains positive coverage, but runs as stress coverage so
-          # it does not dominate the ordinary corpus shard's timing.
-          - shard: emacs-stdlib-reference-stress
-            label: stdlib/reference stress
-            make_target: test-emacs-stdlib-reference-stress
-            summary_name: Emacs stdlib/reference stress
-            selector: '"consent-library-test-srfi-180-reference-valid-stress-corpus"'
           - shard: emacs-reflect-dynamic-manifest-stress
             label: reflection dynamic manifest stress
             make_target: test-emacs-reflect-dynamic-manifest-stress
             summary_name: Emacs reflection dynamic manifest stress
             selector: '"consent-reflect-test-dynamic-manifest-inputs-stress"'
-          - shard: emacs-stdlib-reference
-            label: stdlib/reference corpus
-            make_target: test-emacs-stdlib-reference
-            summary_name: Emacs stdlib/reference corpus
-            selector: '(and "consent-library-test-srfi-180-reference-.*" (not "consent-library-test-srfi-180-reference-valid-stress-corpus"))'
           - shard: emacs-reflect-documentation-stress
             label: reflection docs/apropos stress
             make_target: test-emacs-reflect-documentation-stress
@@ -627,7 +619,7 @@ jobs:
             label: library/conformance
             make_target: test-emacs-library
             summary_name: Emacs library/conformance
-            selector: '(and (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*") (not "consent-library-test-srfi-180-reference-.*"))'
+            selector: '(or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*")'
           # The agent/capability surface used to run as one capabilities/policy
           # shard. It dominated per-push wall time, so the default lane splits
           # it into behavior-focused shards that can run in parallel.

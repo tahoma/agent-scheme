@@ -18,7 +18,6 @@
 (require 'consent-models)
 (require 'consent-policy)
 (require 'consent-result)
-(require 'consent-scheme-host)
 
 (defvar consent-models-test--requests nil
   "Requests received by the fake model transport.")
@@ -267,11 +266,6 @@ the local tests passed. Use only ASCII text.")
               (list 'tool-choice tool))))"
     (consent-models-test--live-endpoint)
     (consent-models-test--live-model))))
-
-(defun consent-models-test--run-live-portable-host (host display-name)
-  "Run live model portable tests on HOST named DISPLAY-NAME."
-  (consent--scheme-host-run-plan
-   host display-name (consent--scheme-host-live-plan-shard host)))
 
 (ert-deftest consent-models-test-local-complete-through-transport ()
   "Expose `(agent models)' and complete through a selected local provider."
@@ -777,20 +771,6 @@ the local tests passed. Use only ASCII text.")
     (should (string-match-p "(tool-calls" external))
     (should (string-match-p "(name local-echo)" external))
     (should (string-match-p "(arguments ((text \"" external))))
-
-(ert-deftest consent-models-test-live-portable-racket-local-openai-compatible-tool-call ()
-  "Opt-in live proof that the portable Racket host receives model tool calls."
-  (skip-unless (consent-models-test--live-enabled-p))
-  (consent-models-test--run-live-portable-host
-   'racket
-   "Racket live model tool-call"))
-
-(ert-deftest consent-models-test-live-portable-compiled-local-openai-compatible-tool-call ()
-  "Opt-in live proof that the compiled Consent host receives model tool calls."
-  (skip-unless (consent-models-test--live-enabled-p))
-  (consent-models-test--run-live-portable-host
-   'compiled
-   "Racket-compiled Consent Scheme live model tool-call"))
 
 (ert-deftest consent-models-test-live-local-quick-start-model-matrix ()
   "Opt-in live proof across the selected quick-start role/model matrix."

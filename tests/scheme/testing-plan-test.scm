@@ -56,8 +56,15 @@
   (test-assert "project full shard contains registered suites"
                (member "tests/scheme/consent-context-test.scm"
                        (testing-plan-files project-plan 'full)))
-  (test-equal "compiled project shard stays compact"
+  (test-equal "evaluator shard isolates the measured bottleneck"
+              '("tests/scheme/consent-eval-test.scm")
+              (testing-plan-files project-plan 'full-evaluator))
+  (test-assert "support shard excludes the evaluator bottleneck"
+               (not (member "tests/scheme/consent-eval-test.scm"
+                            (testing-plan-files project-plan 'full-support))))
+  (test-equal "compiled project shard includes JSON reference stress"
               '("tests/scheme/consent-reader-test.scm"
+                "tests/scheme/stdlib-json-reference-test.scm"
                 "tests/scheme/consent-manifest-smoke-test.scm")
               (testing-plan-files project-plan 'compiled))
   (test-equal "compiled live shard uses the self-hosted program"

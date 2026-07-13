@@ -13,17 +13,18 @@ does; retaining an ERT test does not make it the semantic source of truth.
   direct portable host matrix. Their ERT counterparts remain only to preserve
   Emacs-bootstrap import, primitive-adapter, audit, session, buffer, process,
   and policy coverage.
-- SRFI 180 valid JSONTestSuite fixtures, including
-  `y_foundationdb_status.json`, JSON Lines, and JSON Text Sequences are
-  canonical in `tests/scheme/stdlib-json-reference-test.scm`.
+- SRFI 180 valid and invalid JSONTestSuite fixtures, including
+  `y_foundationdb_status.json`, explicit exclusions, implementation-defined
+  classifications, JSON Lines, and JSON Text Sequences are canonical in
+  `tests/scheme/stdlib-json-reference-test.scm`.
 - Shared R7RS and REPL corpora are exercised by both portable and Emacs hosts.
 
 ## Justified ERT coverage
 
-- `consent-library-test-srfi-180-reference-*` remains as Emacs-bootstrap
-  compatibility, capability-budget, fixture-inventory, invalid-input, and
-  `json.el` oracle coverage. Portable Scheme owns valid and streaming semantics;
-  ERT owns the Emacs evaluator's capability-backed file-port path and oracle.
+- SRFI 180 reference semantics have no ERT copy. The portable corpus owns valid,
+  invalid, classified-exclusion, implementation-defined, JSON Lines, and JSON
+  Text Sequences coverage and runs through both compiled self-hosts. Emacs keeps
+  generic file-capability adapter coverage without using JSON as the workload.
 - Buffer, window, overlay, interactive command, prompt, and Emacs incremental
   REPL tests exercise host-adapter behavior that R7RS Scheme cannot observe.
 - Process launch, executable discovery, compilation, installation, CI YAML,
@@ -114,4 +115,6 @@ the selected path stream needed for host process invocation. Process isolation
 is intentional even though R7RS also provides `(scheme load)`. Separate
 `live-direct` and `live-compiled` selectors keep nested-evaluator and
 self-hosted interaction-context programs explicit instead of hiding that host
-execution distinction in ERT.
+execution distinction in ERT. `make test-live-model-portable` invokes those
+Scheme-plan shards directly; the aggregate live targets run the Emacs-host
+checks beside them, never as their discovery or process-control parent.

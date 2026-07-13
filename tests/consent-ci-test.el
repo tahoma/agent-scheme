@@ -106,6 +106,24 @@
           (should (= (plist-get shard :ert-seconds) 12.0)))
       (delete-file log))))
 
+(ert-deftest consent-ci-test-combines-parallel-portable-runner-summaries ()
+  "Combine counts while retaining the longest parallel subset duration."
+  (let* ((log (consent-ci-test--write-log
+               (concat
+                "CONSENT_CI_PORTABLE_SUMMARY=1 1 0 0 64\n"
+                "CONSENT_CI_PORTABLE_SUMMARY=50 49 1 2 70\n"
+                "CONSENT_CI_SHARD_NAME=Portable R7RS\n"
+                "CONSENT_CI_WALL_SECONDS=72\n")))
+         (shard (consent-ci-parse-log-file log)))
+    (unwind-protect
+        (progn
+          (should (= (plist-get shard :ran) 51))
+          (should (= (plist-get shard :expected) 50))
+          (should (= (plist-get shard :unexpected) 1))
+          (should (= (plist-get shard :skipped) 2))
+          (should (= (plist-get shard :ert-seconds) 70.0)))
+      (delete-file log))))
+
 (ert-deftest consent-ci-test-renders-summary-with-comparable-surfaces ()
   "Render shard rows and paired Emacs/portable validation surface rows."
   (let* ((emacs-log
@@ -350,7 +368,7 @@
                                         :ert-seconds 12.0
                                         :wall-seconds 13.0
                                         :tests nil))
-         (portable-compiled-shard '(:name "Portable R7RS Racket-compiled Consent Scheme full suite"
+         (portable-compiled-shard '(:name "Portable R7RS Racket-compiled Consent Scheme self-host corpus"
                                           :selector "portable-compiled"
                                           :ran 1
                                           :expected 1
@@ -373,7 +391,7 @@
              "| Portable R7RS Racket full suite | 1 | 0 | 0 | 12\\.000s | 13\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Portable R7RS Racket-compiled Consent Scheme full suite | 1 | 0 | 0 | 10\\.000s | 11\\.000s |"
+             "| Portable R7RS Racket-compiled Consent Scheme self-host corpus | 1 | 0 | 0 | 10\\.000s | 11\\.000s |"
              above-fold))
     (should-not (string-match-p "## Portable Host Shard Timing" above-fold))
     (should-not (string-match-p "## Emacs Shard Timing" above-fold))
@@ -682,8 +700,6 @@
   (let ((makefile (consent-ci-test--repo-file-string "Makefile"))
         (launcher
          (consent-ci-test--repo-file-string "tools/run-portable-tests.sh"))
-        (emacs-host-helper
-         (consent-ci-test--repo-file-string "tests/consent-scheme-host.el"))
         (plan
          (consent-ci-test--repo-file-string
           "tests/scheme/test-plan.scm")))
@@ -695,8 +711,15 @@
     (should-not (string-match-p "emacs\\|ert" launcher))
     (should (string-match-p "run-test-plan.scm" launcher))
     (should-not
-     (string-match-p "defconst consent--scheme-host-test-files"
-                     emacs-host-helper))
+     (file-exists-p
+      (expand-file-name "tests/consent-scheme-host.el" consent--test-root)))
+    (should (string-match-p "^test-live-model-portable:" makefile))
+    (should (string-match-p
+             "CONSENT_PORTABLE_GROUP=live-direct"
+             makefile))
+    (should (string-match-p
+             "CONSENT_PORTABLE_GROUP=live-compiled"
+             makefile))
     (should-not
      (file-exists-p
       (expand-file-name
@@ -745,13 +768,15 @@
              "portable-\\${{ matrix.host.host }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
              workflow))
     (should (string-match-p "host: compiled" workflow))
-    (should (string-match-p "make test-portable-gambit-native" workflow))
+    (should (string-match-p "Compile Gambit self-host" workflow))
+    (should (string-match-p "make test-portable-gambit-native-run" workflow))
     (should (string-match-p
-             "Portable R7RS Gambit-compiled Consent Scheme full suite"
+             "Portable R7RS Gambit-compiled Consent Scheme self-host corpus"
              workflow))
-    (should (string-match-p "make_target: test-portable-compiled" workflow))
+    (should (string-match-p "Compile Racket self-host" workflow))
+    (should (string-match-p "make_target: test-portable-compiled-run" workflow))
     (should (string-match-p
-             "Portable R7RS Racket-compiled Consent Scheme full suite"
+             "Portable R7RS Racket-compiled Consent Scheme self-host corpus"
              workflow))
     ;; Emacs-core indexes its log through the combo too; the other Emacs shards
     ;; keep the bare matrix axes.
@@ -899,9 +924,7 @@
          (workflow (consent-ci-test--repo-file-string
                     ".github/workflows/test.yml"))
          (make-targets
-          '("test-emacs-stdlib-reference-stress"
-            "test-emacs-reflect-dynamic-manifest-stress"
-            "test-emacs-stdlib-reference"
+          '("test-emacs-reflect-dynamic-manifest-stress"
             "test-emacs-reflect-documentation-stress"
             "test-emacs-library"
             "test-emacs-agent-control"
@@ -915,9 +938,7 @@
             "test-emacs-capability-boundary"
             "test-emacs-reflect"))
          (workflow-shards
-          '("shard: emacs-stdlib-reference-stress"
-            "shard: emacs-reflect-dynamic-manifest-stress"
-            "shard: emacs-stdlib-reference"
+          '("shard: emacs-reflect-dynamic-manifest-stress"
             "shard: emacs-reflect-documentation-stress"
             "shard: emacs-library"
             "shard: emacs-agent-control"
@@ -933,7 +954,7 @@
     (should
      (string-match-p
       (regexp-quote
-       (concat "CONSENT_EMACS_TEST_SHARD_TARGETS ?= "
+      (concat "CONSENT_EMACS_TEST_SHARD_TARGETS ?= "
                (mapconcat #'identity make-targets " ")))
       makefile))
     (should (consent-ci-test--ordered-substrings-p
@@ -955,14 +976,36 @@
                       "^test-emacs-agent-state:"))
       (should (string-match-p needle makefile)))))
 
-(ert-deftest consent-ci-test-make-splits-stdlib-reference-stress-shard ()
-  "Run large stdlib reference fixtures in a dedicated stress shard."
-  (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
-    (dolist (needle '("CONSENT_EMACS_STDLIB_REFERENCE_TEST_SELECTOR \\?=.*not"
-                      "CONSENT_EMACS_STDLIB_REFERENCE_STRESS_TEST_SELECTOR \\?="
-                      "^test-emacs-stdlib-reference:"
-                      "^test-emacs-stdlib-reference-stress:"))
-      (should (string-match-p needle makefile)))))
+(ert-deftest consent-ci-test-runs-srfi-180-only-through-portable-plans ()
+  "Keep the complete JSON reference corpus out of ERT shards."
+  (let ((makefile (consent-ci-test--repo-file-string "Makefile"))
+        (workflow (consent-ci-test--repo-file-string
+                   ".github/workflows/test.yml"))
+        (plan (consent-ci-test--repo-file-string
+               "tests/scheme/test-plan.scm")))
+    (should-not (string-match-p "emacs-stdlib-reference" makefile))
+    (should-not (string-match-p "emacs-stdlib-reference" workflow))
+    (should (string-match-p "stdlib-json-reference-test.scm" plan))
+    (should (string-match-p
+             "(tags (full direct compiled stdlib reference stress slow))"
+             plan))))
+
+(ert-deftest consent-ci-test-prioritizes-compiled-self-host-builds ()
+  "Build product self-hosts before their test consumers."
+  (let ((workflow (consent-ci-test--repo-file-string
+                   ".github/workflows/test.yml")))
+    (should (consent-ci-test--ordered-substrings-p
+             '("Compile Gambit self-host"
+               "Run portable R7RS Gambit shard"
+               "Run portable R7RS Gambit-compiled shard")
+             workflow))
+    (should (consent-ci-test--ordered-substrings-p
+             '("host: compiled" "host: guile" "host: racket")
+             workflow))
+    (should (consent-ci-test--ordered-substrings-p
+             '("Compile Racket self-host"
+               "Run portable R7RS host shard")
+             workflow))))
 
 (ert-deftest consent-ci-test-make-splits-reflection-behavior-shards ()
   "Run reflection contract and stress coverage as behavior-focused shards."
@@ -1117,7 +1160,7 @@
             :wall-seconds 1.0
             :tests nil))
          (portable-gambit-native-shard
-          '(:name "Portable R7RS Gambit-compiled Consent Scheme full suite"
+          '(:name "Portable R7RS Gambit-compiled Consent Scheme self-host corpus"
             :selector "portable-gambit-native"
             :ran 1
             :expected 1
@@ -1155,7 +1198,7 @@
             :ert-seconds 1.0
             :wall-seconds 1.0
             :tests nil))
-         (portable-compiled-shard '(:name "Portable R7RS Racket-compiled Consent Scheme full suite"
+         (portable-compiled-shard '(:name "Portable R7RS Racket-compiled Consent Scheme self-host corpus"
                                           :selector "portable-compiled"
                                           :ran 1
                                           :expected 1
@@ -1315,7 +1358,7 @@
     (should details)
     (should
      (string-match-p
-      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit reflection contract |.*\n| Portable R7RS Gambit reflection stress |.*\n| Portable R7RS Gambit-compiled Consent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket reflection contract |.*\n| Portable R7RS Racket reflection stress |.*\n| Portable R7RS Racket-compiled Consent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Guile reflection contract |.*\n| Portable R7RS Guile reflection stress |.*\n| Portable R7RS Gauche full suite |.*\n| Portable R7RS Gauche reflection contract |.*\n| Portable R7RS Gauche reflection stress |.*\n| Emacs agent control |.*\n| Emacs agent reliability |.*\n| Emacs capability boundary |.*\n| Emacs agent state |.*\n| Emacs tools/docs/integration |.*\n| Emacs reflection contract |.*\n| Emacs reflection catalog stress |.*\n| Emacs reflection documentation stress |.*\n| Emacs reflection binding crosswalk stress |.*\n| Emacs reflection dynamic manifest stress |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit reflection contract |.*\n| Portable R7RS Gambit reflection stress |.*\n| Portable R7RS Gambit-compiled Consent Scheme self-host corpus |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket reflection contract |.*\n| Portable R7RS Racket reflection stress |.*\n| Portable R7RS Racket-compiled Consent Scheme self-host corpus |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Guile reflection contract |.*\n| Portable R7RS Guile reflection stress |.*\n| Portable R7RS Gauche full suite |.*\n| Portable R7RS Gauche reflection contract |.*\n| Portable R7RS Gauche reflection stress |.*\n| Emacs agent control |.*\n| Emacs agent reliability |.*\n| Emacs capability boundary |.*\n| Emacs agent state |.*\n| Emacs tools/docs/integration |.*\n| Emacs reflection contract |.*\n| Emacs reflection catalog stress |.*\n| Emacs reflection documentation stress |.*\n| Emacs reflection binding crosswalk stress |.*\n| Emacs reflection dynamic manifest stress |"
       details))))
 
 ;;; Structured per-run record (#465)

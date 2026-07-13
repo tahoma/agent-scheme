@@ -5,8 +5,8 @@
 ;;; Commentary:
 
 ;; Host-independent source checks for the portable R7RS evaluator.  The
-;; portable evaluator test file itself runs through the shared aggregate host
-;; suite (`consent--scheme-host-run-suite'), not a per-file Chibi bridge.
+;; portable evaluator test file itself runs through the Scheme-native test plan,
+;; not a per-file ERT bridge.
 
 ;;; Code:
 
