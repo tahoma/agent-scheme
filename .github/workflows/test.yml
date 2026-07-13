@@ -465,7 +465,7 @@ jobs:
       - name: Install test reporting tools
         uses: ./.github/actions/apt-install
         with:
-          packages: emacs-nox make
+          packages: emacs-nox make racket
 
       - name: Download Racket self-host
         uses: actions/download-artifact@v8
@@ -1051,7 +1051,7 @@ jobs:
       - name: Install test reporting tools
         uses: ./.github/actions/apt-install
         with:
-          packages: emacs-nox libssl-dev make
+          packages: emacs-nox libssl-dev make racket
 
       - name: Download compiled self-host
         uses: actions/download-artifact@v8
