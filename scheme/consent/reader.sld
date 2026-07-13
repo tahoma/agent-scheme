@@ -583,12 +583,8 @@
 
     (define (reader-substring reader start end)
       "Return reader source characters from START up to END as a string."
-      (let loop ((index start) (characters '()))
-        (if (= index end)
-            (list->string (reverse characters))
-            (loop (+ index 1)
-                  (cons (vector-ref (reader-characters reader) index)
-                        characters)))))
+      (list->string
+       (vector->list (reader-characters reader) start end)))
 
     (define (advance! reader . maybe-count)
       "Move the reader cursor forward by one character or the requested count."
