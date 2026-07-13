@@ -900,11 +900,10 @@ jobs:
       - name: Render portable R7RS host shard timing summary
         if: always()
         run: |
-          logs=(ci-logs/*.log)
-          if [ -e "${logs[0]}" ]; then
+          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
               --eval "(require 'consent-ci)" \
-              --funcall consent-ci-summary-batch-main -- "${logs[@]}"
+              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
   test-portable-guile-cross:
