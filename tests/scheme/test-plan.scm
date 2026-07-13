@@ -12,6 +12,9 @@
     (path "tests/scheme/consent-reader-test.scm")
     (tags (full direct compiled core registered)))
    (program
+    (path "tests/scheme/current-ports-test.scm")
+    (tags (full direct compiled core registered)))
+   (program
    (path "tests/scheme/consent-fixture-test.scm")
     (tags (full direct conformance self-host-gap registered)))
    (program
@@ -157,10 +160,10 @@
     (tags (full direct stdlib upstream self-host-gap registered)))
    (program
    (path "tests/scheme/stdlib-lightweight-testing-test.scm")
-    (tags (full direct stdlib testing self-host-gap registered)))
+    (tags (full direct compiled stdlib testing registered)))
    (program
    (path "tests/scheme/stdlib-lightweight-testing-upstream-test.scm")
-    (tags (full direct stdlib testing upstream self-host-gap registered)))
+    (tags (full direct compiled stdlib testing upstream registered)))
    (program
     (path "tests/scheme/stdlib-json-reference-test.scm")
     (tags (full direct compiled stdlib reference stress slow)))

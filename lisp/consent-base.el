@@ -92,9 +92,9 @@
     ("error-object-irritants" consent--primitive-error-object-irritants 1 1)
     ("error-object-message" consent--primitive-error-object-message 1 1)
     ("error-object?" consent--primitive-error-object? 1 1)
-    ("current-error-port" consent--primitive-current-error-port 0 0)
-    ("current-input-port" consent--primitive-current-input-port 0 0)
-    ("current-output-port" consent--primitive-current-output-port 0 0)
+    ("current-error-port" consent--primitive-current-error-port 0 1)
+    ("current-input-port" consent--primitive-current-input-port 0 1)
+    ("current-output-port" consent--primitive-current-output-port 0 1)
     ("denominator" consent--primitive-denominator 1 1)
     ("exact" consent--primitive-exact 1 1)
     ("exact-integer-sqrt" consent--primitive-exact-integer-sqrt 1 1)
@@ -382,14 +382,17 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      ((obj1 any "Value for the new pair's car.")
       (obj2 any "Value for the new pair's cdr."))
      (pair "A newly allocated pair."))
-    ("current-error-port" "Return the current textual error output port."
-     ()
+    ("current-error-port"
+     "Return or dynamically replace the current textual error output port."
+     ((port textual-output-port "Optional replacement error output port."))
      (textual-output-port "The current textual error output port."))
-    ("current-input-port" "Return the current textual input port."
-     ()
+    ("current-input-port"
+     "Return or dynamically replace the current textual input port."
+     ((port textual-input-port "Optional replacement input port."))
      (textual-input-port "The current textual input port."))
-    ("current-output-port" "Return the current textual output port."
-     ()
+    ("current-output-port"
+     "Return or dynamically replace the current textual output port."
+     ((port textual-output-port "Optional replacement output port."))
      (textual-output-port "The current textual output port."))
     ("dynamic-wind" "Call before, thunk, and after around dynamic extent changes."
      ((before procedure "Zero-argument procedure called on entry.")
@@ -876,7 +879,9 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     'port-io)
    ((member name consent--primitive-control-names)
     'control)
-   ((equal name "make-parameter")
+   ((member name
+            '("current-error-port" "current-input-port" "current-output-port"
+              "make-parameter"))
     'dynamic-state)
    (t
     'pure)))

@@ -3870,16 +3870,34 @@ cursor across sessions."
           (policy-denied description context '())))
 
     (define (primitive-current-input-port arguments context)
-      "Implement the `current-input-port` primitive."
-      (current-input-port-or-deny context "current-input-port"))
+      "Read or replace CONTEXT's dynamically current textual input port."
+      (if (null? arguments)
+          (current-input-port-or-deny context "current-input-port")
+          (let ((port
+                 (expect-textual-input-port
+                  (car arguments) "current-input-port")))
+            (set-context-current-input-port! context port)
+            consent-unspecified)))
 
     (define (primitive-current-output-port arguments context)
-      "Implement the `current-output-port` primitive."
-      (current-output-port-or-deny context "current-output-port"))
+      "Read or replace CONTEXT's dynamically current textual output port."
+      (if (null? arguments)
+          (current-output-port-or-deny context "current-output-port")
+          (let ((port
+                 (expect-textual-output-port
+                  (car arguments) "current-output-port")))
+            (set-context-current-output-port! context port)
+            consent-unspecified)))
 
     (define (primitive-current-error-port arguments context)
-      "Implement the `current-error-port` primitive."
-      (current-error-port-or-deny context "current-error-port"))
+      "Read or replace CONTEXT's dynamically current textual error port."
+      (if (null? arguments)
+          (current-error-port-or-deny context "current-error-port")
+          (let ((port
+                 (expect-textual-output-port
+                  (car arguments) "current-error-port")))
+            (set-context-current-error-port! context port)
+            consent-unspecified)))
 
     (define (write-text-to-port text port description . maybe-context)
       "Write text to port data through the Consent Scheme port or datum renderer."

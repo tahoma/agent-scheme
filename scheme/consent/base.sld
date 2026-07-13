@@ -121,9 +121,9 @@
        (list 'close-port 'primitive-close-port 1 1)
        (list 'complex? 'primitive-complex? 1 1)
        (list 'cons 'primitive-cons 2 2)
-       (list 'current-error-port 'primitive-current-error-port 0 0)
-       (list 'current-input-port 'primitive-current-input-port 0 0)
-       (list 'current-output-port 'primitive-current-output-port 0 0)
+       (list 'current-error-port 'primitive-current-error-port 0 1)
+       (list 'current-input-port 'primitive-current-input-port 0 1)
+       (list 'current-output-port 'primitive-current-output-port 0 1)
        (list 'dynamic-wind 'primitive-dynamic-wind 3 3)
        (list 'eq? 'primitive-eq? 2 2)
        (list 'equal? 'primitive-equal? 2 2)
@@ -414,14 +414,14 @@
          ((obj1 any "Value for the new pair's car.")
           (obj2 any "Value for the new pair's cdr."))
          (pair "A newly allocated pair."))
-        (current-error-port "Return the current textual error output port."
-         ()
+        (current-error-port "Return or dynamically replace the current textual error output port."
+         ((port textual-output-port "Optional replacement error output port."))
          (textual-output-port "The current textual error output port."))
-        (current-input-port "Return the current textual input port."
-         ()
+        (current-input-port "Return or dynamically replace the current textual input port."
+         ((port textual-input-port "Optional replacement input port."))
          (textual-input-port "The current textual input port."))
-        (current-output-port "Return the current textual output port."
-         ()
+        (current-output-port "Return or dynamically replace the current textual output port."
+         ((port textual-output-port "Optional replacement output port."))
          (textual-output-port "The current textual output port."))
         (dynamic-wind "Call before, thunk, and after around dynamic extent changes."
          ((before procedure "Zero-argument procedure called on entry.")
@@ -920,7 +920,10 @@
        ((memq name primitive-mutation-names) 'mutation)
        ((memq name primitive-port-io-names) 'port-io)
        ((memq name primitive-control-names) 'control)
-       ((eq? name 'make-parameter) 'dynamic-state)
+       ((memq name
+              '(current-error-port current-input-port current-output-port
+                make-parameter))
+        'dynamic-state)
        (else 'pure)))
 
     (define (primitive-emitter-hook-for-effect effect)

@@ -255,7 +255,12 @@
                                                     expected-result))
                                    (return
                                     (list
-                                     (list 'let
+                                     ;; Construct the introduced source head as
+                                     ;; a plain datum.  A quoted introduced
+                                     ;; identifier can retain macro-renaming
+                                     ;; metadata in a self-host expansion and
+                                     ;; is not writable as Scheme data.
+                                     (list (string->symbol "let")
                                            (list (list 'arg arg) ...)
                                            'expr)
                                      actual-result

@@ -184,6 +184,26 @@
                    "." command-line-script-path)))))
 
 (testing-registry-case
+ 'host-run-input-is-mediated-eof '(portable core)
+(let* ((options (cli-script-host-run-options "."))
+       (reader (cdr (assq 'program-input-reader options)))
+       (grants (cdr (assq 'capability-grants options))))
+  (test-assert
+   'host-run-input-is-mediated-eof
+   (and (procedure? reader)
+        (not (reader))
+        (let loop ((rest grants))
+          (and (pair? rest)
+               (or (equal? (car rest)
+                           '(capability-grant
+                             (id host-run-stdin-grant)
+                             (domain port)
+                             (operations read)
+                             (scope (backing stdin))
+                             (expires never)))
+                   (loop (cdr rest)))))))))
+
+(testing-registry-case
  'consent-script-case-20 '(portable core)
 (delete-if-present command-line-script-path))
 

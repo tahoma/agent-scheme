@@ -4240,17 +4240,32 @@ The standard streams are consented by invocation; ambient effects keep gating."
   (or (and context (consent--eval-context-current-error-port context))
       (consent--policy-denied description context)))
 
-(defun consent--primitive-current-input-port (_arguments context)
-  "Primitive current-input-port."
-  (consent--current-input-port-or-deny context "current-input-port"))
+(defun consent--primitive-current-input-port (arguments context)
+  "Read or replace CONTEXT's dynamically current textual input port."
+  (if (null arguments)
+      (consent--current-input-port-or-deny context "current-input-port")
+    (let ((port (consent--expect-textual-input-port
+                 (car arguments) "current-input-port")))
+      (setf (consent--eval-context-current-input-port context) port)
+      consent-unspecified)))
 
-(defun consent--primitive-current-output-port (_arguments context)
-  "Primitive current-output-port."
-  (consent--current-output-port-or-deny context "current-output-port"))
+(defun consent--primitive-current-output-port (arguments context)
+  "Read or replace CONTEXT's dynamically current textual output port."
+  (if (null arguments)
+      (consent--current-output-port-or-deny context "current-output-port")
+    (let ((port (consent--expect-textual-output-port
+                 (car arguments) "current-output-port")))
+      (setf (consent--eval-context-current-output-port context) port)
+      consent-unspecified)))
 
-(defun consent--primitive-current-error-port (_arguments context)
-  "Primitive current-error-port."
-  (consent--current-error-port-or-deny context "current-error-port"))
+(defun consent--primitive-current-error-port (arguments context)
+  "Read or replace CONTEXT's dynamically current textual error port."
+  (if (null arguments)
+      (consent--current-error-port-or-deny context "current-error-port")
+    (let ((port (consent--expect-textual-output-port
+                 (car arguments) "current-error-port")))
+      (setf (consent--eval-context-current-error-port context) port)
+      consent-unspecified)))
 
 (defun consent--write-text-to-port (text port description &optional context)
   "Append TEXT to textual output PORT for DESCRIPTION."
