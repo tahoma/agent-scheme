@@ -9,30 +9,15 @@
 
 (import (scheme base)
         (scheme write)
-        (stdlib list))
-
-;; Number of failed adapted SRFI checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed list-library check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
+        (stdlib list)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 (define (check-values name thunk expected)
   "Compare values returned by THUNK to EXPECTED."
-  (check name (call-with-values thunk list) expected))
+  (test-equal name expected (call-with-values thunk list)))
 
 (define (raises? thunk)
   "Return #t when THUNK raises an exception."
@@ -41,20 +26,17 @@
     (thunk)
     #f))
 
-(define (finish-list-tests)
-  "Report the adapted SRFI 1 test result."
-  (if (= failures 0)
-      (begin
-        (display "Adapted SRFI 1 list tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " adapted SRFI 1 list test failure(s)")
-        (newline)
-        (error "adapted SRFI 1 list tests failed" failures))))
-
-(check 'constructors-and-copy
-       (let* ((tree (list (cons 'a 'b) (list 'c)))
+(testing-registry-case
+ 'constructors-and-copy '(portable stdlib)
+ ("stdlib-list-test.scm" 29)
+(test-equal 'constructors-and-copy
+             '((head tail)
+         (0 1 2 3 4)
+         (10 12 14 16)
+         (0 1 4 9)
+         (a b . c)
+         #t #t #t #t)
+             (let* ((tree (list (cons 'a 'b) (list 'c)))
               (copy (tree-copy tree)))
          (list (xcons '(tail) 'head)
                (iota 5)
@@ -64,16 +46,14 @@
                (equal? copy tree)
                (not (eq? copy tree))
                (not (eq? (car copy) (car tree)))
-               (not (eq? (cadr copy) (cadr tree)))))
-       '((head tail)
-         (0 1 2 3 4)
-         (10 12 14 16)
-         (0 1 4 9)
-         (a b . c)
-         #t #t #t #t))
+               (not (eq? (cadr copy) (cadr tree)))))))
 
-(check 'predicates-and-circular-lists
-       (let ((two-cycle (circular-list 'a 'b))
+(testing-registry-case
+ 'predicates-and-circular-lists '(portable stdlib)
+ ("stdlib-list-test.scm" 51)
+(test-equal 'predicates-and-circular-lists
+             '(#t #f #f #t #f #t #f #t #t #t 3 #f #t #t)
+             (let ((two-cycle (circular-list 'a 'b))
              (one-cycle (circular-list 'solo)))
          (list (proper-list? '(a b c))
                (proper-list? '(a b . c))
@@ -88,11 +68,14 @@
                (length+ '(a b c))
                (length+ two-cycle)
                (eq? (cddr two-cycle) two-cycle)
-               (eq? (cdr one-cycle) one-cycle)))
-       '(#t #f #f #t #f #t #f #t #t #t 3 #f #t #t))
+               (eq? (cdr one-cycle) one-cycle)))))
 
-(check 'selectors
-       (let ((values '(one two three four five six seven eight nine ten)))
+(testing-registry-case
+ 'selectors '(portable stdlib)
+ ("stdlib-list-test.scm" 73)
+(test-equal 'selectors
+             '(one two three four five six seven eight nine ten)
+             (let ((values '(one two three four five six seven eight nine ten)))
          (list (first values)
                (second values)
                (third values)
@@ -102,30 +85,42 @@
                (seventh values)
                (eighth values)
                (ninth values)
-               (tenth values)))
-       '(one two three four five six seven eight nine ten))
+               (tenth values)))))
 
+(testing-registry-case
+ 'car+cdr '(portable stdlib)
+ ("stdlib-list-test.scm" 90)
 (check-values 'car+cdr
               (lambda () (car+cdr '(head tail rest)))
-              '(head (tail rest)))
+              '(head (tail rest))))
 
-(check 'slices
-       (let ((source (list 'a 'b 'c 'd)))
+(testing-registry-case
+ 'slices '(portable stdlib)
+ ("stdlib-list-test.scm" 97)
+(test-equal 'slices
+             '((a b) (c d) (c d) (a b) #t d (d))
+             (let ((source (list 'a 'b 'c 'd)))
          (list (take source 2)
                (drop source 2)
                (take-right source 2)
                (drop-right source 2)
                (eq? (take-right source 2) (cddr source))
                (last source)
-               (last-pair source)))
-       '((a b) (c d) (c d) (a b) #t d (d)))
+               (last-pair source)))))
 
+(testing-registry-case
+ 'split-at '(portable stdlib)
+ ("stdlib-list-test.scm" 111)
 (check-values 'split-at
               (lambda () (split-at '(a b c d) 2))
-              '((a b) (c d)))
+              '((a b) (c d))))
 
-(check 'destructive-slices
-       (let* ((take-source (list 'a 'b 'c 'd))
+(testing-registry-case
+ 'destructive-slices '(portable stdlib)
+ ("stdlib-list-test.scm" 118)
+(test-equal 'destructive-slices
+             '((a b) #t (a b) (a b) #t (a b) (a b) (c d) #t #t)
+             (let* ((take-source (list 'a 'b 'c 'd))
               (take-result (take! take-source 2))
               (drop-source (list 'a 'b 'c 'd))
               (drop-result (drop-right! drop-source 2))
@@ -143,11 +138,15 @@
                   split-prefix
                   split-suffix
                   (eq? split-prefix split-source)
-                  (eq? split-suffix split-tail)))))
-       '((a b) #t (a b) (a b) #t (a b) (a b) (c d) #t #t))
+                  (eq? split-suffix split-tail)))))))
 
-(check 'append-and-reverse
-       (let* ((append-left (list 'a 'b))
+(testing-registry-case
+ 'append-and-reverse '(portable stdlib)
+ ("stdlib-list-test.scm" 143)
+(test-equal 'append-and-reverse
+             '((a b c d) #t #t (1 2 3 4 5) (p q r) #t
+         (three two one) #t (c b a tail) (y x z) #t)
+             (let* ((append-left (list 'a 'b))
               (append-right (list 'c 'd))
               (append-result (append! append-left append-right))
               (concat-left (list 'p))
@@ -168,12 +167,19 @@
                (eq? (last-pair reverse-result) reverse-source)
                (append-reverse '(a b c) '(tail))
                append-reverse-result
-               (eq? (cdr append-reverse-result) append-reverse-source)))
-       '((a b c d) #t #t (1 2 3 4 5) (p q r) #t
-         (three two one) #t (c b a tail) (y x z) #t))
+               (eq? (cdr append-reverse-result) append-reverse-source)))))
 
-(check 'zip-and-unzip
-       (list (zip '(a b c) '(1 2 3) '(x y z))
+(testing-registry-case
+ 'zip-and-unzip '(portable stdlib)
+ ("stdlib-list-test.scm" 172)
+(test-equal 'zip-and-unzip
+             '(((a 1 x) (b 2 y) (c 3 z))
+         (a b c)
+         ((a b c) (1 2 3))
+         ((a b) (1 2) (x y))
+         ((a b) (1 2) (x y) (red blue))
+         ((a b) (1 2) (x y) (red blue) (left right)))
+             (list (zip '(a b c) '(1 2 3) '(x y z))
              (unzip1 '((a 1) (b 2) (c 3)))
              (call-with-values
               (lambda () (unzip2 '((a 1) (b 2) (c 3))))
@@ -186,16 +192,24 @@
               list)
              (call-with-values
               (lambda () (unzip5 '((a 1 x red left) (b 2 y blue right))))
-              list))
-       '(((a 1 x) (b 2 y) (c 3 z))
-         (a b c)
-         ((a b c) (1 2 3))
-         ((a b) (1 2) (x y))
-         ((a b) (1 2) (x y) (red blue))
-         ((a b) (1 2) (x y) (red blue) (left right))))
+              list))))
 
-(check 'folds-reduces-and-unfolds
-       (list (fold + 0 '(1 2 3 4))
+(testing-registry-case
+ 'folds-reduces-and-unfolds '(portable stdlib)
+ ("stdlib-list-test.scm" 197)
+(test-equal 'folds-reduces-and-unfolds
+             '(10 (33 22 11) (a b c)
+            ((c) (b c) (a b c))
+            (a b c)
+            42
+            10
+            (a (b c))
+            2
+            2
+            (0 1 2 3)
+            (0 1 2 stop 3)
+            (3 2 1 0 done))
+             (list (fold + 0 '(1 2 3 4))
              (fold (lambda (left right acc)
                      (cons (+ left right) acc))
                    '()
@@ -226,21 +240,27 @@
                            (lambda (n) n)
                            (lambda (n) (+ n 1))
                            0
-                           '(done)))
-       '(10 (33 22 11) (a b c)
-            ((c) (b c) (a b c))
-            (a b c)
-            42
-            10
-            (a (b c))
-            2
-            2
-            (0 1 2 3)
-            (0 1 2 stop 3)
-            (3 2 1 0 done)))
+                           '(done)))))
 
-(check 'maps-and-filters
-       (let* ((map-source (list 1 2 3))
+(testing-registry-case
+ 'maps-and-filters '(portable stdlib)
+ ("stdlib-list-test.scm" 245)
+(test-equal 'maps-and-filters
+             '((1 -1 2 -2 3 -3)
+         (1 1 2 4 3 9)
+         (10 20 30)
+         #t
+         (10 20 30)
+         ((a b c) (b c) (c))
+         (4 16)
+         (2 4 6)
+         (1 2 3)
+         (2 4)
+         (1 3)
+         (1 3)
+         (2 4)
+         ((2 4) (1 3 5)))
+             (let* ((map-source (list 1 2 3))
               (map-result (map! (lambda (value) (* value 10))
                                 map-source))
               (pair-tails '())
@@ -270,28 +290,29 @@
                (remove! odd? '(1 2 3 4))
                (call-with-values
                 (lambda () (partition! even? '(1 2 3 4 5)))
-                list)))
-       '((1 -1 2 -2 3 -3)
-         (1 1 2 4 3 9)
-         (10 20 30)
-         #t
-         (10 20 30)
-         ((a b c) (b c) (c))
-         (4 16)
-         (2 4 6)
-         (1 2 3)
-         (2 4)
-         (1 3)
-         (1 3)
-         (2 4)
-         ((2 4) (1 3 5))))
+                list)))))
 
+(testing-registry-case
+ 'partition '(portable stdlib)
+ ("stdlib-list-test.scm" 295)
 (check-values 'partition
               (lambda () (partition even? '(1 2 3 4 5)))
-              '((2 4) (1 3 5)))
+              '((2 4) (1 3 5))))
 
-(check 'search
-       (list (find even? '(1 3 4 6))
+(testing-registry-case
+ 'search '(portable stdlib)
+ ("stdlib-list-test.scm" 302)
+(test-equal 'search
+             '(4 (4 6) (1 3) (4 5) (1 3)
+           ((1 3) (4 5))
+           ((1 3) (4 5))
+           ((1 3) (4 5))
+           ((1 3) (4 5))
+           60
+           3
+           2
+           ("bee"))
+             (list (find even? '(1 3 4 6))
              (find-tail even? '(1 3 4 6))
              (take-while odd? '(1 3 4 5))
              (drop-while odd? '(1 3 4 5))
@@ -320,19 +341,21 @@
                     '(1 2 3))
              (list-index even? '(1 3 4 6))
              (find-tail (lambda (name) (string=? name "bee"))
-                        '("ant" "bee")))
-       '(4 (4 6) (1 3) (4 5) (1 3)
-           ((1 3) (4 5))
-           ((1 3) (4 5))
-           ((1 3) (4 5))
-           ((1 3) (4 5))
-           60
-           3
-           2
-           ("bee")))
+                        '("ant" "bee")))))
 
-(check 'delete-and-alist
-       (let ((alist (alist-cons 'c 3 '((a . 1) (b . 2)))))
+(testing-registry-case
+ 'delete-and-alist '(portable stdlib)
+ ("stdlib-list-test.scm" 346)
+(test-equal 'delete-and-alist
+             '((1 3 4)
+         (1 3 4)
+         (1)
+         (a b c d)
+         (a b c d)
+         ((c . 3) (b . 2))
+         ((c . 3) (b . 2))
+         ((c . 3) (a . 1) (b . 2)))
+             (let ((alist (alist-cons 'c 3 '((a . 1) (b . 2)))))
          (list (delete 2 '(1 2 3 2 4))
                (delete! 2 '(1 2 3 2 4))
                (delete 5 '(1 2 5 8)
@@ -342,18 +365,22 @@
                (delete-duplicates! '(a b a c b d))
                (alist-delete 'a alist)
                (alist-delete! 'a alist)
-               (alist-copy alist)))
-       '((1 3 4)
-         (1 3 4)
-         (1)
-         (a b c d)
-         (a b c d)
-         ((c . 3) (b . 2))
-         ((c . 3) (b . 2))
-         ((c . 3) (a . 1) (b . 2))))
+               (alist-copy alist)))))
 
-(check 'list-as-sets
-       (list (lset<= = '(1 2) '(2 1 3))
+(testing-registry-case
+ 'list-as-sets '(portable stdlib)
+ ("stdlib-list-test.scm" 370)
+(test-equal 'list-as-sets
+             '(#t #t (3 1 2) (4 3 1 2) (2 3) (1 3) (4 1)
+            ((1 3) (2 4))
+            (4 3 1 2)
+            (2 3)
+            (1 3)
+            (4 1)
+            ((1 3) (2 4))
+            ()
+            (1 2 3))
+             (list (lset<= = '(1 2) '(2 1 3))
              (lset= = '(1 2 2) '(2 1))
              (lset-adjoin = '(1 2) 2 3)
              (lset-union = '(1 2) '(2 3 4))
@@ -371,19 +398,14 @@
               (lambda () (lset-diff+intersection! = '(1 2 3 4) '(2 4 6)))
               list)
              (lset-union =)
-             (lset-intersection = '(1 2 3)))
-       '(#t #t (3 1 2) (4 3 1 2) (2 3) (1 3) (4 1)
-            ((1 3) (2 4))
-            (4 3 1 2)
-            (2 3)
-            (1 3)
-            (4 1)
-            ((1 3) (2 4))
-            ()
-            (1 2 3)))
+             (lset-intersection = '(1 2 3)))))
 
-(check 'error-cases
-       (list (raises? (lambda () (iota -1)))
+(testing-registry-case
+ 'error-cases '(portable stdlib)
+ ("stdlib-list-test.scm" 403)
+(test-equal 'error-cases
+             '(#t #t #t #t #t #t #t #t #t)
+             (list (raises? (lambda () (iota -1)))
              (raises? (lambda () (iota 3 0 1 2)))
              (raises? (lambda () (list-tabulate 3 'not-a-procedure)))
              (raises? (lambda () (take '(a b) -1)))
@@ -397,7 +419,6 @@
                                 (lambda (x) x)
                                 #t
                                 (lambda (x) x)
-                                (lambda (x) x)))))
-       '(#t #t #t #t #t #t #t #t #t))
+                                (lambda (x) x)))))))
 
-(finish-list-tests)
+(testing-runner-main "Stdlib List portable tests" (command-line))

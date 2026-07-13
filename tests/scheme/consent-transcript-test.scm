@@ -7,34 +7,11 @@
 
 (import (scheme base)
         (scheme write)
-        (agent transcript))
-
-;; Count failed checks so the portable runner can report all mismatches.
-(define failures 0)
-
-;; Record one failed check and keep running the rest of the portable test file.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal?.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
-
-;; Assert VALUE is false after normalizing to canonical booleans.
-(define (check-false name value)
-  (check name (if value #t #f) #f))
+        (agent transcript)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Pure evaluation events classify as deterministic replay and generate
 ;; executable fixture cases.
@@ -47,17 +24,31 @@
      (result "3")
      (time "2026-05-26T00:00:00+0000"))))
 
-(check-true 'pure-event-shape (transcript-event? pure-event))
-(check 'pure-event-mode
-       (transcript-event-replay-mode pure-event)
-       'deterministic-pure)
-(check-true 'pure-event-replayable (transcript-replayable? pure-event))
-(check 'pure-event-session
-       (transcript-field-value pure-event 'session)
-       'portable-main)
-(check 'pure-event-fixture
-       (transcript-event->fixture-case pure-event)
-       '((id transcript-e-portable)
+(testing-registry-case
+ 'pure-event-shape '(portable core)
+ ("consent-transcript-test.scm" 27)
+(test-assert 'pure-event-shape (transcript-event? pure-event)))
+(testing-registry-case
+ 'pure-event-mode '(portable core)
+ ("consent-transcript-test.scm" 31)
+(test-equal 'pure-event-mode
+             'deterministic-pure
+             (transcript-event-replay-mode pure-event)))
+(testing-registry-case
+ 'pure-event-replayable '(portable core)
+ ("consent-transcript-test.scm" 37)
+(test-assert 'pure-event-replayable (transcript-replayable? pure-event)))
+(testing-registry-case
+ 'pure-event-session '(portable core)
+ ("consent-transcript-test.scm" 41)
+(test-equal 'pure-event-session
+             'portable-main
+             (transcript-field-value pure-event 'session)))
+(testing-registry-case
+ 'pure-event-fixture '(portable core)
+ ("consent-transcript-test.scm" 47)
+(test-equal 'pure-event-fixture
+             '((id transcript-e-portable)
          (kind agent-specific)
          (phase eval)
          (category transcript-replay)
@@ -67,7 +58,8 @@
          (options ())
          (description "Generated from transcript event e-portable.")
          (source "(+ 1 2)")
-         (expect (value "3"))))
+         (expect (value "3")))
+             (transcript-event->fixture-case pure-event)))
 
 ;; Host effects become recorded observations and are never silently re-run as
 ;; test fixtures.
@@ -80,26 +72,43 @@
      (result (host-result (status ok) (value observed)))
      (time "2026-05-26T00:00:00+0000"))))
 
-(check 'host-event-mode
-       (transcript-event-replay-mode host-event)
-       'recorded-observation)
-(check-true 'host-event-observation
-             (transcript-recorded-observation? host-event))
-(check-false 'host-event-no-fixture
-             (transcript-event->fixture-case host-event))
+(testing-registry-case
+ 'host-event-mode '(portable core)
+ ("consent-transcript-test.scm" 75)
+(test-equal 'host-event-mode
+             'recorded-observation
+             (transcript-event-replay-mode host-event)))
+(testing-registry-case
+ 'host-event-observation '(portable core)
+ ("consent-transcript-test.scm" 81)
+(test-assert 'host-event-observation
+             (transcript-recorded-observation? host-event)))
+(testing-registry-case
+ 'host-event-no-fixture '(portable core)
+ ("consent-transcript-test.scm" 86)
+(test-assert 'host-event-no-fixture
+             (not (transcript-event->fixture-case host-event))))
 
 ;; Transcript views keep raw datums available and provide human summaries for
 ;; buffers and exports.
-(check 'raw-view
-       (transcript-raw-view (list pure-event host-event))
-       (list pure-event host-event))
-(check 'summary-view
-       (transcript-summary-view (list pure-event host-event))
-       '("e-portable eval-end in portable-main => 3"
-         "e-host capability-call in portable-main recorded observation"))
-(check 'rotation
-       (transcript-rotate (list pure-event host-event) 1)
-       (list host-event))
+(testing-registry-case
+ 'raw-view '(portable core)
+ ("consent-transcript-test.scm" 94)
+(test-equal 'raw-view
+             (list pure-event host-event)
+             (transcript-raw-view (list pure-event host-event))))
+(testing-registry-case
+ 'summary-view '(portable core)
+ ("consent-transcript-test.scm" 100)
+(test-equal 'summary-view
+             '("e-portable eval-end in portable-main => 3"
+         "e-host capability-call in portable-main recorded observation")
+             (transcript-summary-view (list pure-event host-event))))
+(testing-registry-case
+ 'rotation '(portable core)
+ ("consent-transcript-test.scm" 107)
+(test-equal 'rotation
+             (list host-event)
+             (transcript-rotate (list pure-event host-event) 1)))
 
-(if (> failures 0)
-    (error "portable transcript tests failed" failures))
+(testing-runner-main "Consent Transcript portable tests" (command-line))

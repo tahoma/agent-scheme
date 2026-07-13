@@ -14,39 +14,16 @@
 (import (scheme base)
         (scheme case-lambda)
         (scheme write)
-        (stdlib comparator))
-
-;; Number of failed adapted SRFI checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed comparator check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-(define (check-true name value)
-  "Record NAME unless VALUE is true."
-  (check name (if value #t #f) #t))
-
-(define (check-false name value)
-  "Record NAME unless VALUE is false."
-  (check name (if value #t #f) #f))
+        (stdlib comparator)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 (define (check-exact-nonnegative-integer name value)
   "Record NAME unless VALUE is an exact non-negative integer."
-  (check-true name
-              (and (exact-integer? value)
+  (test-assert name
+             (and (exact-integer? value)
                    (not (negative? value)))))
 
 (define (raises? thunk)
@@ -77,32 +54,32 @@
       (set! result (+ (modulo (* result 33) (hash-bound)) n))
       result))))
 
-(define (finish-comparator-tests)
-  "Report the adapted SRFI 128 test result."
-  (if (= failures 0)
-      (begin
-        (display "Adapted SRFI 128 comparator tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " adapted SRFI 128 comparator test failure(s)")
-        (newline)
-        (error "adapted SRFI 128 comparator tests failed" failures))))
+(testing-registry-case
+ 'vector-cdr-many '(portable stdlib)
+ ("stdlib-comparator-test.scm" 57)
+(test-equal 'vector-cdr-many '#(2 3 4) (vector-cdr '#(1 2 3 4))))
+(testing-registry-case
+ 'vector-cdr-one '(portable stdlib)
+ ("stdlib-comparator-test.scm" 61)
+(test-equal 'vector-cdr-one '#() (vector-cdr '#(1))))
 
-(check 'vector-cdr-many (vector-cdr '#(1 2 3 4)) '#(2 3 4))
-(check 'vector-cdr-one (vector-cdr '#(1)) '#())
-
+(testing-registry-case
+ 'upstream-case-lambda-hasher-initial '(portable stdlib)
+ ("stdlib-comparator-test.scm" 66)
 (let* ((acc (make-upstream-case-lambda-hasher))
        (initial (hash-salt))
        (first (+ (modulo (* initial 33) (hash-bound)) 1))
        (second (+ (modulo (* first 33) (hash-bound)) 2)))
-  (check 'upstream-case-lambda-hasher-initial (acc) initial)
-  (check 'upstream-case-lambda-hasher-first (acc 1) first)
-  (check 'upstream-case-lambda-hasher-after-first (acc) first)
-  (check 'upstream-case-lambda-hasher-second (acc 2) second)
-  (check-true 'upstream-case-lambda-hasher-wrong-arity
-              (raises? (lambda () (acc 1 2)))))
+  (test-equal 'upstream-case-lambda-hasher-initial initial (acc))
+  (test-equal 'upstream-case-lambda-hasher-first first (acc 1))
+  (test-equal 'upstream-case-lambda-hasher-after-first first (acc))
+  (test-equal 'upstream-case-lambda-hasher-second second (acc 2))
+  (test-assert 'upstream-case-lambda-hasher-wrong-arity
+             (raises? (lambda () (acc 1 2))))))
 
+(testing-registry-case
+ 'predicates-comparator '(portable stdlib)
+ ("stdlib-comparator-test.scm" 80)
 (let* ((default-comparator (make-default-comparator))
        (real-comparator (make-comparator real? = < number-hash))
        (degenerate-comparator
@@ -139,116 +116,116 @@
          (lambda (a b) (string<? (symbol->string a) (symbol->string b)))
          symbol-hash)))
 
-  (check-true 'predicates-comparator
-              (comparator? real-comparator))
-  (check-false 'predicates-rejects-procedure
-               (comparator? =))
-  (check-true 'predicates-ordered
-              (comparator-ordered? real-comparator))
-  (check-true 'predicates-hashable
-              (comparator-hashable? real-comparator))
-  (check-false 'predicates-degenerate-not-ordered
-               (comparator-ordered? degenerate-comparator))
-  (check-false 'predicates-degenerate-not-hashable
-               (comparator-hashable? degenerate-comparator))
+  (test-assert 'predicates-comparator
+             (comparator? real-comparator))
+  (test-assert 'predicates-rejects-procedure
+             (not (comparator? =)))
+  (test-assert 'predicates-ordered
+             (comparator-ordered? real-comparator))
+  (test-assert 'predicates-hashable
+             (comparator-hashable? real-comparator))
+  (test-assert 'predicates-degenerate-not-ordered
+             (not (comparator-ordered? degenerate-comparator)))
+  (test-assert 'predicates-degenerate-not-hashable
+             (not (comparator-hashable? degenerate-comparator)))
 
-  (check-true 'constructors-boolean-equal
-              (=? boolean-comparator #t #t))
-  (check-false 'constructors-boolean-not-equal
-               (=? boolean-comparator #t #f))
-  (check-true 'constructors-boolean-less
-              (<? boolean-comparator #f #t))
-  (check-false 'constructors-boolean-not-less-same
-               (<? boolean-comparator #t #t))
-  (check-false 'constructors-boolean-not-less-reversed
-               (<? boolean-comparator #t #f))
+  (test-assert 'constructors-boolean-equal
+             (=? boolean-comparator #t #t))
+  (test-assert 'constructors-boolean-not-equal
+             (not (=? boolean-comparator #t #f)))
+  (test-assert 'constructors-boolean-less
+             (<? boolean-comparator #f #t))
+  (test-assert 'constructors-boolean-not-less-same
+             (not (<? boolean-comparator #t #t)))
+  (test-assert 'constructors-boolean-not-less-reversed
+             (not (<? boolean-comparator #t #f)))
 
-  (check-true 'constructors-pair-type
-              (comparator-test-type bool-pair-comparator '(#t . #f)))
-  (check-false 'constructors-pair-rejects-number
-               (comparator-test-type bool-pair-comparator 32))
-  (check-false 'constructors-pair-rejects-car
-               (comparator-test-type bool-pair-comparator '(32 . #f)))
-  (check-false 'constructors-pair-rejects-cdr
-               (comparator-test-type bool-pair-comparator '(#t . 32)))
-  (check-false 'constructors-pair-rejects-both
-               (comparator-test-type bool-pair-comparator '(32 . 34)))
-  (check-true 'constructors-pair-equal
-              (=? bool-pair-comparator '(#t . #t) '(#t . #t)))
-  (check-false 'constructors-pair-not-equal-car
-               (=? bool-pair-comparator '(#t . #t) '(#f . #t)))
-  (check-false 'constructors-pair-not-equal-cdr
-               (=? bool-pair-comparator '(#t . #t) '(#t . #f)))
-  (check-true 'constructors-pair-less-car
-              (<? bool-pair-comparator '(#f . #t) '(#t . #t)))
-  (check-true 'constructors-pair-less-cdr
-              (<? bool-pair-comparator '(#t . #f) '(#t . #t)))
-  (check-false 'constructors-pair-not-less-same
-               (<? bool-pair-comparator '(#t . #t) '(#t . #t)))
-  (check-false 'constructors-pair-not-less-reversed-car
-               (<? bool-pair-comparator '(#t . #t) '(#f . #t)))
-  (check-false 'constructors-pair-not-less-reversed-cdr
-               (<? bool-pair-comparator '(#f . #t) '(#f . #f)))
+  (test-assert 'constructors-pair-type
+             (comparator-test-type bool-pair-comparator '(#t . #f)))
+  (test-assert 'constructors-pair-rejects-number
+             (not (comparator-test-type bool-pair-comparator 32)))
+  (test-assert 'constructors-pair-rejects-car
+             (not (comparator-test-type bool-pair-comparator '(32 . #f))))
+  (test-assert 'constructors-pair-rejects-cdr
+             (not (comparator-test-type bool-pair-comparator '(#t . 32))))
+  (test-assert 'constructors-pair-rejects-both
+             (not (comparator-test-type bool-pair-comparator '(32 . 34))))
+  (test-assert 'constructors-pair-equal
+             (=? bool-pair-comparator '(#t . #t) '(#t . #t)))
+  (test-assert 'constructors-pair-not-equal-car
+             (not (=? bool-pair-comparator '(#t . #t) '(#f . #t))))
+  (test-assert 'constructors-pair-not-equal-cdr
+             (not (=? bool-pair-comparator '(#t . #t) '(#t . #f))))
+  (test-assert 'constructors-pair-less-car
+             (<? bool-pair-comparator '(#f . #t) '(#t . #t)))
+  (test-assert 'constructors-pair-less-cdr
+             (<? bool-pair-comparator '(#t . #f) '(#t . #t)))
+  (test-assert 'constructors-pair-not-less-same
+             (not (<? bool-pair-comparator '(#t . #t) '(#t . #t))))
+  (test-assert 'constructors-pair-not-less-reversed-car
+             (not (<? bool-pair-comparator '(#t . #t) '(#f . #t))))
+  (test-assert 'constructors-pair-not-less-reversed-cdr
+             (not (<? bool-pair-comparator '(#f . #t) '(#f . #f))))
 
-  (check-true 'constructors-vector-type
-              (comparator-test-type num-vector-comparator '#(1 2 3)))
-  (check-true 'constructors-vector-empty-type
-              (comparator-test-type num-vector-comparator '#()))
-  (check-false 'constructors-vector-rejects-number
-               (comparator-test-type num-vector-comparator 1))
-  (check-false 'constructors-vector-rejects-first
-               (comparator-test-type num-vector-comparator '#(a 2 3)))
-  (check-false 'constructors-vector-rejects-second
-               (comparator-test-type num-vector-comparator '#(1 b 3)))
-  (check-false 'constructors-vector-rejects-third
-               (comparator-test-type num-vector-comparator '#(1 2 c)))
-  (check-true 'constructors-vector-equal
-              (=? num-vector-comparator '#(1 2 3) '#(1 2 3)))
-  (check-false 'constructors-vector-not-equal-all
-               (=? num-vector-comparator '#(1 2 3) '#(4 5 6)))
-  (check-false 'constructors-vector-not-equal-tail
-               (=? num-vector-comparator '#(1 2 3) '#(1 5 6)))
-  (check-false 'constructors-vector-not-equal-last
-               (=? num-vector-comparator '#(1 2 3) '#(1 2 6)))
-  (check-true 'constructors-vector-less-shorter
-              (<? num-vector-comparator '#(1 2) '#(1 2 3)))
-  (check-true 'constructors-vector-less-first
-              (<? num-vector-comparator '#(1 2 3) '#(2 3 4)))
-  (check-true 'constructors-vector-less-second
-              (<? num-vector-comparator '#(1 2 3) '#(1 3 4)))
-  (check-true 'constructors-vector-less-third
-              (<? num-vector-comparator '#(1 2 3) '#(1 2 4)))
-  (check-true 'constructors-vector-length-precedes-elements
-              (<? num-vector-comparator '#(3 4) '#(1 2 3)))
-  (check-false 'constructors-vector-not-less-same
-               (<? num-vector-comparator '#(1 2 3) '#(1 2 3)))
-  (check-false 'constructors-vector-not-less-longer
-               (<? num-vector-comparator '#(1 2 3) '#(1 2)))
-  (check-false 'constructors-vector-not-less-first
-               (<? num-vector-comparator '#(1 2 3) '#(0 2 3)))
-  (check-false 'constructors-vector-not-less-second
-               (<? num-vector-comparator '#(1 2 3) '#(1 1 3)))
+  (test-assert 'constructors-vector-type
+             (comparator-test-type num-vector-comparator '#(1 2 3)))
+  (test-assert 'constructors-vector-empty-type
+             (comparator-test-type num-vector-comparator '#()))
+  (test-assert 'constructors-vector-rejects-number
+             (not (comparator-test-type num-vector-comparator 1)))
+  (test-assert 'constructors-vector-rejects-first
+             (not (comparator-test-type num-vector-comparator '#(a 2 3))))
+  (test-assert 'constructors-vector-rejects-second
+             (not (comparator-test-type num-vector-comparator '#(1 b 3))))
+  (test-assert 'constructors-vector-rejects-third
+             (not (comparator-test-type num-vector-comparator '#(1 2 c))))
+  (test-assert 'constructors-vector-equal
+             (=? num-vector-comparator '#(1 2 3) '#(1 2 3)))
+  (test-assert 'constructors-vector-not-equal-all
+             (not (=? num-vector-comparator '#(1 2 3) '#(4 5 6))))
+  (test-assert 'constructors-vector-not-equal-tail
+             (not (=? num-vector-comparator '#(1 2 3) '#(1 5 6))))
+  (test-assert 'constructors-vector-not-equal-last
+             (not (=? num-vector-comparator '#(1 2 3) '#(1 2 6))))
+  (test-assert 'constructors-vector-less-shorter
+             (<? num-vector-comparator '#(1 2) '#(1 2 3)))
+  (test-assert 'constructors-vector-less-first
+             (<? num-vector-comparator '#(1 2 3) '#(2 3 4)))
+  (test-assert 'constructors-vector-less-second
+             (<? num-vector-comparator '#(1 2 3) '#(1 3 4)))
+  (test-assert 'constructors-vector-less-third
+             (<? num-vector-comparator '#(1 2 3) '#(1 2 4)))
+  (test-assert 'constructors-vector-length-precedes-elements
+             (<? num-vector-comparator '#(3 4) '#(1 2 3)))
+  (test-assert 'constructors-vector-not-less-same
+             (not (<? num-vector-comparator '#(1 2 3) '#(1 2 3))))
+  (test-assert 'constructors-vector-not-less-longer
+             (not (<? num-vector-comparator '#(1 2 3) '#(1 2))))
+  (test-assert 'constructors-vector-not-less-first
+             (not (<? num-vector-comparator '#(1 2 3) '#(0 2 3))))
+  (test-assert 'constructors-vector-not-less-second
+             (not (<? num-vector-comparator '#(1 2 3) '#(1 1 3))))
 
-  (check-false 'constructors-vector-as-list-uses-list-order
-               (<? vector-qua-list-comparator '#(3 4) '#(1 2 3)))
-  (check-true 'constructors-list-as-vector-uses-vector-order
-              (<? list-qua-vector-comparator '(3 4) '(1 2 3)))
+  (test-assert 'constructors-vector-as-list-uses-list-order
+             (not (<? vector-qua-list-comparator '#(3 4) '#(1 2 3))))
+  (test-assert 'constructors-list-as-vector-uses-vector-order
+             (<? list-qua-vector-comparator '(3 4) '(1 2 3)))
 
   (let ((bool-pair (cons #t #f))
         (bool-pair-2 (cons #t #f))
         (reverse-bool-pair (cons #f #t)))
-    (check-true 'constructors-eq-true
-                (=? eq-comparator #t #t))
-    (check-false 'constructors-eq-false
-                 (=? eq-comparator #f #t))
-    (check-true 'constructors-eqv-same-pair
-                (=? eqv-comparator bool-pair bool-pair))
-    (check-false 'constructors-eqv-distinct-pairs
-                 (=? eqv-comparator bool-pair bool-pair-2))
-    (check-true 'constructors-equal-distinct-pairs
-                (=? equal-comparator bool-pair bool-pair-2))
-    (check-false 'constructors-equal-reversed-pair
-                 (=? equal-comparator bool-pair reverse-bool-pair)))
+    (test-assert 'constructors-eq-true
+             (=? eq-comparator #t #t))
+    (test-assert 'constructors-eq-false
+             (not (=? eq-comparator #f #t)))
+    (test-assert 'constructors-eqv-same-pair
+             (=? eqv-comparator bool-pair bool-pair))
+    (test-assert 'constructors-eqv-distinct-pairs
+             (not (=? eqv-comparator bool-pair bool-pair-2)))
+    (test-assert 'constructors-equal-distinct-pairs
+             (=? equal-comparator bool-pair bool-pair-2))
+    (test-assert 'constructors-equal-reversed-pair
+             (not (=? equal-comparator bool-pair reverse-bool-pair))))
 
   (check-exact-nonnegative-integer 'hash-boolean-false
                                    (boolean-hash #f))
@@ -262,9 +239,9 @@
                                    (char-ci-hash #\a))
   (check-exact-nonnegative-integer 'hash-char-ci-other
                                    (char-ci-hash #\b))
-  (check 'hash-char-ci-folds
-         (char-ci-hash #\a)
-         (char-ci-hash #\A))
+  (test-equal 'hash-char-ci-folds
+             (char-ci-hash #\A)
+             (char-ci-hash #\a))
   (check-exact-nonnegative-integer 'hash-string
                                    (string-hash "f"))
   (check-exact-nonnegative-integer 'hash-string-other
@@ -273,9 +250,9 @@
                                    (string-ci-hash "f"))
   (check-exact-nonnegative-integer 'hash-string-ci-other
                                    (string-ci-hash "g"))
-  (check 'hash-string-ci-folds
-         (string-ci-hash "f")
-         (string-ci-hash "F"))
+  (test-equal 'hash-string-ci-folds
+             (string-ci-hash "F")
+             (string-ci-hash "f"))
   (check-exact-nonnegative-integer 'hash-symbol
                                    (symbol-hash 'f))
   (check-exact-nonnegative-integer 'hash-symbol-other
@@ -301,96 +278,96 @@
   (check-exact-nonnegative-integer 'hash-default-vector
                                    (default-hash '#(a "b" #\c #(dee) 2.718)))
 
-  (check-true 'default-null-before-list
-              (<? default-comparator '() '(a)))
-  (check-false 'default-null-not-equal-list
-               (=? default-comparator '() '(a)))
-  (check-true 'default-boolean-equal
-              (=? default-comparator #t #t))
-  (check-false 'default-boolean-not-equal
-               (=? default-comparator #t #f))
-  (check-true 'default-boolean-less
-              (<? default-comparator #f #t))
-  (check-false 'default-boolean-not-less-same
-               (<? default-comparator #t #t))
-  (check-true 'default-char-equal
-              (=? default-comparator #\a #\a))
-  (check-true 'default-char-less
-              (<? default-comparator #\a #\b))
+  (test-assert 'default-null-before-list
+             (<? default-comparator '() '(a)))
+  (test-assert 'default-null-not-equal-list
+             (not (=? default-comparator '() '(a))))
+  (test-assert 'default-boolean-equal
+             (=? default-comparator #t #t))
+  (test-assert 'default-boolean-not-equal
+             (not (=? default-comparator #t #f)))
+  (test-assert 'default-boolean-less
+             (<? default-comparator #f #t))
+  (test-assert 'default-boolean-not-less-same
+             (not (<? default-comparator #t #t)))
+  (test-assert 'default-char-equal
+             (=? default-comparator #\a #\a))
+  (test-assert 'default-char-less
+             (<? default-comparator #\a #\b))
 
-  (check-true 'default-type-null
-              (comparator-test-type default-comparator '()))
-  (check-true 'default-type-boolean
-              (comparator-test-type default-comparator #t))
-  (check-true 'default-type-char
-              (comparator-test-type default-comparator #\t))
-  (check-true 'default-type-pair
-              (comparator-test-type default-comparator '(a)))
-  (check-true 'default-type-symbol
-              (comparator-test-type default-comparator 'a))
-  (check-true 'default-type-bytevector
-              (comparator-test-type default-comparator (make-bytevector 10)))
-  (check-true 'default-type-exact-number
-              (comparator-test-type default-comparator 10))
-  (check-true 'default-type-inexact-number
-              (comparator-test-type default-comparator 10.0))
-  (check-true 'default-type-string
-              (comparator-test-type default-comparator "10.0"))
-  (check-true 'default-type-vector
-              (comparator-test-type default-comparator '#(10)))
+  (test-assert 'default-type-null
+             (comparator-test-type default-comparator '()))
+  (test-assert 'default-type-boolean
+             (comparator-test-type default-comparator #t))
+  (test-assert 'default-type-char
+             (comparator-test-type default-comparator #\t))
+  (test-assert 'default-type-pair
+             (comparator-test-type default-comparator '(a)))
+  (test-assert 'default-type-symbol
+             (comparator-test-type default-comparator 'a))
+  (test-assert 'default-type-bytevector
+             (comparator-test-type default-comparator (make-bytevector 10)))
+  (test-assert 'default-type-exact-number
+             (comparator-test-type default-comparator 10))
+  (test-assert 'default-type-inexact-number
+             (comparator-test-type default-comparator 10.0))
+  (test-assert 'default-type-string
+             (comparator-test-type default-comparator "10.0"))
+  (test-assert 'default-type-vector
+             (comparator-test-type default-comparator '#(10)))
 
-  (check-true 'default-pair-equal
-              (=? default-comparator '(#t . #t) '(#t . #t)))
-  (check-false 'default-pair-not-equal-car
-               (=? default-comparator '(#t . #t) '(#f . #t)))
-  (check-false 'default-pair-not-equal-cdr
-               (=? default-comparator '(#t . #t) '(#t . #f)))
-  (check-true 'default-pair-less-car
-              (<? default-comparator '(#f . #t) '(#t . #t)))
-  (check-true 'default-pair-less-cdr
-              (<? default-comparator '(#t . #f) '(#t . #t)))
-  (check-false 'default-pair-not-less-same
-               (<? default-comparator '(#t . #t) '(#t . #t)))
-  (check-false 'default-pair-not-less-reversed-car
-               (<? default-comparator '(#t . #t) '(#f . #t)))
-  (check-false 'default-vector-not-less-reversed-cdr
-               (<? default-comparator '#(#f #t) '#(#f #f)))
+  (test-assert 'default-pair-equal
+             (=? default-comparator '(#t . #t) '(#t . #t)))
+  (test-assert 'default-pair-not-equal-car
+             (not (=? default-comparator '(#t . #t) '(#f . #t))))
+  (test-assert 'default-pair-not-equal-cdr
+             (not (=? default-comparator '(#t . #t) '(#t . #f))))
+  (test-assert 'default-pair-less-car
+             (<? default-comparator '(#f . #t) '(#t . #t)))
+  (test-assert 'default-pair-less-cdr
+             (<? default-comparator '(#t . #f) '(#t . #t)))
+  (test-assert 'default-pair-not-less-same
+             (not (<? default-comparator '(#t . #t) '(#t . #t))))
+  (test-assert 'default-pair-not-less-reversed-car
+             (not (<? default-comparator '(#t . #t) '(#f . #t))))
+  (test-assert 'default-vector-not-less-reversed-cdr
+             (not (<? default-comparator '#(#f #t) '#(#f #f))))
 
-  (check-true 'default-vector-equal
-              (=? default-comparator '#(#t #t) '#(#t #t)))
-  (check-false 'default-vector-not-equal-first
-               (=? default-comparator '#(#t #t) '#(#f #t)))
-  (check-false 'default-vector-not-equal-second
-               (=? default-comparator '#(#t #t) '#(#t #f)))
-  (check-true 'default-vector-less-first
-              (<? default-comparator '#(#f #t) '#(#t #t)))
-  (check-true 'default-vector-less-second
-              (<? default-comparator '#(#t #f) '#(#t #t)))
-  (check-false 'default-vector-not-less-same
-               (<? default-comparator '#(#t #t) '#(#t #t)))
-  (check-false 'default-vector-not-less-reversed-first
-               (<? default-comparator '#(#t #t) '#(#f #t)))
-  (check-false 'default-vector-not-less-reversed-second
-               (<? default-comparator '#(#f #t) '#(#f #f)))
+  (test-assert 'default-vector-equal
+             (=? default-comparator '#(#t #t) '#(#t #t)))
+  (test-assert 'default-vector-not-equal-first
+             (not (=? default-comparator '#(#t #t) '#(#f #t))))
+  (test-assert 'default-vector-not-equal-second
+             (not (=? default-comparator '#(#t #t) '#(#t #f))))
+  (test-assert 'default-vector-less-first
+             (<? default-comparator '#(#f #t) '#(#t #t)))
+  (test-assert 'default-vector-less-second
+             (<? default-comparator '#(#t #f) '#(#t #t)))
+  (test-assert 'default-vector-not-less-same
+             (not (<? default-comparator '#(#t #t) '#(#t #t))))
+  (test-assert 'default-vector-not-less-reversed-first
+             (not (<? default-comparator '#(#t #t) '#(#f #t))))
+  (test-assert 'default-vector-not-less-reversed-second
+             (not (<? default-comparator '#(#f #t) '#(#f #f))))
 
-  (check 'default-hash-boolean
-         (comparator-hash default-comparator #t)
-         (boolean-hash #t))
-  (check 'default-hash-char
-         (comparator-hash default-comparator #\t)
-         (char-hash #\t))
-  (check 'default-hash-string
-         (comparator-hash default-comparator "t")
-         (string-hash "t"))
-  (check 'default-hash-symbol
-         (comparator-hash default-comparator 't)
-         (symbol-hash 't))
-  (check 'default-hash-exact-number
-         (comparator-hash default-comparator 10)
-         (number-hash 10))
-  (check 'default-hash-inexact-number
-         (comparator-hash default-comparator 10.0)
-         (number-hash 10.0))
+  (test-equal 'default-hash-boolean
+             (boolean-hash #t)
+             (comparator-hash default-comparator #t))
+  (test-equal 'default-hash-char
+             (char-hash #\t)
+             (comparator-hash default-comparator #\t))
+  (test-equal 'default-hash-string
+             (string-hash "t")
+             (comparator-hash default-comparator "t"))
+  (test-equal 'default-hash-symbol
+             (symbol-hash 't)
+             (comparator-hash default-comparator 't))
+  (test-equal 'default-hash-exact-number
+             (number-hash 10)
+             (comparator-hash default-comparator 10))
+  (test-equal 'default-hash-inexact-number
+             (number-hash 10.0)
+             (comparator-hash default-comparator 10.0))
 
   (comparator-register-default!
    (make-comparator
@@ -398,13 +375,13 @@
     (lambda (a b) #t)
     (lambda (a b) #f)
     (lambda (obj) 200)))
-  (check-true 'default-registered-procedure-equal
-              (=? default-comparator (lambda () #t) (lambda () #f)))
-  (check-false 'default-registered-procedure-not-less
-               (<? default-comparator (lambda () #t) (lambda () #f)))
-  (check 'default-registered-procedure-hash
-         (comparator-hash default-comparator (lambda () #t))
-         200)
+  (test-assert 'default-registered-procedure-equal
+             (=? default-comparator (lambda () #t) (lambda () #f)))
+  (test-assert 'default-registered-procedure-not-less
+             (not (<? default-comparator (lambda () #t) (lambda () #f))))
+  (test-equal 'default-registered-procedure-hash
+             200
+             (comparator-hash default-comparator (lambda () #t)))
 
   (let* ((x1 0)
          (x2 0)
@@ -415,85 +392,85 @@
          (orp (lambda (x y) (set! x3 333) #t))
          (hf (lambda (x) (set! x4 444) 0)))
     (let ((comp (make-comparator ttp eqp orp hf)))
-      (check-true 'accessors-type-test-invokes-original
-                  (and ((comparator-type-test-predicate comp) x1)
+      (test-assert 'accessors-type-test-invokes-original
+             (and ((comparator-type-test-predicate comp) x1)
                        (= x1 111)))
-      (check-true 'accessors-equality-invokes-original
-                  (and ((comparator-equality-predicate comp) x1 x2)
+      (test-assert 'accessors-equality-invokes-original
+             (and ((comparator-equality-predicate comp) x1 x2)
                        (= x2 222)))
-      (check-true 'accessors-ordering-invokes-original
-                  (and ((comparator-ordering-predicate comp) x1 x3)
+      (test-assert 'accessors-ordering-invokes-original
+             (and ((comparator-ordering-predicate comp) x1 x3)
                        (= x3 333)))
-      (check-true 'accessors-hash-invokes-original
-                  (and (zero? ((comparator-hash-function comp) x1))
+      (test-assert 'accessors-hash-invokes-original
+             (and (zero? ((comparator-hash-function comp) x1))
                        (= x4 444)))))
 
-  (check-true 'invokers-real-exact
-              (comparator-test-type real-comparator 3))
-  (check-true 'invokers-real-inexact
-              (comparator-test-type real-comparator 3.0))
-  (check-false 'invokers-real-rejects-string
-               (comparator-test-type real-comparator "3.0"))
-  (check-true 'invokers-check-type-accepts
-              (comparator-check-type boolean-comparator #t))
-  (check-true 'invokers-check-type-rejects
-              (raises?
+  (test-assert 'invokers-real-exact
+             (comparator-test-type real-comparator 3))
+  (test-assert 'invokers-real-inexact
+             (comparator-test-type real-comparator 3.0))
+  (test-assert 'invokers-real-rejects-string
+             (not (comparator-test-type real-comparator "3.0")))
+  (test-assert 'invokers-check-type-accepts
+             (comparator-check-type boolean-comparator #t))
+  (test-assert 'invokers-check-type-rejects
+             (raises?
                (lambda ()
                  (comparator-check-type boolean-comparator 't))))
 
-  (check-true 'comparison-equal-chain
-              (=? real-comparator 2 2.0 2))
-  (check-true 'comparison-less-chain
-              (<? real-comparator 2 3.0 4))
-  (check-true 'comparison-greater-chain
-              (>? real-comparator 4.0 3.0 2))
-  (check-true 'comparison-less-equal-chain
-              (<=? real-comparator 2.0 2 3.0))
-  (check-true 'comparison-greater-equal-chain
-              (>=? real-comparator 3 3.0 2))
-  (check-false 'comparison-not-equal-chain
-               (=? real-comparator 1 2 3))
-  (check-false 'comparison-not-less-chain
-               (<? real-comparator 3 1 2))
-  (check-false 'comparison-not-greater-chain
-               (>? real-comparator 1 2 3))
-  (check-false 'comparison-not-less-equal-chain
-               (<=? real-comparator 4 3 3))
-  (check-false 'comparison-not-greater-equal-chain
-               (>=? real-comparator 3 4 4.0))
+  (test-assert 'comparison-equal-chain
+             (=? real-comparator 2 2.0 2))
+  (test-assert 'comparison-less-chain
+             (<? real-comparator 2 3.0 4))
+  (test-assert 'comparison-greater-chain
+             (>? real-comparator 4.0 3.0 2))
+  (test-assert 'comparison-less-equal-chain
+             (<=? real-comparator 2.0 2 3.0))
+  (test-assert 'comparison-greater-equal-chain
+             (>=? real-comparator 3 3.0 2))
+  (test-assert 'comparison-not-equal-chain
+             (not (=? real-comparator 1 2 3)))
+  (test-assert 'comparison-not-less-chain
+             (not (<? real-comparator 3 1 2)))
+  (test-assert 'comparison-not-greater-chain
+             (not (>? real-comparator 1 2 3)))
+  (test-assert 'comparison-not-less-equal-chain
+             (not (<=? real-comparator 4 3 3)))
+  (test-assert 'comparison-not-greater-equal-chain
+             (not (>=? real-comparator 3 4 4.0)))
 
-  (check 'syntax-less
-         (comparator-if<=> real-comparator 1 2 'less 'equal 'greater)
-         'less)
-  (check 'syntax-equal
-         (comparator-if<=> real-comparator 1 1 'less 'equal 'greater)
-         'equal)
-  (check 'syntax-greater
-         (comparator-if<=> real-comparator 2 1 'less 'equal 'greater)
-         'greater)
-  (check 'syntax-default-less
-         (comparator-if<=> "1" "2" 'less 'equal 'greater)
-         'less)
-  (check 'syntax-default-equal
-         (comparator-if<=> "1" "1" 'less 'equal 'greater)
-         'equal)
-  (check 'syntax-default-greater
-         (comparator-if<=> "2" "1" 'less 'equal 'greater)
-         'greater)
+  (test-equal 'syntax-less
+             'less
+             (comparator-if<=> real-comparator 1 2 'less 'equal 'greater))
+  (test-equal 'syntax-equal
+             'equal
+             (comparator-if<=> real-comparator 1 1 'less 'equal 'greater))
+  (test-equal 'syntax-greater
+             'greater
+             (comparator-if<=> real-comparator 2 1 'less 'equal 'greater))
+  (test-equal 'syntax-default-less
+             'less
+             (comparator-if<=> "1" "2" 'less 'equal 'greater))
+  (test-equal 'syntax-default-equal
+             'equal
+             (comparator-if<=> "1" "1" 'less 'equal 'greater))
+  (test-equal 'syntax-default-greater
+             'greater
+             (comparator-if<=> "2" "1" 'less 'equal 'greater))
 
   (check-exact-nonnegative-integer 'bound-hash-bound
                                    (hash-bound))
   (check-exact-nonnegative-integer 'bound-hash-salt
                                    (hash-salt))
-  (check-true 'bound-salt-less-than-bound
-              (< (hash-salt) (hash-bound)))
+  (test-assert 'bound-salt-less-than-bound
+             (< (hash-salt) (hash-bound)))
 
   ;; Keep one use of the custom symbol comparator from the upstream setup.
-  (check-true 'constructors-symbol-comparator-less
-              (<? symbol-comparator 'alpha 'beta))
-  (check-true 'constructors-list-comparator-equal
-              (=? num-list-comparator '(1 2) '(1 2)))
-  (check-true 'constructors-list-comparator-less
-              (<? num-list-comparator '(1 2) '(1 3))))
+  (test-assert 'constructors-symbol-comparator-less
+             (<? symbol-comparator 'alpha 'beta))
+  (test-assert 'constructors-list-comparator-equal
+             (=? num-list-comparator '(1 2) '(1 2)))
+  (test-assert 'constructors-list-comparator-less
+             (<? num-list-comparator '(1 2) '(1 3)))))
 
-(finish-comparator-tests)
+(testing-runner-main "Stdlib Comparator portable tests" (command-line))

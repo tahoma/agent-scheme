@@ -16,10 +16,10 @@
         (only (consent reader)
               consent-datum->external
               consent-read
-              consent-source-metadata-count))
-
-;; Count failed checks so the portable runner reports every mismatch.
-(define failures 0)
+              consent-source-metadata-count)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Minimum check duration emitted as a fine-grained CI timing diagnostic.
 (define consent-ci-check-minimum-milliseconds 10)
@@ -169,21 +169,10 @@
               (newline))))
       result)))
 
-;; Record one failed portable reflection check and keep running.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
 ;; Compare ACTUAL and EXPECTED using R7RS equal? and record a named failure.
 (define (check-value name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
+  "Compare ACTUAL and EXPECTED through SRFI 64."
+  (test-equal name expected actual))
 
 ;; Time one reflection stress check and then compare its value.
 (define-syntax check
@@ -213,6 +202,9 @@
    (consent-read (apply string-append fragments)
                  '((source-metadata . #f)))))
 
+(testing-registry-case
+ 'reflect-library-catalog-discovery-source-metadata-budget '(portable core)
+ ("consent-reflect-stress-test.scm" 205)
 (check 'reflect-library-catalog-discovery-source-metadata-budget
        (let ((before (consent-source-metadata-count)))
          (let ((ignored
@@ -223,8 +215,11 @@
                  '((source-metadata . #t)
                    (max-source-metadata . 10000000)))))
            (< (- (consent-source-metadata-count) before) 1000)))
-       #t)
+       #t))
 
+(testing-registry-case
+ 'reflect-library-catalog-discovery '(portable core)
+ ("consent-reflect-stress-test.scm" 220)
 (check-external 'reflect-library-catalog-discovery
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -259,8 +254,11 @@
                    json-read-exported
                    found-reflect
                    missing
-                   #t)"))
+                   #t)")))
 
+(testing-registry-case
+ 'reflect-library-catalog-visibility-tiers '(portable core)
+ ("consent-reflect-stress-test.scm" 259)
 (check-external 'reflect-library-catalog-visibility-tiers
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -281,8 +279,11 @@
                    internal-runtime
                    internal-agent-primitive
                    optional
-                   (host emacs))"))
+                   (host emacs))")))
 
+(testing-registry-case
+ 'reflect-documented-bindings-and-apropos '(portable core)
+ ("consent-reflect-stress-test.scm" 284)
 (check-external/options 'reflect-documented-bindings-and-apropos
                         "(import (scheme base) (agent reflect))
                          (define (field datum name)
@@ -325,8 +326,11 @@
                             (any-kind? reflect-matches 'library)
                             (not (null? library-hits))))"
                         '((docstring-retention . full))
-                        "(documented \"Return the needle value for discovery tests.\" found-binding #f #t)")
+                        "(documented \"Return the needle value for discovery tests.\" found-binding #f #t)"))
 
+(testing-registry-case
+ 'reflect-binding-libraries-crosswalk '(portable core)
+ ("consent-reflect-stress-test.scm" 331)
 (check-external 'reflect-binding-libraries-crosswalk
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -345,8 +349,11 @@
                     (consent json)
                     (srfi srfi-180)
                     (srfi 180))
-                   #t)"))
+                   #t)")))
 
+(testing-registry-case
+ 'reflect-apropos-unmanifested-library '(portable core)
+ ("consent-reflect-stress-test.scm" 354)
 (check-external/options 'reflect-apropos-unmanifested-library
                         "(define-library (adhoc scratch)
                            (export adhoc-needle)
@@ -381,8 +388,11 @@
                             (library-present? apropos-library-names
                                               '(adhoc scratch))))"
                         '((docstring-retention . full))
-                        "(#t #t)")
+                        "(#t #t)"))
 
+(testing-registry-case
+ 'reflect-dynamic-manifest-inputs '(portable core)
+ ("consent-reflect-stress-test.scm" 393)
 (check-external 'reflect-dynamic-manifest-inputs
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -509,8 +519,11 @@
                    ((project rooted))
                    #t
                    #t
-                   root-removed)"))
+                   root-removed)")))
 
+(testing-registry-case
+ 'reflect-library-resolution-api '(portable core)
+ ("consent-reflect-stress-test.scm" 524)
 (check-external 'reflect-library-resolution-api
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -696,14 +709,6 @@
                    (srfi-aliases ((srfi 16) (srfi srfi-16)
                                   (srfi :16) (srfi :16 case-lambda)))
                    (vendored shim (srfi 16) (scheme case-lambda))
-                   (vendored-missing missing missing-srfi))"))
+                   (vendored-missing missing missing-srfi))")))
 
-(if (= failures 0)
-    (begin
-      (display "Portable reflection catalog stress tests passed")
-      (newline))
-    (begin
-      (display failures)
-      (display " portable reflection catalog stress test failure(s)")
-      (newline)
-      (error "Portable reflection catalog stress tests failed")))
+(testing-runner-main "Consent Reflect Stress portable tests" (command-line))

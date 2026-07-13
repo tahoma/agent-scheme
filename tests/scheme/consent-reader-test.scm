@@ -7,35 +7,20 @@
 
 (import (scheme base)
         (scheme write)
-        (consent reader))
+        (consent reader)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Shared reader behavior runs through consent-fixture-test.scm. This file
 ;; keeps portable reader API and bootstrap invariants close to the R7RS library.
 
-(define failures 0)
-
-;; Record one failed portable reader check and keep running the rest of the
-;; suite so failures report together.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal? and record a named failure.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
 ;; Read SOURCE through the portable reader and compare its external form.
 (define (check-external name source expected)
-  (check name
-         (consent-datum->external (consent-read source))
-         expected))
+  (test-equal name
+             expected
+             (consent-datum->external (consent-read source))))
 
 ;; Return #t when THUNK raises any portable Scheme condition.
 (define (raises? thunk)
@@ -44,23 +29,56 @@
     (thunk)
     #f))
 
-(check-external 'boolean-true "#true" "#t")
-(check-external 'boolean-false "#false" "#f")
-(check 'false-is-not-null (null? (consent-read "#f")) #f)
-(check 'empty-list-is-null (null? (consent-read "()")) #t)
+(testing-registry-case
+ 'boolean-true '(portable core)
+ ("consent-reader-test.scm" 32)
+(check-external 'boolean-true "#true" "#t"))
+(testing-registry-case
+ 'boolean-false '(portable core)
+ ("consent-reader-test.scm" 36)
+(check-external 'boolean-false "#false" "#f"))
+(testing-registry-case
+ 'false-is-not-null '(portable core)
+ ("consent-reader-test.scm" 40)
+(test-equal 'false-is-not-null #f (null? (consent-read "#f"))))
+(testing-registry-case
+ 'empty-list-is-null '(portable core)
+ ("consent-reader-test.scm" 44)
+(test-equal 'empty-list-is-null #t (null? (consent-read "()"))))
 
-(check-external 'symbol-case "Consent-Scheme" "Consent-Scheme")
-(check-external 'fold-case "#!fold-case Consent-Scheme" "consent-scheme")
-(check-external 'vertical-symbol "|two\\x20;words|" "|two words|")
+(testing-registry-case
+ 'symbol-case '(portable core)
+ ("consent-reader-test.scm" 49)
+(check-external 'symbol-case "Consent-Scheme" "Consent-Scheme"))
+(testing-registry-case
+ 'fold-case '(portable core)
+ ("consent-reader-test.scm" 53)
+(check-external 'fold-case "#!fold-case Consent-Scheme" "consent-scheme"))
+(testing-registry-case
+ 'vertical-symbol '(portable core)
+ ("consent-reader-test.scm" 57)
+(check-external 'vertical-symbol "|two\\x20;words|" "|two words|"))
 
-(check 'string-escapes
-       (consent-read "\"line\\n\\x03bb;\"")
-       (string-append "line\n" (string (integer->char #x03bb))))
-(check 'string-line-continuation
-       (consent-read (string-append "\"a\\" "\n  b\""))
-       "ab")
-(check-external 'character-name "#\\space" "#\\space")
-(check-external 'character-hex "#\\X03BB" "#\\λ")
+(testing-registry-case
+ 'string-escapes '(portable core)
+ ("consent-reader-test.scm" 62)
+(test-equal 'string-escapes
+             (string-append "line\n" (string (integer->char #x03bb)))
+             (consent-read "\"line\\n\\x03bb;\"")))
+(testing-registry-case
+ 'string-line-continuation '(portable core)
+ ("consent-reader-test.scm" 68)
+(test-equal 'string-line-continuation
+             "ab"
+             (consent-read (string-append "\"a\\" "\n  b\""))))
+(testing-registry-case
+ 'character-name '(portable core)
+ ("consent-reader-test.scm" 74)
+(check-external 'character-name "#\\space" "#\\space"))
+(testing-registry-case
+ 'character-hex '(portable core)
+ ("consent-reader-test.scm" 78)
+(check-external 'character-hex "#\\X03BB" "#\\λ"))
 
 ;; Character writer fixtures cover named, printable, Unicode, and control forms.
 (define character-writer-cases
@@ -79,6 +97,9 @@
     ("character-writer-control-unit-separator" "#\\x1f" "#\\x1f")
     ("character-writer-delete" "#\\x7f" "#\\delete")))
 
+(testing-registry-case
+ 'name '(portable core)
+ ("consent-reader-test.scm" 100)
 (for-each
  (lambda (case)
    (let* ((name (string->symbol (car case)))
@@ -86,109 +107,211 @@
           (expected (list-ref case 2))
           (external (consent-datum->external
                      (consent-read source))))
-     (check name external expected)
-     (check (string->symbol (string-append (car case) "-round-trip"))
-            (consent-datum->external
-             (consent-read external))
-            expected)))
- character-writer-cases)
+     (test-equal name expected external)
+     (test-equal (string->symbol (string-append (car case) "-round-trip"))
+             expected
+             (consent-datum->external
+             (consent-read external)))))
+ character-writer-cases))
 
-(check-external 'integer "42" "42")
+(testing-registry-case
+ 'integer '(portable core)
+ ("consent-reader-test.scm" 117)
+(check-external 'integer "42" "42"))
 ;; Read numbers share the canonical constructors' representation class.
 ;; Compare against a canonical integer rather than hardcoding what the
 ;; surrounding Scheme's `number?' answers: on a reference host both are
 ;; records (#f and #f); when this file runs on the Consent runtime itself via
 ;; --host-run, canonical Consent numbers ARE the runtime's numbers (#t and
 ;; #t). The invariant is the agreement, not the host's answer.
-(check 'integer-matches-canonical-number-class
-       (number? (consent-read "42"))
-       (number? (consent-make-canonical-integer 42)))
-(check 'host-integer-writer
-       (consent-datum->external 42)
-       "42")
-(check 'host-rational-writer
-       (consent-datum->external (/ 3 2))
-       "3/2")
-(check 'host-decimal-writer
-       (consent-datum->external 3.0)
-       "3.0")
-(check-external 'hex-integer "#x2a" "42")
-(check-external 'rational "3/4" "3/4")
-(check-external 'decimal "1.5" "1.5")
-(check 'decimal-integer-external-form
-       (consent-datum->external
-        (consent-make-canonical-decimal 3.0))
-       "3.0")
-(check-external 'reduced-rational "6/10" "3/5")
-(check-external 'exact-decimal "#e1.5" "3/2")
-(check-external 'inexact-rational "#i3/2" "1.5")
-(check-external 'complex-rectangular "3/4-5/6i" "3/4-5/6i")
-(check-external 'infinity "+inf.0" "+inf.0")
-(check-external 'complex-positive-infinity-imaginary "+inf.0i" "0+inf.0i")
-(check-external 'complex-negative-infinity-imaginary "-inf.0i" "0-inf.0i")
-(check-external 'complex-nan-imaginary "+nan.0i" "0+nan.0i")
-(check-external 'polar-infinite-magnitude "+inf.0@0" "+inf.0+nan.0i")
-(check-external 'polar-infinite-angle "1@+inf.0" "+nan.0+nan.0i")
-(check-external 'polar-nan-magnitude "+nan.0@0" "+nan.0+nan.0i")
-(check-external 'bare-i-symbol "i" "i")
+(testing-registry-case
+ 'integer-matches-canonical-number-class '(portable core)
+ ("consent-reader-test.scm" 127)
+(test-equal 'integer-matches-canonical-number-class
+             (number? (consent-make-canonical-integer 42))
+             (number? (consent-read "42"))))
+(testing-registry-case
+ 'host-integer-writer '(portable core)
+ ("consent-reader-test.scm" 133)
+(test-equal 'host-integer-writer
+             "42"
+             (consent-datum->external 42)))
+(testing-registry-case
+ 'host-rational-writer '(portable core)
+ ("consent-reader-test.scm" 139)
+(test-equal 'host-rational-writer
+             "3/2"
+             (consent-datum->external (/ 3 2))))
+(testing-registry-case
+ 'host-decimal-writer '(portable core)
+ ("consent-reader-test.scm" 145)
+(test-equal 'host-decimal-writer
+             "3.0"
+             (consent-datum->external 3.0)))
+(testing-registry-case
+ 'hex-integer '(portable core)
+ ("consent-reader-test.scm" 151)
+(check-external 'hex-integer "#x2a" "42"))
+(testing-registry-case
+ 'rational '(portable core)
+ ("consent-reader-test.scm" 155)
+(check-external 'rational "3/4" "3/4"))
+(testing-registry-case
+ 'decimal '(portable core)
+ ("consent-reader-test.scm" 159)
+(check-external 'decimal "1.5" "1.5"))
+(testing-registry-case
+ 'decimal-integer-external-form '(portable core)
+ ("consent-reader-test.scm" 163)
+(test-equal 'decimal-integer-external-form
+             "3.0"
+             (consent-datum->external
+        (consent-make-canonical-decimal 3.0))))
+(testing-registry-case
+ 'reduced-rational '(portable core)
+ ("consent-reader-test.scm" 170)
+(check-external 'reduced-rational "6/10" "3/5"))
+(testing-registry-case
+ 'exact-decimal '(portable core)
+ ("consent-reader-test.scm" 174)
+(check-external 'exact-decimal "#e1.5" "3/2"))
+(testing-registry-case
+ 'inexact-rational '(portable core)
+ ("consent-reader-test.scm" 178)
+(check-external 'inexact-rational "#i3/2" "1.5"))
+(testing-registry-case
+ 'complex-rectangular '(portable core)
+ ("consent-reader-test.scm" 182)
+(check-external 'complex-rectangular "3/4-5/6i" "3/4-5/6i"))
+(testing-registry-case
+ 'infinity '(portable core)
+ ("consent-reader-test.scm" 186)
+(check-external 'infinity "+inf.0" "+inf.0"))
+(testing-registry-case
+ 'complex-positive-infinity-imaginary '(portable core)
+ ("consent-reader-test.scm" 190)
+(check-external 'complex-positive-infinity-imaginary "+inf.0i" "0+inf.0i"))
+(testing-registry-case
+ 'complex-negative-infinity-imaginary '(portable core)
+ ("consent-reader-test.scm" 194)
+(check-external 'complex-negative-infinity-imaginary "-inf.0i" "0-inf.0i"))
+(testing-registry-case
+ 'complex-nan-imaginary '(portable core)
+ ("consent-reader-test.scm" 198)
+(check-external 'complex-nan-imaginary "+nan.0i" "0+nan.0i"))
+(testing-registry-case
+ 'polar-infinite-magnitude '(portable core)
+ ("consent-reader-test.scm" 202)
+(check-external 'polar-infinite-magnitude "+inf.0@0" "+inf.0+nan.0i"))
+(testing-registry-case
+ 'polar-infinite-angle '(portable core)
+ ("consent-reader-test.scm" 206)
+(check-external 'polar-infinite-angle "1@+inf.0" "+nan.0+nan.0i"))
+(testing-registry-case
+ 'polar-nan-magnitude '(portable core)
+ ("consent-reader-test.scm" 210)
+(check-external 'polar-nan-magnitude "+nan.0@0" "+nan.0+nan.0i"))
+(testing-registry-case
+ 'bare-i-symbol '(portable core)
+ ("consent-reader-test.scm" 214)
+(check-external 'bare-i-symbol "i" "i"))
+(testing-registry-case
+ 'ordinary-identifier '(portable core)
+ ("consent-reader-test.scm" 218)
 (check-external 'ordinary-identifier
                 "number-parser-should-not-see-me"
-                "number-parser-should-not-see-me")
+                "number-parser-should-not-see-me"))
+(testing-registry-case
+ 'signed-identifier '(portable core)
+ ("consent-reader-test.scm" 224)
 (check-external 'signed-identifier
                 "+number-parser-should-not-see-me"
-                "+number-parser-should-not-see-me")
+                "+number-parser-should-not-see-me"))
+(testing-registry-case
+ 'dotted-identifier '(portable core)
+ ("consent-reader-test.scm" 230)
 (check-external 'dotted-identifier
                 ".number-parser-should-not-see-me"
-                ".number-parser-should-not-see-me")
+                ".number-parser-should-not-see-me"))
 
 ;; Exercise large-source cursor access without asserting a host-specific time.
 ;; Multibyte contents also cover readers whose strings use UTF-8 storage.
+(testing-registry-case
+ 'large-unicode-string-length '(portable core)
+ ("consent-reader-test.scm" 239)
 (let* ((length 1024)
        (source (string-append "\"" (make-string length #\λ) "\""))
        (value (consent-read source)))
-  (check 'large-unicode-string-length
-         (string-length value)
-         length))
+  (test-equal 'large-unicode-string-length
+             length
+             (string-length value))))
 
-(check-external 'dotted-list "(alpha beta . gamma)" "(alpha beta . gamma)")
-(check-external 'quote "'alpha" "(quote alpha)")
+(testing-registry-case
+ 'dotted-list '(portable core)
+ ("consent-reader-test.scm" 249)
+(check-external 'dotted-list "(alpha beta . gamma)" "(alpha beta . gamma)"))
+(testing-registry-case
+ 'quote '(portable core)
+ ("consent-reader-test.scm" 253)
+(check-external 'quote "'alpha" "(quote alpha)"))
+(testing-registry-case
+ 'quasiquote '(portable core)
+ ("consent-reader-test.scm" 257)
 (check-external
  'quasiquote
  "`(,alpha ,@beta)"
- "(quasiquote ((unquote alpha) (unquote-splicing beta)))")
-(check-external 'vector "#(1 alpha \"ok\")" "#(1 alpha \"ok\")")
-(check-external 'bytevector "#u8(0 127 255)" "#u8(0 127 255)")
+ "(quasiquote ((unquote alpha) (unquote-splicing beta)))"))
+(testing-registry-case
+ 'vector '(portable core)
+ ("consent-reader-test.scm" 264)
+(check-external 'vector "#(1 alpha \"ok\")" "#(1 alpha \"ok\")"))
+(testing-registry-case
+ 'bytevector '(portable core)
+ ("consent-reader-test.scm" 268)
+(check-external 'bytevector "#u8(0 127 255)" "#u8(0 127 255)"))
 
-(check 'comments
-       (map consent-datum->external
+(testing-registry-case
+ 'comments '(portable core)
+ ("consent-reader-test.scm" 273)
+(test-equal 'comments
+             '("1" "2")
+             (map consent-datum->external
             (consent-read-all
-             "; ignore\n#| nested #| comment |# done |#\n1 #;(skip me) 2"))
-       '("1" "2"))
+             "; ignore\n#| nested #| comment |# done |#\n1 #;(skip me) 2"))))
 
-(check 'list-limit
-       (raises?
+(testing-registry-case
+ 'list-limit '(portable core)
+ ("consent-reader-test.scm" 282)
+(test-equal 'list-limit
+             #t
+             (raises?
         (lambda ()
-          (consent-read "(1 2 3)" '((max-list-length . 2)))))
-       #t)
-(check 'vector-limit
-       (raises?
+          (consent-read "(1 2 3)" '((max-list-length . 2)))))))
+(testing-registry-case
+ 'vector-limit '(portable core)
+ ("consent-reader-test.scm" 290)
+(test-equal 'vector-limit
+             #t
+             (raises?
         (lambda ()
-          (consent-read "#(1 2 3)" '((max-vector-length . 2)))))
-       #t)
+          (consent-read "#(1 2 3)" '((max-vector-length . 2)))))))
+(testing-registry-case
+ 'datum-labels-circular-identity '(portable core)
+ ("consent-reader-test.scm" 298)
 (let ((circular (consent-read "#1=(a . #1#)"))
       (shared (consent-read "(#1=(a b) #1#)")))
-  (check 'datum-labels-circular-identity
-         (eq? circular (cdr circular))
-         #t)
-  (check 'datum-labels-shared-identity
-         (eq? (car shared) (cadr shared))
-         #t)
-  (check 'datum-labels-circular-writer
-         (consent-datum->external circular)
-         "#0=(a . #0#)")
-  (check 'datum-labels-shared-simple-writer
-         (consent-datum->external shared)
-         "((a b) (a b))"))
+  (test-equal 'datum-labels-circular-identity
+             #t
+             (eq? circular (cdr circular)))
+  (test-equal 'datum-labels-shared-identity
+             #t
+             (eq? (car shared) (cadr shared)))
+  (test-equal 'datum-labels-circular-writer
+             "#0=(a . #0#)"
+             (consent-datum->external circular))
+  (test-equal 'datum-labels-shared-simple-writer
+             "((a b) (a b))"
+             (consent-datum->external shared))))
 
 ;;;; Reader recovery: errors as data, resync, incomplete vs invalid.
 
@@ -224,108 +347,123 @@
 
 ;; The default form-level strategy recovers the good forms on either side of a
 ;; malformed top-level form and collects an ordered diagnostics list.
+(testing-registry-case
+ 'recover-status-complete '(portable core)
+ ("consent-reader-test.scm" 350)
 (let ((result
        (consent-read-recover
         "(good 1)\n(broken ]\n(also ]\n(good 2)\n")))
-  (check 'recover-status-complete
-         (consent-recovery-result-status result)
-         'complete)
-  (check 'recover-good-datums
-         (map consent-datum->external
-              (consent-recovery-result-datums result))
-         '("(good 1)" "(good 2)"))
-  (check 'recover-multi-error-count
-         (length (consent-recovery-result-diagnostics result))
-         2)
-  (check 'recover-span-count
-         (length (consent-recovery-result-spans result))
-         2)
+  (test-equal 'recover-status-complete
+             'complete
+             (consent-recovery-result-status result))
+  (test-equal 'recover-good-datums
+             '("(good 1)" "(good 2)")
+             (map consent-datum->external
+              (consent-recovery-result-datums result)))
+  (test-equal 'recover-multi-error-count
+             2
+             (length (consent-recovery-result-diagnostics result)))
+  (test-equal 'recover-span-count
+             2
+             (length (consent-recovery-result-spans result)))
   (let ((diagnostic (car (consent-recovery-result-diagnostics result))))
-    (check 'recover-diagnostic-severity
-           (record-field diagnostic 'severity)
-           'error)
-    (check 'recover-diagnostic-source
-           (record-field diagnostic 'source)
-           'reader)
-    (check 'recover-diagnostic-kind
-           (diagnostic-kind diagnostic)
-           'invalid)
+    (test-equal 'recover-diagnostic-severity
+             'error
+             (record-field diagnostic 'severity))
+    (test-equal 'recover-diagnostic-source
+             'reader
+             (record-field diagnostic 'source))
+    (test-equal 'recover-diagnostic-kind
+             'invalid
+             (diagnostic-kind diagnostic))
     ;; The malformed top-level form runs from "(broken" to the next line.
-    (check 'recover-diagnostic-span
-           (diagnostic-span-pair diagnostic)
-           (cons (portable-host-number 9)
-                 (portable-host-number 19))))
+    (test-equal 'recover-diagnostic-span
+             (cons (portable-host-number 9)
+                 (portable-host-number 19))
+             (diagnostic-span-pair diagnostic)))
   ;; The skipped bytes are preserved in the span, never silently dropped.
   (let ((span (car (consent-recovery-result-spans result))))
-    (check 'recover-span-kind
-           (record-field span 'kind)
-           'invalid)
-    (check 'recover-span-text-preserved
-           (record-field span 'text)
-           "(broken ]\n")))
+    (test-equal 'recover-span-kind
+             'invalid
+             (record-field span 'kind))
+    (test-equal 'recover-span-text-preserved
+             "(broken ]\n"
+             (record-field span 'text)))))
 
 ;; A recovery read returns the partial prefix even when the trailing form is an
 ;; incomplete (valid-prefix) region, and marks the result incomplete.
+(testing-registry-case
+ 'recover-incomplete-status '(portable core)
+ ("consent-reader-test.scm" 395)
 (let ((result (consent-read-recover "(a 1)\n(b ")))
-  (check 'recover-incomplete-status
-         (consent-recovery-result-status result)
-         'incomplete)
-  (check 'recover-incomplete-prefix
-         (map consent-datum->external
-              (consent-recovery-result-datums result))
-         '("(a 1)"))
-  (check 'recover-incomplete-kind
-         (diagnostic-kind
-          (car (consent-recovery-result-diagnostics result)))
-         'incomplete))
+  (test-equal 'recover-incomplete-status
+             'incomplete
+             (consent-recovery-result-status result))
+  (test-equal 'recover-incomplete-prefix
+             '("(a 1)")
+             (map consent-datum->external
+              (consent-recovery-result-datums result)))
+  (test-equal 'recover-incomplete-kind
+             'incomplete
+             (diagnostic-kind
+          (car (consent-recovery-result-diagnostics result))))))
 
 ;; The resync point is caller-selectable: a strategy that jumps to end of
 ;; source discards everything after the first malformed form.
+(testing-registry-case
+ 'recover-custom-resync-datums '(portable core)
+ ("consent-reader-test.scm" 413)
 (let ((result
        (consent-read-recover
         "(bad ]\n(good)\n"
         (list (cons 'resync
                     (lambda (source position)
                       (string-length source)))))))
-  (check 'recover-custom-resync-datums
-         (consent-recovery-result-datums result)
-         '())
-  (check 'recover-custom-resync-diagnostics
-         (length (consent-recovery-result-diagnostics result))
-         1))
+  (test-equal 'recover-custom-resync-datums
+             '()
+             (consent-recovery-result-datums result))
+  (test-equal 'recover-custom-resync-diagnostics
+             1
+             (length (consent-recovery-result-diagnostics result)))))
 
 ;; Single-form recovery distinguishes datum, invalid, incomplete, and eof, and
 ;; reports a resume offset for each.
+(testing-registry-case
+ 'step-datum-status '(portable core)
+ ("consent-reader-test.scm" 431)
 (let ((datum-step (consent-read-recover-from-string-at "(a b) trailing" 0))
       (invalid-step (consent-read-recover-from-string-at ")oops\n(z)" 0))
       (incomplete-step (consent-read-recover-from-string-at "(a" 0))
       (eof-step (consent-read-recover-from-string-at "   \n" 0)))
-  (check 'step-datum-status
-         (consent-recovery-step-status datum-step)
-         'datum)
-  (check 'step-datum-external
-         (consent-datum->external (consent-recovery-step-datum datum-step))
-         "(a b)")
-  (check 'step-invalid-status
-         (consent-recovery-step-status invalid-step)
-         'invalid)
-  (check 'step-invalid-progress
-         (> (consent-recovery-step-next invalid-step) 0)
-         #t)
-  (check 'step-incomplete-status
-         (consent-recovery-step-status incomplete-step)
-         'incomplete)
+  (test-equal 'step-datum-status
+             'datum
+             (consent-recovery-step-status datum-step))
+  (test-equal 'step-datum-external
+             "(a b)"
+             (consent-datum->external (consent-recovery-step-datum datum-step)))
+  (test-equal 'step-invalid-status
+             'invalid
+             (consent-recovery-step-status invalid-step))
+  (test-equal 'step-invalid-progress
+             #t
+             (> (consent-recovery-step-next invalid-step) 0))
+  (test-equal 'step-incomplete-status
+             'incomplete
+             (consent-recovery-step-status incomplete-step))
   ;; Incomplete input does not consume the prefix; the caller resumes at 0.
-  (check 'step-incomplete-rewinds
-         (consent-recovery-step-next incomplete-step)
-         0)
-  (check 'step-eof-status
-         (consent-recovery-step-status eof-step)
-         'eof))
+  (test-equal 'step-incomplete-rewinds
+             0
+             (consent-recovery-step-next incomplete-step))
+  (test-equal 'step-eof-status
+             'eof
+             (consent-recovery-step-status eof-step))))
 
 ;; An incomplete step carries the reader's open-construct stack, innermost
 ;; first, so interactive callers can render nesting depth and the pending
 ;; construct kind; complete, invalid, and eof steps carry no stack.
+(testing-registry-case
+ 'step-pending-nested-lists '(portable core)
+ ("consent-reader-test.scm" 464)
 (let ((nested-step (consent-read-recover-from-string-at "(+ (* 1" 0))
       (string-step (consent-read-recover-from-string-at "(display \"abc" 0))
       (vector-step (consent-read-recover-from-string-at "(a #(1" 0))
@@ -333,73 +471,85 @@
       (prefix-step (consent-read-recover-from-string-at "'" 0))
       (datum-step (consent-read-recover-from-string-at "(a b)" 0))
       (invalid-step (consent-read-recover-from-string-at ")" 0)))
-  (check 'step-pending-nested-lists
-         (consent-recovery-step-pending nested-step)
-         '(list list))
-  (check 'step-pending-string-innermost
-         (consent-recovery-step-pending string-step)
-         '(string list))
-  (check 'step-pending-vector-innermost
-         (consent-recovery-step-pending vector-step)
-         '(vector list))
-  (check 'step-pending-nested-block-comment
-         (consent-recovery-step-pending comment-step)
-         '(comment comment))
+  (test-equal 'step-pending-nested-lists
+             '(list list)
+             (consent-recovery-step-pending nested-step))
+  (test-equal 'step-pending-string-innermost
+             '(string list)
+             (consent-recovery-step-pending string-step))
+  (test-equal 'step-pending-vector-innermost
+             '(vector list)
+             (consent-recovery-step-pending vector-step))
+  (test-equal 'step-pending-nested-block-comment
+             '(comment comment)
+             (consent-recovery-step-pending comment-step))
   ;; A pending datum prefix is incomplete with no construct open: the stack
   ;; is empty rather than absent.
-  (check 'step-pending-datum-prefix-status
-         (consent-recovery-step-status prefix-step)
-         'incomplete)
-  (check 'step-pending-datum-prefix-empty
-         (consent-recovery-step-pending prefix-step)
-         '())
-  (check 'step-pending-datum-none
-         (consent-recovery-step-pending datum-step)
-         #f)
-  (check 'step-pending-invalid-none
-         (consent-recovery-step-pending invalid-step)
-         #f))
+  (test-equal 'step-pending-datum-prefix-status
+             'incomplete
+             (consent-recovery-step-status prefix-step))
+  (test-equal 'step-pending-datum-prefix-empty
+             '()
+             (consent-recovery-step-pending prefix-step))
+  (test-equal 'step-pending-datum-none
+             #f
+             (consent-recovery-step-pending datum-step))
+  (test-equal 'step-pending-invalid-none
+             #f
+             (consent-recovery-step-pending invalid-step))))
 
 ;; Recovery spans are deterministic: two reads of the same source produce the
 ;; same ordered offset pairs, so cached editor diagnostics do not flicker.
+(testing-registry-case
+ 'recover-spans-stable '(portable core)
+ ("consent-reader-test.scm" 503)
 (let ((first (consent-read-recover "(a ]\n(b }\n(c)\n"))
       (second (consent-read-recover "(a ]\n(b }\n(c)\n")))
-  (check 'recover-spans-stable
-         (map diagnostic-span-pair
-              (consent-recovery-result-diagnostics first))
-         (map diagnostic-span-pair
-              (consent-recovery-result-diagnostics second))))
+  (test-equal 'recover-spans-stable
+             (map diagnostic-span-pair
+              (consent-recovery-result-diagnostics second))
+             (map diagnostic-span-pair
+              (consent-recovery-result-diagnostics first)))))
 
 ;; Recovery terminates on pathological input instead of looping forever.  A
 ;; long run of closers collapses to one skipped region; a nested run of openers
 ;; under the depth limit is a single incomplete prefix; and many malformed lines
 ;; each make forward progress instead of wedging the driver.
+(testing-registry-case
+ 'recover-pathological-closers '(portable core)
+ ("consent-reader-test.scm" 518)
 (let ((closers (consent-read-recover (make-string 500 #\))))
       (openers (consent-read-recover (make-string 50 #\()))
       (junk-lines
        (consent-read-recover
         (let loop ((n 0) (text ""))
           (if (= n 200) text (loop (+ n 1) (string-append text "]\n")))))))
-  (check 'recover-pathological-closers
-         (consent-recovery-result-status closers)
-         'complete)
-  (check 'recover-pathological-openers
-         (consent-recovery-result-status openers)
-         'incomplete)
-  (check 'recover-pathological-junk-terminates
-         (consent-recovery-result-status junk-lines)
-         'complete)
-  (check 'recover-pathological-junk-progress
-         (= (length (consent-recovery-result-diagnostics junk-lines)) 200)
-         #t))
+  (test-equal 'recover-pathological-closers
+             'complete
+             (consent-recovery-result-status closers))
+  (test-equal 'recover-pathological-openers
+             'incomplete
+             (consent-recovery-result-status openers))
+  (test-equal 'recover-pathological-junk-terminates
+             'complete
+             (consent-recovery-result-status junk-lines))
+  (test-equal 'recover-pathological-junk-progress
+             #t
+             (= (length (consent-recovery-result-diagnostics junk-lines)) 200))))
 
 ;; The default raise-on-error path is unchanged for existing callers.
-(check 'recover-default-still-raises
-       (raises? (lambda () (consent-read "(a")))
-       #t)
-(check 'recover-default-read-all-raises
-       (raises? (lambda () (consent-read-all "(good) (bad ]")))
-       #t)
+(testing-registry-case
+ 'recover-default-still-raises '(portable core)
+ ("consent-reader-test.scm" 541)
+(test-equal 'recover-default-still-raises
+             #t
+             (raises? (lambda () (consent-read "(a")))))
+(testing-registry-case
+ 'recover-default-read-all-raises '(portable core)
+ ("consent-reader-test.scm" 547)
+(test-equal 'recover-default-read-all-raises
+             #t
+             (raises? (lambda () (consent-read-all "(good) (bad ]")))))
 
 ;;;; Bounded rendering (#508): depth/length/size ceilings with the canonical
 ;;;; `...' truncation marker, used by the interactive REPL display path.
@@ -416,35 +566,48 @@
 
 ;; Render SOURCE read through the reader, bounded by LIMITS, for comparison.
 (define (check-bounded name source limits expected)
-  (check name
-         (consent-datum->external-bounded (consent-read source) limits)
-         expected))
+  (test-equal name
+             expected
+             (consent-datum->external-bounded (consent-read source) limits)))
 
 ;; A length ceiling shows the first L elements then the marker.
-(check-bounded 'bounded-length "(1 2 3 4 5 6 7 8)" '((length . 4)) "(1 2 3 4 ...)")
+(testing-registry-case
+ 'bounded-length '(portable core)
+ ("consent-reader-test.scm" 574)
+(check-bounded 'bounded-length "(1 2 3 4 5 6 7 8)" '((length . 4)) "(1 2 3 4 ...)"))
 ;; A depth ceiling elides the over-deep nesting with the marker.
-(check-bounded 'bounded-depth "(1 (2 (3 (4 5))))" '((depth . 2)) "(1 (2 ...))")
+(testing-registry-case
+ 'bounded-depth '(portable core)
+ ("consent-reader-test.scm" 579)
+(check-bounded 'bounded-depth "(1 (2 (3 (4 5))))" '((depth . 2)) "(1 (2 ...))"))
 ;; Vectors honor the length ceiling too.
-(check-bounded 'bounded-vector "#(10 20 30 40)" '((length . 2)) "#(10 20 ...)")
+(testing-registry-case
+ 'bounded-vector '(portable core)
+ ("consent-reader-test.scm" 584)
+(check-bounded 'bounded-vector "#(10 20 30 40)" '((length . 2)) "#(10 20 ...)"))
 ;; Bytevectors honor the length ceiling.
-(check-bounded 'bounded-bytevector "#u8(1 2 3 4 5)" '((length . 3)) "#u8(1 2 3 ...)")
+(testing-registry-case
+ 'bounded-bytevector '(portable core)
+ ("consent-reader-test.scm" 589)
+(check-bounded 'bounded-bytevector "#u8(1 2 3 4 5)" '((length . 3)) "#u8(1 2 3 ...)"))
 ;; The total-size ceiling is a hard backstop that stops the walk mid-structure.
-(check-bounded 'bounded-size "(100 200 300 400 500)" '((size . 14)) "(100 200 300 ...")
+(testing-registry-case
+ 'bounded-size '(portable core)
+ ("consent-reader-test.scm" 594)
+(check-bounded 'bounded-size "(100 200 300 400 500)" '((size . 14)) "(100 200 300 ..."))
 ;; A long string atom is pre-capped so a huge atom cannot escape the size bound.
-(check 'bounded-size-string
-       (consent-datum->external-bounded "abcdefghijklmnop" '((size . 6)))
-       "...")
+(testing-registry-case
+ 'bounded-size-string '(portable core)
+ ("consent-reader-test.scm" 599)
+(test-equal 'bounded-size-string
+             "..."
+             (consent-datum->external-bounded "abcdefghijklmnop" '((size . 6)))))
 ;; With no ceilings, bounded output equals the canonical writer for acyclic data.
-(check 'bounded-no-limit-matches
-       (consent-datum->external-bounded (consent-read "(1 (2 3) #(4 5) \"s\")") '())
-       (consent-datum->external (consent-read "(1 (2 3) #(4 5) \"s\")")))
+(testing-registry-case
+ 'bounded-no-limit-matches '(portable core)
+ ("consent-reader-test.scm" 606)
+(test-equal 'bounded-no-limit-matches
+             (consent-datum->external (consent-read "(1 (2 3) #(4 5) \"s\")"))
+             (consent-datum->external-bounded (consent-read "(1 (2 3) #(4 5) \"s\")") '())))
 
-(if (= failures 0)
-    (begin
-      (display "Scheme reader tests passed")
-      (newline))
-    (begin
-      (display failures)
-      (display " Scheme reader test failure(s)")
-      (newline)
-      (error "Scheme reader tests failed")))
+(testing-runner-main "Consent Reader portable tests" (command-line))

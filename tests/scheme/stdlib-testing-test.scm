@@ -5,26 +5,10 @@
 (import (scheme base)
         (scheme write)
         (stdlib testing)
-        (stdlib manifest))
-
-;; Number of failed SRFI 64 checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed SRFI 64 check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
+        (stdlib manifest)
+        (scheme process-context)
+        (testing registry)
+        (testing runner))
 
 (define (runner-counts runner)
   "Return RUNNER pass, fail, xfail, xpass, and skip counts."
@@ -41,20 +25,12 @@
       (thunk runner))
     runner))
 
-(define (finish-testing-tests)
-  "Report the SRFI 64 testing result."
-  (if (= failures 0)
-      (begin
-        (display "SRFI 64 testing tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " SRFI 64 testing test failure(s)")
-        (newline)
-        (error "SRFI 64 testing tests failed" failures))))
-
-(check 'basic-test-counts
-       (runner-counts
+(testing-registry-case
+ 'basic-test-counts '(portable stdlib)
+ ("stdlib-testing-test.scm" 28)
+(test-equal 'basic-test-counts
+             '(4 0 0 0 0)
+             (runner-counts
         (with-null-runner
          (lambda (runner)
            (test-begin "basic" 4)
@@ -62,11 +38,14 @@
            (test-eqv "eqv" 4 (+ 2 2))
            (test-eq "eq" 'same 'same)
            (test-equal "equal" '(a b) (list 'a 'b))
-           (test-end "basic"))))
-       '(4 0 0 0 0))
+           (test-end "basic"))))))
 
-(check 'skip-and-expected-failure-counts
-       (runner-counts
+(testing-registry-case
+ 'skip-and-expected-failure-counts '(portable stdlib)
+ ("stdlib-testing-test.scm" 43)
+(test-equal 'skip-and-expected-failure-counts
+             '(1 0 1 1 1)
+             (runner-counts
         (with-null-runner
          (lambda (runner)
            (test-begin "control")
@@ -77,20 +56,26 @@
            (test-assert "known-bad" #f)
            (test-expect-fail "surprise")
            (test-assert "surprise" #t)
-           (test-end "control"))))
-       '(1 0 1 1 1))
+           (test-end "control"))))))
 
-(check 'test-error-passes-on-raised-condition
-       (runner-counts
+(testing-registry-case
+ 'test-error-passes-on-raised-condition '(portable stdlib)
+ ("stdlib-testing-test.scm" 61)
+(test-equal 'test-error-passes-on-raised-condition
+             '(1 0 0 0 0)
+             (runner-counts
         (with-null-runner
          (lambda (runner)
            (test-begin "errors" 1)
            (test-error "raises" (error "expected failure"))
-           (test-end "errors"))))
-       '(1 0 0 0 0))
+           (test-end "errors"))))))
 
-(check 'test-result-properties
-       (let ((properties '()))
+(testing-registry-case
+ 'test-result-properties '(portable stdlib)
+ ("stdlib-testing-test.scm" 73)
+(test-equal 'test-result-properties
+             '("named" (x y) (x y) pass)
+             (let ((properties '()))
          (with-null-runner
           (lambda (runner)
             (test-runner-on-test-end!
@@ -105,11 +90,14 @@
            (list (cdr (assq 'test-name result))
                  (cdr (assq 'expected-value result))
                  (cdr (assq 'actual-value result))
-                 (cdr (assq 'result-kind result)))))
-       '("named" (x y) (x y) pass))
+                 (cdr (assq 'result-kind result)))))))
 
-(check 'group-paths
-       (let ((paths '()))
+(testing-registry-case
+ 'group-paths '(portable stdlib)
+ ("stdlib-testing-test.scm" 95)
+(test-equal 'group-paths
+             '((("outer" "inner") "leaf"))
+             (let ((paths '()))
          (with-null-runner
           (lambda (runner)
             (test-runner-on-test-end!
@@ -122,11 +110,14 @@
             (test-group "outer"
               (test-group "inner"
                 (test-assert "leaf" #t)))))
-         (reverse paths))
-       '((("outer" "inner") "leaf")))
+         (reverse paths))))
 
-(check 'approximate-and-passed-predicate
-       (let ((runner
+(testing-registry-case
+ 'approximate-and-passed-predicate '(portable stdlib)
+ ("stdlib-testing-test.scm" 115)
+(test-equal 'approximate-and-passed-predicate
+             '((1 0 0 0 0) #t pass)
+             (let ((runner
               (with-null-runner
                (lambda (runner)
                  (test-begin "approximate")
@@ -134,21 +125,30 @@
                  (test-end "approximate")))))
          (list (runner-counts runner)
                (test-passed? runner)
-               (test-result-kind runner)))
-       '((1 0 0 0 0) #t pass))
+               (test-result-kind runner)))))
 
-(check 'read-eval-string-uses-scheme-base
-       (list (test-read-eval-string "(let ((x 20)) (+ x 22))")
-             test-log-to-file)
-       '(42 #f))
+(testing-registry-case
+ 'read-eval-string-uses-scheme-base '(portable stdlib)
+ ("stdlib-testing-test.scm" 130)
+(test-equal 'read-eval-string-uses-scheme-base
+             '(42 #f)
+             (list (test-read-eval-string "(let ((x 20)) (+ x 22))")
+             test-log-to-file)))
 
-(check 'fresh-runner-initializes-auxiliary-value
-       (list (test-runner-aux-value (test-runner-null))
-             (test-runner-aux-value (test-runner-simple)))
-       '(#f #f))
+(testing-registry-case
+ 'fresh-runner-initializes-auxiliary-value '(portable stdlib)
+ ("stdlib-testing-test.scm" 138)
+(test-equal 'fresh-runner-initializes-auxiliary-value
+             '(#f #f)
+             (list (test-runner-aux-value (test-runner-null))
+             (test-runner-aux-value (test-runner-simple)))))
 
-(check 'test-apply-selects-and-restores
-       (runner-counts
+(testing-registry-case
+ 'test-apply-selects-and-restores '(portable stdlib)
+ ("stdlib-testing-test.scm" 146)
+(test-equal 'test-apply-selects-and-restores
+             '(2 0 0 0 1)
+             (runner-counts
         (with-null-runner
          (lambda (runner)
            (test-begin "apply")
@@ -159,11 +159,14 @@
               (test-assert "ignored" #f)
               (test-assert "selected" #t)))
            (test-assert "after" #t)
-           (test-end "apply"))))
-       '(2 0 0 0 1))
+           (test-end "apply"))))))
 
-(check 'group-cleanup-normal-and-error-exits
-       (let ((events '()))
+(testing-registry-case
+ 'group-cleanup-normal-and-error-exits '(portable stdlib)
+ ("stdlib-testing-test.scm" 164)
+(test-equal 'group-cleanup-normal-and-error-exits
+             '(body cleanup error-cleanup caught)
+             (let ((events '()))
          (with-null-runner
           (lambda (runner)
             (test-group-with-cleanup
@@ -177,11 +180,14 @@
                "error"
                (error "cleanup exercise")
                (set! events (cons 'error-cleanup events))))))
-         (reverse events))
-       '(body cleanup error-cleanup caught))
+         (reverse events))))
 
-(check 'bad-count-and-end-name-callbacks
-       (let ((events '()))
+(testing-registry-case
+ 'bad-count-and-end-name-callbacks '(portable stdlib)
+ ("stdlib-testing-test.scm" 185)
+(test-equal 'bad-count-and-end-name-callbacks
+             '((name "different" "counted") (count 1 2))
+             (let ((events '()))
          (with-null-runner
           (lambda (runner)
             (test-runner-on-bad-count!
@@ -195,11 +201,14 @@
             (test-begin "counted" 2)
             (test-assert "only" #t)
             (test-end "different")))
-         (reverse events))
-       '((name "different" "counted") (count 1 2)))
+         (reverse events))))
 
-(check 'runner-factory-current-and-reset
-       (let ((saved-factory (test-runner-factory))
+(testing-registry-case
+ 'runner-factory-current-and-reset '(portable stdlib)
+ ("stdlib-testing-test.scm" 206)
+(test-equal 'runner-factory-current-and-reset
+             '(#t #t (1 0 0 0 0) (0 0 0 0 0) ())
+             (let ((saved-factory (test-runner-factory))
              (saved-current (test-runner-current)))
          (dynamic-wind
              (lambda ()
@@ -220,11 +229,14 @@
                          (test-runner-group-stack runner)))))
              (lambda ()
                (test-runner-factory saved-factory)
-               (test-runner-current saved-current))))
-       '(#t #t (1 0 0 0 0) (0 0 0 0 0) ()))
+               (test-runner-current saved-current))))))
 
-(check 'result-property-mutation
-       (let ((runner
+(testing-registry-case
+ 'result-property-mutation '(portable stdlib)
+ ("stdlib-testing-test.scm" 234)
+(test-equal 'result-property-mutation
+             '(41 42 missing cleared)
+             (let ((runner
               (with-null-runner
                (lambda (runner)
                  (test-assert "property" #t)))))
@@ -237,15 +249,17 @@
                (test-result-set! runner 'again 'present)
                (test-result-clear runner)
                (list set-value replaced removed
-                     (test-result-ref runner 'again 'cleared))))))
-       '(41 42 missing cleared))
+                     (test-result-ref runner 'again 'cleared))))))))
 
-(check 'manifest-reports-upstream-meta-suite
-       (let* ((entry (stdlib-manifest-ref '(stdlib testing)))
+(testing-registry-case
+ 'manifest-reports-upstream-meta-suite '(portable stdlib)
+ ("stdlib-testing-test.scm" 254)
+(test-equal 'manifest-reports-upstream-meta-suite
+             #t
+             (let* ((entry (stdlib-manifest-ref '(stdlib testing)))
               (verification (assq 'verification (cdr entry)))
               (status (and verification
                            (assq 'test-status (cadr verification)))))
-         (and status (memq 'upstream-meta-suite (cadr status)) #t))
-       #t)
+         (and status (memq 'upstream-meta-suite (cadr status)) #t))))
 
-(finish-testing-tests)
+(testing-runner-main "Stdlib Testing portable tests" (command-line))

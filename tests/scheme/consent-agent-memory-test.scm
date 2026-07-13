@@ -7,39 +7,11 @@
 ;;; memory record stream before host persistence or UI code sees it.
 
 (import (scheme base)
-        (agent memory))
-
-;; Count failed checks so the portable runner reports every mismatch.
-(define failures 0)
-
-;; Record one failed check and keep running the rest of the portable test file.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal?.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
-
-;; Assert THUNK raises an error.
-(define (check-error name thunk)
-  (check name
-         (guard (condition
-                 (else #t))
-           (thunk)
-           #f)
-         #t))
+        (agent memory)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Return #t when VALUE appears in VALUES using equal?.
 (define (member-equal? value values)
@@ -72,6 +44,9 @@
 
 ;;;; Memory classes and append-only update/delete projection
 
+(testing-registry-case
+ 'default-memory-class '(portable agent)
+ ("consent-agent-memory-test.scm" 47)
 (let* ((store (consent-make-memory-store))
        (first
         (memory-store-put! store
@@ -89,32 +64,35 @@
        (deleted (memory-store-delete! store 'project 'alpha))
        (records (memory-store-records store))
        (tombstone (if (pair? records) (car records) 'missing)))
-  (check 'default-memory-class
-         (memory-record-class first)
-         'semantic)
-  (check 'explicit-memory-class
-         (memory-record-class second)
-         'procedural)
-  (check 'delete-returns-current-record
-         (memory-record-field-value deleted 'value #f)
-         "second")
-  (check 'deleted-key-is-not-live
-         (memory-store-ref store 'project 'alpha)
-         #f)
-  (check 'update-and-delete-append-events
-         (length records)
-         3)
-  (check 'tombstone-kind
-         (memory-record-field-value tombstone 'kind #f)
-         'memory-tombstone)
-  (check 'tombstone-supersedes-current
-         (memory-record-field-value tombstone 'supersedes #f)
-         (list (memory-record-id second)))
-  (check-true 'first-record-remains-in-stream
-              (member-equal? first records)))
+  (test-equal 'default-memory-class
+             'semantic
+             (memory-record-class first))
+  (test-equal 'explicit-memory-class
+             'procedural
+             (memory-record-class second))
+  (test-equal 'delete-returns-current-record
+             "second"
+             (memory-record-field-value deleted 'value #f))
+  (test-equal 'deleted-key-is-not-live
+             #f
+             (memory-store-ref store 'project 'alpha))
+  (test-equal 'update-and-delete-append-events
+             3
+             (length records))
+  (test-equal 'tombstone-kind
+             'memory-tombstone
+             (memory-record-field-value tombstone 'kind #f))
+  (test-equal 'tombstone-supersedes-current
+             (list (memory-record-id second))
+             (memory-record-field-value tombstone 'supersedes #f))
+  (test-assert 'first-record-remains-in-stream
+             (member-equal? first records))))
 
 ;;;; Gated reflection appends insight datums without mutating observations
 
+(testing-registry-case
+ 'reflection-kind '(portable agent)
+ ("consent-agent-memory-test.scm" 93)
 (let* ((store (consent-make-memory-store))
        (base
         (memory-store-add! store
@@ -131,29 +109,32 @@
                                'failed
                                'runner-step-7))
        (records (memory-store-records store)))
-  (check 'reflection-kind
-         (memory-record-field-value reflection 'kind #f)
-         'task-reflection)
-  (check 'reflection-class
-         (memory-record-class reflection)
-         'semantic)
-  (check 'reflection-cites-base
-         (memory-record-field-value reflection 'cites #f)
-         (list (memory-record-id base)))
-  (check 'reflection-receipt
-         (memory-record-field-value reflection 'receipt #f)
-         'failed)
-  (check 'reflection-source
-         (memory-record-field-value reflection 'source #f)
-         '(deterministic-loop runner-step-7))
-  (check 'reflection-appends-only
-         (length records)
-         2)
-  (check-true 'base-observation-remains-in-stream
-              (member-equal? base records)))
+  (test-equal 'reflection-kind
+             'task-reflection
+             (memory-record-field-value reflection 'kind #f))
+  (test-equal 'reflection-class
+             'semantic
+             (memory-record-class reflection))
+  (test-equal 'reflection-cites-base
+             (list (memory-record-id base))
+             (memory-record-field-value reflection 'cites #f))
+  (test-equal 'reflection-receipt
+             'failed
+             (memory-record-field-value reflection 'receipt #f))
+  (test-equal 'reflection-source
+             '(deterministic-loop runner-step-7)
+             (memory-record-field-value reflection 'source #f))
+  (test-equal 'reflection-appends-only
+             2
+             (length records))
+  (test-assert 'base-observation-remains-in-stream
+             (member-equal? base records))))
 
 ;;;; Scope-qualified live projection and access recency
 
+(testing-registry-case
+ 'same-key-project-live-record '(portable agent)
+ ("consent-agent-memory-test.scm" 135)
 (let* ((store (consent-make-memory-store))
        (project
         (memory-store-put! store
@@ -186,39 +167,42 @@
            (allowed-scopes (project session))
            (logical-clock 4))))
        (candidates (memory-selection-candidates selection)))
-  (check 'same-key-project-live-record
-         (memory-record-field-value
+  (test-equal 'same-key-project-live-record
+             "Project scoped note."
+             (memory-record-field-value
           (memory-store-ref store 'project 'shared)
           'value
-          #f)
-         "Project scoped note.")
-  (check 'same-key-session-live-record
-         (memory-record-field-value
+          #f))
+  (test-equal 'same-key-session-live-record
+             "Session scoped note."
+             (memory-record-field-value
           (memory-store-ref store 'session 'shared)
           'value
-          #f)
-         "Session scoped note.")
-  (check 'scope-qualified-access-event-kind
-         (memory-record-field-value access 'kind #f)
-         'memory-access)
-  (check 'scope-qualified-selected-record-count
-         (length (memory-selection-records selection))
-         1)
-  (check 'scope-qualified-selected-record-scope
-         (memory-record-field-value
+          #f))
+  (test-equal 'scope-qualified-access-event-kind
+             'memory-access
+             (memory-record-field-value access 'kind #f))
+  (test-equal 'scope-qualified-selected-record-count
+             1
+             (length (memory-selection-records selection)))
+  (test-equal 'scope-qualified-selected-record-scope
+             'project
+             (memory-record-field-value
           (car (memory-selection-records selection))
           'scope
-          #f)
-         'project)
-  (check 'scope-qualified-selected-candidate-count
-         (count-if
+          #f))
+  (test-equal 'scope-qualified-selected-candidate-count
+             1
+             (count-if
           (lambda (candidate)
             (eq? (memory-record-field-value candidate 'status #f) 'selected))
-          candidates)
-         1))
+          candidates))))
 
 ;;;; Deterministic retrieval and lower-trust prompt filtering
 
+(testing-registry-case
+ 'selection-record '(portable agent)
+ ("consent-agent-memory-test.scm" 203)
 (let* ((store (consent-make-memory-store))
        (public
         (memory-store-add! store
@@ -266,44 +250,47 @@
         (candidate-for-id selection (memory-record-id local)))
        (session-candidate
         (candidate-for-id selection (memory-record-id session))))
-  (check-true 'selection-record
-              (memory-selection? selection))
-  (check 'access-event-kind
-         (memory-record-field-value access 'kind #f)
-         'memory-access)
-  (check 'selected-record-count
-         (length (memory-selection-records selection))
-         1)
-  (check 'selected-record-id
-         (memory-record-id (car (memory-selection-records selection)))
-         (memory-record-id public))
-  (check 'selection-cutoff
-         (memory-selection-cutoff selection)
-         1)
-  (check 'public-candidate-status
-         (memory-record-field-value public-candidate 'status #f)
-         'selected)
-  (check 'public-candidate-score
-         (memory-record-field-value public-candidate 'score #f)
-         6)
-  (check 'public-candidate-subscores
-         (memory-record-field-value public-candidate 'subscores #f)
-         '((recency 1) (importance 2) (relevance 1)))
-  (check 'local-candidate-filtered-before-ranking
-         (memory-record-field-value local-candidate 'status #f)
-         'filtered)
-  (check 'local-candidate-filter-reason
-         (memory-record-field-value local-candidate 'reason #f)
-         'redaction-or-local-only)
-  (check 'local-candidate-not-ranked
-         (memory-record-field-value local-candidate 'score #f)
-         'not-ranked)
-  (check 'session-candidate-filtered-by-scope
-         (memory-record-field-value session-candidate 'reason #f)
-         'scope-mismatch))
+  (test-assert 'selection-record
+             (memory-selection? selection))
+  (test-equal 'access-event-kind
+             'memory-access
+             (memory-record-field-value access 'kind #f))
+  (test-equal 'selected-record-count
+             1
+             (length (memory-selection-records selection)))
+  (test-equal 'selected-record-id
+             (memory-record-id public)
+             (memory-record-id (car (memory-selection-records selection))))
+  (test-equal 'selection-cutoff
+             1
+             (memory-selection-cutoff selection))
+  (test-equal 'public-candidate-status
+             'selected
+             (memory-record-field-value public-candidate 'status #f))
+  (test-equal 'public-candidate-score
+             6
+             (memory-record-field-value public-candidate 'score #f))
+  (test-equal 'public-candidate-subscores
+             '((recency 1) (importance 2) (relevance 1))
+             (memory-record-field-value public-candidate 'subscores #f))
+  (test-equal 'local-candidate-filtered-before-ranking
+             'filtered
+             (memory-record-field-value local-candidate 'status #f))
+  (test-equal 'local-candidate-filter-reason
+             'redaction-or-local-only
+             (memory-record-field-value local-candidate 'reason #f))
+  (test-equal 'local-candidate-not-ranked
+             'not-ranked
+             (memory-record-field-value local-candidate 'score #f))
+  (test-equal 'session-candidate-filtered-by-scope
+             'scope-mismatch
+             (memory-record-field-value session-candidate 'reason #f))))
 
 ;;;; Live projection applies to every store read surface
 
+(testing-registry-case
+ 'live-projection-record-stream-count '(portable agent)
+ ("consent-agent-memory-test.scm" 291)
 (let* ((store (consent-make-memory-store))
        (alpha-old
         (memory-store-put! store
@@ -330,42 +317,45 @@
                               'prompt-build))
        (deleted (memory-store-delete! store 'project 'alpha))
        (recent (memory-store-recent store 'project 10)))
-  (check 'live-projection-record-stream-count
-         (length (memory-store-records store))
-         5)
-  (check 'live-projection-deleted-record
-         (memory-record-id deleted)
-         (memory-record-id alpha-new))
-  (check 'live-projection-alpha-ref
-         (memory-store-ref store 'project 'alpha)
-         #f)
-  (check 'live-projection-beta-ref
-         (memory-record-id (memory-store-ref store 'project 'beta))
-         (memory-record-id beta))
-  (check 'live-projection-find-old
-         (memory-store-find store 'project "old alpha")
-         '())
-  (check 'live-projection-find-new-after-delete
-         (memory-store-find store 'project "new alpha")
-         '())
-  (check 'live-projection-by-current-tag
-         (map memory-record-id
-              (memory-store-by-tag store 'project 'current))
-         (list (memory-record-id beta)))
-  (check 'live-projection-access-event-not-live
-         (map memory-record-id
-              (memory-store-by-tag store 'project 'memory-access))
-         '())
-  (check 'live-projection-recent-only-live
-         (map memory-record-id recent)
-         (list (memory-record-id beta)))
-  (check-true 'live-projection-access-record-is-canonical
-              (member-equal? access (memory-store-records store)))
-  (check-true 'live-projection-old-record-remains-canonical
-              (member-equal? alpha-old (memory-store-records store))))
+  (test-equal 'live-projection-record-stream-count
+             5
+             (length (memory-store-records store)))
+  (test-equal 'live-projection-deleted-record
+             (memory-record-id alpha-new)
+             (memory-record-id deleted))
+  (test-equal 'live-projection-alpha-ref
+             #f
+             (memory-store-ref store 'project 'alpha))
+  (test-equal 'live-projection-beta-ref
+             (memory-record-id beta)
+             (memory-record-id (memory-store-ref store 'project 'beta)))
+  (test-equal 'live-projection-find-old
+             '()
+             (memory-store-find store 'project "old alpha"))
+  (test-equal 'live-projection-find-new-after-delete
+             '()
+             (memory-store-find store 'project "new alpha"))
+  (test-equal 'live-projection-by-current-tag
+             (list (memory-record-id beta))
+             (map memory-record-id
+              (memory-store-by-tag store 'project 'current)))
+  (test-equal 'live-projection-access-event-not-live
+             '()
+             (map memory-record-id
+              (memory-store-by-tag store 'project 'memory-access)))
+  (test-equal 'live-projection-recent-only-live
+             (list (memory-record-id beta))
+             (map memory-record-id recent))
+  (test-assert 'live-projection-access-record-is-canonical
+             (member-equal? access (memory-store-records store)))
+  (test-assert 'live-projection-old-record-remains-canonical
+             (member-equal? alpha-old (memory-store-records store)))))
 
 ;;;; Deterministic selection ordering, limit, and cutoff receipts
 
+(testing-registry-case
+ 'selection-limit-selected-list '(portable agent)
+ ("consent-agent-memory-test.scm" 356)
 (let* ((store (consent-make-memory-store))
        (below
         (memory-store-add! store
@@ -407,36 +397,39 @@
         (candidate-for-id selection (memory-record-id tie-left)))
        (right-candidate
         (candidate-for-id selection (memory-record-id tie-right))))
-  (check 'selection-limit-selected-list
-         (map memory-record-id (memory-selection-records selection))
-         (list (memory-record-id tie-left)))
-  (check 'selection-tie-breaks-by-id
-         (memory-record-id (car (memory-selection-records selection)))
-         'm-2)
-  (check 'selection-left-status
-         (memory-record-field-value left-candidate 'status #f)
-         'selected)
-  (check 'selection-left-score
-         (memory-record-field-value left-candidate 'score #f)
-         5)
-  (check 'selection-right-limited
-         (memory-record-field-value right-candidate 'status #f)
-         'not-selected)
-  (check 'selection-right-limit-reason
-         (memory-record-field-value right-candidate 'reason #f)
-         'below-cutoff-or-limit)
-  (check 'selection-below-cutoff
-         (memory-record-field-value below-candidate 'status #f)
-         'not-selected)
-  (check 'selection-below-cutoff-score
-         (memory-record-field-value below-candidate 'score #f)
-         1)
-  (check 'selection-below-cutoff-reason
-         (memory-record-field-value below-candidate 'reason #f)
-         'below-cutoff-or-limit))
+  (test-equal 'selection-limit-selected-list
+             (list (memory-record-id tie-left))
+             (map memory-record-id (memory-selection-records selection)))
+  (test-equal 'selection-tie-breaks-by-id
+             'm-2
+             (memory-record-id (car (memory-selection-records selection))))
+  (test-equal 'selection-left-status
+             'selected
+             (memory-record-field-value left-candidate 'status #f))
+  (test-equal 'selection-left-score
+             5
+             (memory-record-field-value left-candidate 'score #f))
+  (test-equal 'selection-right-limited
+             'not-selected
+             (memory-record-field-value right-candidate 'status #f))
+  (test-equal 'selection-right-limit-reason
+             'below-cutoff-or-limit
+             (memory-record-field-value right-candidate 'reason #f))
+  (test-equal 'selection-below-cutoff
+             'not-selected
+             (memory-record-field-value below-candidate 'status #f))
+  (test-equal 'selection-below-cutoff-score
+             1
+             (memory-record-field-value below-candidate 'score #f))
+  (test-equal 'selection-below-cutoff-reason
+             'below-cutoff-or-limit
+             (memory-record-field-value below-candidate 'reason #f))))
 
 ;;;; Scope datums and record replacement round-trip canonical memory
 
+(testing-registry-case
+ 'scope-datum-scope '(portable agent)
+ ("consent-agent-memory-test.scm" 430)
 (let* ((store (consent-make-memory-store))
        (first
         (memory-store-add! store
@@ -468,31 +461,34 @@
                              (value "roundtrip two"))))
        (session-datum
         (memory-scope-datum 'session 'session-1 #f records)))
-  (check 'scope-datum-scope
-         (memory-record-field-value scope-datum 'scope #f)
-         'project)
-  (check 'scope-datum-storage
-         (memory-record-field-value scope-datum 'storage #f)
-         storage)
-  (check 'scope-datum-records-roundtrip
-         records
-         (list first))
-  (check 'replace-records-return-value
-         replaced
-         (list first))
-  (check 'replace-records-resets-generated-id
-         (memory-record-id second)
-         'm-2)
-  (check 'replace-records-keeps-existing-record
-         (memory-record-id
-          (memory-store-ref roundtrip 'project (memory-record-id first)))
-         (memory-record-id first))
-  (check 'session-scope-datum-subject
-         (memory-record-field-value session-datum 'session #f)
-         'session-1))
+  (test-equal 'scope-datum-scope
+             'project
+             (memory-record-field-value scope-datum 'scope #f))
+  (test-equal 'scope-datum-storage
+             storage
+             (memory-record-field-value scope-datum 'storage #f))
+  (test-equal 'scope-datum-records-roundtrip
+             (list first)
+             records)
+  (test-equal 'replace-records-return-value
+             (list first)
+             replaced)
+  (test-equal 'replace-records-resets-generated-id
+             'm-2
+             (memory-record-id second))
+  (test-equal 'replace-records-keeps-existing-record
+             (memory-record-id first)
+             (memory-record-id
+          (memory-store-ref roundtrip 'project (memory-record-id first))))
+  (test-equal 'session-scope-datum-subject
+             'session-1
+             (memory-record-field-value session-datum 'session #f))))
 
 ;;;; Validation failures and lower-trust redaction filtering
 
+(testing-registry-case
+ 'invalid-scope '(portable agent)
+ ("consent-agent-memory-test.scm" 489)
 (let* ((store (consent-make-memory-store))
        (sensitive
         (memory-store-add! store
@@ -549,55 +545,48 @@
         (candidate-for-id public-selection (memory-record-id sensitive)))
        (lower-candidate
         (candidate-for-id lower-selection (memory-record-id sensitive))))
-  (check-error 'invalid-scope
-               (lambda ()
+  (test-error 'invalid-scope ((lambda ()
                  (memory-store-add! store
                                     'workspace
                                     'fact
-                                    '((value "bad scope")))))
-  (check-error 'invalid-memory-class
-               (lambda ()
+                                    '((value "bad scope"))))))
+  (test-error 'invalid-memory-class ((lambda ()
                  (memory-store-add! store
                                     'project
                                     'fact
                                     '((memory-class mystery)
-                                      (value "bad class")))))
-  (check-error 'invalid-recent-count
-               (lambda ()
-                 (memory-store-recent store 'project 'one)))
-  (check-error 'invalid-selection-limit
-               (lambda ()
+                                      (value "bad class"))))))
+  (test-error 'invalid-recent-count ((lambda ()
+                 (memory-store-recent store 'project 'one))))
+  (test-error 'invalid-selection-limit ((lambda ()
                  (memory-store-select
                   store
                   '(sensitive)
                   '(retrieval-policy (limit one))
-                  '(retrieval-context (scope project)))))
-  (check-error 'invalid-selection-cutoff
-               (lambda ()
+                  '(retrieval-context (scope project))))))
+  (test-error 'invalid-selection-cutoff ((lambda ()
                  (memory-store-select
                   store
                   '(sensitive)
                   '(retrieval-policy (cutoff high))
-                  '(retrieval-context (scope project)))))
-  (check-error 'scope-datum-missing-records
-               (lambda ()
+                  '(retrieval-context (scope project))))))
+  (test-error 'scope-datum-missing-records ((lambda ()
                  (memory-scope-datum-records
-                  '(agent-memory (scope project)))))
-  (check 'local-trust-allows-sensitive-record
-         (memory-record-field-value local-candidate 'status #f)
-         'selected)
-  (check 'remote-trust-filters-nested-redaction
-         (memory-record-field-value remote-candidate 'reason #f)
-         'redaction-or-local-only)
-  (check 'public-trust-filters-nested-redaction
-         (memory-record-field-value public-candidate 'reason #f)
-         'redaction-or-local-only)
-  (check 'lower-trust-filters-nested-redaction
-         (memory-record-field-value lower-candidate 'reason #f)
-         'redaction-or-local-only)
-  (check 'remote-selection-withholds-sensitive-records
-         (memory-selection-records remote-selection)
-         '()))
+                  '(agent-memory (scope project))))))
+  (test-equal 'local-trust-allows-sensitive-record
+             'selected
+             (memory-record-field-value local-candidate 'status #f))
+  (test-equal 'remote-trust-filters-nested-redaction
+             'redaction-or-local-only
+             (memory-record-field-value remote-candidate 'reason #f))
+  (test-equal 'public-trust-filters-nested-redaction
+             'redaction-or-local-only
+             (memory-record-field-value public-candidate 'reason #f))
+  (test-equal 'lower-trust-filters-nested-redaction
+             'redaction-or-local-only
+             (memory-record-field-value lower-candidate 'reason #f))
+  (test-equal 'remote-selection-withholds-sensitive-records
+             '()
+             (memory-selection-records remote-selection))))
 
-(if (> failures 0)
-    (error "portable agent memory tests failed" failures))
+(testing-runner-main "Consent Agent Memory portable tests" (command-line))

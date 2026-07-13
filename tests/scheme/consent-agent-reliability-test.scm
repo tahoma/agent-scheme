@@ -12,30 +12,11 @@
         (scheme file)
         (scheme read)
         (scheme write)
-        (agent reliability))
-
-;; Count failed checks so the portable runner can report every mismatch.
-(define failures 0)
-
-;; Record one failed check and keep running the rest of the portable test file.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal?.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
+        (agent reliability)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Shared fixture consumed by both portable and Emacs-hosted tests.
 (define reliability-fixture
@@ -52,81 +33,96 @@
 
 ;; Baseline: one complete, one budget-exhausted, one policy-denied, and one
 ;; failed-verifier run.
+(testing-registry-case
+ 'baseline-total '(portable agent)
+ ("consent-agent-reliability-test.scm" 36)
 (let ((report (measure-reliability reliability-fixture 2 '())))
-  (check 'baseline-total
-         (reliability-field-value report 'total)
-         4)
-  (check 'baseline-passed
-         (reliability-field-value report 'passed)
-         1)
-  (check 'baseline-pass-1
-         (reliability-field-value report 'pass^1)
-         1/4)
-  (check 'baseline-pass-2
-         (reliability-field-value report 'pass^k)
-         0)
-  (check 'baseline-complete-slice
-         (slice-count report 'complete)
-         1)
-  (check 'baseline-budget-slice
-         (slice-count report 'budget-exhausted)
-         1)
-  (check 'baseline-policy-slice
-         (slice-count report 'policy-denied)
-         1)
-  (check 'baseline-verifier-slice
-         (slice-count report 'failed-verifier)
-         1)
-  (check-true 'baseline-trials-recorded
-              (= (length (reliability-field-value report 'trials)) 4)))
+  (test-equal 'baseline-total
+             4
+             (reliability-field-value report 'total))
+  (test-equal 'baseline-passed
+             1
+             (reliability-field-value report 'passed))
+  (test-equal 'baseline-pass-1
+             1/4
+             (reliability-field-value report 'pass^1))
+  (test-equal 'baseline-pass-2
+             0
+             (reliability-field-value report 'pass^k))
+  (test-equal 'baseline-complete-slice
+             1
+             (slice-count report 'complete))
+  (test-equal 'baseline-budget-slice
+             1
+             (slice-count report 'budget-exhausted))
+  (test-equal 'baseline-policy-slice
+             1
+             (slice-count report 'policy-denied))
+  (test-equal 'baseline-verifier-slice
+             1
+             (slice-count report 'failed-verifier))
+  (test-assert 'baseline-trials-recorded
+             (= (length (reliability-field-value report 'trials)) 4))))
 
 ;; Disabling advisory policy lets the advisory-violation trial pass, but the
 ;; gate-denied trial remains denied.
+(testing-registry-case
+ 'advisory-disabled-pass-1 '(portable agent)
+ ("consent-agent-reliability-test.scm" 69)
 (let ((report (measure-reliability
                reliability-fixture
                2
                '((advisory-policy disabled)))))
-  (check 'advisory-disabled-pass-1
-         (reliability-field-value report 'pass^1)
-         1/2)
-  (check 'advisory-disabled-pass-2
-         (reliability-field-value report 'pass^k)
-         1/6)
-  (check 'advisory-disabled-complete-slice
-         (slice-count report 'complete)
-         2)
-  (check 'advisory-disabled-policy-slice
-         (slice-count report 'policy-denied)
-         1))
+  (test-equal 'advisory-disabled-pass-1
+             1/2
+             (reliability-field-value report 'pass^1))
+  (test-equal 'advisory-disabled-pass-2
+             1/6
+             (reliability-field-value report 'pass^k))
+  (test-equal 'advisory-disabled-complete-slice
+             2
+             (slice-count report 'complete))
+  (test-equal 'advisory-disabled-policy-slice
+             1
+             (slice-count report 'policy-denied))))
 
 ;; Attempting to disable the gate-enforced tier has no effect.
+(testing-registry-case
+ 'gate-disabled-pass-1 '(portable agent)
+ ("consent-agent-reliability-test.scm" 90)
 (let ((report (measure-reliability
                reliability-fixture
                2
                '((gate-enforced-policy disabled)))))
-  (check 'gate-disabled-pass-1
-         (reliability-field-value report 'pass^1)
-         1/4)
-  (check 'gate-disabled-policy-slice
-         (slice-count report 'policy-denied)
-         1))
+  (test-equal 'gate-disabled-pass-1
+             1/4
+             (reliability-field-value report 'pass^1))
+  (test-equal 'gate-disabled-policy-slice
+             1
+             (slice-count report 'policy-denied))))
 
 ;; The ablation report captures the pass^1 delta for advisory rules and the
 ;; zero delta for gate-enforced authority rules.
+(testing-registry-case
+ 'ablation-advisory-delta '(portable agent)
+ ("consent-agent-reliability-test.scm" 106)
 (let ((ablation (measure-policy-ablation reliability-fixture)))
-  (check 'ablation-advisory-delta
-         (reliability-field-value ablation 'advisory-pass^1-delta)
-         1/4)
-  (check 'ablation-gate-delta
-         (reliability-field-value ablation 'gate-pass^1-delta)
-         0)
-  (check 'ablation-gate-unablatable
-         (reliability-field-value ablation 'gate-enforced-unablatable)
-         #t))
+  (test-equal 'ablation-advisory-delta
+             1/4
+             (reliability-field-value ablation 'advisory-pass^1-delta))
+  (test-equal 'ablation-gate-delta
+             0
+             (reliability-field-value ablation 'gate-pass^1-delta))
+  (test-equal 'ablation-gate-unablatable
+             #t
+             (reliability-field-value ablation 'gate-enforced-unablatable))))
 
 ;; Reward compares canonical external forms instead of raw equal? so record
 ;; streams can be replayed by host implementations with different object
 ;; identity behavior.
+(testing-registry-case
+ 'canonical-reward-mismatch '(portable agent)
+ ("consent-agent-reliability-test.scm" 123)
 (let ((mismatch
        (measure-reliability
         '(consent-agent-reliability-fixture
@@ -142,12 +138,11 @@
              (provider ((finish (record (status actual)))))))))
         1
         '())))
-  (check 'canonical-reward-mismatch
-         (reliability-field-value mismatch 'passed)
-         0)
-  (check 'canonical-reward-failed-verifier
-         (slice-count mismatch 'failed-verifier)
-         1))
+  (test-equal 'canonical-reward-mismatch
+             0
+             (reliability-field-value mismatch 'passed))
+  (test-equal 'canonical-reward-failed-verifier
+             1
+             (slice-count mismatch 'failed-verifier))))
 
-(if (> failures 0)
-    (error "portable agent reliability tests failed" failures))
+(testing-runner-main "Consent Agent Reliability portable tests" (command-line))

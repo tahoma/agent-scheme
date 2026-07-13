@@ -12,30 +12,11 @@
 
 (import (scheme base)
         (scheme write)
-        (agent proposal))
-
-;; Count failed checks so the portable runner can report every mismatch.
-(define failures 0)
-
-;; Record one failed check and keep running the rest of the portable test file.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal?.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
+        (agent proposal)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Host-operation table shared by the gated-call checks below.
 (define operations
@@ -66,175 +47,242 @@
 
 ;;;; Control-plane vocabulary
 
-(check-true 'control-plane-grant
-            (proposal-control-plane-operation? 'grant-capability!))
-(check-true 'control-plane-approval
-            (proposal-control-plane-operation? 'approval-resolve!))
-(check-true 'control-plane-rejects-pure
-            (not (proposal-control-plane-operation? 'cons)))
-(check-true 'control-plane-list-has-revoke
-            (and (memq 'grant-revoke! proposal-control-plane-operations) #t))
+(testing-registry-case
+ 'control-plane-grant '(portable agent)
+ ("consent-agent-proposal-test.scm" 50)
+(test-assert 'control-plane-grant
+             (proposal-control-plane-operation? 'grant-capability!)))
+(testing-registry-case
+ 'control-plane-approval '(portable agent)
+ ("consent-agent-proposal-test.scm" 55)
+(test-assert 'control-plane-approval
+             (proposal-control-plane-operation? 'approval-resolve!)))
+(testing-registry-case
+ 'control-plane-rejects-pure '(portable agent)
+ ("consent-agent-proposal-test.scm" 60)
+(test-assert 'control-plane-rejects-pure
+             (not (proposal-control-plane-operation? 'cons))))
+(testing-registry-case
+ 'control-plane-list-has-revoke '(portable agent)
+ ("consent-agent-proposal-test.scm" 65)
+(test-assert 'control-plane-list-has-revoke
+             (and (memq 'grant-revoke! proposal-control-plane-operations) #t)))
 
 ;;;; A pure form is allowed and charges a deterministic bounded cost
 
+(testing-registry-case
+ 'pure-is-analysis '(portable agent)
+ ("consent-agent-proposal-test.scm" 73)
 (let ((analysis (analyze-code-action '(+ 1 2) '())))
-  (check-true 'pure-is-analysis (code-action-analysis? analysis))
-  (check 'pure-status (analysis-status analysis) 'allowed)
-  (check 'pure-cost (analysis-pure-cost analysis) 4)
-  (check 'pure-no-requests (analysis-capability-requests analysis) '())
-  (check 'pure-no-decisions (analysis-quarantine-decisions analysis) '()))
+  (test-assert 'pure-is-analysis (code-action-analysis? analysis))
+  (test-equal 'pure-status 'allowed (analysis-status analysis))
+  (test-equal 'pure-cost 4 (analysis-pure-cost analysis))
+  (test-equal 'pure-no-requests '() (analysis-capability-requests analysis))
+  (test-equal 'pure-no-decisions '() (analysis-quarantine-decisions analysis))))
 
 ;;;; A host call is routed to a capability-request, never executed
 
+(testing-registry-case
+ 'gated-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 85)
 (let ((analysis (analyze-code-action '(file-write "out.txt" payload)
                                      (list (list 'operations operations)))))
-  (check 'gated-status (analysis-status analysis) 'gated)
-  (check 'gated-no-decisions (analysis-quarantine-decisions analysis) '())
+  (test-equal 'gated-status 'gated (analysis-status analysis))
+  (test-equal 'gated-no-decisions '() (analysis-quarantine-decisions analysis))
   (let ((requests (analysis-capability-requests analysis)))
-    (check 'gated-one-request (length requests) 1)
+    (test-equal 'gated-one-request 1 (length requests))
     (let ((request (car requests)))
-      (check-true 'gated-request-predicate (capability-request? request))
-      (check 'gated-request-source
-             (proposal-field-value request 'source) 'proposal)
-      (check 'gated-request-operation
-             (proposal-field-value request 'operation) 'file-write)
-      (check 'gated-request-effect
-             (proposal-field-value request 'effect) 'host-mutation)
-      (check 'gated-request-requires
-             (proposal-field-value request 'requires) 'file-system)
-      (check 'gated-request-form
-             (proposal-field-value request 'form)
-             '(file-write "out.txt" payload)))))
+      (test-assert 'gated-request-predicate (capability-request? request))
+      (test-equal 'gated-request-source
+             'proposal
+             (proposal-field-value request 'source))
+      (test-equal 'gated-request-operation
+             'file-write
+             (proposal-field-value request 'operation))
+      (test-equal 'gated-request-effect
+             'host-mutation
+             (proposal-field-value request 'effect))
+      (test-equal 'gated-request-requires
+             'file-system
+             (proposal-field-value request 'requires))
+      (test-equal 'gated-request-form
+             '(file-write "out.txt" payload)
+             (proposal-field-value request 'form))))))
 
 ;; A host call nested inside otherwise pure structure is still discovered.
+(testing-registry-case
+ 'nested-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 113)
 (let ((analysis (analyze-code-action
                  '(begin (display "x") (read-file "notes.txt"))
                  (list (list 'operations operations)))))
-  (check 'nested-status (analysis-status analysis) 'gated)
-  (check 'nested-one-request
-         (length (analysis-capability-requests analysis)) 1)
-  (check 'nested-operation
-         (proposal-field-value
-          (car (analysis-capability-requests analysis)) 'operation)
-         'read-file))
+  (test-equal 'nested-status 'gated (analysis-status analysis))
+  (test-equal 'nested-one-request
+             1
+             (length (analysis-capability-requests analysis)))
+  (test-equal 'nested-operation
+             'read-file
+             (proposal-field-value
+          (car (analysis-capability-requests analysis)) 'operation))))
 
 ;;;; Control-plane sub-forms are quarantined to a denied capability-decision
 
+(testing-registry-case
+ 'quarantine-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 130)
 (let ((analysis (analyze-code-action
                  '(grant-capability! token authority)
                  (list (list 'operations operations)))))
-  (check 'quarantine-status (analysis-status analysis) 'quarantined)
-  (check 'quarantine-no-requests
-         (analysis-capability-requests analysis) '())
+  (test-equal 'quarantine-status 'quarantined (analysis-status analysis))
+  (test-equal 'quarantine-no-requests
+             '()
+             (analysis-capability-requests analysis))
   (let ((decisions (analysis-quarantine-decisions analysis)))
-    (check 'quarantine-one-decision (length decisions) 1)
+    (test-equal 'quarantine-one-decision 1 (length decisions))
     (let ((decision (car decisions)))
-      (check-true 'quarantine-decision-predicate
-                  (capability-decision? decision))
-      (check 'quarantine-decision-status
-             (capability-decision-status decision) 'denied)
-      (check 'quarantine-decision-operation
-             (proposal-field-value decision 'operation) 'grant-capability!)
-      (check 'quarantine-decision-reason
-             (proposal-field-value decision 'reason)
-             'proposal-quarantined-control-plane))))
+      (test-assert 'quarantine-decision-predicate
+             (capability-decision? decision))
+      (test-equal 'quarantine-decision-status
+             'denied
+             (capability-decision-status decision))
+      (test-equal 'quarantine-decision-operation
+             'grant-capability!
+             (proposal-field-value decision 'operation))
+      (test-equal 'quarantine-decision-reason
+             'proposal-quarantined-control-plane
+             (proposal-field-value decision 'reason))))))
 
 ;; Approval resolution from a proposal is also quarantined.
+(testing-registry-case
+ 'approval-quarantine-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 156)
 (let ((analysis (analyze-code-action
                  '(approval-resolve! store request-id approved) '())))
-  (check 'approval-quarantine-status
-         (analysis-status analysis) 'quarantined)
-  (check 'approval-quarantine-decision
-         (proposal-field-value
-          (car (analysis-quarantine-decisions analysis)) 'operation)
-         'approval-resolve!))
+  (test-equal 'approval-quarantine-status
+             'quarantined
+             (analysis-status analysis))
+  (test-equal 'approval-quarantine-decision
+             'approval-resolve!
+             (proposal-field-value
+          (car (analysis-quarantine-decisions analysis)) 'operation))))
 
 ;; A quarantine trigger dominates even when a host call is also present.
+(testing-registry-case
+ 'quarantine-dominates-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 170)
 (let ((analysis (analyze-code-action
                  '(begin (file-write "o" p) (grant-revoke! handle))
                  (list (list 'operations operations)))))
-  (check 'quarantine-dominates-status
-         (analysis-status analysis) 'quarantined)
-  (check 'quarantine-dominates-has-decision
-         (length (analysis-quarantine-decisions analysis)) 1))
+  (test-equal 'quarantine-dominates-status
+             'quarantined
+             (analysis-status analysis))
+  (test-equal 'quarantine-dominates-has-decision
+             1
+             (length (analysis-quarantine-decisions analysis)))))
 
 ;; Extra option-supplied quarantine triggers are honored.
+(testing-registry-case
+ 'extra-quarantine-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 184)
 (let ((analysis (analyze-code-action
                  '(custom-escalate now)
                  (list (list 'quarantine '(custom-escalate))))))
-  (check 'extra-quarantine-status
-         (analysis-status analysis) 'quarantined))
+  (test-equal 'extra-quarantine-status
+             'quarantined
+             (analysis-status analysis))))
 
 ;;;; The pure-form budget bounds the walk
 
+(testing-registry-case
+ 'budget-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 196)
 (let ((analysis (analyze-code-action
                  '(+ 1 (+ 2 (+ 3 4)))
                  (list (list 'max-pure-cost 3)))))
-  (check 'budget-status (analysis-status analysis) 'budget-exhausted))
+  (test-equal 'budget-status 'budget-exhausted (analysis-status analysis))))
 
 ;;;; Analysis is deterministic and replayable
 
-(check 'analysis-deterministic
-       (analyze-code-action '(file-write "o" p)
+(testing-registry-case
+ 'analysis-deterministic '(portable agent)
+ ("consent-agent-proposal-test.scm" 206)
+(test-equal 'analysis-deterministic
+             (analyze-code-action '(file-write "o" p)
                             (list (list 'operations operations)))
-       (analyze-code-action '(file-write "o" p)
-                            (list (list 'operations operations))))
+             (analyze-code-action '(file-write "o" p)
+                            (list (list 'operations operations)))))
 
 ;;;; Capability signature admission gates hallucinated and misapplied calls
 
+(testing-registry-case
+ 'signature-hallucinated-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 217)
 (let ((analysis
        (analyze-code-action
         '(imaginary-tool "notes.txt")
         (list (list 'capability-signatures capability-signatures)))))
-  (check 'signature-hallucinated-status
-         (analysis-status analysis) 'rejected)
+  (test-equal 'signature-hallucinated-status
+             'rejected
+             (analysis-status analysis))
   (let ((decision (car (analysis-failure-decisions analysis))))
-    (check-true 'signature-hallucinated-decision
-                (capability-decision? decision))
-    (check 'signature-hallucinated-reason
-           (proposal-field-value decision 'reason)
-           'hallucinated-tool)
-    (check 'signature-hallucinated-operation
-           (proposal-field-value decision 'operation)
-           'imaginary-tool)))
+    (test-assert 'signature-hallucinated-decision
+             (capability-decision? decision))
+    (test-equal 'signature-hallucinated-reason
+             'hallucinated-tool
+             (proposal-field-value decision 'reason))
+    (test-equal 'signature-hallucinated-operation
+             'imaginary-tool
+             (proposal-field-value decision 'operation)))))
 
+(testing-registry-case
+ 'signature-misapplied-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 237)
 (let ((analysis
        (analyze-code-action
         '(file-write 42 "payload")
         (list (list 'capability-signatures capability-signatures)))))
-  (check 'signature-misapplied-status
-         (analysis-status analysis) 'rejected)
+  (test-equal 'signature-misapplied-status
+             'rejected
+             (analysis-status analysis))
   (let ((decision (car (analysis-failure-decisions analysis))))
-    (check 'signature-misapplied-reason
-           (proposal-field-value decision 'reason)
-           'misapplied-tool)
-    (check 'signature-misapplied-operation
-           (proposal-field-value decision 'operation)
-           'file-write)))
+    (test-equal 'signature-misapplied-reason
+             'misapplied-tool
+             (proposal-field-value decision 'reason))
+    (test-equal 'signature-misapplied-operation
+             'file-write
+             (proposal-field-value decision 'operation)))))
 
+(testing-registry-case
+ 'signature-optional-default-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 255)
 (let ((analysis
        (analyze-code-action
         '(file-append "notes.txt")
         (list (list 'capability-signatures capability-signatures)))))
-  (check 'signature-optional-default-status
-         (analysis-status analysis) 'gated)
-  (check 'signature-optional-default-operation
-         (proposal-field-value
-          (car (analysis-capability-requests analysis)) 'operation)
-         'file-append))
+  (test-equal 'signature-optional-default-status
+             'gated
+             (analysis-status analysis))
+  (test-equal 'signature-optional-default-operation
+             'file-append
+             (proposal-field-value
+          (car (analysis-capability-requests analysis)) 'operation))))
 
+(testing-registry-case
+ 'signature-admitted-status '(portable agent)
+ ("consent-agent-proposal-test.scm" 270)
 (let ((analysis
        (analyze-code-action
         '(file-write "notes.txt" "payload")
         (list (list 'capability-signatures capability-signatures)))))
-  (check 'signature-admitted-status
-         (analysis-status analysis) 'gated)
-  (check 'signature-admitted-no-failures
-         (analysis-failure-decisions analysis) '())
-  (check 'signature-admitted-operation
-         (proposal-field-value
-          (car (analysis-capability-requests analysis)) 'operation)
-         'file-write))
+  (test-equal 'signature-admitted-status
+             'gated
+             (analysis-status analysis))
+  (test-equal 'signature-admitted-no-failures
+             '()
+             (analysis-failure-decisions analysis))
+  (test-equal 'signature-admitted-operation
+             'file-write
+             (proposal-field-value
+          (car (analysis-capability-requests analysis)) 'operation))))
 
-(if (> failures 0)
-    (error "portable agent proposal tests failed" failures))
+(testing-runner-main "Consent Agent Proposal portable tests" (command-line))

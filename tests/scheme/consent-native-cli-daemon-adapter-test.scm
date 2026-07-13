@@ -13,30 +13,11 @@
 (import (scheme base)
         (scheme file)
         (scheme read)
-        (scheme write))
-
-;; Count failed checks so one run reports every contract mismatch.
-(define failures 0)
-
-;; Record a failed contract check and keep validating the rest of the fixture.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED with equal? and record a named failure.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to a canonical boolean.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
+        (scheme write)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Return #t when PREDICATE accepts every value in VALUES.
 (define (every? predicate values)
@@ -249,116 +230,172 @@
         (handle-kind (field-value capability 'handle-kind))
         (effect (field-value capability 'effect))
         (effect-path (field-value capability 'effect-path)))
-    (check-true (list name 'library) (in-set? library provided-libraries))
-    (check-true (list name 'authority) (in-set? authority authority-classes))
-    (check-true (list name 'handle-kind) (in-set? handle-kind handle-kinds))
-    (check (list name 'effect-path) effect-path 'shared-capability-request)
-    (check (list name 'effect) effect (authority-effect authority))))
+    (test-assert (list name 'library) (in-set? library provided-libraries))
+    (test-assert (list name 'authority) (in-set? authority authority-classes))
+    (test-assert (list name 'handle-kind) (in-set? handle-kind handle-kinds))
+    (test-equal (list name 'effect-path) 'shared-capability-request effect-path)
+    (test-equal (list name 'effect) (authority-effect authority) effect)))
 
 ;; Validate one boundary record holds every field its head requires.
 (define (check-record spec)
   (let* ((head (car spec))
          (required (cdr spec))
          (record (record-by-head head)))
-    (check-true (list head 'present) record)
+    (test-assert (list head 'present) record)
     (if record
         (for-each
          (lambda (field-name)
-           (check-true (list head field-name)
-                       (field-present? record field-name)))
+           (test-assert (list head field-name)
+             (field-present? record field-name)))
          required))))
 
 ;; Validate a denial SCENARIO denies before any host operation runs.
 (define (check-denial-scenario id reason kind)
   (let ((scenario (scenario-by-id id)))
-    (check-true (list id 'present) scenario)
+    (test-assert (list id 'present) scenario)
     (if scenario
         (let ((decision (field-value scenario 'decision))
               (error-form (field-value scenario 'error)))
-          (check (list id 'host-operation)
-                 (field-value scenario 'host-operation)
-                 'not-performed)
-          (check (list id 'decision-status)
-                 (field-value decision 'status)
-                 'denied)
-          (check (list id 'decision-reason)
-                 (field-value decision 'reason)
-                 reason)
-          (check (list id 'error-kind) (field-value error-form 'kind) kind)
-          (check-true (list id 'error-kind-declared)
-                      (in-set? (field-value error-form 'kind) error-kinds))))))
+          (test-equal (list id 'host-operation)
+             'not-performed
+             (field-value scenario 'host-operation))
+          (test-equal (list id 'decision-status)
+             'denied
+             (field-value decision 'status))
+          (test-equal (list id 'decision-reason)
+             reason
+             (field-value decision 'reason))
+          (test-equal (list id 'error-kind) kind (field-value error-form 'kind))
+          (test-assert (list id 'error-kind-declared)
+             (in-set? (field-value error-form 'kind) error-kinds))))))
 
 ;; Validate the fixture envelope and adapter identity.
-(check 'fixture-tag (car fixture) 'consent-host-adapter-fixture)
-(check 'fixture-id (field-value fixture 'id) 'native-cli-daemon-host-adapter)
-(check 'fixture-status (field-value fixture 'status) 'contract)
-(check 'adapter-tag (car adapter) 'host-adapter)
-(check 'adapter-name (field-value adapter 'name) 'native-cli-daemon)
-(check 'adapter-contract (field-value adapter 'contract) 'r7rs-small)
-(check 'manifest-adapter (field-value manifest 'adapter) 'native-cli-daemon)
-(check 'manifest-effect-path
-       (field-value manifest 'effect-path)
-       'shared-capability-request)
+(testing-registry-case
+ 'fixture-tag '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 273)
+(test-equal 'fixture-tag 'consent-host-adapter-fixture (car fixture)))
+(testing-registry-case
+ 'fixture-id '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 277)
+(test-equal 'fixture-id 'native-cli-daemon-host-adapter (field-value fixture 'id)))
+(testing-registry-case
+ 'fixture-status '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 281)
+(test-equal 'fixture-status 'contract (field-value fixture 'status)))
+(testing-registry-case
+ 'adapter-tag '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 285)
+(test-equal 'adapter-tag 'host-adapter (car adapter)))
+(testing-registry-case
+ 'adapter-name '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 289)
+(test-equal 'adapter-name 'native-cli-daemon (field-value adapter 'name)))
+(testing-registry-case
+ 'adapter-contract '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 293)
+(test-equal 'adapter-contract 'r7rs-small (field-value adapter 'contract)))
+(testing-registry-case
+ 'manifest-adapter '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 297)
+(test-equal 'manifest-adapter 'native-cli-daemon (field-value manifest 'adapter)))
+(testing-registry-case
+ 'manifest-effect-path '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 301)
+(test-equal 'manifest-effect-path
+             'shared-capability-request
+             (field-value manifest 'effect-path)))
 
 ;; Validate adapter modes cover terminal, batch, and daemon use.
+(testing-registry-case
+ 'mode-cli '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 309)
 (let ((modes (field-value adapter 'modes)))
-  (check-true 'mode-cli (in-set? 'cli modes))
-  (check-true 'mode-batch (in-set? 'batch modes))
-  (check-true 'mode-daemon (in-set? 'daemon modes)))
+  (test-assert 'mode-cli (in-set? 'cli modes))
+  (test-assert 'mode-batch (in-set? 'batch modes))
+  (test-assert 'mode-daemon (in-set? 'daemon modes))))
 
 ;; Validate interpreted and future compiled execution share the effect path.
+(testing-registry-case
+ 'interpreted-effect-path '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 318)
 (let ((execution (field-value adapter 'execution)))
-  (check 'interpreted-effect-path
-         (field-value (field execution 'interpreted) 'effect-path)
-         'shared-capability-request)
-  (check 'compiled-effect-path
-         (field-value (field execution 'compiled) 'effect-path)
-         'shared-capability-request))
+  (test-equal 'interpreted-effect-path
+             'shared-capability-request
+             (field-value (field execution 'interpreted) 'effect-path))
+  (test-equal 'compiled-effect-path
+             'shared-capability-request
+             (field-value (field execution 'compiled) 'effect-path))))
 
 ;; Validate the declared vocabularies match the contract.
-(check-true 'provided-libraries
-            (same-set? provided-libraries expected-libraries))
-(check-true 'authority-classes
-            (same-set? authority-classes expected-authority-classes))
-(check-true 'handle-kinds
-            (same-set? handle-kinds expected-handle-kinds))
-(check-true 'event-kinds
-            (same-set? event-kinds expected-event-kinds))
-(check-true 'error-kinds
-            (same-set? error-kinds expected-error-kinds))
+(testing-registry-case
+ 'provided-libraries '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 330)
+(test-assert 'provided-libraries
+             (same-set? provided-libraries expected-libraries)))
+(testing-registry-case
+ 'authority-classes '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 335)
+(test-assert 'authority-classes
+             (same-set? authority-classes expected-authority-classes)))
+(testing-registry-case
+ 'handle-kinds '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 340)
+(test-assert 'handle-kinds
+             (same-set? handle-kinds expected-handle-kinds)))
+(testing-registry-case
+ 'event-kinds '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 345)
+(test-assert 'event-kinds
+             (same-set? event-kinds expected-event-kinds)))
+(testing-registry-case
+ 'error-kinds '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 350)
+(test-assert 'error-kinds
+             (same-set? error-kinds expected-error-kinds)))
 
 ;; Validate every capability against the declared adapter vocabulary.
-(check-true 'capabilities-present (pair? capabilities))
-(for-each check-capability capabilities)
+(testing-registry-case
+ 'capabilities-present '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 357)
+(test-assert 'capabilities-present (pair? capabilities)))
+(testing-registry-case
+ 'consent-native-cli-daemon-adapter-case-17 '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 361)
+(for-each check-capability capabilities))
 
 ;; Validate every boundary record carries its required fields.
-(for-each check-record record-required-fields)
+(testing-registry-case
+ 'consent-native-cli-daemon-adapter-case-18 '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 367)
+(for-each check-record record-required-fields))
 
 ;; Validate the mock denials precede any allowed host operation.
+(testing-registry-case
+ 'consent-native-cli-daemon-adapter-case-19 '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 373)
 (check-denial-scenario 'native-cli-daemon-noninteractive-denial
                        'noninteractive-confirmation-unavailable
-                       'noninteractive-confirmation-unavailable)
+                       'noninteractive-confirmation-unavailable))
+(testing-registry-case
+ 'consent-native-cli-daemon-adapter-case-20 '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 379)
 (check-denial-scenario 'native-cli-daemon-stale-handle-denial
                        'stale-handle
-                       'stale-handle)
+                       'stale-handle))
 
 ;; Validate the stale-handle scenario nests a capability-error condition.
+(testing-registry-case
+ 'stale-handle-condition '(portable core)
+ ("consent-native-cli-daemon-adapter-test.scm" 387)
 (let* ((scenario (scenario-by-id 'native-cli-daemon-stale-handle-denial))
        (error-form (and scenario (field-value scenario 'error)))
        (condition (and error-form (field-value error-form 'condition))))
-  (check-true 'stale-handle-condition condition)
+  (test-assert 'stale-handle-condition condition)
   (if condition
-      (check 'stale-handle-condition-kind
-             (field-value condition 'kind)
-             'stale-handle)))
+      (test-equal 'stale-handle-condition-kind
+             'stale-handle
+             (field-value condition 'kind)))))
 
 ;; Report the aggregate result and fail the process on any mismatch.
-(if (= failures 0)
-    (begin
-      (display "native-cli-daemon adapter fixture validated")
-      (newline))
-    (begin
-      (display failures)
-      (display " native-cli-daemon adapter fixture failure(s)")
-      (newline)
-      (error "native-cli-daemon adapter fixture validation failed")))
+
+(testing-runner-main "Consent Native Cli Daemon Adapter portable tests" (command-line))

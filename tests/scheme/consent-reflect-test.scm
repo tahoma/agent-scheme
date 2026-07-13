@@ -15,10 +15,10 @@
                 (consent-eval-source raw-consent-eval-source))
         (only (consent reader)
               consent-datum->external
-              consent-read))
-
-;; Count failed checks so the portable runner reports every mismatch.
-(define failures 0)
+              consent-read)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Minimum check duration emitted as a fine-grained CI timing diagnostic.
 (define consent-ci-check-minimum-milliseconds 10)
@@ -168,21 +168,10 @@
               (newline))))
       result)))
 
-;; Record one failed portable reflection check and keep running.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
 ;; Compare ACTUAL and EXPECTED using R7RS equal? and record a named failure.
 (define (check-value name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
+  "Compare ACTUAL and EXPECTED through SRFI 64."
+  (test-equal name expected actual))
 
 ;; Time one reflection check and then compare its value.
 (define-syntax check
@@ -212,6 +201,9 @@
    (consent-read (apply string-append fragments)
                  '((source-metadata . #f)))))
 
+(testing-registry-case
+ 'reflect-manifest-input-contract '(portable core)
+ ("consent-reflect-test.scm" 204)
 (check-external 'reflect-manifest-input-contract
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -256,8 +248,11 @@
                        (source-has? (catalog-sources)
                                     'reflect-contract
                                     '(project contract)))"
-                "(ad-hoc-manifest reflect-contract #t #t #f)")
+                "(ad-hoc-manifest reflect-contract #t #t #f)"))
 
+(testing-registry-case
+ 'reflect-documentation-contract '(portable core)
+ ("consent-reflect-test.scm" 253)
 (check-external/options 'reflect-documentation-contract
                         "(import (scheme base) (agent reflect))
                          (define (needle-procedure x)
@@ -272,8 +267,11 @@
                         (expected-datum-external
                          "(\"Return the needle value for discovery tests.\"
                            \"Return the needle value for discovery tests.\"
-                           default)"))
+                           default)")))
 
+(testing-registry-case
+ 'reflect-helper-defaults '(portable core)
+ ("consent-reflect-test.scm" 272)
 (check-external 'reflect-helper-defaults
                 "(import (scheme base) (agent reflect))
                  (define present-false '(sample (present #f)))
@@ -292,14 +290,6 @@
                    \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
                    default
                    \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
-                   default)"))
+                   default)")))
 
-(if (= failures 0)
-    (begin
-      (display "Portable reflection contract tests passed")
-      (newline))
-    (begin
-      (display failures)
-      (display " portable reflection contract test failure(s)")
-      (newline)
-      (error "Portable reflection contract tests failed")))
+(testing-runner-main "Consent Reflect portable tests" (command-line))

@@ -16,26 +16,15 @@
         (only (stdlib json)
               json-null?
               json-read
-              json-write))
-
-;; Number of failed checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed OpenAI protocol check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
+              json-write)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 (define (check-value name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
+  "Compare ACTUAL and EXPECTED as the named SRFI 64 assertion."
+  (test-equal name expected actual))
 
 (define (json-ref object name)
   "Return NAME from decoded JSON OBJECT, or #f."
@@ -134,6 +123,9 @@
      (list (list 'tools (list local-echo-tool))
            (list 'tool-choice local-echo-tool))))))
 
+(testing-registry-case
+ 'model-openai-request-non-ascii-json-ascii-only '(portable core)
+ ("consent-models-openai-test.scm" 126)
 (let* ((non-ascii-prompt
         (string-append "Reuse "
                        (string (integer->char #x2192))
@@ -168,8 +160,11 @@
                  completion)
     (check-value 'model-openai-request-non-ascii-reused-json-ascii-only
                  (ascii-string? next-json)
-                 #t)))
+                 #t))))
 
+(testing-registry-case
+ 'model-openai-request-tool-count '(portable core)
+ ("consent-models-openai-test.scm" 165)
 (let* ((request (request-with-tool))
        (tools (json-ref request 'tools))
        (tool (vector-ref tools 0))
@@ -207,8 +202,11 @@
                '("text" "count"))
   (check-value 'model-openai-request-tool-choice
                (json-ref choice-function 'name)
-               "local-echo"))
+               "local-echo")))
 
+(testing-registry-case
+ 'model-openai-request-full-shape '(portable core)
+ ("consent-models-openai-test.scm" 207)
 (check-value
  'model-openai-request-full-shape
  (request-with-tool)
@@ -232,8 +230,11 @@
                  (required . #("text" "count")))))))
    (tool_choice
     (type . "function")
-    (function (name . "local-echo")))))
+    (function (name . "local-echo"))))))
 
+(testing-registry-case
+ 'model-openai-parse-message-head '(portable core)
+ ("consent-models-openai-test.scm" 235)
 (let* ((response
         (model-openai-parse-response
          (string-append
@@ -258,8 +259,11 @@
                'local-echo)
   (check-value 'model-openai-parse-tool-arguments
                arguments
-               '((text "hello") (count 2))))
+               '((text "hello") (count 2)))))
 
+(testing-registry-case
+ 'consent-json-nested-first '(portable core)
+ ("consent-models-openai-test.scm" 264)
 (let ((out (open-output-string)))
   (json-write
    '((outer
@@ -288,8 +292,11 @@
                  (list (json-ref nested 'name)
                        (json-ref nested 'enabled)
                        (json-null? (vector-ref array 1)))
-                 '("nested" #f #t))))
+                 '("nested" #f #t)))))
 
+(testing-registry-case
+ 'model-openai-retry-count '(portable core)
+ ("consent-models-openai-test.scm" 297)
 (let ((calls 0))
   (let ((result
          (completion-result
@@ -305,8 +312,11 @@
     (check-value 'model-openai-retry-status
                  (result-field result 'status #f) 'ok)
     (check-value 'model-openai-retry-value
-                 (result-field result 'value #f) "ok")))
+                 (result-field result 'value #f) "ok"))))
 
+(testing-registry-case
+ 'model-openai-http-error-status '(portable core)
+ ("consent-models-openai-test.scm" 317)
 (let* ((result
         (completion-result
          '((timeout-seconds 7) (retry-count 0))
@@ -333,8 +343,11 @@
     (check-value 'model-openai-http-error-prompt-redacted
                  (string-contains?
                   (get-output-string out) "prompt text must not leak")
-                 #f)))
+                 #f))))
 
+(testing-registry-case
+ 'model-openai-detail-budget-status '(portable core)
+ ("consent-models-openai-test.scm" 348)
 (let* ((detail (string-append (make-string 260 #\a) "tail-marker"))
        (body (string-append "{\"error\":{\"message\":\"" detail "\"}}"))
        (result
@@ -352,8 +365,11 @@
   (check-value 'model-openai-detail-budget-upper-bound
                (<= (string-length excerpt) 320) #t)
   (check-value 'model-openai-detail-budget-tail
-               (string-contains? excerpt "tail-marker") #t))
+               (string-contains? excerpt "tail-marker") #t)))
 
+(testing-registry-case
+ 'model-openai-decode-error-status '(portable core)
+ ("consent-models-openai-test.scm" 370)
 (let* ((body "{\"choices\":[{\"message\":{\"content\":42}}]}")
        (result
         (completion-result
@@ -367,14 +383,6 @@
   (check-value 'model-openai-decode-error-phase
                (result-field error-datum 'phase #f) 'decode)
   (check-value 'model-openai-decode-error-body
-               (result-field decode 'body-excerpt #f) body))
+               (result-field decode 'body-excerpt #f) body)))
 
-(if (= failures 0)
-    (begin
-      (display "Portable OpenAI model protocol tests passed")
-      (newline))
-    (begin
-      (display failures)
-      (display " portable OpenAI model protocol test failure(s)")
-      (newline)
-      (error "portable OpenAI model protocol tests failed")))
+(testing-runner-main "Consent Models Openai portable tests" (command-line))

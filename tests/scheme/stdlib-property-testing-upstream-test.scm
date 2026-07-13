@@ -14,10 +14,10 @@
         (stdlib generator)
         (stdlib random-bits)
         (stdlib random-data-generators)
-        (stdlib property-testing))
-
-;; Number of failed adapted-upstream SRFI 252 checks seen so far.
-(define failures 0)
+        (stdlib property-testing)
+        (scheme process-context)
+        (testing registry)
+        (testing runner))
 
 ;; Bounded property assertion count used by this adapted upstream fixture.
 (define sample-count 6)
@@ -28,27 +28,6 @@
 ;; SRFI 252's default property assertion count.
 (define default-count 100)
 
-(define (record-failure name expected actual)
-  "Record one failed adapted-upstream SRFI 252 check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-(define (check-true name value)
-  "Record failure unless VALUE is true."
-  (if (not value)
-      (record-failure name #t value)))
-
 (define (runner-counts runner)
   "Return RUNNER pass, fail, xfail, xpass, and skip counts."
   (list (test-runner-pass-count runner)
@@ -56,18 +35,6 @@
         (test-runner-xfail-count runner)
         (test-runner-xpass-count runner)
         (test-runner-skip-count runner)))
-
-(define (finish-property-testing-upstream-tests)
-  "Report the adapted-upstream SRFI 252 property-testing result."
-  (if (= failures 0)
-      (begin
-        (display "SRFI 252 adapted upstream tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " SRFI 252 adapted upstream test failure(s)")
-        (newline)
-        (error "SRFI 252 adapted upstream tests failed" failures))))
 
 (define (three value)
   "Return 3 for VALUE."
@@ -99,6 +66,9 @@
 ;; Null runner that records the adapted upstream SRFI 252 checks.
 (define adapted-runner (test-runner-null))
 
+(testing-registry-case
+ 'stdlib-property-testing-upstream-case-1 '(portable stdlib)
+ ("stdlib-property-testing-upstream-test.scm" 69)
 (test-with-runner adapted-runner
   (test-begin "property-test-adapted-upstream")
 
@@ -236,21 +206,31 @@
    (list (vector-generator-of (integer-generator) 8))
    sample-count)
 
-  (test-end "property-test-adapted-upstream"))
+  (test-end "property-test-adapted-upstream")))
 
-(check-true 'adapted-upstream-records-passing-tests
-            (> (test-runner-pass-count adapted-runner) 0))
+(testing-registry-case
+ 'adapted-upstream-records-passing-tests '(portable stdlib)
+ ("stdlib-property-testing-upstream-test.scm" 211)
+(test-assert 'adapted-upstream-records-passing-tests
+             (> (test-runner-pass-count adapted-runner) 0)))
 
-(check 'adapted-upstream-control-counts
-       (list (test-runner-fail-count adapted-runner)
-             (test-runner-xfail-count adapted-runner)
-             (test-runner-skip-count adapted-runner))
-       (list 0
+(testing-registry-case
+ 'adapted-upstream-control-counts '(portable stdlib)
+ ("stdlib-property-testing-upstream-test.scm" 217)
+(test-equal 'adapted-upstream-control-counts
+             (list 0
              (+ default-count explicit-upstream-count sample-count)
-             (+ default-count explicit-upstream-count sample-count)))
+             (+ default-count explicit-upstream-count sample-count))
+             (list (test-runner-fail-count adapted-runner)
+             (test-runner-xfail-count adapted-runner)
+             (test-runner-skip-count adapted-runner))))
 
-(check 'adapted-upstream-error-tests-pass
-       (test-runner-pass-count
+(testing-registry-case
+ 'adapted-upstream-error-tests-pass '(portable stdlib)
+ ("stdlib-property-testing-upstream-test.scm" 228)
+(test-equal 'adapted-upstream-error-tests-pass
+             2
+             (test-runner-pass-count
         (let ((runner (test-runner-null)))
           (test-with-runner runner
             (test-begin "property-error-type" 2)
@@ -260,24 +240,29 @@
              (list (integer-generator))
              2)
             (test-end "property-error-type"))
-          runner))
-       2)
+          runner))))
 
-(check 'adapted-upstream-determinism
-       (let ((left
+(testing-registry-case
+ 'adapted-upstream-determinism '(portable stdlib)
+ ("stdlib-property-testing-upstream-test.scm" 245)
+(test-equal 'adapted-upstream-determinism
+             #t
+             (let ((left
               (parameterize ((current-random-source (make-random-source)))
                 (generator->list (gdrop (exact-number-generator) 30) 8)))
              (right
               (parameterize ((current-random-source (make-random-source)))
                 (generator->list (gdrop (exact-number-generator) 30) 8))))
-         (equal? left right))
-       #t)
+         (equal? left right))))
 
-(check 'adapted-upstream-non-determinism
-       (let ((left (gdrop (exact-number-generator) 30))
+(testing-registry-case
+ 'adapted-upstream-non-determinism '(portable stdlib)
+ ("stdlib-property-testing-upstream-test.scm" 258)
+(test-equal 'adapted-upstream-non-determinism
+             #t
+             (let ((left (gdrop (exact-number-generator) 30))
              (right (gdrop (exact-number-generator) 30)))
          (not (equal? (generator->list left 8)
-                      (generator->list right 8))))
-       #t)
+                      (generator->list right 8))))))
 
-(finish-property-testing-upstream-tests)
+(testing-runner-main "Stdlib Property Testing Upstream portable tests" (command-line))

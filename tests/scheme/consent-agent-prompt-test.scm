@@ -15,30 +15,11 @@
         (scheme write)
         (agent prompt)
         (agent runner)
-        (agent task))
-
-;; Count failed checks so the portable runner can report every mismatch.
-(define failures 0)
-
-;; Record one failed check and keep running the rest of the portable test file.
-(define (record-failure name expected actual)
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-;; Compare ACTUAL and EXPECTED using R7RS equal?.
-(define (check name actual expected)
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-;; Assert VALUE is true after normalizing to canonical booleans.
-(define (check-true name value)
-  (check name (if value #t #f) #t))
+        (agent task)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
 ;; Host-operation table shared by the gated-call scenarios.
 (define ops
@@ -65,54 +46,67 @@
 
 ;;;; A verified finish completes through the harness and is fully inspectable
 
+(testing-registry-case
+ 'complete-is-result '(portable agent)
+ ("consent-agent-prompt-test.scm" 49)
 (let* ((harness (make-prompt-harness))
        (result (prompt harness 'finish-the-goal
                        (list (list 'provider '((finish done)))
                              (list 'verifier 'passed)))))
-  (check-true 'complete-is-result (prompt-result? result))
-  (check 'complete-status (prompt-result-status result) 'selected)
-  (check-true 'complete-ok (prompt-result-ok? result))
-  (check 'complete-state (prompt-result-state result) 'complete)
-  (check-true 'complete-run (task-run? (prompt-result-run result)))
-  (check-true 'complete-receipt-stop
-              (task-stop? (prompt-result-receipt result)))
-  (check-true 'complete-completion
-              (agent-completion? (prompt-result-completion result)))
-  (check-true 'complete-transcript (pair? (prompt-result-transcript result)))
-  (check-true 'complete-observations
-              (pair? (prompt-result-observations result)))
-  (check 'complete-default-agent (prompt-result-agent-id result) 'default)
-  (check 'complete-role (prompt-result-role result) 'planner)
-  (check 'complete-session (prompt-result-session result) 'project-main)
-  (check 'complete-audit-kinds (audit-kinds result)
-         '(agent-selected model-route)))
+  (test-assert 'complete-is-result (prompt-result? result))
+  (test-equal 'complete-status 'selected (prompt-result-status result))
+  (test-assert 'complete-ok (prompt-result-ok? result))
+  (test-equal 'complete-state 'complete (prompt-result-state result))
+  (test-assert 'complete-run (task-run? (prompt-result-run result)))
+  (test-assert 'complete-receipt-stop
+             (task-stop? (prompt-result-receipt result)))
+  (test-assert 'complete-completion
+             (agent-completion? (prompt-result-completion result)))
+  (test-assert 'complete-transcript (pair? (prompt-result-transcript result)))
+  (test-assert 'complete-observations
+             (pair? (prompt-result-observations result)))
+  (test-equal 'complete-default-agent 'default (prompt-result-agent-id result))
+  (test-equal 'complete-role 'planner (prompt-result-role result))
+  (test-equal 'complete-session 'project-main (prompt-result-session result))
+  (test-equal 'complete-audit-kinds
+             '(agent-selected model-route)
+             (audit-kinds result))))
 
 ;;;; With no provider the harness still returns an inspectable pause
 
+(testing-registry-case
+ 'no-provider-status '(portable agent)
+ ("consent-agent-prompt-test.scm" 77)
 (let ((result (prompt (make-prompt-harness) 'do-a-thing)))
-  (check 'no-provider-status (prompt-result-status result) 'selected)
-  (check 'no-provider-state (prompt-result-state result) 'blocked)
-  (check-true 'no-provider-pause
-              (task-pause? (prompt-result-receipt result))))
+  (test-equal 'no-provider-status 'selected (prompt-result-status result))
+  (test-equal 'no-provider-state 'blocked (prompt-result-state result))
+  (test-assert 'no-provider-pause
+             (task-pause? (prompt-result-receipt result)))))
 
 ;;;; Fail closed without session authority: no runner, an error receipt
 
+(testing-registry-case
+ 'closed-status '(portable agent)
+ ("consent-agent-prompt-test.scm" 88)
 (let* ((harness (make-prompt-harness (list (list 'authority #f))))
        (result (prompt harness 'sensitive
                        (list (list 'provider '((finish done)))
                              (list 'verifier 'passed)))))
-  (check 'closed-status (prompt-result-status result) 'authority-missing)
-  (check-true 'closed-not-ok (not (prompt-result-ok? result)))
-  (check 'closed-state (prompt-result-state result) 'failed-closed)
-  (check 'closed-no-run (prompt-result-run result) 'none)
-  (check 'closed-receipt-tag (car (prompt-result-receipt result)) 'prompt-error)
-  (check 'closed-receipt-reason
-         (cadr (assq 'reason (cdr (prompt-result-receipt result))))
-         'authority-missing)
-  (check 'closed-audit-kinds (audit-kinds result) '(authority-denied)))
+  (test-equal 'closed-status 'authority-missing (prompt-result-status result))
+  (test-assert 'closed-not-ok (not (prompt-result-ok? result)))
+  (test-equal 'closed-state 'failed-closed (prompt-result-state result))
+  (test-equal 'closed-no-run 'none (prompt-result-run result))
+  (test-equal 'closed-receipt-tag 'prompt-error (car (prompt-result-receipt result)))
+  (test-equal 'closed-receipt-reason
+             'authority-missing
+             (cadr (assq 'reason (cdr (prompt-result-receipt result)))))
+  (test-equal 'closed-audit-kinds '(authority-denied) (audit-kinds result))))
 
 ;;;; Non-interactive prompt authority is explicit data, not ambient approval
 
+(testing-registry-case
+ 'noninteractive-authority-record '(portable agent)
+ ("consent-agent-prompt-test.scm" 107)
 (let* ((authority
         (make-prompt-authority
          '((origin noninteractive)
@@ -128,24 +122,27 @@
                              (list 'verifier 'passed))))
        (audit (prompt-result-audit result))
        (authority-audit (car audit)))
-  (check-true 'noninteractive-authority-record
-              (prompt-authority? authority))
-  (check 'noninteractive-authority-status
-         (prompt-result-status result)
-         'selected)
-  (check 'noninteractive-authority-state
-         (prompt-result-state result)
-         'complete)
-  (check 'noninteractive-authority-audit-kinds
-         (audit-kinds result)
-         '(authority-granted agent-selected model-route))
-  (check 'noninteractive-authority-audit-origin
-         (cadr (assq 'origin (cdr authority-audit)))
-         'noninteractive)
-  (check 'noninteractive-authority-audit-source
-         (cadr (assq 'source (cdr authority-audit)))
-         'grant))
+  (test-assert 'noninteractive-authority-record
+             (prompt-authority? authority))
+  (test-equal 'noninteractive-authority-status
+             'selected
+             (prompt-result-status result))
+  (test-equal 'noninteractive-authority-state
+             'complete
+             (prompt-result-state result))
+  (test-equal 'noninteractive-authority-audit-kinds
+             '(authority-granted agent-selected model-route)
+             (audit-kinds result))
+  (test-equal 'noninteractive-authority-audit-origin
+             'noninteractive
+             (cadr (assq 'origin (cdr authority-audit))))
+  (test-equal 'noninteractive-authority-audit-source
+             'grant
+             (cadr (assq 'source (cdr authority-audit))))))
 
+(testing-registry-case
+ 'noninteractive-authority-denied-status '(portable agent)
+ ("consent-agent-prompt-test.scm" 143)
 (let* ((authority
         (make-prompt-authority '((origin noninteractive))))
        (harness (make-prompt-harness (list (list 'authority authority))))
@@ -154,71 +151,86 @@
                              (list 'verifier 'passed))))
        (audit (prompt-result-audit result))
        (authority-audit (car audit)))
-  (check 'noninteractive-authority-denied-status
-         (prompt-result-status result)
-         'authority-missing)
-  (check 'noninteractive-authority-denied-reason
-         (cadr (assq 'reason (cdr (prompt-result-receipt result))))
-         'noninteractive-authority-unavailable)
-  (check 'noninteractive-authority-denied-audit-kinds
-         (audit-kinds result)
-         '(authority-denied))
-  (check 'noninteractive-authority-denied-origin
-         (cadr (assq 'origin (cdr authority-audit)))
-         'noninteractive)
-  (check 'noninteractive-authority-denied-source
-         (cadr (assq 'source (cdr authority-audit)))
-         'none))
+  (test-equal 'noninteractive-authority-denied-status
+             'authority-missing
+             (prompt-result-status result))
+  (test-equal 'noninteractive-authority-denied-reason
+             'noninteractive-authority-unavailable
+             (cadr (assq 'reason (cdr (prompt-result-receipt result)))))
+  (test-equal 'noninteractive-authority-denied-audit-kinds
+             '(authority-denied)
+             (audit-kinds result))
+  (test-equal 'noninteractive-authority-denied-origin
+             'noninteractive
+             (cadr (assq 'origin (cdr authority-audit))))
+  (test-equal 'noninteractive-authority-denied-source
+             'none
+             (cadr (assq 'source (cdr authority-audit))))))
 
 ;;;; Fail closed without a current session
 
+(testing-registry-case
+ 'no-session-status '(portable agent)
+ ("consent-agent-prompt-test.scm" 172)
 (let* ((harness (make-prompt-harness (list (list 'session #f))))
        (result (prompt harness 'orphan)))
-  (check 'no-session-status (prompt-result-status result) 'no-session)
-  (check 'no-session-state (prompt-result-state result) 'failed-closed))
+  (test-equal 'no-session-status 'no-session (prompt-result-status result))
+  (test-equal 'no-session-state 'failed-closed (prompt-result-state result))))
 
 ;;;; prompt-role forces an agent of a named role
 
+(testing-registry-case
+ 'role-agent-id '(portable agent)
+ ("consent-agent-prompt-test.scm" 182)
 (let* ((harness (make-staffed-harness))
        (result (prompt-role harness 'reviewer 'review-the-diff
                             (list (list 'provider '((finish done)))
                                   (list 'verifier 'passed)))))
-  (check 'role-agent-id (prompt-result-agent-id result) 'reviewer-1)
-  (check 'role-role (prompt-result-role result) 'reviewer)
-  (check 'role-basis
-         (agent-selection-basis (prompt-result-selection result))
-         'role-match)
-  (check 'role-state (prompt-result-state result) 'complete))
+  (test-equal 'role-agent-id 'reviewer-1 (prompt-result-agent-id result))
+  (test-equal 'role-role 'reviewer (prompt-result-role result))
+  (test-equal 'role-basis
+             'role-match
+             (agent-selection-basis (prompt-result-selection result)))
+  (test-equal 'role-state 'complete (prompt-result-state result))))
 
 ;;;; prompt-model forces an agent of a named model
 
+(testing-registry-case
+ 'model-status '(portable agent)
+ ("consent-agent-prompt-test.scm" 198)
 (let* ((harness (make-staffed-harness))
        (result (prompt-model harness 'portable-coder 'build-it)))
-  (check 'model-status (prompt-result-status result) 'selected)
-  (check 'model-agent-id (prompt-result-agent-id result) 'coder-1)
-  (check 'model-model (prompt-result-model result) 'portable-coder)
-  (check 'model-basis
-         (agent-selection-basis (prompt-result-selection result))
-         'model-match)
-  (check 'model-requested
-         (agent-selection-field-value (prompt-result-selection result)
-                                      'requested-model)
-         'portable-coder))
+  (test-equal 'model-status 'selected (prompt-result-status result))
+  (test-equal 'model-agent-id 'coder-1 (prompt-result-agent-id result))
+  (test-equal 'model-model 'portable-coder (prompt-result-model result))
+  (test-equal 'model-basis
+             'model-match
+             (agent-selection-basis (prompt-result-selection result)))
+  (test-equal 'model-requested
+             'portable-coder
+             (agent-selection-field-value (prompt-result-selection result)
+                                      'requested-model))))
 
 ;;;; Policy gating flows through the harness to a runner pause
 
+(testing-registry-case
+ 'gated-status '(portable agent)
+ ("consent-agent-prompt-test.scm" 216)
 (let* ((harness (make-staffed-harness))
        (result (prompt harness 'edit-file
                        (list (list 'provider
                                    '((code-action (file-write "o" p))))
                              (list 'operations ops)
                              (list 'policy '((file-write needs-approval)))))))
-  (check 'gated-status (prompt-result-status result) 'selected)
-  (check 'gated-state (prompt-result-state result) 'waiting-for-approval)
-  (check-true 'gated-pause (task-pause? (prompt-result-receipt result))))
+  (test-equal 'gated-status 'selected (prompt-result-status result))
+  (test-equal 'gated-state 'waiting-for-approval (prompt-result-state result))
+  (test-assert 'gated-pause (task-pause? (prompt-result-receipt result)))))
 
 ;;;; Budgets: the agent budget and per-call options both reach the runner
 
+(testing-registry-case
+ 'budget-from-agent '(portable agent)
+ ("consent-agent-prompt-test.scm" 231)
 (let ((registry (make-agent-registry)))
   (register-agent registry
                   (make-agent 'budgeted
@@ -228,50 +240,69 @@
   (let* ((harness (make-prompt-harness (list (list 'registry registry))))
          (from-agent (prompt harness 'go))
          (from-option (prompt harness 'go (list (list 'max-steps 5)))))
-    (check 'budget-from-agent
-           (task-field-value (prompt-result-budget from-agent) 'max-steps)
-           3)
-    (check 'budget-option-overrides
-           (task-field-value (prompt-result-budget from-option) 'max-steps)
-           5)))
+    (test-equal 'budget-from-agent
+             3
+             (task-field-value (prompt-result-budget from-agent) 'max-steps))
+    (test-equal 'budget-option-overrides
+             5
+             (task-field-value (prompt-result-budget from-option) 'max-steps)))))
 
 ;;;; Discovery helpers list agents, distinct roles, and distinct models
 
+(testing-registry-case
+ 'discover-agents '(portable agent)
+ ("consent-agent-prompt-test.scm" 252)
 (let ((harness (make-staffed-harness)))
-  (check 'discover-agents (map agent-id (agents harness))
-         '(default coder-1 reviewer-1))
-  (check 'discover-roles (roles harness) '(planner coder reviewer))
-  (check 'discover-models (models harness)
-         '(auto portable-coder portable-reviewer)))
+  (test-equal 'discover-agents
+             '(default coder-1 reviewer-1)
+             (map agent-id (agents harness)))
+  (test-equal 'discover-roles '(planner coder reviewer) (roles harness))
+  (test-equal 'discover-models
+             '(auto portable-coder portable-reviewer)
+             (models harness))))
 
 ;;;; The ambient current harness backs the bare verb forms
 
-(reset-prompt-harness!)
+(testing-registry-case
+ 'consent-agent-prompt-case-12 '(portable agent)
+ ("consent-agent-prompt-test.scm" 266)
+(reset-prompt-harness!))
+(testing-registry-case
+ 'ambient-status '(portable agent)
+ ("consent-agent-prompt-test.scm" 270)
 (let ((result (prompt 'ambient-goal)))
-  (check 'ambient-status (prompt-result-status result) 'selected)
-  (check 'ambient-state (prompt-result-state result) 'blocked))
+  (test-equal 'ambient-status 'selected (prompt-result-status result))
+  (test-equal 'ambient-state 'blocked (prompt-result-state result))))
 
+(testing-registry-case
+ 'ambient-installed '(portable agent)
+ ("consent-agent-prompt-test.scm" 277)
 (let ((custom (make-staffed-harness)))
   (set-current-prompt-harness! custom)
-  (check 'ambient-installed (map agent-id (agents)) '(default coder-1 reviewer-1))
-  (check 'ambient-role-id
-         (prompt-result-agent-id
+  (test-equal 'ambient-installed '(default coder-1 reviewer-1) (map agent-id (agents)))
+  (test-equal 'ambient-role-id
+             'coder-1
+             (prompt-result-agent-id
           (prompt-role 'coder 'work
                        (list (list 'provider '((finish done)))
-                             (list 'verifier 'passed))))
-         'coder-1))
-(reset-prompt-harness!)
+                             (list 'verifier 'passed)))))))
+(testing-registry-case
+ 'consent-agent-prompt-case-15 '(portable agent)
+ ("consent-agent-prompt-test.scm" 289)
+(reset-prompt-harness!))
 
 ;;;; Identical prompts are deterministic and replayable
 
+(testing-registry-case
+ 'prompt-deterministic '(portable agent)
+ ("consent-agent-prompt-test.scm" 296)
 (let ((harness (make-prompt-harness)))
-  (check 'prompt-deterministic
-         (prompt harness 'replay
+  (test-equal 'prompt-deterministic
+             (prompt harness 'replay
                  (list (list 'provider '((finish done)))
                        (list 'verifier 'passed)))
-         (prompt harness 'replay
+             (prompt harness 'replay
                  (list (list 'provider '((finish done)))
-                       (list 'verifier 'passed)))))
+                       (list 'verifier 'passed))))))
 
-(if (> failures 0)
-    (error "portable agent prompt tests failed" failures))
+(testing-runner-main "Consent Agent Prompt portable tests" (command-line))

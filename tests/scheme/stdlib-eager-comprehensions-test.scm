@@ -11,62 +11,53 @@
 
 (import (scheme base)
         (scheme write)
-        (stdlib eager-comprehensions))
+        (stdlib eager-comprehensions)
+        (scheme process-context)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
 
-;; Number of failed adapted SRFI checks seen so far.
-(define failures 0)
-
-(define (record-failure name expected actual)
-  "Record one failed eager-comprehension check."
-  (set! failures (+ failures 1))
-  (display "FAIL ")
-  (write name)
-  (display ": expected ")
-  (write expected)
-  (display ", got ")
-  (write actual)
-  (newline))
-
-(define (check name actual expected)
-  "Compare ACTUAL and EXPECTED and record NAME on mismatch."
-  (if (not (equal? actual expected))
-      (record-failure name expected actual)))
-
-(define (finish-eager-comprehension-tests)
-  "Report the adapted SRFI 42 test result."
-  (if (= failures 0)
-      (begin
-        (display "Adapted SRFI 42 eager-comprehension tests passed")
-        (newline))
-      (begin
-        (display failures)
-        (display " adapted SRFI 42 eager-comprehension test failure(s)")
-        (newline)
-        (error "adapted SRFI 42 eager-comprehension tests failed" failures))))
-
-(check 'do-ec-no-qualifier
-       (let ((x 0))
+(testing-registry-case
+ 'do-ec-no-qualifier '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 20)
+(test-equal 'do-ec-no-qualifier
+             1
+             (let ((x 0))
          (do-ec (set! x (+ x 1)))
-         x)
-       1)
+         x)))
 
-(check 'list-ec-range
-       (list-ec (:range i 5) (* i i))
-       '(0 1 4 9 16))
+(testing-registry-case
+ 'list-ec-range '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 29)
+(test-equal 'list-ec-range
+             '(0 1 4 9 16)
+             (list-ec (:range i 5) (* i i))))
 
-(check 'list-ec-nested-range
-       (list-ec (:range n 1 4) (:range i n) (list n i))
-       '((1 0) (2 0) (2 1) (3 0) (3 1) (3 2)))
+(testing-registry-case
+ 'list-ec-nested-range '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 36)
+(test-equal 'list-ec-nested-range
+             '((1 0) (2 0) (2 1) (3 0) (3 1) (3 2))
+             (list-ec (:range n 1 4) (:range i n) (list n i))))
 
-(check 'qualifiers-filter
-       (list-ec (:range n 5)
+(testing-registry-case
+ 'qualifiers-filter '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 43)
+(test-equal 'qualifiers-filter
+             '((0 0) (2 0) (2 1) (2 2) (4 0) (4 1) (4 2) (4 3) (4 4))
+             (list-ec (:range n 5)
                 (if (even? n))
                 (:range k (+ n 1))
-                (list n k))
-       '((0 0) (2 0) (2 1) (2 2) (4 0) (4 1) (4 2) (4 3) (4 4)))
+                (list n k))))
 
-(check 'qualifiers-not-and-or
-       (list (list-ec (:range n 5)
+(testing-registry-case
+ 'qualifiers-not-and-or '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 53)
+(test-equal 'qualifiers-not-and-or
+             '(((1 0) (1 1) (3 0) (3 1) (3 2) (3 3))
+         (4)
+         (0 2 4))
+             (list (list-ec (:range n 5)
                       (not (even? n))
                       (:range k (+ n 1))
                       (list n k))
@@ -75,65 +66,87 @@
                       n)
              (list-ec (:range n 5)
                       (or (even? n) (> n 3))
-                      n))
-       '(((1 0) (1 1) (3 0) (3 1) (3 2) (3 3))
-         (4)
-         (0 2 4)))
+                      n))))
 
-(check 'qualifiers-begin-and-nested
-       (list (let ((x 0))
+(testing-registry-case
+ 'qualifiers-begin-and-nested '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 71)
+(test-equal 'qualifiers-begin-and-nested
+             '(4 (0 0 1))
+             (list (let ((x 0))
                (list-ec (:range n 4) (begin (set! x (+ x 1))) n)
                x)
-             (list-ec (nested (:range n 3) (:range k n)) k))
-       '(4 (0 0 1)))
+             (list-ec (nested (:range n 3) (:range k n)) k))))
 
-(check 'collectors
-       (list (append-ec (:range i 2) '(a b))
+(testing-registry-case
+ 'collectors '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 81)
+(test-equal 'collectors
+             (list '(a b a b) "aa" "abab" (vector 0 1 2) 6 24 0 2)
+             (list (append-ec (:range i 2) '(a b))
              (string-ec (:range i 2) #\a)
              (string-append-ec (:range i 2) "ab")
              (vector-ec (:range i 3) i)
              (sum-ec (:range i 4) i)
              (product-ec (:range i 1 5) i)
              (min-ec (:range i 2) i)
-             (max-ec (:range i 3) i))
-       (list '(a b a b) "aa" "abab" (vector 0 1 2) 6 24 0 2))
+             (max-ec (:range i 3) i))))
 
-(check 'first-last-any-every
-       (list (first-ec #f (:range i 0) i)
+(testing-registry-case
+ 'first-last-any-every '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 95)
+(test-equal 'first-last-any-every
+             '(#f 0 2 #t #f)
+             (list (first-ec #f (:range i 0) i)
              (first-ec #f (:range i 3) i)
              (last-ec #f (:range i 3) i)
              (any?-ec (:range i 2 3) (even? i))
-             (every?-ec (:range i 2 4) (even? i)))
-       '(#f 0 2 #t #f))
+             (every?-ec (:range i 2 4) (even? i)))))
 
-(check 'folds
-       (let ((sum-sqr (lambda (x result) (+ result (* x x)))))
+(testing-registry-case
+ 'folds '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 106)
+(test-equal 'folds
+             '(285 empty)
+             (let ((sum-sqr (lambda (x result) (+ result (* x x)))))
          (list (fold-ec 0 (:range i 10) i sum-sqr)
-               (fold3-ec 'empty (:range i 0) i min min)))
-       '(285 empty))
+               (fold3-ec 'empty (:range i 0) i min min)))))
 
-(check 'typed-generators
-       (list (list-ec (:list x '(1) '(2) '(3)) x)
+(testing-registry-case
+ 'typed-generators '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 115)
+(test-equal 'typed-generators
+             '((1 2 3) (#\1 #\2) (1 2) (6 4 2) "abc")
+             (list (list-ec (:list x '(1) '(2) '(3)) x)
              (list-ec (:string c "1" "2") c)
              (list-ec (:vector x (vector 1) (vector 2)) x)
              (list-ec (:range x 6 1 -2) x)
-             (string-ec (:char-range c #\a #\c) c))
-       '((1 2 3) (#\1 #\2) (1 2) (6 4 2) "abc"))
+             (string-ec (:char-range c #\a #\c) c))))
 
-(check 'port-generator
-       (let ((input (open-input-string "0 1 2")))
-         (list-ec (:port datum input) datum))
-       '(0 1 2))
+(testing-registry-case
+ 'port-generator '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 126)
+(test-equal 'port-generator
+             '(0 1 2)
+             (let ((input (open-input-string "0 1 2")))
+         (list-ec (:port datum input) datum))))
 
-(check 'explicit-generators
-       (list (list-ec (:do ((i 0)) (< i 4) ((+ i 1))) i)
+(testing-registry-case
+ 'explicit-generators '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 134)
+(test-equal 'explicit-generators
+             '((0 1 2 3) (2) ((1 a) (2 b) (3 c)))
+             (list (list-ec (:do ((i 0)) (< i 4) ((+ i 1))) i)
              (list-ec (:let x 1) (:let y (+ x 1)) y)
              (list-ec (:parallel (:range i 1 10) (:list x '(a b c)))
-                      (list i x)))
-       '((0 1 2 3) (2) ((1 a) (2 b) (3 c))))
+                      (list i x)))))
 
-(check ':while-and-:until
-       (list (list-ec (:while (:range i 1 10) (< i 5)) i)
+(testing-registry-case
+ '-while-and--until '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 144)
+(test-equal ':while-and-:until
+             '((1 2 3 4) (1 2 3 4 5) 5 5)
+             (list (list-ec (:while (:range i 1 10) (< i 5)) i)
              (list-ec (:until (:range i 1 10) (>= i 5)) i)
              (let ((n 0))
                (do-ec (:while (:range i 1 10)
@@ -144,11 +157,14 @@
                (do-ec (:until (:range i 1 10)
                               (begin (set! n (+ n 1)) (>= i 5)))
                       (if #f #f))
-               n))
-       '((1 2 3 4) (1 2 3 4 5) 5 5))
+               n))))
 
-(check ':while-inner-binding-regressions
-       (list (list-ec (:while (:list i '(1 2 3 4 5 6 7 8 9))
+(testing-registry-case
+ '-while-inner-binding-regressions '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 162)
+(test-equal ':while-inner-binding-regressions
+             '((1 2 3 4) (1 2 3 4 5) ((1 1) (2 2) (3 3) (4 4)))
+             (list (list-ec (:while (:list i '(1 2 3 4 5 6 7 8 9))
                               (< i 5))
                       i)
              (list-ec (:while (:vector x (index i) '#(1 2 3 4 5))
@@ -157,22 +173,24 @@
              (list-ec (:while (:parallel (:range i 1 10)
                                          (:list j '(1 2 3 4 5 6 7 8 9)))
                               (< i 5))
-                      (list i j)))
-       '((1 2 3 4) (1 2 3 4 5) ((1 1) (2 2) (3 3) (4 4))))
+                      (list i j)))))
 
-(check 'dispatching-generator
-       (list (list-ec (: c '(a b) '(c d)) c)
-             (list-ec (: c "ab" "cd") c)
-             (list-ec (: c (vector 'a 'b) (vector 'c)) c)
-             (list-ec (: i 1 9 3) i)
-             (list-ec (: c #\a #\c) c)
-             (list-ec (: x (index i) '(a b c)) (list x i)))
-       '((a b c d)
+(testing-registry-case
+ 'dispatching-generator '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 178)
+(test-equal 'dispatching-generator
+             '((a b c d)
          (#\a #\b #\c #\d)
          (a b c)
          (1 4 7)
          (#\a #\b #\c)
-         ((a 0) (b 1) (c 2))))
+         ((a 0) (b 1) (c 2)))
+             (list (list-ec (: c '(a b) '(c d)) c)
+             (list-ec (: c "ab" "cd") c)
+             (list-ec (: c (vector 'a 'b) (vector 'c)) c)
+             (list-ec (: i 1 9 3) i)
+             (list-ec (: c #\a #\c) c)
+             (list-ec (: x (index i) '(a b c)) (list x i)))))
 
 ;; Example dispatcher from the SRFI extension notes.
 (define (example-dispatch args)
@@ -183,8 +201,12 @@
     (:generator-proc (:string (symbol->string (car args)))))
    (else #f)))
 
-(check 'dispatch-extension-hook
-       (let ((original-dispatch (:-dispatch-ref)))
+(testing-registry-case
+ 'dispatch-extension-hook '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 204)
+(test-equal 'dispatch-extension-hook
+             '(#\a #\b #\c)
+             (let ((original-dispatch (:-dispatch-ref)))
          (dynamic-wind
            (lambda ()
              (:-dispatch-set! (dispatch-union original-dispatch
@@ -192,8 +214,7 @@
            (lambda ()
              (list-ec (: c 'abc) c))
            (lambda ()
-             (:-dispatch-set! original-dispatch))))
-       '(#\a #\b #\c))
+             (:-dispatch-set! original-dispatch))))))
 
 ;; Example typed generator from the SRFI extension notes.
 (define-syntax :mygen
@@ -207,9 +228,12 @@
     ((new-list-ec etc1 etc ...)
      (reverse (fold-ec '() etc1 etc ... cons)))))
 
-(check 'extension-macros
-       (list (list-ec (:mygen x '(1 2 3)) x)
-             (new-list-ec (: i 5) i))
-       '((3 2 1) (0 1 2 3 4)))
+(testing-registry-case
+ 'extension-macros '(portable stdlib)
+ ("stdlib-eager-comprehensions-test.scm" 231)
+(test-equal 'extension-macros
+             '((3 2 1) (0 1 2 3 4))
+             (list (list-ec (:mygen x '(1 2 3)) x)
+             (new-list-ec (: i 5) i))))
 
-(finish-eager-comprehension-tests)
+(testing-runner-main "Stdlib Eager Comprehensions portable tests" (command-line))
