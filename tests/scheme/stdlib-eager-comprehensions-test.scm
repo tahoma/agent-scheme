@@ -19,7 +19,6 @@
 
 (testing-registry-case
  'do-ec-no-qualifier '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 20)
 (test-equal 'do-ec-no-qualifier
              1
              (let ((x 0))
@@ -28,21 +27,18 @@
 
 (testing-registry-case
  'list-ec-range '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 29)
 (test-equal 'list-ec-range
              '(0 1 4 9 16)
              (list-ec (:range i 5) (* i i))))
 
 (testing-registry-case
  'list-ec-nested-range '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 36)
 (test-equal 'list-ec-nested-range
              '((1 0) (2 0) (2 1) (3 0) (3 1) (3 2))
              (list-ec (:range n 1 4) (:range i n) (list n i))))
 
 (testing-registry-case
  'qualifiers-filter '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 43)
 (test-equal 'qualifiers-filter
              '((0 0) (2 0) (2 1) (2 2) (4 0) (4 1) (4 2) (4 3) (4 4))
              (list-ec (:range n 5)
@@ -52,7 +48,6 @@
 
 (testing-registry-case
  'qualifiers-not-and-or '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 53)
 (test-equal 'qualifiers-not-and-or
              '(((1 0) (1 1) (3 0) (3 1) (3 2) (3 3))
          (4)
@@ -70,7 +65,6 @@
 
 (testing-registry-case
  'qualifiers-begin-and-nested '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 71)
 (test-equal 'qualifiers-begin-and-nested
              '(4 (0 0 1))
              (list (let ((x 0))
@@ -80,7 +74,6 @@
 
 (testing-registry-case
  'collectors '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 81)
 (test-equal 'collectors
              (list '(a b a b) "aa" "abab" (vector 0 1 2) 6 24 0 2)
              (list (append-ec (:range i 2) '(a b))
@@ -94,7 +87,6 @@
 
 (testing-registry-case
  'first-last-any-every '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 95)
 (test-equal 'first-last-any-every
              '(#f 0 2 #t #f)
              (list (first-ec #f (:range i 0) i)
@@ -105,7 +97,6 @@
 
 (testing-registry-case
  'folds '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 106)
 (test-equal 'folds
              '(285 empty)
              (let ((sum-sqr (lambda (x result) (+ result (* x x)))))
@@ -114,7 +105,6 @@
 
 (testing-registry-case
  'typed-generators '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 115)
 (test-equal 'typed-generators
              '((1 2 3) (#\1 #\2) (1 2) (6 4 2) "abc")
              (list (list-ec (:list x '(1) '(2) '(3)) x)
@@ -125,7 +115,6 @@
 
 (testing-registry-case
  'port-generator '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 126)
 (test-equal 'port-generator
              '(0 1 2)
              (let ((input (open-input-string "0 1 2")))
@@ -133,7 +122,6 @@
 
 (testing-registry-case
  'explicit-generators '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 134)
 (test-equal 'explicit-generators
              '((0 1 2 3) (2) ((1 a) (2 b) (3 c)))
              (list (list-ec (:do ((i 0)) (< i 4) ((+ i 1))) i)
@@ -143,7 +131,6 @@
 
 (testing-registry-case
  '-while-and--until '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 144)
 (test-equal ':while-and-:until
              '((1 2 3 4) (1 2 3 4 5) 5 5)
              (list (list-ec (:while (:range i 1 10) (< i 5)) i)
@@ -161,7 +148,6 @@
 
 (testing-registry-case
  '-while-inner-binding-regressions '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 162)
 (test-equal ':while-inner-binding-regressions
              '((1 2 3 4) (1 2 3 4 5) ((1 1) (2 2) (3 3) (4 4)))
              (list (list-ec (:while (:list i '(1 2 3 4 5 6 7 8 9))
@@ -177,7 +163,6 @@
 
 (testing-registry-case
  'dispatching-generator '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 178)
 (test-equal 'dispatching-generator
              '((a b c d)
          (#\a #\b #\c #\d)
@@ -203,7 +188,6 @@
 
 (testing-registry-case
  'dispatch-extension-hook '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 204)
 (test-equal 'dispatch-extension-hook
              '(#\a #\b #\c)
              (let ((original-dispatch (:-dispatch-ref)))
@@ -230,7 +214,6 @@
 
 (testing-registry-case
  'extension-macros '(portable stdlib)
- ("stdlib-eager-comprehensions-test.scm" 231)
 (test-equal 'extension-macros
              '((3 2 1) (0 1 2 3 4))
              (list (list-ec (:mygen x '(1 2 3)) x)

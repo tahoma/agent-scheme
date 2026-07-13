@@ -100,7 +100,6 @@
 
 (testing-registry-case
  'random-bits-upstream-basics '(portable stdlib upstream)
- ("stdlib-random-bits-upstream-test.scm" 101)
  (dynamic-wind
   (lambda () #t)
   check-basics-1
@@ -110,7 +109,6 @@
 
 (testing-registry-case
  'random-bits-upstream-mrg32k3a '(portable stdlib upstream)
- ("stdlib-random-bits-upstream-test.scm" 111)
  (check-mrg32k3a-state))
 
 (testing-runner-main "SRFI 27 upstream confidence tests" (command-line))

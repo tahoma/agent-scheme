@@ -132,29 +132,23 @@
 
 (testing-registry-case
  'predicate-mapping '(portable stdlib)
- ("stdlib-mapping-test.scm" 133)
 (test-assert 'predicate-mapping (mapping? symbols)))
 (testing-registry-case
  'predicate-empty '(portable stdlib)
- ("stdlib-mapping-test.scm" 137)
 (test-assert 'predicate-empty (mapping-empty? empty-symbols)))
 (testing-registry-case
  'predicate-non-empty '(portable stdlib)
- ("stdlib-mapping-test.scm" 141)
 (test-assert 'predicate-non-empty (not (mapping-empty? symbols))))
 (testing-registry-case
  'constructor-orders-keys '(portable stdlib)
- ("stdlib-mapping-test.scm" 145)
 (test-equal 'constructor-orders-keys
              '((a . 1) (b . 2) (c . 3))
              (mapping->alist symbols)))
 (testing-registry-case
  'mapping-ref '(portable stdlib)
- ("stdlib-mapping-test.scm" 151)
 (test-equal 'mapping-ref 2 (mapping-ref symbols 'b)))
 (testing-registry-case
  'mapping-ref/default-missing '(portable stdlib)
- ("stdlib-mapping-test.scm" 155)
 (test-equal 'mapping-ref/default-missing
              42
              (mapping-ref/default symbols 'missing 42)))
@@ -169,13 +163,11 @@
 
 (testing-registry-case
  'mapping-set-last-duplicate-wins '(portable stdlib)
- ("stdlib-mapping-test.scm" 170)
 (test-equal 'mapping-set-last-duplicate-wins
              '((a . 1) (b . 21) (c . 3) (d . 4))
              (mapping->alist set-duplicates)))
 (testing-registry-case
  'mapping-adjoin-keeps-existing-and-first-new '(portable stdlib)
- ("stdlib-mapping-test.scm" 176)
 (test-equal 'mapping-adjoin-keeps-existing-and-first-new
              '((a . 1) (b . 2) (c . 3) (d . 4))
              (mapping->alist adjoin-duplicates)))
@@ -190,14 +182,12 @@
 
 (testing-registry-case
  'mapping-union-prefers-left '(portable stdlib)
- ("stdlib-mapping-test.scm" 191)
 (test-equal 'mapping-union-prefers-left
              '((1 . one) (2 . two) (3 . three) (4 . four) (5 . five))
              (mapping->alist
         (mapping-union numbers (mapping integer-comparator 2 'dos 5 'five)))))
 (testing-registry-case
  'mapping-intersection-keeps-common-left-values '(portable stdlib)
- ("stdlib-mapping-test.scm" 198)
 (test-equal 'mapping-intersection-keeps-common-left-values
              '((2 . two) (4 . four))
              (mapping->alist
@@ -206,21 +196,18 @@
          (mapping integer-comparator 2 'dos 4 'cuatro 6 'six)))))
 (testing-registry-case
  'mapping-difference-removes-common '(portable stdlib)
- ("stdlib-mapping-test.scm" 207)
 (test-equal 'mapping-difference-removes-common
              '((1 . one) (3 . three) (4 . four))
              (mapping->alist
         (mapping-difference numbers (mapping integer-comparator 2 'dos)))))
 (testing-registry-case
  'mapping-range>= '(portable stdlib)
- ("stdlib-mapping-test.scm" 214)
 (test-equal 'mapping-range>=
              '((3 . three) (4 . four))
              (mapping->alist (mapping-range>= numbers 3))))
 
 (testing-registry-case
  'mapping-split '(portable stdlib)
- ("stdlib-mapping-test.scm" 221)
 (test-equal 'mapping-split
              '((one two) (one two three) (three) (three four) (four))
              (call-with-values
@@ -238,7 +225,6 @@
 
 (testing-registry-case
  'mapping-unfold '(portable stdlib)
- ("stdlib-mapping-test.scm" 239)
 (test-equal 'mapping-unfold
              '((1 . 1) (2 . 4) (3 . 9))
              (mapping->alist unfolded)))
@@ -261,37 +247,30 @@
 
 (testing-registry-case
  'mapping<=?-proper-subset '(portable stdlib)
- ("stdlib-mapping-test.scm" 262)
 (test-assert 'mapping<=?-proper-subset
              (mapping<=? integer-comparator subset-left subset-right)))
 (testing-registry-case
  'mapping<?-proper-subset '(portable stdlib)
- ("stdlib-mapping-test.scm" 267)
 (test-assert 'mapping<?-proper-subset
              (mapping<? integer-comparator subset-left subset-right)))
 (testing-registry-case
  'mapping>=?-proper-superset '(portable stdlib)
- ("stdlib-mapping-test.scm" 272)
 (test-assert 'mapping>=?-proper-superset
              (mapping>=? integer-comparator subset-right subset-left)))
 (testing-registry-case
  'mapping>?-proper-superset '(portable stdlib)
- ("stdlib-mapping-test.scm" 277)
 (test-assert 'mapping>?-proper-superset
              (mapping>? integer-comparator subset-right subset-left)))
 (testing-registry-case
  'mapping<?-overlap-not-subset '(portable stdlib)
- ("stdlib-mapping-test.scm" 282)
 (test-assert 'mapping<?-overlap-not-subset
              (not (mapping<? integer-comparator overlap-left overlap-right))))
 (testing-registry-case
  'mapping>?-overlap-not-superset '(portable stdlib)
- ("stdlib-mapping-test.scm" 287)
 (test-assert 'mapping>?-overlap-not-superset
              (not (mapping>? integer-comparator overlap-left overlap-right))))
 (testing-registry-case
  'mapping>=?-overlap-not-superset '(portable stdlib)
- ("stdlib-mapping-test.scm" 292)
 (test-assert 'mapping>=?-overlap-not-superset
              (not (mapping>=? integer-comparator overlap-left overlap-right))))
 
@@ -337,43 +316,36 @@
 
 (testing-registry-case
  'model-set-sequence '(portable stdlib)
- ("stdlib-mapping-test.scm" 338)
 (test-equal 'model-set-sequence
              model-after-set
              (mapping->alist mapping-after-set)))
 (testing-registry-case
  'model-delete-sequence '(portable stdlib)
- ("stdlib-mapping-test.scm" 344)
 (test-equal 'model-delete-sequence
              model-after-delete
              (mapping->alist mapping-after-delete)))
 (testing-registry-case
  'model-adjoin-sequence '(portable stdlib)
- ("stdlib-mapping-test.scm" 350)
 (test-equal 'model-adjoin-sequence
              model-after-adjoin
              (mapping->alist mapping-after-adjoin)))
 (testing-registry-case
  'model-union-left-biased '(portable stdlib)
- ("stdlib-mapping-test.scm" 356)
 (test-equal 'model-union-left-biased
              (model-union model-after-adjoin model-other)
              (mapping->alist (mapping-union mapping-after-adjoin mapping-other))))
 (testing-registry-case
  'model-intersection-left-values '(portable stdlib)
- ("stdlib-mapping-test.scm" 362)
 (test-equal 'model-intersection-left-values
              (model-intersection model-after-adjoin model-other)
              (mapping->alist (mapping-intersection mapping-after-adjoin mapping-other))))
 (testing-registry-case
  'model-difference '(portable stdlib)
- ("stdlib-mapping-test.scm" 368)
 (test-equal 'model-difference
              (model-difference model-after-adjoin model-other)
              (mapping->alist (mapping-difference mapping-after-adjoin mapping-other))))
 (testing-registry-case
  'model-range>= '(portable stdlib)
- ("stdlib-mapping-test.scm" 374)
 (test-equal 'model-range>=
              (model-range>= model-after-adjoin 4)
              (mapping->alist (mapping-range>= mapping-after-adjoin 4))))

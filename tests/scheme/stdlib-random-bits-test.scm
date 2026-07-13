@@ -29,28 +29,24 @@
 
 (testing-registry-case
  'random-source-predicate-true '(portable stdlib)
- ("stdlib-random-bits-test.scm" 30)
 (test-equal 'random-source-predicate-true
              #t
              (random-source? source-a)))
 
 (testing-registry-case
  'random-source-predicate-false '(portable stdlib)
- ("stdlib-random-bits-test.scm" 37)
 (test-equal 'random-source-predicate-false
              #f
              (random-source? '(not a source))))
 
 (testing-registry-case
  'fresh-sources-share-deterministic-stream '(portable stdlib)
- ("stdlib-random-bits-test.scm" 44)
 (test-equal 'fresh-sources-share-deterministic-stream
              (draw-integers source-b ranges)
              (draw-integers source-a ranges)))
 
 (testing-registry-case
  'state-ref-set-replays-stream '(portable stdlib)
- ("stdlib-random-bits-test.scm" 51)
 (let* ((source (make-random-source))
        (state (random-source-state-ref source))
        (first (draw-integers source ranges)))
@@ -64,7 +60,6 @@
 
 (testing-registry-case
  'pseudo-randomize-is-deterministic '(portable stdlib)
- ("stdlib-random-bits-test.scm" 65)
 (let ((left (make-random-source))
       (right (make-random-source)))
   (random-source-pseudo-randomize! left 7 11)
@@ -75,7 +70,6 @@
 
 (testing-registry-case
  'random-real-is-in-range '(portable stdlib)
- ("stdlib-random-bits-test.scm" 76)
 (let* ((source (make-random-source))
        (rand-real (random-source-make-reals source))
        (value (rand-real)))
@@ -84,7 +78,6 @@
 
 (testing-registry-case
  'random-real-with-unit-is-in-range '(portable stdlib)
- ("stdlib-random-bits-test.scm" 85)
 (let* ((source (make-random-source))
        (rand-real (random-source-make-reals source 1/1024))
        (value (rand-real)))
@@ -93,21 +86,18 @@
 
 (testing-registry-case
  'default-random-source-is-source '(portable stdlib)
- ("stdlib-random-bits-test.scm" 94)
 (test-equal 'default-random-source-is-source
              #t
              (random-source? default-random-source)))
 
 (testing-registry-case
  'random-integer-default-range '(portable stdlib)
- ("stdlib-random-bits-test.scm" 101)
 (test-assert 'random-integer-default-range
              (let ((value (random-integer 37)))
               (and (integer? value) (<= 0 value) (< value 37)))))
 
 (testing-registry-case
  'random-real-default-range '(portable stdlib)
- ("stdlib-random-bits-test.scm" 108)
 (test-assert 'random-real-default-range
              (let ((value (random-real)))
               (and (real? value) (< 0 value) (< value 1)))))

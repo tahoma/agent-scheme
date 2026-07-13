@@ -42,7 +42,6 @@
 
 (testing-registry-case
  'property-test-pass-counts '(portable stdlib)
- ("stdlib-property-testing-test.scm" 43)
 (test-equal 'property-test-pass-counts
              '(5 0 0 0 0)
              (runner-counts
@@ -54,7 +53,6 @@
 
 (testing-registry-case
  'property-result-metadata '(portable stdlib)
- ("stdlib-property-testing-test.scm" 55)
 (test-equal 'property-result-metadata
              '((3 2 1) (3 3 3) (2 2 2))
              (let ((properties '()))
@@ -85,7 +83,6 @@
 
 (testing-registry-case
  'property-expect-fail-counts '(portable stdlib)
- ("stdlib-property-testing-test.scm" 86)
 (test-equal 'property-expect-fail-counts
              '(0 0 4 0 0)
              (runner-counts
@@ -100,7 +97,6 @@
 
 (testing-registry-case
  'property-skip-counts '(portable stdlib)
- ("stdlib-property-testing-test.scm" 101)
 (test-equal 'property-skip-counts
              '(0 0 0 0 4)
              (runner-counts
@@ -117,7 +113,6 @@
 
 (testing-registry-case
  'property-error-counts '(portable stdlib)
- ("stdlib-property-testing-test.scm" 118)
 (test-equal 'property-error-counts
              '(3 0 0 0 0)
              (runner-counts
@@ -132,7 +127,6 @@
 
 (testing-registry-case
  'property-test-failure-counts '(portable stdlib)
- ("stdlib-property-testing-test.scm" 133)
 (test-equal 'property-test-failure-counts
              '(0 3 0 0 0)
              (runner-counts
@@ -149,7 +143,6 @@
 
 (testing-registry-case
  'property-expect-fail-xpass-counts '(portable stdlib)
- ("stdlib-property-testing-test.scm" 150)
 (test-equal 'property-expect-fail-xpass-counts
              '(0 0 0 2 0)
              (runner-counts
@@ -161,7 +154,6 @@
 
 (testing-registry-case
  'property-error-missing-error-counts '(portable stdlib)
- ("stdlib-property-testing-test.scm" 162)
 (test-equal 'property-error-missing-error-counts
              '(0 2 0 0 0)
              (runner-counts
@@ -176,7 +168,6 @@
 
 (testing-registry-case
  'property-error-type-records-expected-error '(portable stdlib)
- ("stdlib-property-testing-test.scm" 177)
 (test-equal 'property-error-type-records-expected-error
              '(expected-error-kind expected-error-kind)
              (let ((properties '()))
@@ -200,14 +191,12 @@
 
 (testing-registry-case
  'property-test-runner-is-srfi-64-runner '(portable stdlib)
- ("stdlib-property-testing-test.scm" 201)
 (test-equal 'property-test-runner-is-srfi-64-runner
              #t
              (test-runner? (property-test-runner))))
 
 (testing-registry-case
  'pair-generator-of-uses-both-generators '(portable stdlib)
- ("stdlib-property-testing-test.scm" 208)
 (test-equal 'pair-generator-of-uses-both-generators
              '((a . 1) (b . 2) (c . 3))
              (let ((pairs (pair-generator-of (generator 'a 'b 'c)
@@ -216,7 +205,6 @@
 
 (testing-registry-case
  'basic-generators-produce-expected-types '(portable stdlib)
- ("stdlib-property-testing-test.scm" 217)
 (test-assert 'basic-generators-produce-expected-types
              (let ((bytes ((bytevector-generator)))
                   (char ((char-generator)))
@@ -229,7 +217,6 @@
 
 (testing-registry-case
  'collection-generators-obey-explicit-bounds '(portable stdlib)
- ("stdlib-property-testing-test.scm" 230)
 (test-assert 'collection-generators-obey-explicit-bounds
              (let* ((lists (list-generator-of (circular-generator 'x) 4))
                    (vectors (vector-generator-of (circular-generator 'x) 4))
@@ -244,7 +231,6 @@
 
 (testing-registry-case
  'procedure-generator-of-values '(portable stdlib)
- ("stdlib-property-testing-test.scm" 245)
 (test-equal 'procedure-generator-of-values
              '(first second)
              (let ((procedures (procedure-generator-of (generator 'first 'second))))
@@ -252,7 +238,6 @@
 
 (testing-registry-case
  'deterministic-random-source-replays-generated-numbers '(portable stdlib)
- ("stdlib-property-testing-test.scm" 253)
 (test-equal 'deterministic-random-source-replays-generated-numbers
              #t
              (let ((left
@@ -265,7 +250,6 @@
 
 (testing-registry-case
  'independent-random-generators-diverge-after-special-prefix '(portable stdlib)
- ("stdlib-property-testing-test.scm" 266)
 (test-equal 'independent-random-generators-diverge-after-special-prefix
              #t
              (let ((left (gdrop (exact-number-generator) 30))
@@ -275,14 +259,12 @@
 
 (testing-registry-case
  'exact-integer-generator-special-prefix '(portable stdlib)
- ("stdlib-property-testing-test.scm" 276)
 (test-equal 'exact-integer-generator-special-prefix
              '(0 1 -1)
              (generated-sample (exact-integer-generator) 3)))
 
 (testing-registry-case
  'char-generator-skips-surrogate-code-points '(portable stdlib)
- ("stdlib-property-testing-test.scm" 283)
 (test-assert 'char-generator-skips-surrogate-code-points
              (all? (lambda (char)
                     (let ((scalar (char->integer char)))
@@ -291,7 +273,6 @@
 
 (testing-registry-case
  'basic-generators-obey-size-bounds '(portable stdlib)
- ("stdlib-property-testing-test.scm" 292)
 (test-assert 'basic-generators-obey-size-bounds
              (let ((bytevectors (generated-sample (bytevector-generator) 16))
                   (strings (generated-sample (string-generator) 16))
@@ -306,7 +287,6 @@
 
 (testing-registry-case
  'numeric-generators-produce-representative-values '(portable stdlib)
- ("stdlib-property-testing-test.scm" 307)
 (test-assert 'numeric-generators-produce-representative-values
              (let ((values (list ((exact-integer-generator))
                                 ((exact-rational-generator))

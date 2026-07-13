@@ -37,7 +37,7 @@
         (consent-result->external result))))
 
 (testing-registry-case
- 'diff-render '(agent diff records) ("consent-diff-test.scm" 39)
+ 'diff-render '(agent diff records)
  (test-equal
   "proposed edit renders as unified diff"
   "--- before.scm\n+++ after.scm\n@@ -2,1 +2,1 @@\n-old\n+new\n"
@@ -55,7 +55,7 @@
         (after \"new\"))))")))
 
 (testing-registry-case
- 'diff-no-change '(agent diff records) ("consent-diff-test.scm" 57)
+ 'diff-no-change '(agent diff records)
  (test-equal
   "no-change diff is explicit and renders empty"
   "(#t #f \"\")"
@@ -68,7 +68,7 @@
              (diff-render-unified diff)))"))))
 
 (testing-registry-case
- 'diff-yield '(agent diff events) ("consent-diff-test.scm" 70)
+ 'diff-yield '(agent diff events)
  (let ((result
         (consent-result->external
          (consent-eval-source-result

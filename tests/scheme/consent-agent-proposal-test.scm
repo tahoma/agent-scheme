@@ -49,22 +49,18 @@
 
 (testing-registry-case
  'control-plane-grant '(portable agent)
- ("consent-agent-proposal-test.scm" 50)
 (test-assert 'control-plane-grant
              (proposal-control-plane-operation? 'grant-capability!)))
 (testing-registry-case
  'control-plane-approval '(portable agent)
- ("consent-agent-proposal-test.scm" 55)
 (test-assert 'control-plane-approval
              (proposal-control-plane-operation? 'approval-resolve!)))
 (testing-registry-case
  'control-plane-rejects-pure '(portable agent)
- ("consent-agent-proposal-test.scm" 60)
 (test-assert 'control-plane-rejects-pure
              (not (proposal-control-plane-operation? 'cons))))
 (testing-registry-case
  'control-plane-list-has-revoke '(portable agent)
- ("consent-agent-proposal-test.scm" 65)
 (test-assert 'control-plane-list-has-revoke
              (and (memq 'grant-revoke! proposal-control-plane-operations) #t)))
 
@@ -72,7 +68,6 @@
 
 (testing-registry-case
  'pure-is-analysis '(portable agent)
- ("consent-agent-proposal-test.scm" 73)
 (let ((analysis (analyze-code-action '(+ 1 2) '())))
   (test-assert 'pure-is-analysis (code-action-analysis? analysis))
   (test-equal 'pure-status 'allowed (analysis-status analysis))
@@ -84,7 +79,6 @@
 
 (testing-registry-case
  'gated-status '(portable agent)
- ("consent-agent-proposal-test.scm" 85)
 (let ((analysis (analyze-code-action '(file-write "out.txt" payload)
                                      (list (list 'operations operations)))))
   (test-equal 'gated-status 'gated (analysis-status analysis))
@@ -112,7 +106,6 @@
 ;; A host call nested inside otherwise pure structure is still discovered.
 (testing-registry-case
  'nested-status '(portable agent)
- ("consent-agent-proposal-test.scm" 113)
 (let ((analysis (analyze-code-action
                  '(begin (display "x") (read-file "notes.txt"))
                  (list (list 'operations operations)))))
@@ -129,7 +122,6 @@
 
 (testing-registry-case
  'quarantine-status '(portable agent)
- ("consent-agent-proposal-test.scm" 130)
 (let ((analysis (analyze-code-action
                  '(grant-capability! token authority)
                  (list (list 'operations operations)))))
@@ -155,7 +147,6 @@
 ;; Approval resolution from a proposal is also quarantined.
 (testing-registry-case
  'approval-quarantine-status '(portable agent)
- ("consent-agent-proposal-test.scm" 156)
 (let ((analysis (analyze-code-action
                  '(approval-resolve! store request-id approved) '())))
   (test-equal 'approval-quarantine-status
@@ -169,7 +160,6 @@
 ;; A quarantine trigger dominates even when a host call is also present.
 (testing-registry-case
  'quarantine-dominates-status '(portable agent)
- ("consent-agent-proposal-test.scm" 170)
 (let ((analysis (analyze-code-action
                  '(begin (file-write "o" p) (grant-revoke! handle))
                  (list (list 'operations operations)))))
@@ -183,7 +173,6 @@
 ;; Extra option-supplied quarantine triggers are honored.
 (testing-registry-case
  'extra-quarantine-status '(portable agent)
- ("consent-agent-proposal-test.scm" 184)
 (let ((analysis (analyze-code-action
                  '(custom-escalate now)
                  (list (list 'quarantine '(custom-escalate))))))
@@ -195,7 +184,6 @@
 
 (testing-registry-case
  'budget-status '(portable agent)
- ("consent-agent-proposal-test.scm" 196)
 (let ((analysis (analyze-code-action
                  '(+ 1 (+ 2 (+ 3 4)))
                  (list (list 'max-pure-cost 3)))))
@@ -205,7 +193,6 @@
 
 (testing-registry-case
  'analysis-deterministic '(portable agent)
- ("consent-agent-proposal-test.scm" 206)
 (test-equal 'analysis-deterministic
              (analyze-code-action '(file-write "o" p)
                             (list (list 'operations operations)))
@@ -216,7 +203,6 @@
 
 (testing-registry-case
  'signature-hallucinated-status '(portable agent)
- ("consent-agent-proposal-test.scm" 217)
 (let ((analysis
        (analyze-code-action
         '(imaginary-tool "notes.txt")
@@ -236,7 +222,6 @@
 
 (testing-registry-case
  'signature-misapplied-status '(portable agent)
- ("consent-agent-proposal-test.scm" 237)
 (let ((analysis
        (analyze-code-action
         '(file-write 42 "payload")
@@ -254,7 +239,6 @@
 
 (testing-registry-case
  'signature-optional-default-status '(portable agent)
- ("consent-agent-proposal-test.scm" 255)
 (let ((analysis
        (analyze-code-action
         '(file-append "notes.txt")
@@ -269,7 +253,6 @@
 
 (testing-registry-case
  'signature-admitted-status '(portable agent)
- ("consent-agent-proposal-test.scm" 270)
 (let ((analysis
        (analyze-code-action
         '(file-write "notes.txt" "payload")

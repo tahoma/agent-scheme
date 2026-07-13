@@ -35,7 +35,6 @@
 ;; failed-verifier run.
 (testing-registry-case
  'baseline-total '(portable agent)
- ("consent-agent-reliability-test.scm" 36)
 (let ((report (measure-reliability reliability-fixture 2 '())))
   (test-equal 'baseline-total
              4
@@ -68,7 +67,6 @@
 ;; gate-denied trial remains denied.
 (testing-registry-case
  'advisory-disabled-pass-1 '(portable agent)
- ("consent-agent-reliability-test.scm" 69)
 (let ((report (measure-reliability
                reliability-fixture
                2
@@ -89,7 +87,6 @@
 ;; Attempting to disable the gate-enforced tier has no effect.
 (testing-registry-case
  'gate-disabled-pass-1 '(portable agent)
- ("consent-agent-reliability-test.scm" 90)
 (let ((report (measure-reliability
                reliability-fixture
                2
@@ -105,7 +102,6 @@
 ;; zero delta for gate-enforced authority rules.
 (testing-registry-case
  'ablation-advisory-delta '(portable agent)
- ("consent-agent-reliability-test.scm" 106)
 (let ((ablation (measure-policy-ablation reliability-fixture)))
   (test-equal 'ablation-advisory-delta
              1/4
@@ -122,7 +118,6 @@
 ;; identity behavior.
 (testing-registry-case
  'canonical-reward-mismatch '(portable agent)
- ("consent-agent-reliability-test.scm" 123)
 (let ((mismatch
        (measure-reliability
         '(consent-agent-reliability-fixture

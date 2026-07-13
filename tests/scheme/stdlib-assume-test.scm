@@ -20,16 +20,13 @@
 
 (testing-registry-case
  'truthy-object '(portable stdlib)
- ("stdlib-assume-test.scm" 21)
 (test-equal 'truthy-object '(a b) (assume '(a b) "list is true")))
 (testing-registry-case
  'false-is-the-only-false-value '(portable stdlib)
- ("stdlib-assume-test.scm" 25)
 (test-equal 'false-is-the-only-false-value 0 (assume 0 "zero is true")))
 
 (testing-registry-case
  'message-expressions-are-lazy-on-success '(portable stdlib)
- ("stdlib-assume-test.scm" 30)
 (test-equal 'message-expressions-are-lazy-on-success
              '(ok (assumption))
              (let ((events '()))
@@ -43,7 +40,6 @@
 
 (testing-registry-case
  'false-assumption-raises '(portable stdlib)
- ("stdlib-assume-test.scm" 44)
 (test-assert 'false-assumption-raises
              (raises? (lambda () (assume #f "invalid path" 'payload)))))
 

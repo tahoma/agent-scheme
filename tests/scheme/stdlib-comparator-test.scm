@@ -56,16 +56,13 @@
 
 (testing-registry-case
  'vector-cdr-many '(portable stdlib)
- ("stdlib-comparator-test.scm" 57)
 (test-equal 'vector-cdr-many '#(2 3 4) (vector-cdr '#(1 2 3 4))))
 (testing-registry-case
  'vector-cdr-one '(portable stdlib)
- ("stdlib-comparator-test.scm" 61)
 (test-equal 'vector-cdr-one '#() (vector-cdr '#(1))))
 
 (testing-registry-case
  'upstream-case-lambda-hasher-initial '(portable stdlib)
- ("stdlib-comparator-test.scm" 66)
 (let* ((acc (make-upstream-case-lambda-hasher))
        (initial (hash-salt))
        (first (+ (modulo (* initial 33) (hash-bound)) 1))
@@ -79,7 +76,6 @@
 
 (testing-registry-case
  'predicates-comparator '(portable stdlib)
- ("stdlib-comparator-test.scm" 80)
 (let* ((default-comparator (make-default-comparator))
        (real-comparator (make-comparator real? = < number-hash))
        (degenerate-comparator

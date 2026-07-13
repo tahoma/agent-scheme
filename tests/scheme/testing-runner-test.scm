@@ -16,20 +16,20 @@
 (testing-registry-clear!)
 
 (testing-registry-case
- 'runner-pass '(fast unit) ("testing-runner-test.scm" 17)
+ 'runner-pass '(fast unit)
  (test-assert "passing registered body" #t))
 
 (testing-registry-case
- 'runner-fail '(slow failure) ("testing-runner-test.scm" 21)
+ 'runner-fail '(slow failure)
  (test-assert "failing registered body" #f))
 
 (testing-registry-case
- 'runner-skip '(slow skip) ("testing-runner-test.scm" 25)
+ 'runner-skip '(slow skip)
  (test-skip 1)
  (test-assert "skipped registered body" #f))
 
 (testing-registry-case
- 'runner-xfail '(slow xfail) ("testing-runner-test.scm" 30)
+ 'runner-xfail '(slow xfail)
  (test-expect-fail 1)
  (test-assert "expected registered failure" #f))
 

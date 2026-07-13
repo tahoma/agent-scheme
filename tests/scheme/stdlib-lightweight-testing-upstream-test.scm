@@ -48,7 +48,6 @@
 
 (testing-registry-case
  'simple-test-pass '(portable stdlib)
- ("stdlib-lightweight-testing-upstream-test.scm" 49)
 (test-equal 'simple-test-pass
              #t
              (upstream-example-passes?
@@ -57,7 +56,6 @@
 
 (testing-registry-case
  'simple-test-fail '(portable stdlib)
- ("stdlib-lightweight-testing-upstream-test.scm" 58)
 (test-equal 'simple-test-fail
              #t
              (upstream-example-fails?
@@ -66,7 +64,6 @@
 
 (testing-registry-case
  'default-vector-equality '(portable stdlib)
- ("stdlib-lightweight-testing-upstream-test.scm" 67)
 (test-equal 'default-vector-equality
              #t
              (upstream-example-passes?
@@ -75,7 +72,6 @@
 
 (testing-registry-case
  'custom-vector-equality '(portable stdlib)
- ("stdlib-lightweight-testing-upstream-test.scm" 76)
 (test-equal 'custom-vector-equality
              #t
              (upstream-example-fails?
@@ -84,7 +80,6 @@
 
 (testing-registry-case
  'check-ec-no-qualifier '(portable stdlib)
- ("stdlib-lightweight-testing-upstream-test.scm" 85)
 (test-equal 'check-ec-no-qualifier
              #t
              (upstream-example-passes?
@@ -93,7 +88,6 @@
 
 (testing-registry-case
  'check-ec-range-argument-reporting '(portable stdlib)
- ("stdlib-lightweight-testing-upstream-test.scm" 94)
 (test-equal 'check-ec-range-argument-reporting
              #t
              (upstream-example-passes?
@@ -102,7 +96,6 @@
 
 (testing-registry-case
  'check-ec-distributive-law '(portable stdlib)
- ("stdlib-lightweight-testing-upstream-test.scm" 103)
 (test-equal 'check-ec-distributive-law
              #t
              (upstream-example-passes?
@@ -116,7 +109,6 @@
 
 (testing-registry-case
  'fib-simple-examples '(portable stdlib)
- ("stdlib-lightweight-testing-upstream-test.scm" 117)
 (test-equal 'fib-simple-examples
              #t
              (begin
@@ -128,7 +120,6 @@
 
 (testing-registry-case
  'fib-parametric-example '(portable stdlib)
- ("stdlib-lightweight-testing-upstream-test.scm" 129)
 (test-equal 'fib-parametric-example
              #t
              (upstream-example-passes?
@@ -140,7 +131,6 @@
 
 (testing-registry-case
  'check-report-example '(portable stdlib)
- ("stdlib-lightweight-testing-upstream-test.scm" 141)
 (test-equal 'check-report-example
              "\n; *** checks *** : 2 correct, 0 failed.\n"
              (capture-upstream-output

@@ -16,7 +16,7 @@
 (define nul (string #\null))
 
 (testing-registry-case
- 'vcs-status-clean '(agent vcs parser) ("consent-vcs-test.scm" 18)
+ 'vcs-status-clean '(agent vcs parser)
  (let* ((status
          (parse-git-status-porcelain-v2-z
           (string-append
@@ -31,7 +31,7 @@
                 (null? (vcs-status-entries status)))))
 
 (testing-registry-case
- 'vcs-status-parser '(agent vcs parser) ("consent-vcs-test.scm" 33)
+ 'vcs-status-parser '(agent vcs parser)
  (let* ((status
          (parse-git-status-porcelain-v2-z
           (string-append
@@ -82,7 +82,6 @@
 
 (testing-registry-case
  'vcs-status-detached-conflict '(agent vcs parser)
- ("consent-vcs-test.scm" 83)
  (let* ((status
          (parse-git-status-porcelain-v2-z
           (string-append
@@ -111,7 +110,7 @@
                (vcs-field-value conflict 'type #f))))
 
 (testing-registry-case
- 'vcs-diff-parser '(agent vcs parser) ("consent-vcs-test.scm" 113)
+ 'vcs-diff-parser '(agent vcs parser)
  (let* ((diff
          (parse-git-raw-diff-z
           (string-append
@@ -139,7 +138,7 @@
                (vcs-field-value renamed 'score #f))))
 
 (testing-registry-case
- 'vcs-request-result '(agent vcs records) ("consent-vcs-test.scm" 141)
+ 'vcs-request-result '(agent vcs records)
  (let* ((request
          (make-vcs-capability-request
           'req-1 'status 'read-only-observation '((path "."))))
@@ -165,7 +164,7 @@
                 (make-vcs-outcome 'timeout "Git timed out.")))))
 
 (testing-registry-case
- 'vcs-authority '(agent vcs capability) ("consent-vcs-test.scm" 167)
+ 'vcs-authority '(agent vcs capability)
  (test-equal "read authority" 'read-only-observation
              (vcs-operation-required-authority 'status))
  (test-equal "remote mutation authority" 'remote-mutation
@@ -226,7 +225,7 @@
                (vcs-field-value audit 'outcome #f))))
 
 (testing-registry-case
- 'vcs-repository-property '(agent vcs property) ("consent-vcs-test.scm" 228)
+ 'vcs-repository-property '(agent vcs property)
  (test-property
   (lambda (path identity)
     (let ((repository (make-vcs-repository 'git path identity)))

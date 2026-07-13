@@ -272,35 +272,27 @@
 ;; Validate the fixture envelope and adapter identity.
 (testing-registry-case
  'fixture-tag '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 273)
 (test-equal 'fixture-tag 'consent-host-adapter-fixture (car fixture)))
 (testing-registry-case
  'fixture-id '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 277)
 (test-equal 'fixture-id 'native-cli-daemon-host-adapter (field-value fixture 'id)))
 (testing-registry-case
  'fixture-status '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 281)
 (test-equal 'fixture-status 'contract (field-value fixture 'status)))
 (testing-registry-case
  'adapter-tag '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 285)
 (test-equal 'adapter-tag 'host-adapter (car adapter)))
 (testing-registry-case
  'adapter-name '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 289)
 (test-equal 'adapter-name 'native-cli-daemon (field-value adapter 'name)))
 (testing-registry-case
  'adapter-contract '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 293)
 (test-equal 'adapter-contract 'r7rs-small (field-value adapter 'contract)))
 (testing-registry-case
  'manifest-adapter '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 297)
 (test-equal 'manifest-adapter 'native-cli-daemon (field-value manifest 'adapter)))
 (testing-registry-case
  'manifest-effect-path '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 301)
 (test-equal 'manifest-effect-path
              'shared-capability-request
              (field-value manifest 'effect-path)))
@@ -308,7 +300,6 @@
 ;; Validate adapter modes cover terminal, batch, and daemon use.
 (testing-registry-case
  'mode-cli '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 309)
 (let ((modes (field-value adapter 'modes)))
   (test-assert 'mode-cli (in-set? 'cli modes))
   (test-assert 'mode-batch (in-set? 'batch modes))
@@ -317,7 +308,6 @@
 ;; Validate interpreted and future compiled execution share the effect path.
 (testing-registry-case
  'interpreted-effect-path '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 318)
 (let ((execution (field-value adapter 'execution)))
   (test-equal 'interpreted-effect-path
              'shared-capability-request
@@ -329,56 +319,46 @@
 ;; Validate the declared vocabularies match the contract.
 (testing-registry-case
  'provided-libraries '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 330)
 (test-assert 'provided-libraries
              (same-set? provided-libraries expected-libraries)))
 (testing-registry-case
  'authority-classes '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 335)
 (test-assert 'authority-classes
              (same-set? authority-classes expected-authority-classes)))
 (testing-registry-case
  'handle-kinds '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 340)
 (test-assert 'handle-kinds
              (same-set? handle-kinds expected-handle-kinds)))
 (testing-registry-case
  'event-kinds '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 345)
 (test-assert 'event-kinds
              (same-set? event-kinds expected-event-kinds)))
 (testing-registry-case
  'error-kinds '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 350)
 (test-assert 'error-kinds
              (same-set? error-kinds expected-error-kinds)))
 
 ;; Validate every capability against the declared adapter vocabulary.
 (testing-registry-case
  'capabilities-present '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 357)
 (test-assert 'capabilities-present (pair? capabilities)))
 (testing-registry-case
  'consent-native-cli-daemon-adapter-case-17 '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 361)
 (for-each check-capability capabilities))
 
 ;; Validate every boundary record carries its required fields.
 (testing-registry-case
  'consent-native-cli-daemon-adapter-case-18 '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 367)
 (for-each check-record record-required-fields))
 
 ;; Validate the mock denials precede any allowed host operation.
 (testing-registry-case
  'consent-native-cli-daemon-adapter-case-19 '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 373)
 (check-denial-scenario 'native-cli-daemon-noninteractive-denial
                        'noninteractive-confirmation-unavailable
                        'noninteractive-confirmation-unavailable))
 (testing-registry-case
  'consent-native-cli-daemon-adapter-case-20 '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 379)
 (check-denial-scenario 'native-cli-daemon-stale-handle-denial
                        'stale-handle
                        'stale-handle))
@@ -386,7 +366,6 @@
 ;; Validate the stale-handle scenario nests a capability-error condition.
 (testing-registry-case
  'stale-handle-condition '(portable core)
- ("consent-native-cli-daemon-adapter-test.scm" 387)
 (let* ((scenario (scenario-by-id 'native-cli-daemon-stale-handle-denial))
        (error-form (and scenario (field-value scenario 'error)))
        (condition (and error-form (field-value error-form 'condition))))

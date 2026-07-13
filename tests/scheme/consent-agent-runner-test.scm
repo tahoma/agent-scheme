@@ -53,7 +53,6 @@
 
 (testing-registry-case
  'success-is-run '(portable agent)
- ("consent-agent-runner-test.scm" 54)
 (let ((run (run-task 'replace-helper
                      (list (list 'provider
                                  '((code-action (file-write "out.txt" payload))
@@ -76,7 +75,6 @@
 ;; `insufficient', so the task blocks for evidence rather than completing.
 (testing-registry-case
  'finish-unverified-state '(portable agent)
- ("consent-agent-runner-test.scm" 77)
 (let ((run (run-task 'answer-question
                      (list (list 'provider '((finish "FINAL ANSWER")))
                            (list 'verifier 'insufficient)))))
@@ -88,7 +86,6 @@
 ;; The same finish with a verifier pass DOES complete.
 (testing-registry-case
  'finish-verified-state '(portable agent)
- ("consent-agent-runner-test.scm" 89)
 (let ((run (run-task 'answer-question
                      (list (list 'provider '((finish "FINAL ANSWER")))
                            (list 'verifier 'passed)))))
@@ -100,7 +97,6 @@
 
 (testing-registry-case
  'approval-state '(portable agent)
- ("consent-agent-runner-test.scm" 101)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
@@ -113,7 +109,6 @@
 
 (testing-registry-case
  'user-input-state '(portable agent)
- ("consent-agent-runner-test.scm" 114)
 (let ((run (run-task 'summarize
                      (list (list 'provider '((code-action (read-file "x"))))
                            (list 'operations ops)
@@ -126,7 +121,6 @@
 
 (testing-registry-case
  'host-state '(portable agent)
- ("consent-agent-runner-test.scm" 127)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
@@ -138,7 +132,6 @@
 
 (testing-registry-case
  'model-state '(portable agent)
- ("consent-agent-runner-test.scm" 139)
 (let ((run (run-task 'plan-it
                      (list (list 'provider
                                  '((model-unavailable "endpoint did not respond")))))))
@@ -150,7 +143,6 @@
 
 (testing-registry-case
  'authority-state '(portable agent)
- ("consent-agent-runner-test.scm" 151)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
@@ -160,7 +152,6 @@
 
 (testing-registry-case
  'stale-state '(portable agent)
- ("consent-agent-runner-test.scm" 161)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
@@ -172,7 +163,6 @@
 
 (testing-registry-case
  'denied-state '(portable agent)
- ("consent-agent-runner-test.scm" 173)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
@@ -185,7 +175,6 @@
 
 (testing-registry-case
  'failed-state '(portable agent)
- ("consent-agent-runner-test.scm" 186)
 (let ((run (run-task 'edit-file
                      (list (list 'provider '((code-action (file-write "o" p))))
                            (list 'operations ops)
@@ -198,7 +187,6 @@
 
 (testing-registry-case
  'cancel-state '(portable agent)
- ("consent-agent-runner-test.scm" 199)
 (let ((run (run-task 'anything
                      (list (list 'provider '((finish done)))
                            (list 'control '(cancel))))))
@@ -210,7 +198,6 @@
 
 (testing-registry-case
  'quarantine-state '(portable agent)
- ("consent-agent-runner-test.scm" 211)
 (let ((run (run-task 'escalate
                      (list (list 'provider
                                  '((code-action (grant-capability! token authority))))
@@ -232,7 +219,6 @@
 
 (testing-registry-case
  'hallucinated-tool-state '(portable agent)
- ("consent-agent-runner-test.scm" 233)
 (let ((run (run-task 'call-tool
                      (list (list 'provider
                                  '((code-action
@@ -249,7 +235,6 @@
 
 (testing-registry-case
  'misapplied-tool-state '(portable agent)
- ("consent-agent-runner-test.scm" 250)
 (let ((run (run-task 'call-tool
                      (list (list 'provider
                                  '((code-action
@@ -266,7 +251,6 @@
 
 (testing-registry-case
  'unauthorized-tool-state '(portable agent)
- ("consent-agent-runner-test.scm" 267)
 (let ((run (run-task 'call-tool
                      (list (list 'provider
                                  '((code-action
@@ -286,7 +270,6 @@
 
 (testing-registry-case
  'runner-deterministic '(portable agent)
- ("consent-agent-runner-test.scm" 287)
 (test-equal 'runner-deterministic
              (run-task 'replay
                  (list (list 'provider '((finish done))) (list 'verifier 'passed)))

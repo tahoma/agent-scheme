@@ -96,7 +96,6 @@
 
 (testing-registry-case
  'source-permutation-reference '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 97)
 (let* ((state (random-source-state-ref (make-random-source)))
        (actual-source (source-at state))
        (expected-source (source-at state))
@@ -109,20 +108,17 @@
 
 (testing-registry-case
  'random-permutation-zero-length '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 110)
 (test-equal 'random-permutation-zero-length
              0
              (vector-length (random-permutation 0))))
 
 (testing-registry-case
  'random-permutation-has-each-image-once '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 117)
 (test-assert 'random-permutation-has-each-image-once
              (permutation-vector? (random-permutation 11) 11)))
 
 (testing-registry-case
  'source-exponential-reference '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 123)
 (let* ((state (random-source-state-ref (make-random-source)))
        (actual-source (source-at state))
        (expected-source (source-at state))
@@ -133,7 +129,6 @@
 
 (testing-registry-case
  'source-exponential-unit-reference '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 134)
 (let* ((state (random-source-state-ref (make-random-source)))
        (actual-source (source-at state))
        (expected-source (source-at state))
@@ -145,19 +140,16 @@
 
 (testing-registry-case
  'random-exponential-positive '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 146)
 (test-assert 'random-exponential-positive
              (< 0 (random-exponential 2.0))))
 
 (testing-registry-case
  'random-exponential-rejects-non-positive-mean '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 152)
 (test-assert 'random-exponential-rejects-non-positive-mean
              (raises? (lambda () (random-exponential 0)))))
 
 (testing-registry-case
  'source-normal-first-reference '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 158)
 (let* ((state (random-source-state-ref (make-random-source)))
        (actual-source (source-at state))
        (expected-source (source-at state))
@@ -177,7 +169,6 @@
 
 (testing-registry-case
  'source-normal-first-result-real '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 178)
 (let* ((state (random-source-state-ref (make-random-source)))
        (source (source-at state))
        (expected-source (source-at state))
@@ -199,19 +190,16 @@
 
 (testing-registry-case
  'random-normal-produces-real '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 200)
 (test-assert 'random-normal-produces-real
              (real? (random-normal 0.0 1.0))))
 
 (testing-registry-case
  'random-normal-rejects-negative-deviation '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 206)
 (test-assert 'random-normal-rejects-negative-deviation
              (raises? (lambda () (random-normal 0.0 -1.0)))))
 
 (testing-registry-case
  'random-permutation-rejects-negative-degree '(portable stdlib)
- ("stdlib-random-distributions-test.scm" 212)
 (test-assert 'random-permutation-rejects-negative-degree
              (raises? (lambda () (random-permutation -1)))))
 

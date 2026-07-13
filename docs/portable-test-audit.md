@@ -103,7 +103,7 @@ checks still execute through file-local counters instead of registered cases.
 | deterministic batch failure and summary receipts | `(testing harness)` and `(testing runner)` over SRFI 64 | parity; runner exits distinguish test and configuration failures |
 | named cases, selectors, tags, listing, and selective reruns | `(testing registry)` plus `(testing runner)` | parity for registered suites; selectors are composable Scheme data |
 | multi-program plans and shard selection | `(testing plan)` plus `(testing runner)` | exceeds ERT core; project plans are validated Scheme data |
-| source locations and per-test timing | registry case metadata and runner jiffy clock | parity, with explicit portable source metadata |
+| source locations and per-test timing | registry case metadata and runner jiffy clock | parity, with opt-in explicit portable source metadata |
 | assertion details and arbitrary result properties | assertion alists retained in each case report | parity |
 | persisted failed-test inspection and rerun | `--report` and `--rerun-failed` | batch parity through Scheme-readable reports |
 | backtraces and host diagnostics | rendered portable conditions plus registry diagnostic hook | partial; native stack capture remains a host adapter responsibility |
@@ -120,7 +120,7 @@ available to downstream users. The executable suites and cases under
 testing namespace must be named for the missing test facility they provide;
 `(stdlib ...)` remains reserved for the portable standards shelf.
 
-`(testing registry)` carries names, tags, source metadata, timing,
+`(testing registry)` carries names, tags, optional source metadata, timing,
 status, and host diagnostics without replacing SRFI 64 assertions. R7RS does
 not standardize stack capture or an interactive UI, so the registry exposes a
 diagnostic hook and Scheme-readable reports that host adapters can render and

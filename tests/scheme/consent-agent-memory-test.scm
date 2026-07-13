@@ -46,7 +46,6 @@
 
 (testing-registry-case
  'default-memory-class '(portable agent)
- ("consent-agent-memory-test.scm" 47)
 (let* ((store (consent-make-memory-store))
        (first
         (memory-store-put! store
@@ -92,7 +91,6 @@
 
 (testing-registry-case
  'reflection-kind '(portable agent)
- ("consent-agent-memory-test.scm" 93)
 (let* ((store (consent-make-memory-store))
        (base
         (memory-store-add! store
@@ -134,7 +132,6 @@
 
 (testing-registry-case
  'same-key-project-live-record '(portable agent)
- ("consent-agent-memory-test.scm" 135)
 (let* ((store (consent-make-memory-store))
        (project
         (memory-store-put! store
@@ -202,7 +199,6 @@
 
 (testing-registry-case
  'selection-record '(portable agent)
- ("consent-agent-memory-test.scm" 203)
 (let* ((store (consent-make-memory-store))
        (public
         (memory-store-add! store
@@ -290,7 +286,6 @@
 
 (testing-registry-case
  'live-projection-record-stream-count '(portable agent)
- ("consent-agent-memory-test.scm" 291)
 (let* ((store (consent-make-memory-store))
        (alpha-old
         (memory-store-put! store
@@ -355,7 +350,6 @@
 
 (testing-registry-case
  'selection-limit-selected-list '(portable agent)
- ("consent-agent-memory-test.scm" 356)
 (let* ((store (consent-make-memory-store))
        (below
         (memory-store-add! store
@@ -429,7 +423,6 @@
 
 (testing-registry-case
  'scope-datum-scope '(portable agent)
- ("consent-agent-memory-test.scm" 430)
 (let* ((store (consent-make-memory-store))
        (first
         (memory-store-add! store
@@ -488,7 +481,6 @@
 
 (testing-registry-case
  'invalid-scope '(portable agent)
- ("consent-agent-memory-test.scm" 489)
 (let* ((store (consent-make-memory-store))
        (sensitive
         (memory-store-add! store

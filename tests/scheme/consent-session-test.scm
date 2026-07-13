@@ -80,7 +80,6 @@
 ;; independent environments.
 (testing-registry-case
  'switch-result-count '(portable core)
- ("consent-session-test.scm" 81)
 (let ((records
        (drive-authorized
         (string-append
@@ -108,7 +107,6 @@
 ;; `set-default-session!' is a synonym for `switch-session'.
 (testing-registry-case
  'set-default-redirects '(portable core)
- ("consent-session-test.scm" 109)
 (let ((records
        (drive-authorized
         (string-append
@@ -129,7 +127,6 @@
 
 (testing-registry-case
  'create-returns-session-record '(portable core)
- ("consent-session-test.scm" 130)
 (let ((records
        (drive-authorized
         (string-append
@@ -166,7 +163,6 @@
 ;; session keeps running.
 (testing-registry-case
  'deny-create-emits-condition '(portable core)
- ("consent-session-test.scm" 167)
 (let ((records
        (drive-unauthorized
         (string-append
@@ -186,7 +182,6 @@
 ;; switch-session is likewise gated and fails closed without authority.
 (testing-registry-case
  'deny-switch-emits-condition '(portable core)
- ("consent-session-test.scm" 187)
 (let ((records
        (drive-unauthorized
         (string-append
@@ -198,7 +193,6 @@
 
 (testing-registry-case
  'close-returns-session-record '(portable core)
- ("consent-session-test.scm" 199)
 (let ((records
        (drive-authorized
         (string-append

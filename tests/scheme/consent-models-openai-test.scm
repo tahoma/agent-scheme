@@ -125,7 +125,6 @@
 
 (testing-registry-case
  'model-openai-request-non-ascii-json-ascii-only '(portable core)
- ("consent-models-openai-test.scm" 126)
 (let* ((non-ascii-prompt
         (string-append "Reuse "
                        (string (integer->char #x2192))
@@ -164,7 +163,6 @@
 
 (testing-registry-case
  'model-openai-request-tool-count '(portable core)
- ("consent-models-openai-test.scm" 165)
 (let* ((request (request-with-tool))
        (tools (json-ref request 'tools))
        (tool (vector-ref tools 0))
@@ -206,7 +204,6 @@
 
 (testing-registry-case
  'model-openai-request-full-shape '(portable core)
- ("consent-models-openai-test.scm" 207)
 (check-value
  'model-openai-request-full-shape
  (request-with-tool)
@@ -234,7 +231,6 @@
 
 (testing-registry-case
  'model-openai-parse-message-head '(portable core)
- ("consent-models-openai-test.scm" 235)
 (let* ((response
         (model-openai-parse-response
          (string-append
@@ -263,7 +259,6 @@
 
 (testing-registry-case
  'consent-json-nested-first '(portable core)
- ("consent-models-openai-test.scm" 264)
 (let ((out (open-output-string)))
   (json-write
    '((outer
@@ -296,7 +291,6 @@
 
 (testing-registry-case
  'model-openai-retry-count '(portable core)
- ("consent-models-openai-test.scm" 297)
 (let ((calls 0))
   (let ((result
          (completion-result
@@ -316,7 +310,6 @@
 
 (testing-registry-case
  'model-openai-http-error-status '(portable core)
- ("consent-models-openai-test.scm" 317)
 (let* ((result
         (completion-result
          '((timeout-seconds 7) (retry-count 0))
@@ -347,7 +340,6 @@
 
 (testing-registry-case
  'model-openai-detail-budget-status '(portable core)
- ("consent-models-openai-test.scm" 348)
 (let* ((detail (string-append (make-string 260 #\a) "tail-marker"))
        (body (string-append "{\"error\":{\"message\":\"" detail "\"}}"))
        (result
@@ -369,7 +361,6 @@
 
 (testing-registry-case
  'model-openai-decode-error-status '(portable core)
- ("consent-models-openai-test.scm" 370)
 (let* ((body "{\"choices\":[{\"message\":{\"content\":42}}]}")
        (result
         (completion-result

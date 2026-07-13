@@ -12,7 +12,6 @@
 
 (testing-registry-case
  'fixed-formals '(portable stdlib)
- ("stdlib-receive-test.scm" 13)
 (test-equal 'fixed-formals
              7
              (receive (x y) (values 2 5)
@@ -20,7 +19,6 @@
 
 (testing-registry-case
  'rest-formals '(portable stdlib)
- ("stdlib-receive-test.scm" 21)
 (test-equal 'rest-formals
              '(a b c)
              (receive all (values 'a 'b 'c)
@@ -28,7 +26,6 @@
 
 (testing-registry-case
  'dotted-formals '(portable stdlib)
- ("stdlib-receive-test.scm" 29)
 (test-equal 'dotted-formals
              '(first (second third))
              (receive (head . tail) (values 'first 'second 'third)
@@ -36,7 +33,6 @@
 
 (testing-registry-case
  'body-sequence '(portable stdlib)
- ("stdlib-receive-test.scm" 37)
 (test-equal 'body-sequence
              28
              (receive (x y) (values 3 4)

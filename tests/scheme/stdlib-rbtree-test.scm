@@ -194,14 +194,12 @@
 
 (testing-registry-case
  'folds-in-key-order '(portable stdlib)
- ("stdlib-rbtree-test.scm" 195)
 (test-equal 'folds-in-key-order
              '((1 . one) (2 . two) (3 . three) (4 . four))
              (tree-items tree)))
 
 (testing-registry-case
  'inserts-report-status '(portable stdlib)
- ("stdlib-rbtree-test.scm" 202)
 (test-equal 'inserts-report-status
              '(inserted ((1 . one) (2 . two) (3 . three) (4 . four) (5 . five)))
              (call-with-values
@@ -211,7 +209,6 @@
 
 (testing-registry-case
  'updates-existing-key '(portable stdlib)
- ("stdlib-rbtree-test.scm" 212)
 (test-equal 'updates-existing-key
              '(updated ((1 . one) (2 . two) (3 . THREE) (4 . four)))
              (call-with-values
@@ -221,7 +218,6 @@
 
 (testing-registry-case
  'removes-existing-key '(portable stdlib)
- ("stdlib-rbtree-test.scm" 222)
 (test-equal 'removes-existing-key
              '(two ((1 . one) (3 . three) (4 . four)))
              (call-with-values
@@ -231,7 +227,6 @@
 
 (testing-registry-case
  'missing-remove-returns-failure-status '(portable stdlib)
- ("stdlib-rbtree-test.scm" 232)
 (test-equal 'missing-remove-returns-failure-status
              '(missing ((1 . one) (2 . two) (3 . three) (4 . four)))
              (call-with-values
@@ -241,7 +236,6 @@
 
 (testing-registry-case
  'empty-tree-behavior '(portable stdlib)
- ("stdlib-rbtree-test.scm" 242)
 (test-equal 'empty-tree-behavior
              '(() seed seed #t none none (missing ()))
              (let ((empty (make-tree)))
@@ -264,7 +258,6 @@
 
 (testing-registry-case
  'successor-and-predecessor '(portable stdlib)
- ("stdlib-rbtree-test.scm" 265)
 (test-equal 'successor-and-predecessor
              '(3 2 none none)
              (list (tree-key-successor integer-comparator tree 2 (lambda () 'none))
@@ -274,7 +267,6 @@
 
 (testing-registry-case
  'successor-and-predecessor-gaps '(portable stdlib)
- ("stdlib-rbtree-test.scm" 275)
 (test-equal 'successor-and-predecessor-gaps
              '(3 3 1 5 none none)
              (let ((gap-tree
@@ -289,7 +281,6 @@
 
 (testing-registry-case
  'for-each-visits-in-key-order '(portable stdlib)
- ("stdlib-rbtree-test.scm" 290)
 (test-equal 'for-each-visits-in-key-order
              '((1 one) (2 two) (3 three) (4 four))
              (let ((seen '()))
@@ -301,7 +292,6 @@
 
 (testing-registry-case
  'generator-yields-key-value-lists '(portable stdlib)
- ("stdlib-rbtree-test.scm" 302)
 (test-equal 'generator-yields-key-value-lists
              '((1 one) (2 two) (3 three) (4 four) #t)
              (let ((gen (tree-generator tree)))
@@ -309,7 +299,6 @@
 
 (testing-registry-case
  'map-transforms-values '(portable stdlib)
- ("stdlib-rbtree-test.scm" 310)
 (test-equal 'map-transforms-values
              '((1 one 1) (2 two 2) (3 three 3) (4 four 4))
              (tree-items
@@ -320,7 +309,6 @@
 
 (testing-registry-case
  'map-transforms-monotone-keys '(portable stdlib)
- ("stdlib-rbtree-test.scm" 321)
 (test-equal 'map-transforms-monotone-keys
              '((11 . one) (12 . two) (13 . three) (14 . four))
              (tree-items
@@ -331,7 +319,6 @@
 
 (testing-registry-case
  'catenate-joins-trees '(portable stdlib)
- ("stdlib-rbtree-test.scm" 332)
 (test-equal 'catenate-joins-trees
              '((1 . one) (2 . two) (3 . three) (4 . four) (5 . five))
              (tree-items
@@ -343,7 +330,6 @@
 
 (testing-registry-case
  'catenate-allows-empty-left-tree '(portable stdlib)
- ("stdlib-rbtree-test.scm" 344)
 (test-equal 'catenate-allows-empty-left-tree
              '((1 . one) (2 . two) (3 . three))
              (tree-items
@@ -355,7 +341,6 @@
 
 (testing-registry-case
  'catenate-allows-empty-right-tree '(portable stdlib)
- ("stdlib-rbtree-test.scm" 356)
 (test-equal 'catenate-allows-empty-right-tree
              '((1 . one) (2 . two) (3 . three))
              (tree-items
@@ -367,7 +352,6 @@
 
 (testing-registry-case
  'catenate-balances-unequal-heights '(portable stdlib)
- ("stdlib-rbtree-test.scm" 368)
 (test-equal 'catenate-balances-unequal-heights
              '((1 . one) (2 . two) (3 . three) (4 . four) (5 . five)
          (6 . six) (7 . seven) (8 . eight) (9 . nine) (10 . ten))
@@ -382,7 +366,6 @@
 
 (testing-registry-case
  'split-partitions-tree '(portable stdlib)
- ("stdlib-rbtree-test.scm" 383)
 (test-equal 'split-partitions-tree
              '(((1 . one) (2 . two))
          ((1 . one) (2 . two) (3 . three))
@@ -400,7 +383,6 @@
 
 (testing-registry-case
  'split-partitions-absent-boundary '(portable stdlib)
- ("stdlib-rbtree-test.scm" 401)
 (test-equal 'split-partitions-absent-boundary
              '(((1 . one))
          ((1 . one))
@@ -421,7 +403,6 @@
 
 (testing-registry-case
  'split-empty-tree '(portable stdlib)
- ("stdlib-rbtree-test.scm" 422)
 (test-equal 'split-empty-tree
              '(() () () () ())
              (call-with-values
@@ -435,7 +416,6 @@
 
 (testing-registry-case
  'string-key-comparator '(portable stdlib)
- ("stdlib-rbtree-test.scm" 436)
 (test-equal 'string-key-comparator
              '(updated
          (("alpha" . a) ("bravo" . b) ("charlie" . c))
@@ -467,7 +447,6 @@
 
 (testing-registry-case
  'operation-sequence-matches-sorted-model '(portable stdlib)
- ("stdlib-rbtree-test.scm" 468)
 (test-equal 'operation-sequence-matches-sorted-model
              '(#t
          (inserted inserted inserted inserted inserted inserted inserted updated
@@ -492,7 +471,6 @@
 
 (testing-registry-case
  'deletion-sequence-rebalances-tree '(portable stdlib)
- ("stdlib-rbtree-test.scm" 493)
 (test-equal 'deletion-sequence-rebalances-tree
              '(#t
          (8 1 15 4 12 2 14 6 10 3 5 7 9 11 13)

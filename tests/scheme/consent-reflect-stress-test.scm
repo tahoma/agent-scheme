@@ -204,7 +204,6 @@
 
 (testing-registry-case
  'reflect-library-catalog-discovery-source-metadata-budget '(portable core)
- ("consent-reflect-stress-test.scm" 205)
 (check 'reflect-library-catalog-discovery-source-metadata-budget
        (let ((before (consent-source-metadata-count)))
          (let ((ignored
@@ -219,7 +218,6 @@
 
 (testing-registry-case
  'reflect-library-catalog-discovery '(portable core)
- ("consent-reflect-stress-test.scm" 220)
 (check-external 'reflect-library-catalog-discovery
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -258,7 +256,6 @@
 
 (testing-registry-case
  'reflect-library-catalog-visibility-tiers '(portable core)
- ("consent-reflect-stress-test.scm" 259)
 (check-external 'reflect-library-catalog-visibility-tiers
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -283,7 +280,6 @@
 
 (testing-registry-case
  'reflect-documented-bindings-and-apropos '(portable core)
- ("consent-reflect-stress-test.scm" 284)
 (check-external/options 'reflect-documented-bindings-and-apropos
                         "(import (scheme base) (agent reflect))
                          (define (field datum name)
@@ -330,7 +326,6 @@
 
 (testing-registry-case
  'reflect-binding-libraries-crosswalk '(portable core)
- ("consent-reflect-stress-test.scm" 331)
 (check-external 'reflect-binding-libraries-crosswalk
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -353,7 +348,6 @@
 
 (testing-registry-case
  'reflect-apropos-unmanifested-library '(portable core)
- ("consent-reflect-stress-test.scm" 354)
 (check-external/options 'reflect-apropos-unmanifested-library
                         "(define-library (adhoc scratch)
                            (export adhoc-needle)
@@ -392,7 +386,6 @@
 
 (testing-registry-case
  'reflect-dynamic-manifest-inputs '(portable core)
- ("consent-reflect-stress-test.scm" 393)
 (check-external 'reflect-dynamic-manifest-inputs
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -523,7 +516,6 @@
 
 (testing-registry-case
  'reflect-library-resolution-api '(portable core)
- ("consent-reflect-stress-test.scm" 524)
 (check-external 'reflect-library-resolution-api
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
