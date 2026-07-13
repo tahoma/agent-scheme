@@ -10487,6 +10487,11 @@ cursor across sessions."
         (set-context-libraries! context libraries)
         (set-context-interaction-environment! context environment)
         (set-context-current-output-port! context program-output-port)
+        ;; A durable interaction captures both standard text output streams.
+        ;; R7RS permits them to designate the same port; using the interaction
+        ;; buffer keeps REPL and self-hosted test diagnostics inside the
+        ;; capability boundary instead of leaving current-error-port denied.
+        (set-context-current-error-port! context program-output-port)
         (if program-input-port
             (set-context-current-input-port! context program-input-port))
         (let ((result

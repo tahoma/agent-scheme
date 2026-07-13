@@ -153,6 +153,14 @@
        (consent-value->external
         (list command-line-script-path "alpha" "beta")))
 
+;; The compiled self-host dispatcher must hide its own --host-run argument and
+;; present the test file as the complete Scheme command line.
+(check 'host-run-command-line-normalized
+       (cdr (assq 'command-line
+                  (cli-script-host-run-options
+                   "." command-line-script-path)))
+       (list command-line-script-path))
+
 (delete-if-present command-line-script-path)
 
 (if (= failures 0)

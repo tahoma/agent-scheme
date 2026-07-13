@@ -340,23 +340,31 @@
             plan-path (string->symbol shard-text))))))
 
     (define (testing-runner-main suite arguments)
-      "Run SUITE from command-line ARGUMENTS and exit with batch status."
+      "Run SUITE from command-line ARGUMENTS and complete with batch status."
       #((parameters
          (suite (type object) (description "Suite name."))
          (arguments (type list) (description "Command line including program.")))
-        (returns (type unspecified) (description "Does not return."))
+        (returns (type unspecified)
+         (description
+          ("Does not return during ordinary process execution; returns"
+            "zero inside a compiled host-run interaction.")))
         (effects process-exit state-read state-write file-read file-write port-io error))
-      (exit
-       (guard (condition
-               (else
-                (write (list 'testing-runner-error condition)
-                       (current-error-port))
-                (newline (current-error-port))
-                2))
-         (let* ((result
-                 (testing-runner-run
-                  suite
-                  (testing-runner-options
-                   (testing-runner-effective-arguments arguments))))
-                (status (cadr (assq 'status (cdr result)))))
-           (if (eq? status 'failed) 1 0)))))))
+      (let ((status
+             (guard (condition
+                     (else
+                      (write (list 'testing-runner-error condition)
+                             (current-error-port))
+                      (newline (current-error-port))
+                      2))
+               (let* ((result
+                       (testing-runner-run
+                        suite
+                        (testing-runner-options
+                         (testing-runner-effective-arguments arguments))))
+                      (result-status (cadr (assq 'status (cdr result)))))
+                 (if (eq? result-status 'failed) 1 0)))))
+        (if (get-environment-variable "TESTING_RUNNER_HOST_RUN")
+            (if (= status 0)
+                status
+                (error "compiled host-run test program failed" status))
+            (exit status))))))

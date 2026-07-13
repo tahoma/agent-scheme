@@ -27,6 +27,33 @@
 ;; Checked-in project plan used for integration assertions below.
 (define project-plan (testing-plan-read "tests/scheme/test-plan.scm"))
 
+(define (program-tagged? program tag)
+  "Return true when PROGRAM carries TAG."
+  (if (memq tag (testing-plan-program-tags program)) #t #f))
+
+(define (program-count-with-tag programs tag)
+  "Return the number of PROGRAMS carrying TAG."
+  (let loop ((rest programs) (count 0))
+    (if (null? rest)
+        count
+        (loop (cdr rest)
+              (+ count (if (program-tagged? (car rest) tag) 1 0))))))
+
+(define (full-program-self-host-classified? program)
+  "Return true when every full PROGRAM is either compiled or a named gap."
+  (if (program-tagged? program 'full)
+      (let ((compiled? (program-tagged? program 'compiled))
+            (gap? (program-tagged? program 'self-host-gap)))
+        (or (and compiled? (not gap?))
+            (and gap? (not compiled?))))
+      #t))
+
+(define (every predicate values)
+  "Return true when PREDICATE accepts every member of VALUES."
+  (or (null? values)
+      (and (predicate (car values))
+           (every predicate (cdr values)))))
+
 (testing-harness-run "Testing plan"
   (test-assert "valid plan predicate" (testing-plan? sample-plan))
   (test-equal "declared shard names"
@@ -62,11 +89,27 @@
   (test-assert "support shard excludes the evaluator bottleneck"
                (not (member "tests/scheme/consent-eval-test.scm"
                             (testing-plan-files project-plan 'full-support))))
-  (test-equal "compiled project shard includes JSON reference stress"
-              '("tests/scheme/consent-reader-test.scm"
-                "tests/scheme/stdlib-json-reference-test.scm"
-                "tests/scheme/consent-manifest-smoke-test.scm")
-              (testing-plan-files project-plan 'compiled))
+  (let ((programs (testing-plan-programs project-plan))
+        (compiled-files (testing-plan-files project-plan 'compiled)))
+    (test-equal "compiled project shard program count" 38
+                (length compiled-files))
+    (test-assert "compiled project shard includes registered semantics"
+                 (member "tests/scheme/consent-context-test.scm"
+                         compiled-files))
+    (test-assert "compiled project shard includes JSON reference stress"
+                 (member "tests/scheme/stdlib-json-reference-test.scm"
+                         compiled-files))
+    (test-assert "compiled project shard includes runtime manifest smoke"
+                 (member "tests/scheme/consent-manifest-smoke-test.scm"
+                         compiled-files))
+    (test-equal "programs admitted to compiled self-host" 38
+                (program-count-with-tag programs 'compiled))
+    (test-equal "ordinary full-suite programs" 55
+                (program-count-with-tag programs 'full))
+    (test-equal "full programs carrying an explicit self-host gap" 18
+                (program-count-with-tag programs 'self-host-gap))
+    (test-assert "full programs exactly partition compiled coverage and gaps"
+                 (every full-program-self-host-classified? programs)))
   (test-equal "compiled live shard uses the self-hosted program"
               '("tests/scheme/consent-models-compiled-live-test.scm")
               (testing-plan-files project-plan 'live-compiled))

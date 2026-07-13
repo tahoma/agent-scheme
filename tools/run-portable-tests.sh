@@ -93,7 +93,7 @@ run_scheme_program() {
       "$runner" "-:r7rs,search=$library_root" "$program"
       ;;
     gambit-native|compiled)
-      "$runner" --host-run "$program"
+      TESTING_RUNNER_HOST_RUN=1 "$runner" --host-run "$program"
       ;;
     racket)
       "$runner" -S "$racket_collections" -I r7rs -f "$program"
