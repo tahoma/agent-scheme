@@ -11,7 +11,8 @@
         (scheme write)
         (only (agent models openai)
               model-openai-request-json
-              model-openai-parse-response)
+              model-openai-parse-response
+              model-openai-compatible-http-completion-result)
         (only (stdlib json)
               json-null?
               json-read
@@ -72,6 +73,37 @@
       (or (= index length)
           (and (< (char->integer (string-ref text index)) 128)
                (loop (+ index 1)))))))
+
+(define (result-field record name default)
+  "Return NAME from RECORD, or DEFAULT."
+  (let ((entry (and (pair? record) (assq name (cdr record)))))
+    (if entry (cadr entry) default)))
+
+;; Canonical provider and model datums used by transport-result tests.
+(define portable-provider
+  '(model-provider
+    (id local-errors)
+    (kind local)
+    (transport openai-compatible-http)
+    (endpoint "http://127.0.0.1:11434/v1")))
+
+;; Canonical model paired with portable-provider for transport-result tests.
+(define portable-model '(model (id qwen-coder)))
+
+(define (retrieval-output body status)
+  "Return fake successful process retrieval output for BODY and HTTP STATUS."
+  (list 0
+        (string-append body
+                       "__CONSENT_OPENAI_META__"
+                       (number->string status)
+                       " 0.001")
+        ""))
+
+(define (completion-result options attempt)
+  "Run a deterministic portable model completion with OPTIONS and ATTEMPT."
+  (model-openai-compatible-http-completion-result
+   portable-provider portable-model 'scheme-scripter
+   "prompt text must not leak" options attempt))
 
 ;; Canonical tool schema used by request projection checks.
 (define local-echo-tool
@@ -257,6 +289,85 @@
                        (json-ref nested 'enabled)
                        (json-null? (vector-ref array 1)))
                  '("nested" #f #t))))
+
+(let ((calls 0))
+  (let ((result
+         (completion-result
+          '((timeout-seconds 7) (retry-count 1))
+          (lambda (url request-json timeout)
+            (set! calls (+ calls 1))
+            (if (= calls 1)
+                (list 7 "" "connection refused")
+                (retrieval-output
+                 "{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}"
+                 200))))))
+    (check-value 'model-openai-retry-count calls 2)
+    (check-value 'model-openai-retry-status
+                 (result-field result 'status #f) 'ok)
+    (check-value 'model-openai-retry-value
+                 (result-field result 'value #f) "ok")))
+
+(let* ((result
+        (completion-result
+         '((timeout-seconds 7) (retry-count 0))
+         (lambda (url request-json timeout)
+           (retrieval-output
+            "{\"error\":{\"message\":\"model still loading\"}}"
+            503))))
+       (error-datum (result-field result 'error '()))
+       (request (result-field error-datum 'request '()))
+       (http (result-field error-datum 'http '())))
+  (check-value 'model-openai-http-error-status
+               (result-field result 'status #f) 'error)
+  (check-value 'model-openai-http-error-phase
+               (result-field error-datum 'phase #f) 'http)
+  (check-value 'model-openai-http-error-code
+               (result-field http 'status #f) 503)
+  (check-value 'model-openai-http-error-excerpt
+               (result-field http 'body-excerpt #f)
+               "{\"error\":{\"message\":\"model still loading\"}}")
+  (check-value 'model-openai-http-error-timeout
+               (result-field request 'timeout-seconds #f) 7)
+  (let ((out (open-output-string)))
+    (write error-datum out)
+    (check-value 'model-openai-http-error-prompt-redacted
+                 (string-contains?
+                  (get-output-string out) "prompt text must not leak")
+                 #f)))
+
+(let* ((detail (string-append (make-string 260 #\a) "tail-marker"))
+       (body (string-append "{\"error\":{\"message\":\"" detail "\"}}"))
+       (result
+        (completion-result
+         '((max-transport-detail-bytes 320) (retry-count 0))
+         (lambda (url request-json timeout)
+           (retrieval-output body 503))))
+       (error-datum (result-field result 'error '()))
+       (http (result-field error-datum 'http '()))
+       (excerpt (result-field http 'body-excerpt "")))
+  (check-value 'model-openai-detail-budget-status
+               (result-field result 'status #f) 'error)
+  (check-value 'model-openai-detail-budget-lower-bound
+               (> (string-length excerpt) 240) #t)
+  (check-value 'model-openai-detail-budget-upper-bound
+               (<= (string-length excerpt) 320) #t)
+  (check-value 'model-openai-detail-budget-tail
+               (string-contains? excerpt "tail-marker") #t))
+
+(let* ((body "{\"choices\":[{\"message\":{\"content\":42}}]}")
+       (result
+        (completion-result
+         '()
+         (lambda (url request-json timeout)
+           (retrieval-output body 200))))
+       (error-datum (result-field result 'error '()))
+       (decode (result-field error-datum 'decode '())))
+  (check-value 'model-openai-decode-error-status
+               (result-field result 'status #f) 'error)
+  (check-value 'model-openai-decode-error-phase
+               (result-field error-datum 'phase #f) 'decode)
+  (check-value 'model-openai-decode-error-body
+               (result-field decode 'body-excerpt #f) body))
 
 (if (= failures 0)
     (begin

@@ -5133,6 +5133,87 @@
     (transport openai-compatible-http)
     (endpoint \"http://127.0.0.1:11434/v1\"))"))
 
+(check-external
+ 'agent-models-route-skips-unavailable
+ "(import (scheme base) (agent models))
+  (model-provider-register!
+   '(model-provider
+     (id local-stack)
+     (kind local)
+     (transport openai-compatible-http)
+     (endpoint \"http://127.0.0.1:11434/v1\")
+     (models
+      (((id cold-model)
+        (roles (portable-fallback))
+        (status unavailable))
+       ((id warm-model)
+        (roles (portable-fallback))
+        (privacy local))))))
+  (model-route 'portable-fallback '())"
+ (expected-datum-external
+  "(model-routing-decision
+    (status selected)
+    (role portable-fallback)
+    (provider local-stack)
+    (model warm-model)
+    (kind local)
+    (transport openai-compatible-http)
+    (endpoint \"http://127.0.0.1:11434/v1\"))"))
+
+(let* ((result
+        (consent-eval-source-result
+         "(import (scheme base) (agent models) (agent redaction))
+          (model-provider-register!
+           '(model-provider
+             (id remote-openai)
+             (kind remote)
+             (transport openai-compatible-http)
+             (endpoint \"https://api.openai.example/v1\")
+             (models
+              (((id gpt-example)
+                (roles (portable-remote-test))
+                (privacy public))))))
+          (model-complete
+           'portable-remote-test
+           (context-local-only! \"private buffer text\" \"private buffer\")
+           '())"))
+       (error-field (assq 'error (cdr result))))
+  (check 'agent-models-remote-local-only-denied
+         (and (equal? (field-value result 'status) 'error)
+              (string=?
+               (field-value error-field 'message)
+               (string-append
+                "consent eval error: local-only context requires "
+                "explicit approval"))
+              #t)
+         #t))
+
+(let ((external
+       (consent-value->external
+        (consent-eval-source
+         "(import (scheme base) (agent models))
+          (model-provider-register!
+           '(model-provider
+             (id local-secret)
+             (kind local)
+             (transport openai-compatible-http)
+             (endpoint \"http://127.0.0.1:11434/v1\")
+             (credentials
+              ((source env)
+               (field \"OPENAI_API_KEY\")
+               (value \"sk-modelsecret1234567890\")))
+             (models
+              (((id qwen-coder)
+                (roles (scheme-scripter))
+                (privacy local))))))
+          (model-provider-diagnostics)"))))
+  (check 'agent-models-diagnostics-redact-credentials
+         (and (string-contains? external "model-provider-diagnostics")
+              (string-contains? external "local-secret")
+              (not (string-contains? external "sk-modelsecret"))
+              #t)
+         #t))
+
 (check-external/options
  'agent-models-tool-spec-from-docstring-metadata
  "(import (scheme base) (agent models))
@@ -5655,6 +5736,15 @@
                "(yield (request-context")
               #t)
          #t))
+
+(check-external
+ 'agent-context-missing-defaults
+ "(import (scheme base) (agent context))
+  (list (current-request)
+        (current-conversation-summary)
+        (current-focus)
+        (current-buffer-context))"
+ "(#f #f #f #f)")
 
 (check 'standard-host-libraries-import-and-default-deny
        (and

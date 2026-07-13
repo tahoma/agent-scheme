@@ -36,7 +36,19 @@
     (path "tests/scheme/consent-session-test.scm")
     (tags (full direct agent)))
    (program
+    (path "tests/scheme/consent-session-store-test.scm")
+    (tags (full direct agent registered)))
+   (program
     (path "tests/scheme/consent-context-test.scm")
+    (tags (full direct agent registered)))
+   (program
+    (path "tests/scheme/consent-diagnostics-test.scm")
+    (tags (full direct agent registered)))
+   (program
+    (path "tests/scheme/consent-diff-test.scm")
+    (tags (full direct agent registered)))
+   (program
+    (path "tests/scheme/consent-network-test.scm")
     (tags (full direct agent registered)))
    (program
     (path "tests/scheme/testing-harness-test.scm")

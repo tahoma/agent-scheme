@@ -8,16 +8,43 @@ does; retaining an ERT test does not make it the semantic source of truth.
 
 - Reader, evaluator, macro, runtime, standard-library, agent-record, REPL
   contract, and conformance semantics have canonical files in `tests/scheme/`.
-- The pure `(agent context)`, `(agent plan)`, `(agent redaction)`, `(agent
-  task)`, and `(agent vcs)` datum/parser suites run under SRFI 64 across the
-  direct portable host matrix. Their ERT counterparts remain only to preserve
-  Emacs-bootstrap import, primitive-adapter, audit, session, buffer, process,
-  and policy coverage.
+- The pure `(agent context)`, `(agent diagnostics)`, `(agent diff)`, `(agent
+  network)`, `(agent plan)`, `(agent redaction)`, `(agent session store)`,
+  `(agent task)`, and `(agent vcs)` datum/parser suites run under SRFI 64 across
+  the direct portable host matrix. Their ERT counterparts remain only to
+  preserve Emacs-bootstrap import, primitive-adapter, audit, session, buffer,
+  process, and policy coverage.
+- The portable OpenAI-compatible model suite injects a deterministic retrieval
+  adapter and owns retry, HTTP failure, decode failure, bounded-detail, and
+  credential/prompt-redaction semantics without routing those checks through
+  an Emacs transport fake.
 - SRFI 180 valid and invalid JSONTestSuite fixtures, including
   `y_foundationdb_status.json`, explicit exclusions, implementation-defined
   classifications, JSON Lines, and JSON Text Sequences are canonical in
   `tests/scheme/stdlib-json-reference-test.scm`.
 - Shared R7RS and REPL corpora are exercised by both portable and Emacs hosts.
+
+## Actual case ownership
+
+`tests/scheme/ert-portable-parity-map.scm` is the canonical Scheme-data
+inventory for every checked-in ERT file. The repository audit rejects an
+unmapped ERT file, a missing portable program, or a portable program absent
+from the Scheme-native test plan. Surfaces that are wholly repository policy,
+build orchestration, or Emacs host adapters carry an explicit boundary reason.
+
+The 15 mixed source-backed surfaces are stricter: every ERT case is partitioned
+between a named portable case/check marker and a concrete Emacs-only boundary.
+The audit rejects duplicates, omissions, and portable markers that no longer
+exist. Shared-corpus and dual-core surfaces retain their distinct ownership
+forms because their parity unit is respectively the common fixture corpus or
+the separately exercised runtime implementation, rather than a copied ERT case
+body.
+
+Raw ERT-test and Scheme-assertion totals are deliberately not used as a parity
+claim: one ERT case may contain many assertions, while one registered portable
+case retains each SRFI 64 result. The ownership map and executable marker checks
+answer the meaningful question: which environment owns each semantic case, and
+what portable test makes a host-neutral claim executable?
 
 ## Justified ERT coverage
 
@@ -43,8 +70,8 @@ The audit groups the remaining ERT files by the boundary they exercise:
 | ERT surface | Canonical portable coverage or reason retained |
 | --- | --- |
 | `consent-base`, `consent-budget`, `consent-eval`, `consent-macro`, `consent-reader`, `consent-result`, and `consent-runtime` | `consent-reader-test.scm`, `consent-eval-test.scm`, shared fixtures, and parity tests own language semantics; ERT retains the Emacs evaluator and bootstrap realization. |
-| `consent-agent-*`, `consent-context`, `consent-memory`, `consent-models`, `consent-plan`, `consent-redaction`, `consent-session`, `consent-task`, `consent-transcript`, and `consent-vcs` | Source-backed datum and pure-library behavior is covered by the corresponding portable agent suites, including the five suites migrated in this issue; ERT retains primitive adapters, audit effects, persistence, live buffers, processes, and policy gates. |
-| `consent-capability`, `consent-network`, `consent-approval`, `consent-job`, `consent-repl-comint`, and `consent-repl-stream` | These tests exercise Emacs buffers, processes, callbacks, prompts, transport fakes, grants, or interactive session state and therefore remain host-adapter tests. |
+| `consent-agent-*`, `consent-context`, `consent-diagnostics`, `consent-diff`, `consent-memory`, `consent-models`, `consent-network`, `consent-plan`, `consent-redaction`, `consent-session`, `consent-task`, `consent-transcript`, and `consent-vcs` | Source-backed datum and pure-library behavior is covered by the corresponding portable agent suites; the exact mixed-surface map identifies the remaining primitive adapters, audit effects, persistence, live buffers, processes, and policy gates case by case. |
+| `consent-capability`, `consent-approval`, `consent-job`, `consent-repl-comint`, and `consent-repl-stream` | These tests exercise dual-core capability enforcement or Emacs buffers, processes, callbacks, prompts, grants, and interactive session state; portable runtime and REPL tests own the shared language/interaction contracts. |
 | `consent-library`, `consent-compile-*`, `consent-ci`, `consent-smoke`, and module/ownership tests | These validate manifest discovery from the Emacs bootstrap, compilation, packaging, repository layout, CI configuration, and executable discovery rather than host-neutral library semantics. |
 | `*-doc-test`, Scheme documentation lint, and branding/style tests | These inspect checked-in documentation and source conventions using repository tooling; they are build-policy tests, not Scheme runtime semantics. |
 
@@ -54,9 +81,9 @@ semantic coverage. New and migrated semantic suites use SRFI 64 plus the
 `(testing registry)` and `(testing runner)` path; #883 tracks conversion of those
 older portable files without moving their assertions back through ERT.
 
-New host-neutral ERT-only tests must state the blocking host boundary in their
-commentary or link a focused issue that moves the semantics into portable
-Scheme.
+New ERT tests must update the Scheme ownership map. A mixed source-backed case
+must either name its portable case/check marker or state the concrete Emacs-only
+boundary; a new ERT file cannot enter the suite unclassified.
 
 ## ERT capability comparison
 
@@ -102,10 +129,11 @@ augment rather than embedding one host's debugger in the portable layer.
 `(testing runner)` turns those facilities into a complete batch entry point.
 It parses portable selector data, lists cases, installs the clock and diagnostic
 adapters, preserves full assertion result alists, writes reports, reruns failed
-case names from a prior report, and owns process exit status. The Context, Plan,
-Redaction, Task, and VCS semantic suites use this path directly; remaining
-legacy portable files still need conversion from file-local counters before
-their individual checks become registry-visible.
+case names from a prior report, and owns process exit status. The Context,
+Diagnostics, Diff, Network, Plan, Redaction, Session Store, Task, and VCS
+semantic suites use this path directly; remaining legacy portable files still
+need conversion from file-local counters before their individual checks become
+registry-visible.
 
 `(testing plan)` supplies the layer above an individual registered suite. It
 validates tagged program records and named shard selectors without turning
