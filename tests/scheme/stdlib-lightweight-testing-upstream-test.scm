@@ -41,10 +41,11 @@
   (not (check-passed? 1)))
 
 (define (fib n)
-  "Return upstream SRFI 78's small Fibonacci example."
-  (if (<= n 2)
-      1
-      (+ (fib (- n 1)) (fib (- n 2)))))
+  "Return upstream SRFI 78's Fibonacci value using bounded linear work."
+  (let loop ((remaining n) (previous 0) (current 1))
+    (if (= remaining 0)
+        previous
+        (loop (- remaining 1) current (+ previous current)))))
 
 (testing-registry-case
  'simple-test-pass '(portable stdlib)
