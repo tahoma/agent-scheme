@@ -12,9 +12,10 @@ offer that tree through an optional AVL-backed SRFI 146 Mapping provider.
 map. `(stdlib mapping)` gains an internal ordered-provider seam while retaining
 the existing red-black provider and standard aliases. `(data mapping avl)` adds
 AVL-selecting constructors for ordinary Mapping objects. `(consent symbol)`
-owns portable symbol records and symbol-table handles, while the portable and
-Emacs reader/evaluator boundaries carry an explicit table through evaluation
-state.
+owns portable symbol records and symbol-table handles. Borrowed-host
+reader/evaluator boundaries carry an explicit table through evaluation state;
+a future native compiler links this same implementation as its sole symbol
+table and needs no internal host-symbol conversion.
 
 **Implementation style:** Portable R7RS-small Scheme, immutable AVL nodes,
 SRFI 128 comparators at the Mapping facade, shared Scheme test programs, ERT
@@ -213,7 +214,7 @@ public.
    constructor, process-default table handle, explicit table construction/root
    accessors for the runtime, interning, predicate, name, and equality helpers.
 4. Keep host-symbol conversion out of the public library surface. Any
-   bootstrap helper must be private and named as a host adapter.
+   bootstrap helper must be private, runtime-only, and named as a host adapter.
 5. Run the direct and compiled symbol tests.
 6. Commit as `feat(runtime): add owned portable symbols`.
 
@@ -244,8 +245,10 @@ public.
    `symbol->string` with `(consent symbol)` operations. Keep explicitly renamed
    host procedures only for private bootstrap metadata where unavoidable.
    Do not rename or redefine the standard `(scheme base)` bindings inside
-   shared libraries; name every mixed-symbol operation at its boundary call
-   site.
+   shared libraries. Marshal symbols centrally when an interpreted call crosses
+   into or returns from a natively compiled library, including callback
+   crossings. Preserve callback results that an opaque host control merely
+   returns, then convert them once at the outer result barrier.
 5. Route `string->symbol` through the context table after charging the existing
    budget once per evaluated call. Reader-created symbols remain charged to
    reader/value limits rather than that evaluation counter.
@@ -278,9 +281,20 @@ public.
    metadata. Remove `eq?`, `memq`, and `assq` assumptions where those keys are
    user-visible symbols.
    Shared source libraries must retain their ordinary `(scheme base)` bindings;
-   borrowed-host native execution uses explicit internal boundary operations
-   and installs the evaluation context's table around native calls that can
-   construct symbols.
+   borrowed-host native execution marshals owned arguments to host values at
+   the runtime call barrier and interns host symbols from results in the active
+   evaluation context. Shared libraries do not import or call the private
+   symbol-boundary compatibility layer. The same central barrier marshals
+   results consumed directly by compiled CLI or adapter code whose `(scheme
+   base)` is still supplied by the borrowed host. Reader-owned forms remain
+   opaque until evaluation, and values that re-enter Consent are interned into
+   the active context.
+   Walk long proper-list spines iteratively at the borrowed-host egress so
+   cycle detection does not make audit-heavy or file-driven results quadratic.
+   Treat these conversions strictly as borrowed-host ABI scaffolding. A native
+   Consent backend compiles `(consent symbol)` and its data-structure
+   dependencies directly, uses that table as its only interning authority, and
+   performs no symbol conversion between Consent-compiled libraries.
 5. Update the writer to recognize owned symbols and feed their names through
    existing R7RS identifier escaping without converting to host symbols.
 6. Run portable macro, library, reader/writer, evaluator, reflection, and

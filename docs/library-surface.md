@@ -18,6 +18,8 @@ library outside the catalog:
 
 - `scheme/consent/manifest.sld` for R7RS-small, core Consent Scheme, and runtime
   implementation libraries.
+- `scheme/data/manifest.sld` for public project-owned portable data structures
+  that do not have a standard Scheme or SRFI library name.
 - `scheme/stdlib/manifest.sld` for optional stdlib, SRFI, and R7RS-large-facing
   aliases or owned portable libraries.
 - `scheme/testing/manifest.sld` for reusable portable testing facilities;
@@ -28,6 +30,15 @@ library outside the catalog:
 - `scheme/cli/manifest.sld` for CLI adapter-facing libraries.
 - `scheme/emacs/manifest.sld` for Emacs host-adapter capability libraries.
 - `scheme/manifest.sld` for the aggregate manifest collection itself.
+
+The `(data ...)` collection admits reusable, dependency-light abstractions, not
+incidental runtime helpers. Its public libraries expose opaque values and
+documented operations while representation helpers remain internal. The first
+members are persistent `(data avl-tree)`, the optional AVL-backed SRFI 146
+constructors in `(data mapping avl)`, and the mutable-overlay/persistent-base
+adapter `(data transient-map)`. User specifications live with the collection in
+[`scheme/data/reference/`](../scheme/data/reference/README.md) and are linked
+from the corresponding data-manifest provenance.
 
 Collection manifests use collection-local `(source (path ...))` values. For
 example, `scheme/agent/manifest.sld` records `(source (path "memory.sld"))`,

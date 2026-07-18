@@ -23,6 +23,30 @@ does; retaining an ERT test does not make it the semantic source of truth.
   classifications, JSON Lines, and JSON Text Sequences are canonical in
   `tests/scheme/stdlib-json-reference-test.scm`.
 - Shared R7RS and REPL corpora are exercised by both portable and Emacs hosts.
+- `(data avl-tree)` semantics are canonical in
+  `tests/scheme/data-avl-tree-test.scm`; its public smoke corpus also runs on
+  compiled hosts. The direct-host suite alone imports the internal invariant
+  checker so opaque nodes remain outside the user API. Deterministic permuted
+  insertion and deletion stress checks every intermediate root, while focused
+  cases cover persistence, equivalent keys, rotations, range boundaries,
+  traversal, conversion, handlers, and contracts.
+- `(data transient-map)` mutable-overlay, materialization, deletion, reset,
+  collision, and resize semantics are canonical in
+  `tests/scheme/data-transient-map-test.scm`. AVL and alist adapters establish
+  backend independence; a model-driven history additionally covers cached
+  reads, tombstones, stored false values, pending-count transitions,
+  collisions, resizing, idempotent materialization, and callback contracts.
+- `(data mapping avl)` constructor, provider-preservation, and mixed-provider
+  semantics are canonical in the compact and upstream-derived Mapping suites.
+- `(consent symbol)` owned-record, interning, persistent-root, and isolated
+  handle semantics are canonical in `tests/scheme/consent-symbol-test.scm`.
+  Its adversarial cases cover mutable-name ownership, returned-name isolation,
+  exact hash collisions, repeated lookup across resizes, root replacement with
+  pending entries, branch identity, and argument contracts. Shared R7RS
+  fixtures additionally exercise reader/conversion/macro identity and
+  escaped-symbol writer round trips on both bootstraps. ERT retains the Emacs
+  adapter checks for explicit hash-table handle plumbing, input-name ownership,
+  isolated handles, bulk identity, recovery, and incremental reads.
 
 ## Actual case ownership
 
@@ -148,17 +172,17 @@ Scheme-plan shards directly; the aggregate live targets run the Emacs-host
 checks beside them, never as their discovery or process-control parent.
 
 The same plan makes compiled self-host coverage auditable rather than an
-allowlist hidden in shell orchestration. All 55 ordinary `full` programs carry
-exactly one of `compiled` or `self-host-gap`; the separate manifest smoke makes
-the compiled shard 38 programs total. The 18 current gaps are acceptance inputs
-to #346 (7 programs), #350 (1), #432 (8), and #901 (2). Their issue comments
+allowlist hidden in shell orchestration. All 60 ordinary `full` programs carry
+exactly one of `compiled` or `self-host-gap`; the compiled shard contains 44
+programs total. The 17 current gaps are acceptance inputs to #346, #350, #432,
+and #901. Their issue comments
 name the exact registered cases or first failing manual checks. As those runtime
 defects ship, their programs move into `compiled`; the plan test rejects an
 unclassified full-suite program or a program tagged both ways.
 
-The plan also partitions the 55 direct programs exactly once across seven
+The plan also partitions the 60 direct programs exactly once across seven
 behavior surfaces (`runtime`, `evaluator`, `integration`, `agent`, `library`,
-`random`, and `property`) and the 38 compiled programs exactly once across six
+`random`, and `property`) and the 44 compiled programs exactly once across six
 parallel counterparts. CI uses those names as first-class Guile, Gauche,
 Gambit-compiled, and Racket-compiled jobs; aggregate local and exhaustive-lane
 runs launch the same selectors through `tools/run-portable-test-set.sh` and
