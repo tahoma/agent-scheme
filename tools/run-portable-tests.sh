@@ -6,6 +6,7 @@ set -euo pipefail
 
 host=${CONSENT_PORTABLE_HOST:?CONSENT_PORTABLE_HOST is required}
 group=${CONSENT_PORTABLE_GROUP:-full}
+single_program=${CONSENT_PORTABLE_PROGRAM:-}
 root=$(cd "$(dirname "$0")/.." && pwd)
 target_root=${CONSENT_TEST_TARGET_ROOT:-$root}
 library_root=$target_root/scheme
@@ -111,6 +112,23 @@ run_scheme_program() {
 }
 
 cd "$root"
+if [[ -n $single_program ]]; then
+  if [[ ! -f $single_program ]]; then
+    printf 'portable Scheme test program is unavailable: %s\n' \
+      "$single_program" >&2
+    exit 2
+  fi
+  current_test=$single_program
+  program_started=$SECONDS
+  run_scheme_program "$single_program"
+  program_elapsed=$((SECONDS - program_started))
+  printf 'CONSENT_CI_PROGRAM_SECONDS=%s %d\n' \
+    "$single_program" "$program_elapsed"
+  elapsed=$((SECONDS - started))
+  printf 'CONSENT_CI_PORTABLE_SUMMARY=1 1 0 0 %d\n' "$elapsed"
+  exit 0
+fi
+
 plan_output=$(mktemp "${TMPDIR:-/tmp}/consent-test-plan.XXXXXX")
 current_test=$plan_runner
 export TESTING_PLAN_FILE=$plan_file
