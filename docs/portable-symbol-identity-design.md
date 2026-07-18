@@ -15,6 +15,13 @@ symbol tables, and interning. Evaluation contexts will carry an explicit
 symbol-table handle whose persistent root is visible to the runtime state model
 and can later participate in checkpoint fork, commit, and abort work.
 
+This ownership is also the native-compiler end state. A native Consent image
+will compile and link this same portable symbol library and use its table as
+the only symbol table. It will not acquire a second interning authority from
+its code generator, runtime, or platform. Host-symbol conversion described
+below exists only at a borrowed-host bootstrap ABI and disappears when both
+sides of a call use Consent's native value representation.
+
 The symbol table will be backed by a new public persistent AVL tree library,
 `(data avl-tree)`. The AVL tree is a general-purpose portable data structure,
 not symbol-specific implementation substrate. A second public consumer,
@@ -43,6 +50,8 @@ This produces the following dependency direction:
 
 - Give Consent Scheme symbols a portable representation and stable name-based
   semantics independent of host-native symbol identity.
+- Make `(consent symbol)` the single semantic owner that a future native
+  compiler links directly, without a backend-specific symbol table.
 - Intern every user-visible symbol through an explicit symbol table.
 - Make the symbol-table root part of evaluation state so later checkpoint work
   can share and branch it without copying the whole table.
@@ -335,11 +344,53 @@ do not change the language-level predicate or equality rules.
 
 Portable libraries import `(scheme base)` without renaming or locally
 redefining these procedures. When a borrowed R7RS compiler executes one of
-those libraries natively as an internal runtime backend, mixed owned/bootstrap
-data is handled by explicitly named private boundary operations at the actual
-crossing. Native code that constructs a symbol while serving an evaluation
-uses the calling context's dynamically installed table; it does not intern that
-user-visible name in the compiler host's process-wide symbol table.
+those libraries natively as an internal runtime backend, the native-call bridge
+converts owned symbols to ordinary host symbols before native code sees them.
+The inverse bridge interns host symbols from native results in the calling
+evaluation context before interpreted code sees them. Callback arguments and
+results consumed by the native library cross the same two conversions in their
+corresponding directions. Opaque host controls preserve callback results until
+the outer result barrier, avoiding a redundant whole-graph round trip.
+The central runtime barrier may also perform the owned-to-host conversion for
+compiled CLI or adapter code on that borrowed host, because its `(scheme base)`
+still denotes the host implementation. Reader-owned forms remain opaque until
+evaluation, and values that re-enter Consent are interned into the active
+context.
+The outer borrowed-host egress handles long proper-list result spines
+iteratively; cycle-aware recursive conversion remains for nested graphs. This
+keeps large audit streams and file-driven workloads linear in result size.
+The compiled library therefore remains representation-agnostic and uses only
+the ordinary procedures it imported from `(scheme base)`.
+
+### Native compiler invariant
+
+The borrowed-host bridge is bootstrapping scaffolding, not part of the symbol
+model. Compiler plans include `(data avl-tree)`, `(data transient-map)`, and
+`(consent symbol)` as ordinary repository-owned source units with dependency
+order derived from collection manifests. On a borrowed R7RS host, those
+libraries are compiled and linked so that compiled `(consent symbol)` calls
+its compiled dependencies directly. The borrowed-host image also registers
+those compiled realizations for interpreted imports so both sides share the
+symbol owner's record types and single table. The public AVL root type crosses
+that boundary with it. The transient overlay remains a direct compiled
+dependency and may be source-evaluated for an explicit interpreted import
+because its private records do not cross the core interface. Callback and
+opaque-record wrappers are strictly bootstrap ABI. A native Consent backend
+compiles callers and callees into one Consent value domain and therefore needs
+no such wrappers.
+
+A native Consent backend therefore:
+
+- uses the portable symbol record as its runtime symbol representation;
+- links the portable transient and persistent table implementation directly;
+- carries the evaluation context's table through reading, expansion,
+  evaluation, and compiled execution;
+- performs no host-symbol conversion between Consent-compiled libraries; and
+- confines any foreign symbol conversion to an actual FFI or bootstrap edge.
+
+No optimization may introduce an independent backend intern table. A native
+backend may specialize or inline the portable operations only while preserving
+the one table's identity, root, budget, and checkpoint semantics.
 
 ## Resource Accounting
 

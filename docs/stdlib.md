@@ -31,13 +31,14 @@ source-tree layers.
 | `(stdlib receive)` | shimmed | Built-in portable shim over R7RS multiple values, recorded in `(stdlib manifest)` | `(stdlib receive)`, `(srfi 8)`, `(srfi srfi-8)`, `(srfi :8)`, `(srfi :8 receive)` | Optional SRFI 8 `receive` syntax for binding multiple values; not part of the R7RS-small baseline. |
 | `(stdlib assume)` | shimmed | Built-in portable SRFI 145 shim, recorded in `(stdlib manifest)` | `(stdlib assume)`, `(srfi 145)`, `(srfi srfi-145)` | Optional SRFI 145 `assume` syntax for invalid code paths; not part of the R7RS-small baseline. |
 | `(stdlib comparator)` | implemented | Vendored adapted SRFI 128 sample implementation, recorded in `(stdlib manifest)` | `(stdlib comparator)`, `(scheme comparator)`, `(srfi 128)`, `(srfi srfi-128)` | Primary stdlib spelling owns the source; R7RS-large and SRFI spellings are compatibility aliases. |
-| `(stdlib mapping)` | implemented | Vendored adapted SRFI 146 ordered mapping implementation, recorded in `(stdlib manifest)` | `(stdlib mapping)`, `(scheme mapping)`, `(srfi 146)`, `(srfi srfi-146)` | Ordered finite mappings over SRFI 128 comparators; primary stdlib spelling owns the source and R7RS-large/SRFI spellings are compatibility aliases. Hash mappings are separate future work. |
+| `(stdlib mapping)` | implemented | Vendored adapted SRFI 146 ordered mapping implementation, recorded in `(stdlib manifest)` | `(stdlib mapping)`, `(scheme mapping)`, `(srfi 146)`, `(srfi srfi-146)` | Ordered finite mappings over SRFI 128 comparators. Standard constructors remain red-black-backed; `(data mapping avl)` supplies optional AVL-selecting constructors whose results use the same Mapping API. Hash mappings are separate future work. |
 
 ## Internal Helpers
 
 | Library | Status | Source | Imports | Notes |
 | --- | --- | --- | --- | --- |
 | `(stdlib rbtree)` | implemented helper | Vendored adapted SRFI 146 `nieper/rbtree` helper, recorded in `(stdlib manifest)` | `(stdlib rbtree)` | Internal stdlib substrate for ordered SRFI 146 mappings; no R7RS-large or SRFI aliases are exposed for direct user-facing imports. |
+| `(stdlib mapping implementation)` | implemented helper | Project-owned provider-neutral SRFI 146 implementation seam | internal runtime only | Stores comparator, ordered-provider identity, and provider-owned root while preserving the source provider across derived Mapping operations. |
 
 The Scheme-readable `(stdlib manifest)` library records source URLs, upstream
 revisions, licenses, local patches, import aliases, dependencies, and test
@@ -61,6 +62,9 @@ license in `scheme/stdlib/manifest.sld`; repository license files and REUSE
 annotations preserve the corresponding notices for the proving slice.
 
 `(scheme mapping)` and the SRFI 146 aliases expose only the ordered mapping
-interface. `(scheme mapping hash)`, `(srfi 146 hash)`, and
+interface and continue to choose the red-black provider by default. Programs
+that want persistent AVL storage import `(data mapping avl)` alongside the
+standard Mapping interface and construct values with `avl-mapping`,
+`avl-mapping-unfold`, or `alist->avl-mapping`. `(scheme mapping hash)`, `(srfi 146 hash)`, and
 `(srfi srfi-146 hash)` are not registered; the hash mapping variant is tracked
 separately after the HAMT substrate lands.

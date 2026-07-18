@@ -249,6 +249,61 @@ The language core owns R7RS data and evaluation:
 Macros and libraries are first-class requirements. They are not optional polish
 after a loose evaluator exists.
 
+#### Portable symbol ownership
+
+User-visible symbols are opaque Consent values, not host Scheme or Emacs Lisp
+symbols. `(consent symbol)` interns immutable names through an explicit table
+handle. Portable tables stage changes in `(data transient-map)` and materialize
+checkpoint-visible persistent `(data avl-tree)` roots; the Emacs bootstrap
+carries the same explicit handle contract over its hash-backed adapter.
+
+The portable implementation is the native-compiler destination, not merely a
+cross-host reference model. A native Consent image links `(consent symbol)` and
+its portable data-structure dependencies directly and uses that table as its
+only interning authority. Compiler backends may optimize the representation,
+but may not introduce a second backend-owned symbol table or alter table-root,
+budget, identity, or checkpoint semantics.
+
+Evaluation contexts are created before source is read and carry their table
+through ordinary, incremental, recovery, program-input, include, load, and
+source-library reader paths. Reader literals, evaluated `string->symbol`, and
+macro-introduced quoted symbols therefore share identity when they share a
+context. Same-name symbols from isolated roots remain equivalent under `eq?`,
+`eqv?`, `equal?`, and `symbol=?`, which keeps future checkpoint and transport
+boundaries deterministic.
+
+Host-native symbols remain private bootstrap, dispatch, or adapter metadata.
+The runtime-only `(consent symbol-boundary)` library lets the evaluator,
+reader, macro expander, and library loader recognize that exceptional mixed
+metadata while bootstrapping; ordinary libraries never import it. Language
+predicates never accept host values as Consent symbols. Writers render owned
+names directly with the R7RS identifier escaping rules rather than
+round-tripping through host symbol identity.
+
+Shared libraries import `(scheme base)` unchanged. If a borrowed R7RS compiler
+also runs one natively as an internal backend, the runtime's native-call bridge
+recursively marshals owned symbols to ordinary host symbols on arguments and
+on callback results the native library consumes. It recursively interns host
+symbols in the active evaluation context on native results and callback
+arguments. Opaque host controls such as `call-with-input-file` preserve a
+callback's result until the single outer result barrier instead of converting
+the same graph out and back. The compiled library therefore uses only its
+host's ordinary `(scheme base)` procedures and has no knowledge of Consent's
+symbol representation. On that borrowed host, the central runtime barrier also
+marshals result datums consumed directly by compiled CLI or adapter code whose
+`(scheme base)` is still the host implementation. That egress walks proper-list
+spines iteratively so large audit and result streams remain linear rather than
+turning ancestor-based cycle checks into a quadratic hot path.
+Reader-owned forms remain opaque until they enter evaluation, and any result
+that re-enters Consent is interned into the active context rather than becoming
+a second language-visible symbol domain.
+
+That bridge belongs only to a borrowed R7RS host ABI. Calls between libraries
+compiled for a native Consent runtime use Consent values directly, so no
+host-symbol representation or conversion participates. Foreign symbols exist
+only at actual FFI or bootstrap edges and are interned into the active Consent
+table before entering language-visible data.
+
 ### Host Adapter
 
 The host adapter owns effects outside pure Scheme:
