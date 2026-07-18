@@ -36,6 +36,60 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (consent compiler-manifest))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer compiler-front-end)
+        (source-kind source-library)
+        (source (path "compiler-manifest.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-compiler-images consent-compiler-image-ref))
+        (dependencies ((library (scheme base))))
+        (provenance ((origin repo)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (consent compiler-plan))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer compiler-front-end)
+        (source-kind source-library)
+        (source (path "compiler-plan.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-compiler-plan
+          consent-compiler-plan-roots
+          consent-compiler-plan-units
+          consent-compiler-plan-native-libraries
+          consent-compiler-unit-name
+          consent-compiler-unit-source
+          consent-compiler-unit-dependencies))
+        (dependencies
+         ((library (scheme base))
+          (library (consent compiler-manifest))
+          (library (consent manifest))
+          (library (stdlib manifest))
+          (library (data manifest))
+          (library (agent manifest))
+          (library (cli manifest))))
+        (provenance ((origin repo)))
+        (verification
+         ((test-status
+           (manifest-derived dependency-ordered backend-shared))))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (scheme base))
         (owner r7rs-small)
         (provider consent-core)
@@ -1982,6 +2036,7 @@
           (library (scheme char))
           (library (scheme file))
           (library (consent reader))
+          (library (consent symbol))
           (library (consent symbol-boundary))
           (library (consent runtime))
           (library (consent base))))

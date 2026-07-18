@@ -117,6 +117,9 @@
     (path "tests/scheme/consent-symbol-test.scm")
     (tags (full direct compiled runtime registered)))
    (program
+    (path "tests/scheme/consent-compiler-plan-test.scm")
+    (tags (full direct compiled compiler registered)))
+   (program
    (path "tests/scheme/stdlib-list-test.scm")
     (tags (full direct compiled stdlib registered)))
    (program

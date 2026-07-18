@@ -327,6 +327,38 @@ failing closed on everything."
               (consent-compile-portable-test--output result)))))
       (ignore-errors (delete-file probe-script)))))
 
+(defun consent-compile-portable-test--assert-compiled-source-documentation
+    (runner)
+  "Assert RUNNER preserves source documentation on compiled procedures."
+  (let ((probe-script
+         (make-temp-file
+          "consent-compiled-source-documentation-" nil ".scm")))
+    (unwind-protect
+        (progn
+          (with-temp-file probe-script
+            (insert
+             "(import (scheme base)\n"
+             "        (scheme write)\n"
+             "        (agent reflect)\n"
+             "        (agent transcript))\n"
+             "(write (documentation 'transcript-event->fixture-case))\n"
+             "(newline)\n"))
+          (let ((result
+                 (consent-compile-portable-test--run-executable
+                  runner "--host-run" probe-script)))
+            (should
+             (equal (consent-compile-portable-test--status result) 0))
+            (should
+             (string-match-p
+              (regexp-quote
+               "Generate a shared fixture case from EVENT when replay permits it.")
+              (consent-compile-portable-test--output result)))
+            (should
+             (string-match-p
+              (regexp-quote "(parameters ((event (type transcript-event)")
+              (consent-compile-portable-test--output result)))))
+      (ignore-errors (delete-file probe-script)))))
+
 (defun consent-compile-portable-test--assert-repl-timeout-option-diagnostics
     (runner)
   "Assert RUNNER's `--repl' preserves numeric transport options."
@@ -390,73 +422,28 @@ failing closed on everything."
       (when (file-directory-p build-dir)
         (delete-directory build-dir t)))))
 
-(ert-deftest consent-compile-portable-test-gambit-links-stdlib-dependencies ()
-  "Link source-backed stdlib dependencies into the Gambit runner."
-  (let* ((script
-          (consent-compile-portable-test--repo-file-string
-           "tools/compile-portable.sh"))
-         (gambit-main-start
-          (string-match "write_gambit_main_common()" script))
-         (gambit-main-end
-          (and gambit-main-start
-               (string-match "write_gambit_main()" script gambit-main-start)))
-         (gambit-main
-          (and gambit-main-start
-               gambit-main-end
-               (substring script gambit-main-start gambit-main-end))))
-    (should gambit-main)
+(ert-deftest consent-compile-portable-test-backends-share-compiler-plan ()
+  "Derive backend membership, link order, and main imports from one plan."
+  (let ((script
+         (consent-compile-portable-test--repo-file-string
+          "tools/compile-portable.sh"))
+        (manifest
+         (consent-compile-portable-test--repo-file-string
+          "scheme/consent/compiler-manifest.sld")))
+    (should (string-match-p "enumerate_compiler_plan_files()" script))
+    (should (string-match-p "load_compiler_plan_link_metadata" script))
+    (should (string-match-p "compiler_root_imports" script))
+    (should (string-match-p "compiler_native_libraries" script))
+    (should (string-match-p "documentation-literals" script))
+    (should-not
+     (string-match-p "gambit_module_order='[^']" script))
     (should
      (string-match-p
-      "(prefix (stdlib and-let-star) consent-main:stdlib-and-let-star:)"
-      gambit-main))
-    (should
-     (string-match-p
-      "(prefix (stdlib list) consent-main:stdlib-list:)"
-      gambit-main))
-    (should
-     (string-match-p
-      "(prefix (stdlib generator) consent-main:stdlib-generator:)"
-      gambit-main))
-    (should
-     (string-match-p
-      "(prefix (stdlib receive) consent-main:stdlib-receive:)"
-      gambit-main))
-    (should
-     (string-match-p
-      "\"\\$scheme_dir/stdlib/and-let-star\\.sld\""
+      "gambit_module_order=.*source%.sld"
       script))
-    (should
-     (string-match-p
-      "\"\\$scheme_dir/stdlib/receive\\.sld\""
-      script))
-    (should
-     (string-match-p
-      "\"\\$scheme_dir/stdlib/list\\.sld\""
-      script))
-    (should
-     (string-match-p
-      "\"\\$scheme_dir/stdlib/generator\\.sld\""
-      script))
-    (should
-     (string-match-p
-      "\"\\$scheme_dir/stdlib/comparator\\.sld\""
-      script))
-    (should
-     (string-match-p
-      "\"\\$scheme_dir/stdlib/assume\\.sld\""
-      script))
-    (should
-     (string-match-p
-      "\"\\$scheme_dir/stdlib/rbtree\\.sld\""
-      script))
-    (should
-     (string-match-p
-      "\"\\$scheme_dir/stdlib/mapping\\.sld\""
-      script))
-    (should
-     (string-match-p
-      "gambit_module_order='[^']*stdlib/and-let-star[[:space:]]+stdlib/list[[:space:]]+stdlib/generator[[:space:]]+stdlib/comparator[[:space:]]+stdlib/receive[[:space:]]+stdlib/assume[[:space:]]+stdlib/rbtree[[:space:]]+stdlib/mapping[[:space:]]+stdlib/json"
-      script))))
+    (should (string-match-p "(native-libraries" manifest))
+    (should (string-match-p "(data mapping avl)" manifest))
+    (should (string-match-p "(agent context)" manifest))))
 
 (ert-deftest consent-compile-portable-test-racket-builds-runner ()
   "Build a Racket-hosted portable executable and run smoke commands."
@@ -500,6 +487,8 @@ failing closed on everything."
         '(:status 0 :output "3\n")))
       (consent-compile-portable-test--assert-eval-error-diagnostics runner)
       (consent-compile-portable-test--assert-host-run-timeout-option-diagnostics
+       runner)
+      (consent-compile-portable-test--assert-compiled-source-documentation
        runner)
       (consent-compile-portable-test--assert-repl-timeout-option-diagnostics
        runner)
@@ -604,6 +593,8 @@ failing closed on everything."
         '(:status 0 :output "3\n")))
       (consent-compile-portable-test--assert-eval-error-diagnostics runner)
       (consent-compile-portable-test--assert-host-run-timeout-option-diagnostics
+       runner)
+      (consent-compile-portable-test--assert-compiled-source-documentation
        runner)
       (consent-compile-portable-test--assert-repl-timeout-option-diagnostics
        runner)

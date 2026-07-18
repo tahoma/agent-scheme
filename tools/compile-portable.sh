@@ -137,55 +137,113 @@ write_runtime_source_manifest() {
   printf '%s\n' "$source_list" > "$manifest_root/runtime-source-manifest"
 }
 
+# Resolve the canonical compiler-front-end plan through portable Scheme.  Both
+# borrowed host backends consume the same dependency-ordered source list; a
+# future native backend consumes this artifact before lowering its own IR.
+evaluate_compiler_plan_program() {
+  enum_prog=$1
+  enum_library_path="$scheme_dir${CONSENT_LIBRARY_PATH:+:$CONSENT_LIBRARY_PATH}"
+  case "$compile_host" in
+    gambit)
+      CONSENT_LIBRARY_PATH="$enum_library_path" \
+        "$gsi" -:r7rs,search="$scheme_dir" -e "$enum_prog" \
+        || die "could not resolve compiler plan via gsi"
+      ;;
+    racket)
+      enum_file="$build_dir/consent-compiler-plan.rkt"
+      { printf '%s\n' '#lang r7rs'; printf '%s\n' "$enum_prog"; } > "$enum_file"
+      CONSENT_LIBRARY_PATH="$enum_library_path" \
+        PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" "$racket" "$enum_file" \
+        || { rm -f "$enum_file"; die "could not resolve compiler plan via racket"; }
+      rm -f "$enum_file"
+      ;;
+    *)
+      die "cannot resolve compiler plan for host $compile_host"
+      ;;
+  esac
+}
+
+enumerate_compiler_plan_files() {
+  evaluate_compiler_plan_program \
+    '(import (scheme base) (scheme write) (consent compiler-plan)) (for-each (lambda (u) (display (consent-compiler-unit-source u)) (newline)) (consent-compiler-plan-units (consent-compiler-plan)))'
+}
+
+enumerate_compiler_plan_roots() {
+  evaluate_compiler_plan_program \
+    '(import (scheme base) (scheme write) (consent compiler-plan)) (for-each (lambda (name) (write name) (newline)) (consent-compiler-plan-roots (consent-compiler-plan)))'
+}
+
+enumerate_compiler_plan_native_libraries() {
+  evaluate_compiler_plan_program \
+    '(import (scheme base) (scheme write) (consent compiler-plan)) (let* ((plan (consent-compiler-plan)) (units (consent-compiler-plan-units plan))) (define (unit-ref name) (let loop ((rest units)) (cond ((null? rest) (error "native library has no source unit" name)) ((equal? name (consent-compiler-unit-name (car rest))) (car rest)) (else (loop (cdr rest)))))) (for-each (lambda (name) (write name) (write-char #\tab) (display (consent-compiler-unit-source (unit-ref name))) (newline)) (consent-compiler-plan-native-libraries plan)))'
+}
+
+write_compiler_plan_manifest() {
+  manifest_root=$1
+  source_list=$2
+  printf '%s\n' "$source_list" > "$manifest_root/compiler-plan-manifest"
+}
+
+compiler_library_prefix() {
+  key=$1
+  words=$(printf '%s\n' "$key" | sed -e 's/^(//' -e 's/)$//' -e 's/[ ][ ]*/-/g')
+  case "$words" in
+    consent-embedded-source) printf '%s\n' 'consent-main:embedded:' ;;
+    consent-*) printf 'consent-main:%s:\n' "${words#consent-}" ;;
+    *) printf 'consent-main:%s:\n' "$words" ;;
+  esac
+}
+
+compiler_root_imports=
+compiler_native_libraries=
+
+load_compiler_plan_link_metadata() {
+  compiler_roots=$(enumerate_compiler_plan_roots)
+  compiler_native_units=$(enumerate_compiler_plan_native_libraries)
+  compiler_root_imports=
+  while IFS= read -r key; do
+    [ -n "$key" ] || continue
+    prefix=$(compiler_library_prefix "$key")
+    compiler_root_imports="$compiler_root_imports        (prefix $key $prefix)
+"
+  done <<EOF
+$compiler_roots
+EOF
+  compiler_root_imports="$compiler_root_imports        (prefix (consent embedded-source) consent-main:embedded:)
+"
+
+  compiler_native_libraries=
+  while IFS="$(printf '\t')" read -r key path; do
+    [ -n "$key" ] || continue
+    prefix=$(compiler_library_prefix "$key")
+    compiler_native_libraries="$compiler_native_libraries$key|$path|$prefix
+"
+  done <<EOF
+$compiler_native_units
+EOF
+}
+
 # Internal libraries whose compiled modules the generated main registers in the
 # runtime's native-library registry: library key | path under scheme/ | the
 # main's import prefix. Under the internal-libraries grant the resolver binds
 # imports of these keys to the compiled modules directly (the product serving
 # as its own host runner) instead of re-interpreting their source.
 native_library_table() {
-  cat <<'EOF'
-(agent task)|agent/task.sld|consent-main:agent-task:
-(agent transcript)|agent/transcript.sld|consent-main:agent-transcript:
-(agent models openai)|agent/models/openai.sld|consent-main:agent-models-openai:
-(agent registry)|agent/registry.sld|consent-main:agent-registry:
-(agent proposal)|agent/proposal.sld|consent-main:agent-proposal:
-(agent runner)|agent/runner.sld|consent-main:agent-runner:
-(agent prompt)|agent/prompt.sld|consent-main:agent-prompt:
-(agent generated-source)|agent/generated-source.sld|consent-main:agent-generated-source:
-(agent approval)|agent/approval.sld|consent-main:agent-approval:
-(agent context)|agent/context.sld|consent-main:agent-context:
-(agent helper)|agent/helper.sld|consent-main:agent-helper:
-(agent job)|agent/job.sld|consent-main:agent-job:
-(agent memory)|agent/memory.sld|consent-main:agent-memory:
-(agent plan)|agent/plan.sld|consent-main:agent-plan:
-(agent redaction)|agent/redaction.sld|consent-main:agent-redaction:
-(agent session)|agent/session.sld|consent-main:agent-session:
-(consent base)|consent/base.sld|consent-main:base:
-(consent eval)|consent/eval.sld|consent-main:eval:
-(consent interpreter)|consent/interpreter.sld|consent-main:interpreter:
-(consent library)|consent/library.sld|consent-main:library:
-(consent macro)|consent/macro.sld|consent-main:macro:
-(consent reader)|consent/reader.sld|consent-main:reader:
-(consent runtime)|consent/runtime.sld|consent-main:runtime:
-(consent version)|consent/version.sld|consent-main:version:
-(cli native-cli)|cli/native-cli.sld|consent-main:cli-native-cli:
-(cli process-host)|cli/process-host.sld|consent-main:cli-process-host:
-(cli repl-chrome)|cli/repl-chrome.sld|consent-main:cli-repl-chrome:
-(cli repl-shell)|cli/repl-shell.sld|consent-main:cli-repl-shell:
-(cli script)|cli/script.sld|consent-main:cli-script:
-EOF
+  printf '%s' "$compiler_native_libraries"
 }
 
 # Generate the native-library registration forms the generated main evaluates at
-# startup. Export lists are extracted from each library's define-library form by
-# the compile host's own reader (handling (rename internal external) clauses), so
-# the registry is single-sourced from the .sld files rather than hand-maintained.
+# startup. Export lists and procedure documentation are extracted from each
+# library's define-library form by the compile host's own reader (handling
+# (rename internal external) clauses), so the registry is single-sourced from
+# the .sld files rather than hand-maintained.
 write_native_library_registrations() {
   registrations_file=$1
 
   extract_file="$build_dir/native-library-exports-extract.scm"
   {
-    printf '%s\n' '(import (scheme base) (scheme file) (scheme read) (scheme write))'
+    printf '%s\n' \
+      '(import (scheme base) (scheme cxr) (scheme file) (scheme read) (scheme write))'
     printf '%s\n' '(define library-files'
     printf '%s\n' '  (list'
     native_library_table | while IFS='|' read -r key path prefix; do
@@ -194,20 +252,78 @@ write_native_library_registrations() {
     done
     printf '%s\n' '    ))'
     cat <<'EOF'
+(define (library-definitions form)
+  (let loop ((clauses (cddr form)) (definitions '()))
+    (cond
+     ((null? clauses) (reverse definitions))
+     ((and (pair? (car clauses)) (eq? (caar clauses) 'begin))
+      (loop
+       (cdr clauses)
+       (append (reverse (cdr (car clauses))) definitions)))
+     (else (loop (cdr clauses) definitions)))))
+
+(define (definition-info definitions name)
+  (let loop ((rest definitions))
+    (if (null? rest)
+        #f
+        (let ((definition (car rest)))
+          (cond
+           ((and (pair? definition)
+                 (eq? (car definition) 'define)
+                 (pair? (cdr definition))
+                 (pair? (cadr definition))
+                 (eq? (car (cadr definition)) name))
+            (cons (cdr (cadr definition)) (cddr definition)))
+           ((and (pair? definition)
+                 (eq? (car definition) 'define)
+                 (pair? (cdr definition))
+                 (eq? (cadr definition) name)
+                 (pair? (cddr definition))
+                 (pair? (caddr definition))
+                 (eq? (car (caddr definition)) 'lambda))
+            (cons (cadr (caddr definition))
+                  (cddr (caddr definition))))
+           (else (loop (cdr rest))))))))
+
+(define (documentation-literals body)
+  (let loop ((rest body) (literals '()))
+    (if (and (pair? rest)
+             (or (string? (car rest)) (vector? (car rest))))
+        (loop (cdr rest) (cons (car rest) literals))
+        (reverse literals))))
+
+(define (export-internal-name entry)
+  (if (pair? entry) (cadr entry) entry))
+
+(define (export-external-name entry)
+  (if (pair? entry) (caddr entry) entry))
+
 (for-each
  (lambda (path)
    (call-with-input-file path
      (lambda (port)
-       (let ((form (read port)))
+       (let* ((form (read port))
+              (definitions (library-definitions form)))
          (for-each
           (lambda (clause)
             (if (and (pair? clause) (eq? (car clause) 'export))
                 (for-each
                  (lambda (entry)
-                   (display path)
-                   (display "\t")
-                   (write (if (pair? entry) (car (cddr entry)) entry))
-                   (newline))
+                   (let* ((internal-name (export-internal-name entry))
+                          (external-name (export-external-name entry))
+                          (info
+                           (definition-info definitions internal-name)))
+                     (display path)
+                     (display "\t")
+                     (write external-name)
+                     (display "\t")
+                     (write
+                      (and
+                       info
+                       (list
+                        (car info)
+                        (documentation-literals (cdr info)))))
+                     (newline)))
                  (cdr clause))))
           (cddr form))))))
  library-files)
@@ -245,6 +361,12 @@ EOF
       printf '%s\n' "$exports" | awk -F'\t' -v p="$scheme_dir/$path" -v prefix="$prefix" '
         $1 == p && !seen[$2]++ {
           printf "  (cons (quote %s) %s%s)\n", $2, prefix, $2
+        }'
+      printf '  )\n'
+      printf ' (list\n'
+      printf '%s\n' "$exports" | awk -F'\t' -v p="$scheme_dir/$path" '
+        $1 == p && $3 != "#f" && !seen[$2]++ {
+          printf "  (cons (quote %s) (quote %s))\n", $2, $3
         }'
       printf '  ))\n'
     done
@@ -308,42 +430,9 @@ write_racket_main_common() {
         (prefix (scheme repl) consent-main:r7rs-repl:)
         (prefix (scheme time) consent-main:r7rs-time:)
         (scheme write)
-        (prefix (agent task) consent-main:agent-task:)
-        (prefix (agent transcript) consent-main:agent-transcript:)
-        (prefix (agent models openai) consent-main:agent-models-openai:)
-        (prefix (agent registry) consent-main:agent-registry:)
-        (prefix (agent proposal) consent-main:agent-proposal:)
-        (prefix (agent runner) consent-main:agent-runner:)
-        (prefix (agent prompt) consent-main:agent-prompt:)
-        (prefix (agent generated-source) consent-main:agent-generated-source:)
-        (prefix (agent approval) consent-main:agent-approval:)
-        (prefix (agent context) consent-main:agent-context:)
-        (prefix (agent helper) consent-main:agent-helper:)
-        (prefix (agent job) consent-main:agent-job:)
-        (prefix (agent memory) consent-main:agent-memory:)
-        (prefix (agent plan) consent-main:agent-plan:)
-        (prefix (agent redaction) consent-main:agent-redaction:)
-        (prefix (agent session) consent-main:agent-session:)
-        (prefix (stdlib and-let-star) consent-main:stdlib-and-let-star:)
-        (prefix (stdlib list) consent-main:stdlib-list:)
-        (prefix (stdlib generator) consent-main:stdlib-generator:)
-        (prefix (stdlib receive) consent-main:stdlib-receive:)
-        (prefix (stdlib json) consent-main:stdlib-json:)
-        (prefix (consent base) consent-main:base:)
-        (prefix (consent eval) consent-main:eval:)
-        (prefix (consent interpreter) consent-main:interpreter:)
-        (prefix (consent library) consent-main:library:)
-        (prefix (consent macro) consent-main:macro:)
-        (prefix (consent reader) consent-main:reader:)
-        (prefix (consent result) consent-main:result:)
-        (prefix (consent runtime) consent-main:runtime:)
-        (prefix (consent version) consent-main:version:)
-        (prefix (cli process-host) consent-main:cli-process-host:)
-        (prefix (cli native-cli) consent-main:cli-native-cli:)
-        (prefix (cli repl-chrome) consent-main:cli-repl-chrome:)
-        (prefix (cli repl-shell) consent-main:cli-repl-shell:)
-        (prefix (cli script) consent-main:cli-script:)
-        (prefix (consent embedded-source) consent-main:embedded:)
+EOF
+  printf '%s' "$compiler_root_imports"
+  cat <<'EOF'
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -659,42 +748,9 @@ write_gambit_main_common() {
         (prefix (scheme repl) consent-main:r7rs-repl:)
         (prefix (scheme time) consent-main:r7rs-time:)
         (scheme write)
-        (prefix (agent task) consent-main:agent-task:)
-        (prefix (agent transcript) consent-main:agent-transcript:)
-        (prefix (agent models openai) consent-main:agent-models-openai:)
-        (prefix (agent registry) consent-main:agent-registry:)
-        (prefix (agent proposal) consent-main:agent-proposal:)
-        (prefix (agent runner) consent-main:agent-runner:)
-        (prefix (agent prompt) consent-main:agent-prompt:)
-        (prefix (agent generated-source) consent-main:agent-generated-source:)
-        (prefix (agent approval) consent-main:agent-approval:)
-        (prefix (agent context) consent-main:agent-context:)
-        (prefix (agent helper) consent-main:agent-helper:)
-        (prefix (agent job) consent-main:agent-job:)
-        (prefix (agent memory) consent-main:agent-memory:)
-        (prefix (agent plan) consent-main:agent-plan:)
-        (prefix (agent redaction) consent-main:agent-redaction:)
-        (prefix (agent session) consent-main:agent-session:)
-        (prefix (stdlib and-let-star) consent-main:stdlib-and-let-star:)
-        (prefix (stdlib list) consent-main:stdlib-list:)
-        (prefix (stdlib generator) consent-main:stdlib-generator:)
-        (prefix (stdlib receive) consent-main:stdlib-receive:)
-        (prefix (stdlib json) consent-main:stdlib-json:)
-        (prefix (consent base) consent-main:base:)
-        (prefix (consent eval) consent-main:eval:)
-        (prefix (consent interpreter) consent-main:interpreter:)
-        (prefix (consent library) consent-main:library:)
-        (prefix (consent macro) consent-main:macro:)
-        (prefix (consent reader) consent-main:reader:)
-        (prefix (consent result) consent-main:result:)
-        (prefix (consent runtime) consent-main:runtime:)
-        (prefix (consent version) consent-main:version:)
-        (prefix (cli process-host) consent-main:cli-process-host:)
-        (prefix (cli native-cli) consent-main:cli-native-cli:)
-        (prefix (cli repl-chrome) consent-main:cli-repl-chrome:)
-        (prefix (cli repl-shell) consent-main:cli-repl-shell:)
-        (prefix (cli script) consent-main:cli-script:)
-        (prefix (consent embedded-source) consent-main:embedded:)
+EOF
+  printf '%s' "$compiler_root_imports"
+  cat <<'EOF'
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -1433,14 +1489,26 @@ compile_racket() {
   # keep their mtime and Racket's compilation manager reuses their bytecode.
   generate_racket_collections "$collections_dir"
 
-  # Build the (consent library) closure to bytecode before enumeration so the
-  # enumeration run reuses the bytecode instead of expanding the library stack in
-  # memory; without this the cold build would expand the stack once here and again
-  # under raco exe.
+  compiler_source_list=$(enumerate_compiler_plan_files)
+  write_compiler_plan_manifest "$host_root" "$compiler_source_list"
+  load_compiler_plan_link_metadata
+  racket_plan_sources=
+  while IFS= read -r source; do
+    [ -n "$source" ] || continue
+    [ "$source" = "consent/embedded-source.sld" ] && continue
+    racket_plan_sources="$racket_plan_sources $collections_dir/${source%.sld}.rkt"
+  done <<EOF
+$compiler_source_list
+EOF
+
+  # Compile the shared front-end plan before enumeration.  Racket does not
+  # require explicit link ordering, but consuming the same plan keeps module
+  # membership and dependency validation identical across compiler backends.
+  # shellcheck disable=SC2086
   PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
-    "$raco" make -j "$racket_jobs" "$collections_dir/consent/library.rkt" \
+    "$raco" make -j "$racket_jobs" $racket_plan_sources \
     >"$logs_dir/raco-make-library.log" 2>&1 \
-    || die "raco make of the runtime library closure failed; see $logs_dir/raco-make-library.log"
+    || die "raco make of the compiler plan failed; see $logs_dir/raco-make-library.log"
 
   runtime_source_list=$(enumerate_runtime_source_files)
   mkdir -p "$collections_dir/consent"
@@ -1503,134 +1571,21 @@ compile_gambit() {
     cp "$source_file" "$target_file"
   }
 
-  copy_gambit_source \
-    "$scheme_dir/consent/version.sld" \
-    "$src_dir/consent/version.sld"
-  copy_gambit_source \
-    "$scheme_dir/consent/reader.sld" \
-    "$src_dir/consent/reader.sld"
-  copy_gambit_source \
-    "$scheme_dir/consent/runtime.sld" \
-    "$src_dir/consent/runtime.sld"
-  copy_gambit_source \
-    "$scheme_dir/consent/base.sld" \
-    "$src_dir/consent/base.sld"
-  copy_gambit_source \
-    "$scheme_dir/consent/base-prelude.scm" \
-    "$src_dir/consent/base-prelude.scm"
-  copy_gambit_source \
-    "$scheme_dir/consent/base-syntax.scm" \
-    "$src_dir/consent/base-syntax.scm"
-  copy_gambit_source \
-    "$scheme_dir/consent/library.sld" \
-    "$src_dir/consent/library.sld"
-  copy_gambit_source \
-    "$scheme_dir/consent/result.sld" \
-    "$src_dir/consent/result.sld"
-  copy_gambit_source \
-    "$scheme_dir/consent/macro.sld" \
-    "$src_dir/consent/macro.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/approval.sld" \
-    "$src_dir/agent/approval.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/context.sld" \
-    "$src_dir/agent/context.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/helper.sld" \
-    "$src_dir/agent/helper.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/job.sld" \
-    "$src_dir/agent/job.sld"
-  copy_gambit_source \
-    "$scheme_dir/stdlib/and-let-star.sld" \
-    "$src_dir/stdlib/and-let-star.sld"
-  copy_gambit_source \
-    "$scheme_dir/stdlib/list.sld" \
-    "$src_dir/stdlib/list.sld"
-  copy_gambit_source \
-    "$scheme_dir/stdlib/generator.sld" \
-    "$src_dir/stdlib/generator.sld"
-  copy_gambit_source \
-    "$scheme_dir/stdlib/comparator.sld" \
-    "$src_dir/stdlib/comparator.sld"
-  copy_gambit_source \
-    "$scheme_dir/stdlib/receive.sld" \
-    "$src_dir/stdlib/receive.sld"
-  copy_gambit_source \
-    "$scheme_dir/stdlib/assume.sld" \
-    "$src_dir/stdlib/assume.sld"
-  copy_gambit_source \
-    "$scheme_dir/stdlib/rbtree.sld" \
-    "$src_dir/stdlib/rbtree.sld"
-  copy_gambit_source \
-    "$scheme_dir/stdlib/mapping.sld" \
-    "$src_dir/stdlib/mapping.sld"
-  copy_gambit_source \
-    "$scheme_dir/stdlib/json.sld" \
-    "$src_dir/stdlib/json.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/memory.sld" \
-    "$src_dir/agent/memory.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/plan.sld" \
-    "$src_dir/agent/plan.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/redaction.sld" \
-    "$src_dir/agent/redaction.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/session.sld" \
-    "$src_dir/agent/session.sld"
-  copy_gambit_source \
-    "$scheme_dir/consent/interpreter.sld" \
-    "$src_dir/consent/interpreter.sld"
-  copy_gambit_source \
-    "$scheme_dir/consent/eval.sld" \
-    "$src_dir/consent/eval.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/task.sld" \
-    "$src_dir/agent/task.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/transcript.sld" \
-    "$src_dir/agent/transcript.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/models/openai.sld" \
-    "$src_dir/agent/models/openai.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/registry.sld" \
-    "$src_dir/agent/registry.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/proposal.sld" \
-    "$src_dir/agent/proposal.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/runner.sld" \
-    "$src_dir/agent/runner.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/prompt.sld" \
-    "$src_dir/agent/prompt.sld"
-  copy_gambit_source \
-    "$scheme_dir/agent/generated-source.sld" \
-    "$src_dir/agent/generated-source.sld"
-  copy_gambit_source \
-    "$scheme_dir/cli/process-host.sld" \
-    "$src_dir/cli/process-host.sld"
-  copy_gambit_source \
-    "$scheme_dir/cli/native-cli.sld" \
-    "$src_dir/cli/native-cli.sld"
-  copy_gambit_source \
-    "$scheme_dir/cli/repl-chrome.sld" \
-    "$src_dir/cli/repl-chrome.sld"
-  copy_gambit_source \
-    "$scheme_dir/cli/repl-shell.sld" \
-    "$src_dir/cli/repl-shell.sld"
-  copy_gambit_source \
-    "$scheme_dir/cli/script.sld" \
-    "$src_dir/cli/script.sld"
-
   "$gsi" -:r7rs,search="$scheme_dir" \
     -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)' \
     >"$logs_dir/gsi-r7rs-probe.log" 2>&1 \
     || die "Gambit gsi does not accept R7RS mode with the Consent Scheme library search path; see $logs_dir/gsi-r7rs-probe.log"
+
+  compiler_source_list=$(enumerate_compiler_plan_files)
+  write_compiler_plan_manifest "$host_root" "$compiler_source_list"
+  load_compiler_plan_link_metadata
+  while IFS= read -r source; do
+    [ -n "$source" ] || continue
+    [ "$source" = "consent/embedded-source.sld" ] && continue
+    copy_gambit_source "$scheme_dir/$source" "$src_dir/$source"
+  done <<EOF
+$compiler_source_list
+EOF
 
   registrations_file="$src_dir/native-library-registrations.scm"
   write_native_library_registrations "$registrations_file"
@@ -1645,11 +1600,16 @@ compile_gambit() {
   tab=$(printf '\t')
   version_sentinel='@@consent-version-structural@@'
 
-  # Ordered Consent Scheme module list. This is also the executable link order;
-  # the per-module compiled artifacts are $src_dir/<ref>.c and $src_dir/<ref>.o.
-  # (consent embedded-source) is generated into $src_dir; every other module's
-  # source lives under $scheme_dir.
-  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro agent/approval agent/context agent/helper agent/job stdlib/and-let-star stdlib/list stdlib/generator stdlib/comparator stdlib/receive stdlib/assume stdlib/rbtree stdlib/mapping stdlib/json agent/memory agent/plan agent/redaction agent/session cli/process-host agent/models/openai agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt agent/generated-source consent/interpreter consent/eval cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
+  # The shared compiler-front-end plan is already dependency ordered. Gambit
+  # projects its source paths to module references and uses that same order for
+  # Scheme-to-C units and the final native link.
+  gambit_module_order=
+  while IFS= read -r source; do
+    [ -n "$source" ] || continue
+    gambit_module_order="$gambit_module_order ${source%.sld}"
+  done <<EOF
+$compiler_source_list
+EOF
 
   gambit_module_source() {
     case "$1" in
