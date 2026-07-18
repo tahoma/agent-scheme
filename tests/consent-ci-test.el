@@ -747,6 +747,70 @@
              "(shard (name full) (selector (tag full)))"
              plan))))
 
+(ert-deftest consent-ci-test-gambit-single-program-shards-isolate-gsi ()
+  "Run seven one-program Gambit shards beside the failing aggregate suite."
+  (let ((workflow (consent-ci-test--repo-file-string
+                   ".github/workflows/test.yml"))
+        (launcher
+         (consent-ci-test--repo-file-string "tools/run-portable-tests.sh")))
+    (dolist
+        (needle
+         '("test-portable-gambit-single-program:"
+           "CONSENT_PORTABLE_PROGRAM: ${{ matrix.case.program }}"
+           "tests/scheme/consent-repl-test.scm"
+           "tests/scheme/consent-eval-test.scm"
+           "tests/scheme/stdlib-random-bits-test.scm"
+           "tests/scheme/stdlib-property-testing-test.scm"
+           "tests/scheme/data-avl-tree-test.scm"
+           "tests/scheme/consent-transcript-test.scm"
+           "tests/scheme/consent-symbol-test.scm"
+           "tools/run-portable-tests.sh"
+           "- test-portable-gambit-single-program"))
+      (should (string-match-p (regexp-quote needle) workflow)))
+    (dolist (needle '("CONSENT_PORTABLE_PROGRAM"
+                      "single_program"
+                      "CONSENT_CI_PORTABLE_SUMMARY=1 1 0 0"))
+      (should (string-match-p (regexp-quote needle) launcher)))))
+
+(ert-deftest consent-ci-test-large-programs-use-language-symbol-comparisons ()
+  "Keep large programs from rebinding language comparison procedures."
+  (dolist (file '("tests/scheme/consent-eval-test.scm"
+                  "tests/scheme/consent-repl-test.scm"
+                  "tests/scheme/consent-session-test.scm"))
+    (let ((source (consent-ci-test--repo-file-string file)))
+      (dolist (binding '("(eq? host-eq?)"
+                         "(equal? host-equal?)"
+                         "(memq host-memq)"
+                         "(assq host-assq)"
+                         "(define eq? consent-host-symbol-eq?)"
+                         "(define equal? consent-host-symbol-equal?)"
+                         "(define memq consent-host-symbol-memq)"
+                         "(define assq consent-host-symbol-assq)"))
+        (should-not
+         (string-match-p
+          (regexp-quote binding)
+          source))))))
+
+(ert-deftest consent-ci-test-interpreter-preserves-native-table-operations ()
+  "Keep mixed symbol adapters explicit at interpreter data boundaries."
+  (let ((source
+         (consent-ci-test--repo-file-string
+          "scheme/consent/interpreter.sld")))
+    (dolist (binding '("(rename (scheme base)"
+                       "(define memq consent-host-symbol-memq)"
+                       "(define assq consent-host-symbol-assq)"))
+      (should-not
+       (string-match-p
+        (regexp-quote binding)
+        source)))
+    (dolist (binding '("(import (scheme base)"
+                       "(define host-memq memq)"
+                       "(define host-assq assq)"))
+      (should
+       (string-match-p
+        (regexp-quote binding)
+        source)))))
+
 (ert-deftest consent-ci-test-workflow-matrixes-host-option-variants ()
   "Deal out CI shards across host, syntax metadata, and docstring retention."
   (let ((workflow (consent-ci-test--repo-file-string
@@ -1049,7 +1113,7 @@
              (mapcar #'ert-test-name (ert-select-tests selector t)))
            partition-selectors))
          (flattened (apply #'append parts)))
-    (should (= (length aggregate) 212))
+    (should (= (length aggregate) 217))
     (should (= (length flattened)
                (length (delete-dups (copy-sequence flattened)))))
     (should (equal (sort aggregate #'string-lessp)
