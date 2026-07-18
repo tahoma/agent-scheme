@@ -1386,16 +1386,48 @@
           consent-default-symbol-table))
         (dependencies
          ((library (scheme base))
-          (library (data avl-tree))))
+          (library (data avl-tree))
+          (library (data transient-map))))
         (provenance
          ((origin repo)
           (identity owned-portable-symbol)
-          (storage persistent-avl-root)))
+          (storage transient-map-over-persistent-avl-root)))
         (verification
          ((test-status
            (interning shared-root-branches isolated-root-equivalence
                       root-installation portable-host-suite
                       compiled-host-suite))))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (consent symbol-boundary))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "symbol-boundary.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-host-symbol?
+          consent-host-symbol-name
+          consent-host-symbol-eq?
+          consent-host-symbol-eqv?
+          consent-host-symbol-equal?
+          consent-host-symbol-memq
+          consent-host-symbol-assq
+          consent-host-symbol-member
+          consent-host-symbol-assoc))
+        (dependencies
+         ((library (scheme base))
+          (library (consent symbol))))
+        (provenance
+         ((origin repo)
+          (boundary private-bootstrap-symbols)))
         (status internal)
         (canonical #t))
        (manifest-entry
@@ -1467,7 +1499,9 @@
          ((library (scheme base))
           (library (scheme char))
           (library (scheme inexact))
-          (library (scheme write))))
+          (library (scheme write))
+          (library (consent symbol))
+          (library (consent symbol-boundary))))
         (provenance ((origin repo)))
         (status internal)
         (canonical #t))
@@ -1501,6 +1535,7 @@
           consent-embedded-source-ref
           consent-register-native-library!
           consent-native-library-ref
+          consent-native-library-documentation-ref
           consent-install-native-applier!
           consent-native-applier-ref
           consent-host-datum->consent-datum
@@ -1560,6 +1595,8 @@
           primitive-procedure-function
           primitive-procedure-minimum-arity
           primitive-procedure-maximum-arity
+          primitive-procedure-documentation
+          set-primitive-procedure-documentation!
           make-consent-parameter
           consent-parameter?
           parameter-value
@@ -1642,6 +1679,8 @@
           set-context-interned-symbols!
           context-maximum-interned-symbols
           set-context-maximum-interned-symbols!
+          context-symbol-table
+          set-context-symbol-table!
           context-host-callbacks
           set-context-host-callbacks!
           context-maximum-host-callbacks
@@ -1827,6 +1866,8 @@
         (dependencies
          ((library (scheme base))
           (library (consent reader))
+          (library (consent symbol))
+          (library (consent symbol-boundary))
           (library (consent version))))
         (provenance ((origin repo)))
         (status internal)
@@ -1871,6 +1912,7 @@
           (library (scheme inexact))
           (library (scheme write))
           (library (consent reader))
+          (library (consent symbol-boundary))
           (library (consent runtime))))
         (provenance ((origin repo)))
         (status internal)
@@ -1916,6 +1958,8 @@
           consent-vendored-srfi-record
           consent-install-library-backend!
           consent-native-argument-value
+          consent-runtime-datum->native-datum
+          consent-call-native-library
           consent-apply-callable
           import-form?
           define-library-form?
@@ -1938,6 +1982,7 @@
           (library (scheme char))
           (library (scheme file))
           (library (consent reader))
+          (library (consent symbol-boundary))
           (library (consent runtime))
           (library (consent base))))
         (provenance ((origin repo)))
@@ -1996,6 +2041,8 @@
         (dependencies
          ((library (scheme base))
           (library (consent reader))
+          (library (consent symbol))
+          (library (consent symbol-boundary))
           (library (consent runtime))
           (library (consent base))
           (library (consent library))))
@@ -2035,6 +2082,8 @@
         (dependencies
          ((library (scheme base))
           (library (consent reader))
+          (library (consent symbol))
+          (library (consent symbol-boundary))
           (library (consent runtime))))
         (provenance ((origin repo)))
         (status implemented)
@@ -2099,6 +2148,8 @@
           (library (scheme read))
           (library (scheme write))
           (library (consent reader))
+          (library (consent symbol))
+          (library (consent symbol-boundary))
           (library (consent runtime))
           (library (consent result))
           (library (consent base))

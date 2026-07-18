@@ -13,27 +13,36 @@
 (require 'consent-reader)
 (require 'consent-runtime)
 
-(defun consent--strip-identifiers (value &optional seen)
-  "Return VALUE with hygienic identifiers converted to plain symbols."
+(defun consent--strip-identifiers (value &optional seen symbol-table)
+  "Return VALUE with hygienic identifiers converted to plain symbols.
+When SYMBOL-TABLE is non-nil, intern converted identifiers and existing
+symbols into that explicit table."
   (let ((seen (or seen (make-hash-table :test #'eq))))
     (cond
      ((consent--identifier-p value)
-      (consent--syntax-symbol (consent--identifier-name value)))
+      (consent--intern-symbol (consent--identifier-name value) symbol-table))
+     ((and symbol-table (consent-symbol-p value))
+      (consent--intern-symbol (consent-symbol-name value) symbol-table))
      ((consp value)
-      (if (gethash value seen)
-          value
-        (puthash value t seen)
-        (cons (consent--strip-identifiers (car value) seen)
-              (consent--strip-identifiers (cdr value) seen))))
+      (or (gethash value seen)
+          (let ((copy (cons nil nil)))
+            (puthash value copy seen)
+            (setcar copy
+                    (consent--strip-identifiers
+                     (car value) seen symbol-table))
+            (setcdr copy
+                    (consent--strip-identifiers
+                     (cdr value) seen symbol-table))
+            (consent--copy-datum-source copy value t))))
      ((vectorp value)
-      (if (gethash value seen)
-          value
-        (puthash value t seen)
-        (vconcat
-         (mapcar
-          (lambda (item)
-            (consent--strip-identifiers item seen))
-          (append value nil)))))
+      (or (gethash value seen)
+          (let ((copy (make-vector (length value) nil)))
+            (puthash value copy seen)
+            (dotimes (index (length value))
+              (aset copy index
+                    (consent--strip-identifiers
+                     (aref value index) seen symbol-table)))
+            (consent--copy-datum-source copy value t))))
      (t value))))
 
 (defun consent-result->external (result)

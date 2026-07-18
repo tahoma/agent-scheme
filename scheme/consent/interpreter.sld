@@ -36,6 +36,7 @@
           consent-base-binding-specs
           consent-standard-source-library-specs
           consent-stdlib-source-library-specs
+          consent-data-source-library-specs
           consent-primitive-manifest-binding-specs
           consent-result->external
           consent-value->external
@@ -56,7 +57,10 @@
                   (get-environment-variable host-get-environment-variable)
                   (get-environment-variables host-get-environment-variables))
           (scheme write)
+          (data avl-tree)
           (consent reader)
+          (consent symbol)
+          (consent symbol-boundary)
           (consent runtime)
           (consent result)
           (consent base)
@@ -72,6 +76,31 @@
           (prefix (agent session) session-model:)
           (consent macro))
   (begin
+    ;; Preserve host operations used for implementation identity and private
+    ;; bootstrap metadata.
+    (define host-symbol? symbol?)
+    ;; Read host symbol names in private bootstrap metadata.
+    (define host-symbol->string symbol->string)
+    ;; Construct host symbols only for private bootstrap reflection.
+    (define host-string->symbol string->symbol)
+    ;; Search private host identity lists without mixed-symbol semantics.
+    (define host-memq memq)
+    ;; Look up private host identity tables without mixed-symbol semantics.
+    (define host-assq assq)
+
+    ;; Recognize owned and bootstrap symbols in interpreter metadata.
+    (define interpreter-symbol? consent-host-symbol?)
+    ;; Read names from owned and bootstrap symbols.
+    (define interpreter-symbol-name consent-host-symbol-name)
+    ;; Compare symbols only at explicit owned/bootstrap boundary seams.
+    (define interpreter-symbol-eq? consent-host-symbol-eq?)
+
+    (define (interpreter-string->symbol name context)
+      "Intern NAME through CONTEXT's owned symbol table."
+      (consent-intern-symbol (context-symbol-table context) name))
+    ;; Internal evaluator values use context-owned identity.  Keep Scheme's
+    ;; comparison primitives compiler-visible and call the mixed-symbol
+    ;; adapters explicitly at ingress, egress, and private metadata seams.
     ;; Process-local portable approvals used by `(agent approval)' primitives.
     (define interpreter-approval-store
       (approval-model:consent-make-approval-store))
@@ -116,20 +145,91 @@ cursor across sessions."
            interpreter-session-manager default-session-context-factory))
       interpreter-session-manager)
 
-    (define (portable-library-argument value context)
-      "Normalize interpreted VALUE for direct compiled portable-library calls."
-      "Interpreter primitives that call shared portable libraries directly"
-      "must cross the same bridge as imported native-library shims, so those"
-      "libraries still see ordinary `(scheme base)' numbers and other host"
-      "scalars instead of reader/runtime representation details."
-      (consent-native-argument-value value context))
+    (define (own-runtime-datum value context)
+      "Return VALUE with every visible symbol owned by CONTEXT's symbol table."
+      "Published data already owned by the context keeps its original graph,"
+      "including reader source metadata; only changed paths are rebuilt."
+      (own-runtime-datum* value context '()))
+
+    (define (own-runtime-datum* value context seen)
+      "Recursively own VALUE while preserving sharing recorded in SEEN."
+      (cond
+         ((identifier? value)
+          (own-runtime-datum* (identifier-name value) context seen))
+         ((consent-symbol? value)
+          (consent-intern-symbol
+           (context-symbol-table context)
+           (consent-symbol-name value)))
+         ((host-symbol? value)
+          (consent-intern-symbol
+           (context-symbol-table context)
+           (host-symbol->string value)))
+         ((pair? value)
+          (let ((prior
+                 (let loop ((entries seen))
+                   (cond
+                    ((null? entries) #f)
+                    ((eq? value (caar entries)) (cdar entries))
+                    (else (loop (cdr entries)))))))
+            (if prior
+                prior
+                (let* ((copy (cons #f #f))
+                       (next-seen (cons (cons value copy) seen))
+                       (head (own-runtime-datum* (car value)
+                                                 context
+                                                 next-seen))
+                       (tail (own-runtime-datum* (cdr value)
+                                                 context
+                                                 next-seen)))
+                  (if (and (eq? head (car value))
+                           (eq? tail (cdr value)))
+                      value
+                      (begin
+                        (set-car! copy head)
+                        (set-cdr! copy tail)
+                        (consent-copy-datum-source! copy value #t)))))))
+         ((vector? value)
+          (let ((prior
+                 (let loop ((entries seen))
+                   (cond
+                    ((null? entries) #f)
+                    ((eq? value (caar entries)) (cdar entries))
+                    (else (loop (cdr entries)))))))
+            (if prior
+                prior
+                (let* ((copy (make-vector (vector-length value) #f))
+                       (next-seen (cons (cons value copy) seen)))
+                  (let loop ((index 0) (changed? #f))
+                    (if (< index (vector-length value))
+                        (let* ((element (vector-ref value index))
+                               (owned (own-runtime-datum* element
+                                                          context
+                                                          next-seen)))
+                          (vector-set! copy index owned)
+                          (loop (+ index 1)
+                                (or changed? (not (eq? owned element)))))
+                        (if changed?
+                            (consent-copy-datum-source! copy value #t)
+                            value)))))))
+         (else value)))
 
     (define (portable-library-call procedure context . arguments)
       "Apply PROCEDURE to ARGUMENTS normalized for a compiled portable library."
-      (apply procedure
-             (map (lambda (argument)
-                    (portable-library-argument argument context))
-                  arguments)))
+      (apply consent-call-native-library procedure context arguments))
+
+    (define (portable-redact value policy context)
+      "Redact VALUE through the compiled portable redaction library."
+      (portable-library-call redaction-model:redact
+                             context
+                             value
+                             policy))
+
+    (define (portable-safe-for-provider? value provider context)
+      "Report provider safety through the compiled portable redaction library."
+      (portable-library-call redaction-model:safe-for-provider?
+                             context
+                             value
+                             provider))
 
     ;; Process-local portable model provider profiles.
     (define interpreter-model-providers '())
@@ -264,7 +364,7 @@ cursor across sessions."
                   (let constructor-loop ((rest constructor-fields))
                     (if (not (null? rest))
                         (begin
-                          (if (not (memq (car rest) field-names))
+                          (if (not (host-memq (car rest) field-names))
                               (eval-error
                                "record constructor references unknown field"
                                (car rest)))
@@ -310,11 +410,11 @@ cursor across sessions."
       "Return every binding introduced by a define-record-type form."
       (let ((spec (parse-record-definition form)))
         (append
-         (list (second (assq 'type-name spec))
-               (second (assq 'constructor-name spec))
-               (second (assq 'predicate-name spec)))
-         (map car (second (assq 'accessors spec)))
-         (map car (second (assq 'mutators spec))))))
+         (list (second (host-assq 'type-name spec))
+               (second (host-assq 'constructor-name spec))
+               (second (host-assq 'predicate-name spec)))
+         (map car (second (host-assq 'accessors spec)))
+         (map car (second (host-assq 'mutators spec))))))
 
     (define (record-field-index record-type field)
       "Return FIELD's zero-based index in RECORD-TYPE, or raise on mismatch."
@@ -331,7 +431,7 @@ cursor across sessions."
       (if (not (and (consent-record? value)
                     (eq? (consent-record-type value) record-type)))
           (eval-error
-           (string-append (symbol->string description) " expected record")
+           (string-append (interpreter-symbol-name description) " expected record")
            value))
       value)
 
@@ -348,13 +448,13 @@ cursor across sessions."
     (define (eval-record-definition form environment context)
       "Install a record type plus generated constructor, predicate, and field procedures."
       (let* ((spec (parse-record-definition form))
-             (type-name (second (assq 'type-name spec)))
-             (fields (second (assq 'fields spec)))
+             (type-name (second (host-assq 'type-name spec)))
+             (fields (second (host-assq 'fields spec)))
              (record-type (consent-make-record-type type-name fields))
              (constructor-fields
-              (second (assq 'constructor-fields spec)))
-             (constructor-name (second (assq 'constructor-name spec)))
-             (predicate-name (second (assq 'predicate-name spec)))
+              (second (host-assq 'constructor-fields spec)))
+             (constructor-name (second (host-assq 'constructor-name spec)))
+             (predicate-name (second (host-assq 'predicate-name spec)))
              (constructor
               (make-primitive-procedure
                constructor-name
@@ -412,7 +512,7 @@ cursor across sessions."
                   index))
                1
                1))))
-         (second (assq 'accessors spec)))
+         (second (host-assq 'accessors spec)))
         (for-each
          (lambda (mutator)
            (let* ((name (car mutator))
@@ -435,7 +535,7 @@ cursor across sessions."
                  consent-unspecified)
                2
                2))))
-         (second (assq 'mutators spec)))
+         (second (host-assq 'mutators spec)))
         consent-unspecified))
 
     (define (split-body body)
@@ -740,7 +840,7 @@ cursor across sessions."
 
     (define (native-primitive-name? name)
       "Report whether NAME marks a natively bound library procedure shim."
-      (let ((text (symbol->string name)))
+      (let ((text (interpreter-symbol-name name)))
         (and (>= (string-length text) 7)
              (string=? (substring text 0 7) "native:"))))
 
@@ -777,7 +877,13 @@ cursor across sessions."
 
     (define (contract-enabled? context)
       "Return true when CONTEXT enables shallow boundary contracts."
-      (eq? (context-boundary-contract-checking context) 'shallow))
+      (consent-host-symbol-eq?
+       (context-boundary-contract-checking context)
+       'shallow))
+
+    (define (contract-tag=? actual expected)
+      "Compare a context-owned contract tag with bootstrap metadata."
+      (consent-host-symbol-eq? actual expected))
 
     (define (contract-field name . values)
       "Return a Scheme-readable contract field named NAME with VALUES."
@@ -788,7 +894,7 @@ cursor across sessions."
       (let loop ((rest fields))
         (cond
          ((null? rest) #f)
-         ((and (pair? (car rest)) (eq? (caar rest) name))
+         ((and (pair? (car rest)) (contract-tag=? (caar rest) name))
           (cdar rest))
          (else (loop (cdr rest))))))
 
@@ -808,56 +914,59 @@ cursor across sessions."
       "Return true when VALUE is an exact integer."
       (or (and (integer? value) (exact? value))
           (and (consent-number? value)
-               (eq? (consent-number-kind value) 'integer)
-               (eq? (consent-number-exactness value) 'exact))))
+               (contract-tag=? (consent-number-kind value) 'integer)
+               (contract-tag=? (consent-number-exactness value) 'exact))))
 
     (define (contract-integer? value)
       "Return true when VALUE is an integer number."
       (or (integer? value)
           (and (consent-number? value)
-               (eq? (consent-number-kind value) 'integer))))
+               (contract-tag=? (consent-number-kind value) 'integer))))
 
     (define (contract-type-matches? type value)
       "Return true when VALUE satisfies shallow contract TYPE."
       "Unknown type extensions remain advisory and therefore pass."
       (cond
        ((eq? type #f) (eq? value #f))
-       ((symbol? type)
-        (case type
-          ((any) #t)
-          ((boolean) (boolean? value))
-          ((symbol) (symbol? value))
-          ((string) (string? value))
-          ((number) (or (number? value) (consent-number? value)))
-          ((integer) (contract-integer? value))
-          ((exact-integer) (contract-exact-integer? value))
-          ((char character) (char? value))
-          ((pair) (pair? value))
-          ((list) (list? value))
-          ((null) (null? value))
-          ((vector) (vector? value))
-          ((bytevector) (bytevector? value))
-          ((procedure) (contract-procedure? value))
-          ((port) (consent-port? value))
-          ((input-port) (and (consent-port? value)
-                             (consent-port-input? value)))
-          ((output-port) (and (consent-port? value)
-                              (consent-port-output? value)))
-          ((textual-port) (and (consent-port? value)
-                               (consent-port-textual? value)))
-          ((binary-port) (and (consent-port? value)
-                              (consent-port-binary? value)))
-          ((eof-object) (consent-eof-object? value))
-          (else #t)))
+       ((interpreter-symbol? type)
+        (cond
+         ((contract-tag=? type 'any) #t)
+         ((contract-tag=? type 'boolean) (boolean? value))
+         ((contract-tag=? type 'symbol) (interpreter-symbol? value))
+         ((contract-tag=? type 'string) (string? value))
+         ((contract-tag=? type 'number)
+          (or (number? value) (consent-number? value)))
+         ((contract-tag=? type 'integer) (contract-integer? value))
+         ((contract-tag=? type 'exact-integer) (contract-exact-integer? value))
+         ((or (contract-tag=? type 'char)
+              (contract-tag=? type 'character))
+          (char? value))
+         ((contract-tag=? type 'pair) (pair? value))
+         ((contract-tag=? type 'list) (list? value))
+         ((contract-tag=? type 'null) (null? value))
+         ((contract-tag=? type 'vector) (vector? value))
+         ((contract-tag=? type 'bytevector) (bytevector? value))
+         ((contract-tag=? type 'procedure) (contract-procedure? value))
+         ((contract-tag=? type 'port) (consent-port? value))
+         ((contract-tag=? type 'input-port)
+          (and (consent-port? value) (consent-port-input? value)))
+         ((contract-tag=? type 'output-port)
+          (and (consent-port? value) (consent-port-output? value)))
+         ((contract-tag=? type 'textual-port)
+          (and (consent-port? value) (consent-port-textual? value)))
+         ((contract-tag=? type 'binary-port)
+          (and (consent-port? value) (consent-port-binary? value)))
+         ((contract-tag=? type 'eof-object) (consent-eof-object? value))
+         (else #t)))
        ((pair? type)
-        (case (car type)
-          ((or)
+        (cond
+         ((contract-tag=? (car type) 'or)
            (let loop ((variants (cdr type)))
              (cond
               ((null? variants) #f)
               ((contract-type-matches? (car variants) value) #t)
               (else (loop (cdr variants))))))
-          ((list-of)
+         ((contract-tag=? (car type) 'list-of)
            (if (= (length type) 2)
                (and (list? value)
                     (let loop ((items value))
@@ -867,7 +976,7 @@ cursor across sessions."
                         (loop (cdr items)))
                        (else #f))))
                #t))
-          ((vector-of)
+         ((contract-tag=? (car type) 'vector-of)
            (if (= (length type) 2)
                (and (vector? value)
                     (let loop ((index 0))
@@ -879,18 +988,16 @@ cursor across sessions."
                         (loop (+ index 1)))
                        (else #f))))
                #t))
-          ((pair)
+         ((contract-tag=? (car type) 'pair)
            (cond
             ((= (length type) 3)
              (and (pair? value)
                   (contract-type-matches? (cadr type) (car value))
                   (contract-type-matches? (third type) (cdr value))))
             (else (pair? value))))
-          ((procedure)
-           (contract-procedure? value))
-          ((values)
-           #t)
-          (else #t)))
+         ((contract-tag=? (car type) 'procedure) (contract-procedure? value))
+         ((contract-tag=? (car type) 'values) #t)
+         (else #t)))
        (else #t)))
 
     (define (contract-value-shape value)
@@ -898,7 +1005,7 @@ cursor across sessions."
       (cond
        ((eq? value #f) '#f)
        ((eq? value #t) 'boolean)
-       ((symbol? value) 'symbol)
+       ((interpreter-symbol? value) 'symbol)
        ((string? value) 'string)
        ((or (number? value) (consent-number? value)) 'number)
        ((char? value) 'character)
@@ -950,7 +1057,7 @@ cursor across sessions."
       (let loop ((rest parameters))
         (cond
          ((null? rest) #f)
-         ((and (pair? (car rest)) (eq? (caar rest) name))
+         ((and (pair? (car rest)) (contract-tag=? (caar rest) name))
           (cdar rest))
          (else (loop (cdr rest))))))
 
@@ -1009,7 +1116,7 @@ cursor across sessions."
                     'returns))))
         (if descriptor
             (let ((type (contract-descriptor-type descriptor)))
-              (if (and (pair? type) (eq? (car type) 'values))
+              (if (and (pair? type) (contract-tag=? (car type) 'values))
                   (let ((actual-values (values-list value))
                         (types (cdr type)))
                     (if (not (= (length actual-values) (length types)))
@@ -1508,7 +1615,9 @@ cursor across sessions."
             (if (not (= (length parts) 2))
                 (eval-error "quote requires exactly one datum" parts))
             (continue continuation
-                      (charge-literal! (second parts) context)))
+                      (charge-literal!
+                       (strip-identifiers (second parts))
+                       context)))
            ((and (identifier-named? operator 'quasiquote)
                  (special-operator-active? operator environment))
             ;; The quasiquote builder assembles its result with host cons/append
@@ -1517,7 +1626,8 @@ cursor across sessions."
             (continue
              continuation
              (charge-literal!
-              (eval-quasiquote parts environment context)
+              (strip-identifiers
+               (eval-quasiquote parts environment context))
               context)))
            ((and (identifier-named? operator 'lambda)
                  (special-operator-active? operator environment))
@@ -1675,7 +1785,7 @@ cursor across sessions."
                 ((self-evaluating? expression)
                  (continue continuation
                            (charge-literal! expression context)))
-                ((symbol? expression)
+                ((interpreter-symbol? expression)
                  (continue
                   continuation
                   (environment-ref-identifier environment expression)))
@@ -3144,7 +3254,7 @@ cursor across sessions."
         (cond
          ((null? cursor) #t)
          ((not (pair? cursor)) #f)
-         ((memq cursor seen) #f)
+         ((host-memq cursor seen) #f)
          (else (loop (cdr cursor) (cons cursor seen))))))
 
     (define (primitive-list? arguments context)
@@ -3420,14 +3530,16 @@ cursor across sessions."
     (define (primitive-symbol? arguments context)
       "Implement the `symbol?` primitive with argument validation and Consent"
       "Scheme values."
-      (symbol? (car arguments)))
+      (consent-symbol? (car arguments)))
 
     (define (primitive-symbol->string arguments context)
       "Implement the `symbol->string` primitive with argument validation and"
       "Consent Scheme values."
-      (if (not (symbol? (car arguments)))
+      (if (not (consent-symbol? (car arguments)))
           (eval-error "symbol->string expected a symbol"))
-      (charge-string-allocation! (symbol->string (car arguments)) context))
+      (charge-string-allocation!
+       (consent-symbol-name (car arguments))
+       context))
 
     (define (primitive-string->symbol arguments context)
       "Implement the `string->symbol` primitive with argument validation and"
@@ -3436,20 +3548,21 @@ cursor across sessions."
       "dimension rather than relying on the step budget as a proxy."
       (let ((name (expect-string (car arguments) "string->symbol")))
         (note-interned-symbol! context)
-        (string->symbol name)))
+        (consent-intern-symbol (context-symbol-table context) name)))
 
     (define (primitive-symbol=? arguments context)
       "Implement the `symbol=?` primitive with argument validation and Consent"
       "Scheme values."
       (let ((first (car arguments)))
-        (if (not (symbol? first))
+        (if (not (consent-symbol? first))
             (eval-error "symbol=? expected symbols"))
         (let loop ((rest (cdr arguments)))
           (cond
            ((null? rest) #t)
-           ((not (symbol? (car rest)))
+           ((not (consent-symbol? (car rest)))
             (eval-error "symbol=? expected symbols"))
-           ((eq? first (car rest)) (loop (cdr rest)))
+           ((consent-symbol-equivalent? first (car rest))
+            (loop (cdr rest)))
            (else #f)))))
 
     (define (primitive-char? arguments context)
@@ -3684,17 +3797,18 @@ cursor across sessions."
 
     (define (authorization-field authorization field)
       "Return FIELD from an authorization alist."
-      (let ((entry (assq field authorization)))
+      (let ((entry (consent-host-symbol-assq field authorization)))
         (if entry (second entry) #f)))
 
-    (define (port-capability-handle-id)
+    (define (port-capability-handle-id context)
       "Allocate a fresh Scheme-readable port capability handle id."
       (set! next-port-capability-handle-number
             (+ next-port-capability-handle-number 1))
-      (string->symbol
+      (interpreter-string->symbol
        (string-append
         "p-file-"
-        (number->string next-port-capability-handle-number))))
+        (number->string next-port-capability-handle-number))
+       context))
 
     (define (port-capability-datum
              handle kind backing operations grant limits status path)
@@ -3770,18 +3884,21 @@ cursor across sessions."
 
     (define (port-capability-limit-value port name)
       "Return PORT limit NAME as a host integer, or #f when unlimited."
-      (let ((field (and name (assq name (consent-port-limits port)))))
+      (let ((field (and name
+                        (consent-host-symbol-assq
+                         name
+                         (consent-port-limits port)))))
         (if field
             (exact-integer->host
              (second field)
              (string-append
               "port capability limit "
-              (symbol->string name)))
+              (interpreter-symbol-name name)))
             #f)))
 
     (define (port-capability-counter port name)
       "Return PORT's consumed counter for NAME."
-      (let ((entry (assq name (consent-port-counters port))))
+      (let ((entry (host-assq name (consent-port-counters port))))
         (if entry (cdr entry) 0)))
 
     (define (set-port-capability-counter! port name value)
@@ -3814,12 +3931,12 @@ cursor across sessions."
                      operation
                      (string-append
                       "port capability limit exceeded: "
-                      (symbol->string name))
+                      (interpreter-symbol-name name))
                      #t)
                     (eval-error
                      (string-append
                       "port capability limit exceeded: "
-                      (symbol->string name)))))
+                      (interpreter-symbol-name name)))))
               (set-port-capability-counter! port name (+ used 1))))))
 
     (define (revalidate-port-operation! port context operation)
@@ -3830,7 +3947,7 @@ cursor across sessions."
             (audit-port-capability-result!
              context port operation "closed port capability handle" #t)
             (eval-error "stale port capability handle: closed port"))
-           ((not (memq operation (consent-port-operations port)))
+           ((not (host-memq operation (consent-port-operations port)))
             (audit-port-capability-result!
              context port operation "operation outside port capability" #t)
             (eval-error "operation outside port capability"))
@@ -3903,7 +4020,7 @@ cursor across sessions."
       "Write text to port data through the Consent Scheme port or datum renderer."
       (let ((output (expect-textual-output-port port description))
             (context (if (null? maybe-context) #f (car maybe-context))))
-        (if (not (memq (consent-port-medium output) '(string file)))
+        (if (not (host-memq (consent-port-medium output) '(string file)))
             (eval-error
              (string-append description
                             " host textual output ports are not available")
@@ -4174,8 +4291,8 @@ cursor across sessions."
       "Return the next character from PORT, optionally advancing its cursor."
       (let ((input (expect-textual-input-port port description))
             (maybe-ctx (if (null? maybe-context) #f (car maybe-context))))
-        (if (not (memq (consent-port-medium input)
-                       '(string file network)))
+        (if (not (host-memq (consent-port-medium input)
+                            '(string file network)))
             (eval-error
              (string-append description
                             " host textual input ports are not available")
@@ -4251,7 +4368,9 @@ cursor across sessions."
             (eval-error "read-string count must be non-negative"))
         (cond
          ((not port) (if (= count 0) "" consent-eof-object))
-         ((not (memq (consent-port-medium port) '(string file network)))
+         ((not (host-memq
+                (consent-port-medium port)
+                '(string file network)))
           (eval-error "read-string host textual input ports are not available"))
          (else
           (revalidate-port-operation! port context 'read)
@@ -4285,7 +4404,9 @@ cursor across sessions."
                        (current-input-port-or-deny context "read-line")
                        (car arguments))
                    "read-line")))
-        (if (not (memq (consent-port-medium port) '(string file network)))
+        (if (not (host-memq
+                  (consent-port-medium port)
+                  '(string file network)))
             (eval-error
              "read-line host textual input ports are not available"))
         (revalidate-port-operation! port context 'read)
@@ -4328,7 +4449,9 @@ cursor across sessions."
       "Append BYTES to binary output PORT."
       (let ((output (expect-binary-output-port port description))
             (context (if (null? maybe-context) #f (car maybe-context))))
-        (if (not (memq (consent-port-medium output) '(bytevector file)))
+        (if (not (host-memq
+                  (consent-port-medium output)
+                  '(bytevector file)))
             (eval-error
              (string-append description
                             " host binary output ports are not available")
@@ -4364,7 +4487,9 @@ cursor across sessions."
       (if (null? arguments)
           consent-eof-object
           (let ((port (expect-binary-input-port (car arguments) "read-u8")))
-            (if (not (memq (consent-port-medium port) '(bytevector file)))
+            (if (not (host-memq
+                      (consent-port-medium port)
+                      '(bytevector file)))
                 (eval-error
                  "read-u8 host binary input ports are not available"))
             (revalidate-port-operation! port context 'read)
@@ -4393,7 +4518,9 @@ cursor across sessions."
       (if (null? arguments)
           consent-eof-object
           (let ((port (expect-binary-input-port (car arguments) "peek-u8")))
-            (if (not (memq (consent-port-medium port) '(bytevector file)))
+            (if (not (host-memq
+                      (consent-port-medium port)
+                      '(bytevector file)))
                 (eval-error
                  "peek-u8 host binary input ports are not available"))
             (revalidate-port-operation! port context 'read)
@@ -4449,7 +4576,9 @@ cursor across sessions."
         (cond
          ((not port)
           (if (= count 0) (make-bytevector 0 0) consent-eof-object))
-         ((not (memq (consent-port-medium port) '(bytevector file)))
+         ((not (host-memq
+                (consent-port-medium port)
+                '(bytevector file)))
           (eval-error "read-bytevector host binary input ports are not available"))
          (else
           (revalidate-port-operation! port context 'read)
@@ -4504,7 +4633,9 @@ cursor across sessions."
         (if (not port)
             consent-eof-object
             (begin
-              (if (not (memq (consent-port-medium port) '(bytevector file)))
+              (if (not (host-memq
+                        (consent-port-medium port)
+                        '(bytevector file)))
                   (eval-error
                    "read-bytevector! host binary input ports are not available"))
               (revalidate-port-operation! port context 'read)
@@ -4682,7 +4813,9 @@ cursor across sessions."
     (define (primitive-features arguments context)
       "Implement the `features` primitive with argument validation and Consent"
       "Scheme values."
-      '(r7rs srfi-0 ratios exact-complex ieee-float consent))
+      (own-runtime-datum
+       '(r7rs srfi-0 ratios exact-complex ieee-float consent)
+       context))
 
     (define (primitive-agent-yield arguments context)
       "Emit a primary structured observation event into the current context."
@@ -4724,7 +4857,9 @@ cursor across sessions."
 
     (define (context-current-request context)
       "Return the current request context, or #f when no request was supplied."
-      (context-model:make-request-context
+      (portable-library-call
+       context-model:make-request-context
+       context
        (context-request-id context)
        (context-session-id context)
        (context-request context)))
@@ -4743,14 +4878,18 @@ cursor across sessions."
 
     (define (context-current-conversation-summary context)
       "Return the current conversation summary, or #f when no summary exists."
-      (context-model:make-conversation-summary
+      (portable-library-call
+       context-model:make-conversation-summary
+       context
        (context-session-id context)
        (context-conversation-summary context)))
 
     (define (context-current-focus context)
       "Return the current focus context, synthesizing one from known records."
       (or (context-focus context)
-          (context-model:make-focus-context
+          (portable-library-call
+           context-model:make-focus-context
+           context
            (list
             (context-current-request context)
             (context-current-region-context context)
@@ -4758,72 +4897,84 @@ cursor across sessions."
             (context-current-project-context context)
             (context-current-conversation-summary context)))))
 
-    (define (context-query-name query)
+    (define (context-query-name query context)
       "Return QUERY as a context selector name, or #f when unsupported."
       (cond
-       ((symbol? query) query)
-       ((string? query) (string->symbol query))
+       ((interpreter-symbol? query) query)
+       ((string? query) (interpreter-string->symbol query context))
        (else #f)))
 
     (define (context-select-one name context)
       "Return one context record selected by NAME."
       (cond
-       ((or (eq? name 'all) (eq? name 'context))
-        (context-model:make-context-bundle
+       ((or (consent-host-symbol-eq? name 'all)
+            (consent-host-symbol-eq? name 'context))
+        (portable-library-call
+         context-model:make-context-bundle
+         context
          (list
           (context-current-request context)
           (context-current-region-context context)
           (context-current-buffer-context context)
           (context-current-project-context context)
           (context-current-conversation-summary context))))
-       ((eq? name 'request) (context-current-request context))
-       ((eq? name 'focus) (context-current-focus context))
-       ((eq? name 'region) (context-current-region-context context))
-       ((eq? name 'buffer) (context-current-buffer-context context))
-       ((eq? name 'project) (context-current-project-context context))
-       ((or (eq? name 'conversation)
-            (eq? name 'conversation-summary))
+       ((consent-host-symbol-eq? name 'request)
+        (context-current-request context))
+       ((consent-host-symbol-eq? name 'focus)
+        (context-current-focus context))
+       ((consent-host-symbol-eq? name 'region)
+        (context-current-region-context context))
+       ((consent-host-symbol-eq? name 'buffer)
+        (context-current-buffer-context context))
+       ((consent-host-symbol-eq? name 'project)
+        (context-current-project-context context))
+       ((or (consent-host-symbol-eq? name 'conversation)
+            (consent-host-symbol-eq? name 'conversation-summary))
         (context-current-conversation-summary context))
        (else #f)))
 
     (define (context-select query context)
       "Return context records selected by QUERY."
-      (let ((name (context-query-name query)))
+      (let ((name (context-query-name query context)))
         (cond
          (name (context-select-one name context))
          ((pair? query)
-          (context-model:make-context-bundle
+          (portable-library-call
+           context-model:make-context-bundle
+           context
            (map
             (lambda (item)
               (context-select-one
-               (or (context-query-name item) 'unknown)
+               (or (context-query-name item context) 'unknown)
                context))
             (proper-list-elements query "context-yield query"))))
          (else #f))))
 
     (define (primitive-current-request arguments context)
       "Return the current request context primitive value."
-      (context-current-request context))
+      (own-runtime-datum (context-current-request context) context))
 
     (define (primitive-current-focus arguments context)
       "Return the current focus context primitive value."
-      (context-current-focus context))
+      (own-runtime-datum (context-current-focus context) context))
 
     (define (primitive-current-region-context arguments context)
       "Return the current region context primitive value."
-      (context-current-region-context context))
+      (own-runtime-datum (context-current-region-context context) context))
 
     (define (primitive-current-buffer-context arguments context)
       "Return the current buffer context primitive value."
-      (context-current-buffer-context context))
+      (own-runtime-datum (context-current-buffer-context context) context))
 
     (define (primitive-current-project-context arguments context)
       "Return the current project context primitive value."
-      (context-current-project-context context))
+      (own-runtime-datum (context-current-project-context context) context))
 
     (define (primitive-current-conversation-summary arguments context)
       "Return the current conversation summary primitive value."
-      (context-current-conversation-summary context))
+      (own-runtime-datum
+       (context-current-conversation-summary context)
+       context))
 
     (define (primitive-context-yield arguments context)
       "Yield selected context through the event channel."
@@ -4831,8 +4982,9 @@ cursor across sessions."
         (if record
             (record-context-event!
              context
-             (list 'yield (redaction-model:redact record 'agent-context))))
-        record))
+             (list 'yield
+                   (portable-redact record 'agent-context context))))
+        (own-runtime-datum record context)))
 
     ;; Policy categories reported by `(agent reflect)'.
     (define reflect-policy-categories
@@ -4876,8 +5028,21 @@ cursor across sessions."
 
     (define (reflect-field-value spec field default)
       "Return FIELD's value from association-list SPEC, or DEFAULT."
-      (let ((entry (assq field spec)))
+      (let ((entry (host-assq field spec)))
         (if entry (cadr entry) default)))
+
+    (define (reflect-symbol-name-assq name entries)
+      "Return NAME's entry after normalizing symbol identity to text."
+      (let ((key (and (interpreter-symbol? name) (interpreter-symbol-name name))))
+        (and key
+             (let loop ((rest entries))
+               (cond
+                ((null? rest) #f)
+                ((and (pair? (car rest))
+                      (interpreter-symbol? (caar rest))
+                      (string=? key (interpreter-symbol-name (caar rest))))
+                 (car rest))
+                (else (loop (cdr rest))))))))
 
     (define (reflect-datumize value)
       "Return host VALUE as a Scheme-readable reflection datum."
@@ -4935,32 +5100,51 @@ cursor across sessions."
                       records)))
          (else (loop (cdr specs) records)))))
 
-    (define (reflect-capability-name symbol-or-name)
+    (define (reflect-capability-name symbol-or-name context)
       "Return SYMBOL-OR-NAME as a capability name symbol."
       (cond
-       ((symbol? symbol-or-name) symbol-or-name)
-       ((string? symbol-or-name) (string->symbol symbol-or-name))
+       ((interpreter-symbol? symbol-or-name) symbol-or-name)
+       ((string? symbol-or-name)
+        (interpreter-string->symbol symbol-or-name context))
        (else (eval-error "capability-info expects a symbol or string"))))
 
-    (define (reflect-capability-info symbol-or-name)
+    (define (reflect-capability-info symbol-or-name context)
       "Return capability metadata for SYMBOL-OR-NAME, or #f."
-      (let ((name (reflect-capability-name symbol-or-name)))
-        (let loop ((specs (consent-primitive-manifest-binding-specs)))
-          (cond
-           ((null? specs) #f)
-           ((and (reflect-host-capability-spec? (car specs))
-                 (eq? (reflect-field-value (car specs) 'name #f) name))
-            (reflect-capability-record (car specs)))
-           (else (loop (cdr specs)))))))
+      (let ((spec
+             (reflect-manifest-spec-for-name
+              (reflect-capability-name symbol-or-name context))))
+        (and spec
+             (reflect-host-capability-spec? spec)
+             (reflect-capability-record spec))))
+
+    ;; Lazily built process-local lookup for private primitive metadata.
+    (define reflect-primitive-manifest-spec-index #f)
+
+    (define (reflect-primitive-manifest-index)
+      "Return the cached string-keyed index of private primitive metadata."
+      (or reflect-primitive-manifest-spec-index
+          (let loop ((specs (consent-primitive-manifest-binding-specs))
+                     (index (make-avl-tree string<?)))
+            (if (null? specs)
+                (begin
+                  (set! reflect-primitive-manifest-spec-index index)
+                  index)
+                (let ((name (reflect-field-value (car specs) 'name #f)))
+                  (loop
+                   (cdr specs)
+                   (if (interpreter-symbol? name)
+                       (avl-tree-set index
+                                     (interpreter-symbol-name name)
+                                     (car specs))
+                       index)))))))
 
     (define (reflect-manifest-spec-for-name name)
       "Return primitive manifest metadata for binding NAME, or #f."
-      (let loop ((specs (consent-primitive-manifest-binding-specs)))
-        (cond
-         ((null? specs) #f)
-         ((eq? (reflect-field-value (car specs) 'name #f) name)
-          (car specs))
-         (else (loop (cdr specs))))))
+      (and (interpreter-symbol? name)
+           (avl-tree-ref/default
+            (reflect-primitive-manifest-index)
+            (interpreter-symbol-name name)
+            #f)))
 
     ;; Best-effort public documentation for primitive implementation hooks
     ;; where standard R7RS gives no way to reflect host procedure docstrings.
@@ -4974,8 +5158,9 @@ cursor across sessions."
     (define (reflect-implementation-documentation hook)
       "Return documentation metadata derived from implementation HOOK."
       (let ((entry (and hook
-                        (assq hook
-                              primitive-implementation-documentation-specs))))
+                        (host-assq
+                         hook
+                         primitive-implementation-documentation-specs))))
         (and entry
              (make-documentation-metadata
               (list (cons 'documentation (cdr entry)))
@@ -4993,14 +5178,35 @@ cursor across sessions."
            (reflect-manifest-spec-for-name
             (primitive-procedure-name value))))
 
+    (define (reflect-compiled-procedure-documentation documentation)
+      "Materialize raw compiled-source DOCUMENTATION in this runtime."
+      (if (and
+           (pair? documentation)
+           (pair? (cdr documentation)))
+          (let ((result
+                 (car
+                  (documentation-body-result
+                   (append (cadr documentation) (list #f))
+                   (lambda (form) #f)
+                   'full
+                   (car documentation)))))
+            result)
+          documentation))
+
     (define (reflect-procedure-documentation value)
       "Return documentation metadata attached to callable VALUE, or #f."
       (cond
        ((consent-procedure? value)
         (procedure-documentation value))
        ((consent-primitive-procedure? value)
-        (let ((spec (reflect-primitive-procedure-spec value)))
-          (and spec (reflect-primitive-documentation spec))))
+        (or
+         (let ((documentation
+                (primitive-procedure-documentation value)))
+           (and
+            documentation
+            (reflect-compiled-procedure-documentation documentation)))
+         (let ((spec (reflect-primitive-procedure-spec value)))
+           (and spec (reflect-primitive-documentation spec)))))
        (else #f)))
 
     (define (reflect-documentation-origin documentation)
@@ -5053,11 +5259,12 @@ cursor across sessions."
               (result-field 'fields
                             (reflect-documentation-fields documentation)))))
 
-    (define (reflect-binding-name symbol-or-name)
+    (define (reflect-binding-name symbol-or-name context)
       "Return SYMBOL-OR-NAME as a binding symbol, or #f."
       (cond
-       ((symbol? symbol-or-name) symbol-or-name)
-       ((string? symbol-or-name) (string->symbol symbol-or-name))
+       ((interpreter-symbol? symbol-or-name) symbol-or-name)
+       ((string? symbol-or-name)
+        (interpreter-string->symbol symbol-or-name context))
        (else #f)))
 
     (define (reflect-documentation subject context)
@@ -5071,7 +5278,7 @@ cursor across sessions."
               (reflect-documentation-record '(procedure) documentation spec)
               #f)))
        (else
-        (let* ((name (reflect-binding-name subject))
+        (let* ((name (reflect-binding-name subject context))
                (environment (context-interaction-environment context))
                (cell (and name environment (environment-cell environment name)))
                (value (and cell (cell-value cell)))
@@ -5148,7 +5355,7 @@ cursor across sessions."
             (consent-primitive-procedure? subject))
         (reflect-binding-description '(procedure) #f subject context))
        (else
-        (let* ((name (reflect-binding-name subject))
+        (let* ((name (reflect-binding-name subject context))
                (environment (context-interaction-environment context))
                (cell (and name environment (environment-cell environment name)))
                (value (if cell (cell-value cell) #f)))
@@ -5267,10 +5474,16 @@ cursor across sessions."
 
     (define (reflect-policy-action context category)
       "Return CATEGORY's effective policy action in CONTEXT."
-      (let ((override (assq category (context-policy-actions context))))
+      (let ((override
+             (reflect-symbol-name-assq
+              category
+              (context-policy-actions context))))
         (if override
             (cdr override)
-            (let ((default (assq category reflect-default-policy-actions)))
+            (let ((default
+                   (reflect-symbol-name-assq
+                    category
+                    reflect-default-policy-actions)))
               (if default (cdr default) 'deny)))))
 
     (define (reflect-current-policy context)
@@ -5313,7 +5526,7 @@ cursor across sessions."
 
     (define (reflect-library-catalog-field entry field default)
       "Return FIELD from catalog ENTRY, or DEFAULT when absent."
-      (let ((cell (assq field entry)))
+      (let ((cell (host-assq field entry)))
         (if cell (cadr cell) default)))
 
     (define (reflect-library-catalog-value entry field default)
@@ -5442,17 +5655,45 @@ cursor across sessions."
               (reflect-registered-library-entry (caar entries) (cdar entries))
               result)))))
 
+    (define (reflect-symbol-name-member? name symbols)
+      "Report whether SYMBOLS contains a symbol whose name equals NAME."
+      (let ((key (and (interpreter-symbol? name) (interpreter-symbol-name name))))
+        (and key
+             (let loop ((rest symbols))
+               (cond
+                ((null? rest) #f)
+                ((and (interpreter-symbol? (car rest))
+                      (string=? key (interpreter-symbol-name (car rest))))
+                 #t)
+                (else (loop (cdr rest))))))))
+
     (define (reflect-library-entry-exports-name? entry name)
       "Report whether reflection ENTRY exports NAME."
-      (memq name (reflect-library-catalog-field entry 'exports '())))
+      (reflect-symbol-name-member?
+       name
+       (reflect-library-catalog-field entry 'exports '())))
+
+    (define (reflect-library-name-index-key name)
+      "Return NAME with symbol parts normalized to strings for comparison."
+      (map (lambda (part)
+             (cond
+              ((interpreter-symbol? part) (interpreter-symbol-name part))
+              ((consent-number? part) (consent-number-value part))
+              (else part)))
+           name))
 
     (define (reflect-library-entry-name-seen? key entries)
       "Report whether ENTRIES already contains library KEY."
-      (cond
-       ((null? entries) #f)
-       ((equal? key (reflect-library-catalog-field (car entries) 'name '()))
-        #t)
-       (else (reflect-library-entry-name-seen? key (cdr entries)))))
+      (let ((index-key (reflect-library-name-index-key key)))
+        (let loop ((rest entries))
+          (cond
+           ((null? rest) #f)
+           ((equal?
+             index-key
+             (reflect-library-name-index-key
+              (reflect-library-catalog-field (car rest) 'name '())))
+            #t)
+           (else (loop (cdr rest)))))))
 
     (define (reflect-binding-library-entries name context)
       "Return catalog and registered library entries exporting NAME."
@@ -5483,7 +5724,7 @@ cursor across sessions."
     (define (reflect-library-search-query query)
       "Return QUERY as catalog search input."
       (cond
-       ((or (string? query) (symbol? query) (pair? query)) query)
+       ((or (string? query) (interpreter-symbol? query) (pair? query)) query)
        (else (consent-value->external query))))
 
     (define (reflect-library-search query)
@@ -5549,7 +5790,9 @@ cursor across sessions."
     (define (reflect-catalog-private-library library-name)
       "Return (LIBRARY . CONTEXT) for LIBRARY-NAME in a private context."
       (let* ((context (new-eval-context '()))
-             (environment (consent-make-base-environment)))
+             (environment
+              (consent-make-base-environment
+               (context-symbol-table context))))
         (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
         (cons (resolve-library (library-name-key library-name)
@@ -5576,7 +5819,7 @@ cursor across sessions."
 
     (define (reflect-binding-libraries symbol-or-name context)
       "Return cataloged or registered libraries exporting SYMBOL-OR-NAME."
-      (let ((name (reflect-binding-name symbol-or-name)))
+      (let ((name (reflect-binding-name symbol-or-name context)))
         (if (not name)
             (eval-error "binding-libraries expects a symbol or string"
                         symbol-or-name))
@@ -5590,48 +5833,104 @@ cursor across sessions."
                    (result '()))
           (if (null? frame)
               (reverse result)
-              (let ((documentation
-                     (reflect-documentation (caar frame) context)))
+              (let* ((binding (car frame))
+                     (documentation
+                      (reflect-binding-documentation
+                       (list 'binding (car binding))
+                       (cell-value (cdr binding))
+                       context)))
                 (loop (cdr frame)
                       (if documentation
                           (cons documentation result)
                           result)))))))
 
     (define (reflect-field-name name)
-      "Return NAME as a reflection field symbol."
+      "Return NAME as a private reflection field host symbol."
       (cond
-       ((symbol? name) name)
-       ((string? name) (string->symbol name))
+       ((host-symbol? name) name)
+       ((string? name) (host-string->symbol name))
        (else name)))
 
+    (define (reflect-field-value/default fields name default)
+      "Return NAME's value from same-domain association list FIELDS."
+      (let ((cell (host-assq name fields)))
+        (if (and cell (pair? (cdr cell)))
+            (cadr cell)
+            default)))
+
     (define (reflect-reflection-field record name default)
-      "Return NAME's value in RECORD, or DEFAULT when absent."
+      "Return private field NAME from internal RECORD, or DEFAULT."
       (if (not (pair? record))
           default
-          (let ((cell (assq (reflect-field-name name) (cdr record))))
-            (if (and cell (pair? (cdr cell)))
-                (cadr cell)
-                default))))
+          (reflect-field-value/default
+           (cdr record)
+           (reflect-field-name name)
+           default)))
 
     (define (reflect-documentation-field documentation name default)
-      "Return NAME's value from DOCUMENTATION metadata, or DEFAULT."
+      "Return private field NAME from internal DOCUMENTATION, or DEFAULT."
       (let ((fields
              (reflect-reflection-field documentation 'fields #f)))
         (if (not (list? fields))
             default
-            (let ((cell (assq (reflect-field-name name) fields)))
-              (if (and cell (pair? (cdr cell)))
-                  (cadr cell)
-                  default)))))
+            (reflect-field-value/default
+             fields
+             (reflect-field-name name)
+             default))))
+
+    (define (reflect-owned-field-name name context)
+      "Return NAME interned in CONTEXT's owned symbol table."
+      (cond
+       ((consent-symbol? name) name)
+       ((host-symbol? name)
+        (consent-intern-symbol
+         (context-symbol-table context)
+         (host-symbol->string name)))
+       ((string? name)
+        (consent-intern-symbol (context-symbol-table context) name))
+       (else name)))
+
+    (define (reflect-owned-reflection-field record name default context)
+      "Return owned field NAME from public RECORD, or DEFAULT."
+      (if (not (pair? record))
+          default
+          (reflect-field-value/default
+           (cdr record)
+           (reflect-owned-field-name name context)
+           default)))
+
+    (define (reflect-owned-documentation-field
+             documentation name default context)
+      "Return owned field NAME from public DOCUMENTATION, or DEFAULT."
+      (let ((fields
+             (reflect-owned-reflection-field
+              documentation
+              "fields"
+              #f
+              context)))
+        (if (not (list? fields))
+            default
+            (reflect-field-value/default
+             fields
+             (reflect-owned-field-name name context)
+             default))))
 
     (define (reflect-docstring subject default context)
       "Return SUBJECT's documentation string, or DEFAULT when absent."
-      (let ((documentation
-             (if (and (pair? subject)
-                      (eq? (car subject) 'documentation-metadata))
-                 subject
-                 (reflect-documentation subject context))))
-        (reflect-documentation-field documentation 'documentation default)))
+      (if (and
+           (pair? subject)
+           (eq?
+            (car subject)
+            (reflect-owned-field-name "documentation-metadata" context)))
+          (reflect-owned-documentation-field
+           subject
+           "documentation"
+           default
+           context)
+          (reflect-documentation-field
+           (reflect-documentation subject context)
+           'documentation
+           default)))
 
     (define (reflect-string-prefix? prefix text)
       "Report whether TEXT starts with PREFIX."
@@ -5650,6 +5949,13 @@ cursor across sessions."
                     needle
                     (substring text index text-length))
                    (loop (+ index 1)))))))
+
+    (define (reflect-string-member? value values)
+      "Report whether string VALUE occurs in string list VALUES."
+      (let loop ((rest values))
+        (and (pair? rest)
+             (or (string=? value (car rest))
+                 (loop (cdr rest))))))
 
     (define (reflect-documentation-summary documentation)
       "Return DOCUMENTATION's human-readable summary, or #f."
@@ -5673,7 +5979,8 @@ cursor across sessions."
 
     (define (reflect-apropos-export-name-seen? name seen)
       "Report whether NAME is already recorded in SEEN."
-      (and (memq name seen) #t))
+      (and (interpreter-symbol? name)
+           (reflect-string-member? (interpreter-symbol-name name) seen)))
 
     (define (reflect-known-export-names context)
       "Return unique exported binding names from the catalog and CONTEXT."
@@ -5681,7 +5988,8 @@ cursor across sessions."
                    (append
                     (consent-library-catalog-entries)
                     (reflect-registered-library-entries context)))
-                  (names '()))
+                  (names '())
+                  (seen '()))
         (if (null? entries)
             (reverse names)
             (let inner ((exports
@@ -5689,17 +5997,22 @@ cursor across sessions."
                           (car entries)
                           'exports
                           '()))
-                        (acc names))
+                        (acc names)
+                        (keys seen))
               (if (null? exports)
-                  (outer (cdr entries) acc)
-                  (inner
-                   (cdr exports)
-                   (if (memq (car exports) acc)
-                       acc
-                       (cons (car exports) acc))))))))
+                  (outer (cdr entries) acc keys)
+                  (let* ((name (car exports))
+                         (key (and (interpreter-symbol? name)
+                                   (interpreter-symbol-name name))))
+                    (if (or (not key)
+                            (reflect-string-member? key keys))
+                        (inner (cdr exports) acc keys)
+                        (inner (cdr exports)
+                               (cons name acc)
+                               (cons key keys)))))))))
 
     (define (reflect-apropos-documentation-match
-             documentation needle seen context)
+             documentation needle context)
       "Return (MATCH . NAME) for DOCUMENTATION and NEEDLE, or #f."
       (let* ((subject
               (reflect-reflection-field documentation 'subject #f))
@@ -5710,16 +6023,16 @@ cursor across sessions."
              (summary
               (reflect-documentation-summary documentation))
              (name-match?
-              (and (symbol? name)
+              (and (interpreter-symbol? name)
                    (reflect-string-contains?
-                    (string-downcase (symbol->string name))
+                    (string-downcase (interpreter-symbol-name name))
                     needle)))
              (summary-match?
               (and (string? summary)
                    (reflect-string-contains?
                     (string-downcase summary)
                     needle))))
-        (if (and (symbol? name) (or name-match? summary-match?))
+        (if (and (interpreter-symbol? name) (or name-match? summary-match?))
             (cons
              (reflect-apropos-match
               'binding
@@ -5734,7 +6047,7 @@ cursor across sessions."
       "Return an apropos match for catalog export NAME, or #f."
       (if (or (reflect-apropos-export-name-seen? name seen)
               (not (reflect-string-contains?
-                    (string-downcase (symbol->string name))
+                    (string-downcase (interpreter-symbol-name name))
                     needle)))
           #f
           (reflect-apropos-match
@@ -5750,7 +6063,7 @@ cursor across sessions."
              (string-downcase
               (cond
                ((string? query) query)
-               ((symbol? query) (symbol->string query))
+               ((interpreter-symbol? query) (interpreter-symbol-name query))
                (else (consent-value->external query))))))
         (let loop-docs ((documents (reflect-documented-bindings context))
                         (seen '())
@@ -5769,17 +6082,20 @@ cursor across sessions."
                             context)))
                       (loop-exports
                        (cdr exports)
-                       (if match (cons (car exports) seen) seen)
+                       (if match
+                           (cons (interpreter-symbol-name (car exports)) seen)
+                           seen)
                        (if match (cons match matches) matches)))))
               (let ((match/name
                      (reflect-apropos-documentation-match
                       (car documents)
                       needle
-                      seen
                       context)))
                 (loop-docs
                  (cdr documents)
-                 (if match/name (cons (cdr match/name) seen) seen)
+                 (if match/name
+                     (cons (interpreter-symbol-name (cdr match/name)) seen)
+                     seen)
                  (if match/name (cons (car match/name) result) result)))))))
 
     (define (reflect-current-session-info context)
@@ -5796,7 +6112,7 @@ cursor across sessions."
 
     (define (reflect-entry-field entry field)
       "Return FIELD from a Scheme-readable reflection or audit ENTRY."
-      (let ((cell (assq field (cdr entry))))
+      (let ((cell (host-assq field (cdr entry))))
         (if cell (cadr cell) #f)))
 
     (define (reflect-filter predicate list)
@@ -5810,31 +6126,42 @@ cursor across sessions."
 
     (define (reflect-recent-yields context)
       "Return recent yield events from CONTEXT in emission order."
-      (redaction-model:redact
+      (portable-redact
        (reflect-filter
         (lambda (event)
           (and (pair? event) (eq? (car event) 'yield)))
         (reverse (context-audit-events context)))
-       'runtime-reflection))
+       'runtime-reflection
+       context))
 
     (define (reflect-recent-errors context)
       "Return recent error conditions known to CONTEXT."
-      (redaction-model:redact
+      (portable-redact
        (if (context-current-error context)
            (list (context-current-error context))
            '())
-       'runtime-reflection))
+       'runtime-reflection
+       context))
 
     (define (reflect-recent-policy-decisions context)
       "Return recent policy decisions from CONTEXT in emission order."
-      (redaction-model:redact
+      (portable-redact
        (reflect-filter
         (lambda (entry)
           (and (pair? entry)
                (eq? (car entry) 'audit-entry)
                (eq? (reflect-entry-field entry 'event) 'policy-decision)))
         (reverse (context-audit-events context)))
-       'runtime-reflection))
+       'runtime-reflection
+       context))
+
+    (define (reflect-public-datum value context)
+      "Redact VALUE and intern all published symbols in CONTEXT."
+      "Reflection records are assembled by compiled portable code, whose"
+      "literal field names are host symbols.  Publication must cross the same"
+      "ownership boundary as reader and provider results so user `eq?',"
+      "`memq', and `assq' observe the active context's symbol identities."
+      (portable-redact value 'runtime-reflection context))
 
     (define (primitive-consent-version arguments context)
       "Return the canonical Consent Scheme version datum."
@@ -5842,23 +6169,19 @@ cursor across sessions."
 
     (define (primitive-current-capabilities arguments context)
       "Return the runtime capability metadata list."
-      (redaction-model:redact (reflect-current-capabilities)
-                              'runtime-reflection))
+      (reflect-public-datum (reflect-current-capabilities) context))
 
     (define (primitive-current-policy arguments context)
       "Return the runtime policy snapshot."
-      (redaction-model:redact (reflect-current-policy context)
-                              'runtime-reflection))
+      (reflect-public-datum (reflect-current-policy context) context))
 
     (define (primitive-current-budget arguments context)
       "Return the current evaluation budget snapshot."
-      (redaction-model:redact (reflect-current-budget context)
-                              'runtime-reflection))
+      (reflect-public-datum (reflect-current-budget context) context))
 
     (define (primitive-budget-remaining arguments context)
       "Return remaining budget headroom per enforced dimension."
-      (redaction-model:redact (reflect-budget-remaining context)
-                              'runtime-reflection))
+      (reflect-public-datum (reflect-budget-remaining context) context))
 
     (define (primitive-budget-exhausted? arguments context)
       "Report whether ARGUMENT is a budget-exhaustion stop receipt."
@@ -5870,109 +6193,102 @@ cursor across sessions."
       "Emit the current budget ledger as a yield event and return it."
       (let ((ledger (reflect-current-budget context)))
         (record-context-event! context (list 'yield ledger))
-        (redaction-model:redact ledger 'runtime-reflection)))
+        (reflect-public-datum ledger context)))
 
     (define (primitive-current-imports arguments context)
       "Return the current import snapshot."
-      (redaction-model:redact (reflect-current-imports context)
-                              'runtime-reflection))
+      (reflect-public-datum (reflect-current-imports context) context))
 
     (define (primitive-library-bindings arguments context)
       "Return exported bindings for a library name."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-library-bindings (car arguments) context)
-       'runtime-reflection))
+       context))
 
     (define (primitive-libraries arguments context)
       "Return catalog metadata for every known library."
-      (redaction-model:redact (reflect-libraries) 'runtime-reflection))
+      (reflect-public-datum (reflect-libraries) context))
 
     (define (primitive-library-info arguments context)
       "Return catalog metadata for one library name."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-library-info (car arguments))
-       'runtime-reflection))
+       context))
 
     (define (primitive-library-search arguments context)
       "Search catalog metadata."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-library-search (car arguments))
-       'runtime-reflection))
+       context))
 
     (define (primitive-catalog-sources arguments context)
       "Return manifest catalog source records."
-      (redaction-model:redact
-       (reflect-catalog-sources)
-       'runtime-reflection))
+      (reflect-public-datum (reflect-catalog-sources) context))
 
     (define (primitive-catalog-diagnostics arguments context)
       "Return manifest catalog diagnostics."
-      (redaction-model:redact
-       (reflect-catalog-diagnostics)
-       'runtime-reflection))
+      (reflect-public-datum (reflect-catalog-diagnostics) context))
 
     (define (primitive-library-resolve arguments context)
       "Return resolution metadata for a library name."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-library-resolve (car arguments) context)
-       'runtime-reflection))
+       context))
 
     (define (primitive-library-load arguments context)
       "Load a library and return resolution metadata."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-library-load (car arguments) context)
-       'runtime-reflection))
+       context))
 
     (define (primitive-library-solve-dependencies arguments context)
       "Return dependency solution metadata for a library name."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-library-solve-dependencies (car arguments))
-       'runtime-reflection))
+       context))
 
     (define (primitive-library-paths arguments context)
       "Return active library path records."
-      (redaction-model:redact
-       (reflect-library-paths)
-       'runtime-reflection))
+      (reflect-public-datum (reflect-library-paths) context))
 
     (define (primitive-library-conflicts arguments context)
       "Return catalog conflict records for a library name."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-library-conflicts
         (if (null? arguments) #f (car arguments)))
-       'runtime-reflection))
+       context))
 
     (define (primitive-library-snapshot arguments context)
       "Return a reproducible library resolution snapshot."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-library-snapshot (car arguments) context)
-       'runtime-reflection))
+       context))
 
     (define (primitive-srfi-library-name arguments context)
       "Return canonical SRFI library name."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-srfi-library-name (car arguments))
-       'runtime-reflection))
+       context))
 
     (define (primitive-srfi-library-aliases arguments context)
       "Return known SRFI library aliases."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-srfi-library-aliases (car arguments))
-       'runtime-reflection))
+       context))
 
     (define (primitive-vendored-srfi-manifest arguments context)
       "Return vendored SRFI manifest metadata."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-vendored-srfi-manifest (car arguments))
-       'runtime-reflection))
+       context))
 
     (define (primitive-add-manifest! arguments context)
       "Add or replace an ad-hoc manifest datum."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-datumize
         (consent-library-catalog-add-manifest! (car arguments)
                                                (second arguments)))
-       'runtime-reflection))
+       context))
 
     (define (primitive-remove-manifest! arguments context)
       "Remove an ad-hoc manifest source."
@@ -5980,11 +6296,11 @@ cursor across sessions."
 
     (define (primitive-add-manifest-root! arguments context)
       "Add or replace an explicit manifest-root input."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-datumize
         (consent-library-catalog-add-root! (car arguments)
                                            (second arguments)))
-       'runtime-reflection))
+       context))
 
     (define (primitive-remove-manifest-root! arguments context)
       "Remove an explicit manifest-root input."
@@ -5996,27 +6312,27 @@ cursor across sessions."
 
     (define (primitive-library-documentation arguments context)
       "Return documentation records for one library's exports."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-library-documentation (car arguments))
-       'runtime-reflection))
+       context))
 
     (define (primitive-binding-libraries arguments context)
       "Return known libraries exporting a binding name."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-binding-libraries (car arguments) context)
-       'runtime-reflection))
+       context))
 
     (define (primitive-documented-bindings arguments context)
       "Return documentation records for documented current bindings."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-documented-bindings context)
-       'runtime-reflection))
+       context))
 
     (define (primitive-apropos arguments context)
       "Search current documentation and the library catalog."
-      (redaction-model:redact
+      (reflect-public-datum
        (reflect-apropos (car arguments) context)
-       'runtime-reflection))
+       context))
 
     (define (primitive-optional-default arguments offset)
       "Return optional default argument at OFFSET, or #f when absent."
@@ -6026,17 +6342,19 @@ cursor across sessions."
 
     (define (primitive-reflection-field arguments context)
       "Return a named field from a reflection record."
-      (reflect-reflection-field
+      (reflect-owned-reflection-field
        (car arguments)
        (second arguments)
-       (primitive-optional-default arguments 2)))
+       (primitive-optional-default arguments 2)
+       context))
 
     (define (primitive-documentation-field arguments context)
       "Return a named metadata field from a documentation record."
-      (reflect-documentation-field
+      (reflect-owned-documentation-field
        (car arguments)
        (second arguments)
-       (primitive-optional-default arguments 2)))
+       (primitive-optional-default arguments 2)
+       context))
 
     (define (primitive-docstring arguments context)
       "Return SUBJECT's documentation string."
@@ -6047,20 +6365,19 @@ cursor across sessions."
 
     (define (primitive-current-session-info arguments context)
       "Return current session metadata."
-      (redaction-model:redact (reflect-current-session-info context)
-                              'runtime-reflection))
+      (reflect-public-datum (reflect-current-session-info context) context))
 
     (define (primitive-recent-yields arguments context)
       "Return recent yield events."
-      (reflect-recent-yields context))
+      (own-runtime-datum (reflect-recent-yields context) context))
 
     (define (primitive-recent-errors arguments context)
       "Return recent error records."
-      (reflect-recent-errors context))
+      (own-runtime-datum (reflect-recent-errors context) context))
 
     (define (primitive-recent-policy-decisions arguments context)
       "Return recent policy decision records."
-      (reflect-recent-policy-decisions context))
+      (own-runtime-datum (reflect-recent-policy-decisions context) context))
 
     (define (authorize-session-verb context operation)
       "Gate a mutating `(agent session)' verb on the window-session policy."
@@ -6175,8 +6492,11 @@ cursor across sessions."
                                      scope
                                      options)))
         (record-session-lifecycle! context 'create
-                                   (session-model:session-datum-id datum))
-        (redaction-model:redact datum 'runtime-reflection)))
+                                   (portable-library-call
+                                    session-model:session-datum-id
+                                    context
+                                    datum))
+        (portable-redact datum 'runtime-reflection context)))
 
     (define (primitive-switch-session arguments context)
       "Switch the default session to the existing session named in ARGUMENTS."
@@ -6191,27 +6511,35 @@ cursor across sessions."
         (if datum
             (begin
               (record-session-lifecycle! context 'switch (car arguments))
-              (redaction-model:redact datum 'runtime-reflection))
+              (portable-redact datum 'runtime-reflection context))
             (eval-error "unknown session" (car arguments)))))
 
     (define (primitive-current-session arguments context)
       "Return the default session datum, or session info when none is selected."
-      (let ((datum (session-model:session-manager-current
-                    interpreter-session-manager)))
-        (redaction-model:redact
+      (let ((datum
+             (portable-library-call
+              session-model:session-manager-current
+              context
+              interpreter-session-manager)))
+        (portable-redact
          (or datum (reflect-current-session-info context))
-         'runtime-reflection)))
+         'runtime-reflection
+         context)))
 
     (define (primitive-list-sessions arguments context)
       "Return the manager's session datums, optionally filtered by scope."
-      (redaction-model:redact
+      (portable-redact
        (if (null? arguments)
-           (session-model:session-manager-list interpreter-session-manager)
+           (portable-library-call
+            session-model:session-manager-list
+            context
+            interpreter-session-manager)
            (portable-library-call session-model:session-manager-list
                                   context
                                   interpreter-session-manager
                                   (car arguments)))
-       'runtime-reflection))
+       'runtime-reflection
+       context))
 
     (define (primitive-close-session arguments context)
       "Retire the session named in ARGUMENTS and drop its live context."
@@ -6222,27 +6550,34 @@ cursor across sessions."
                                     (active-session-manager)
                                     (car arguments))))
         (record-session-lifecycle! context 'close (car arguments))
-        (redaction-model:redact datum 'runtime-reflection)))
+        (portable-redact datum 'runtime-reflection context)))
 
     (define (primitive-capability-info arguments context)
       "Return metadata for one named capability."
-      (redaction-model:redact (reflect-capability-info (car arguments))
-                              'runtime-reflection))
+      (reflect-public-datum
+       (reflect-capability-info (car arguments) context)
+       context))
 
     (define (primitive-documentation arguments context)
       "Return documentation metadata for a binding or procedure."
-      (redaction-model:redact (reflect-documentation (car arguments) context)
-                              'runtime-reflection))
+      (portable-redact
+       (reflect-documentation (car arguments) context)
+       'runtime-reflection
+       context))
 
     (define (primitive-consent-doc arguments context)
       "Return documentation metadata for a binding or procedure."
-      (redaction-model:redact (reflect-documentation (car arguments) context)
-                              'runtime-reflection))
+      (portable-redact
+       (reflect-documentation (car arguments) context)
+       'runtime-reflection
+       context))
 
     (define (primitive-consent-describe arguments context)
       "Return Scheme-readable description data for a binding or procedure."
-      (redaction-model:redact (reflect-describe (car arguments) context)
-                              'runtime-reflection))
+      (portable-redact
+       (reflect-describe (car arguments) context)
+       'runtime-reflection
+       context))
 
     (define (macro-primitive-options arguments)
       "Return optional macro introspection options from primitive ARGUMENTS."
@@ -6250,38 +6585,46 @@ cursor across sessions."
 
     (define (primitive-macroexpand arguments context)
       "Return a full macro expansion record."
-      (consent-macroexpand
-       (car arguments)
-       (context-interaction-environment context)
-       context
-       (macro-primitive-options arguments)))
+      (own-runtime-datum
+       (consent-macroexpand
+        (car arguments)
+        (context-interaction-environment context)
+        context
+        (macro-primitive-options arguments))
+       context))
 
     (define (primitive-macroexpand-1 arguments context)
       "Return a one-step macro expansion record."
-      (consent-macroexpand-1
-       (car arguments)
-       (context-interaction-environment context)
-       context
-       (macro-primitive-options arguments)))
+      (own-runtime-datum
+       (consent-macroexpand-1
+        (car arguments)
+        (context-interaction-environment context)
+        context
+        (macro-primitive-options arguments))
+       context))
 
     (define (primitive-macroexpand-library arguments context)
       "Return macro export metadata for a library."
-      (consent-macroexpand-library
-       (car arguments)
-       (context-interaction-environment context)
-       context
-       (macro-primitive-options arguments)))
+      (own-runtime-datum
+       (consent-macroexpand-library
+        (car arguments)
+        (context-interaction-environment context)
+        context
+        (macro-primitive-options arguments))
+       context))
 
     (define (primitive-macro-binding-info arguments context)
       "Return metadata for an active syntax binding."
-      (consent-macro-binding-info
-       (car arguments)
-       (context-interaction-environment context)
+      (own-runtime-datum
+       (consent-macro-binding-info
+        (car arguments)
+        (context-interaction-environment context)
+        context)
        context))
 
     (define (primitive-syntax-source arguments context)
       "Return source metadata attached to a syntax datum, if any."
-      (consent-syntax-source (car arguments)))
+      (own-runtime-datum (consent-syntax-source (car arguments)) context))
 
     (define (primitive-macroexpand-yield arguments context)
       "Record a macro expansion event and return the expansion record."
@@ -6292,7 +6635,7 @@ cursor across sessions."
               context
               (second arguments))))
         (record-context-event! context (list 'macroexpand result))
-        result))
+        (own-runtime-datum result context)))
 
     (define (primitive-current-error arguments context)
       "Return the active debugger condition, or #f outside error handling."
@@ -6315,11 +6658,13 @@ cursor across sessions."
              (frame-id (second arguments)))
         (if (not frame-id)
             frames
-            (let ((name (debugger-restart-id-name frame-id)))
+            (let ((name (debugger-restart-id-name frame-id context)))
               (let loop ((rest frames))
                 (cond
                  ((null? rest) #f)
-                 ((eq? (debugger-field-value (car rest) 'frame) name)
+                 ((interpreter-symbol-eq?
+                   (debugger-field-value (car rest) 'frame)
+                   name)
                   (car rest))
                  (else (loop (cdr rest)))))))))
 
@@ -6331,22 +6676,25 @@ cursor across sessions."
 
     (define (primitive-restart-invoke! arguments context)
       "Invoke a debugger restart that can be modeled in portable Scheme."
-      (let ((id (debugger-restart-id-name (car arguments)))
+      (let ((id (debugger-restart-id-name (car arguments) context))
             (options (second arguments)))
         (cond
-         ((eq? id 'continue-with-warning)
-          (list 'restart-result
-                (result-field 'id id)
-                (result-field 'status 'continued)
-                (result-field 'options options)))
-         ((eq? id 'abort)
+         ((interpreter-symbol-eq? id 'continue-with-warning)
+          (own-runtime-datum
+           (list 'restart-result
+                 (result-field 'id id)
+                 (result-field 'status 'continued)
+                 (result-field 'options options))
+           context))
+         ((interpreter-symbol-eq? id 'abort)
           (eval-error "debugger abort restart invoked"))
          (else
           (eval-error "restart requires host debugger policy" id)))))
 
     (define (primitive-debugger-yield arguments context)
       "Emit a structured debugger event into the current result stream."
-      (let* ((condition (redaction-model:redact (car arguments) 'debugger))
+      (let* ((condition
+              (portable-redact (car arguments) 'debugger context))
              (event (list 'debugger condition)))
         (record-context-event! context event)
         consent-unspecified))
@@ -6375,7 +6723,10 @@ cursor across sessions."
     (define (primitive-approval-yield-pending arguments context)
       "Yield all pending portable approval requests."
       (let ((records
-             (approval-model:approval-store-pending interpreter-approval-store)))
+             (portable-library-call
+              approval-model:approval-store-pending
+              context
+              interpreter-approval-store)))
         (for-each
          (lambda (record)
            (record-context-event! context (list 'yield record)))
@@ -6384,8 +6735,10 @@ cursor across sessions."
 
     (define (approval-resolution-allowed? context)
       "Report whether CONTEXT allows Scheme-side approval resolution."
-      (let ((entry (assq 'approval-resolution
-                         (context-policy-actions context))))
+      (let ((entry
+             (consent-host-symbol-assq
+              'approval-resolution
+              (context-policy-actions context))))
         (and entry (eq? (cdr entry) 'allow))))
 
     (define (primitive-approval-resolve! arguments context)
@@ -6417,7 +6770,9 @@ cursor across sessions."
     (define (primitive-job-list arguments context)
       "Return portable job records, optionally scoped to one session."
       (if (null? arguments)
-          (job-model:job-store-list interpreter-job-store)
+          (portable-library-call job-model:job-store-list
+                                 context
+                                 interpreter-job-store)
           (portable-library-call job-model:job-store-list
                                  context
                                  interpreter-job-store
@@ -6460,7 +6815,8 @@ cursor across sessions."
       (let loop ((fields (if (pair? datum) (cdr datum) '())))
         (cond
          ((null? fields) #f)
-         ((and (pair? (car fields)) (eq? (caar fields) field))
+         ((and (pair? (car fields))
+               (consent-host-symbol-eq? (caar fields) field))
           (car fields))
          (else (loop (cdr fields))))))
 
@@ -6483,7 +6839,8 @@ cursor across sessions."
        (let loop ((fields (cdr grant)))
          (cond
           ((null? fields) '())
-          ((memq (caar fields) names) (loop (cdr fields)))
+          ((consent-host-symbol-memq (caar fields) names)
+           (loop (cdr fields)))
           (else (cons (car fields) (loop (cdr fields))))))))
 
     (define (capability-grant-replace-field grant name values)
@@ -6494,7 +6851,7 @@ cursor across sessions."
           (if seen?
               (list (car grant))
               (list (car grant) (cons name values))))
-         ((eq? (caar fields) name)
+         ((consent-host-symbol-eq? (caar fields) name)
           (cons (car grant)
                 (cons (cons name values)
                       (cdr fields))))
@@ -6505,7 +6862,10 @@ cursor across sessions."
 
     (define (normalize-capability-grant datum)
       "Return a normalized portable capability grant datum."
-      (if (not (and (pair? datum) (eq? (car datum) 'capability-grant)))
+      (if (not (and (pair? datum)
+                    (consent-host-symbol-eq?
+                     (car datum)
+                     'capability-grant)))
           (eval-error "grant-capability! expects a capability-grant datum"))
       (let ((without-status
              (capability-grant-remove-fields datum '(status))))
@@ -6516,7 +6876,7 @@ cursor across sessions."
 
     (define (capability-grant-has-id? grant id)
       "Return GRANT if it has ID."
-      (equal? (capability-grant-id grant) id))
+      (consent-host-symbol-equal? (capability-grant-id grant) id))
 
     (define (capability-grant-find grants id)
       "Return grant ID from GRANTS or #f."
@@ -6552,7 +6912,9 @@ cursor across sessions."
       (let loop ((grants (context-capability-grants context)))
         (cond
          ((null? grants) '())
-         ((eq? (capability-grant-status (car grants)) 'active)
+         ((consent-host-symbol-eq?
+           (capability-grant-status (car grants))
+           'active)
           (cons (car grants) (loop (cdr grants))))
          (else (loop (cdr grants))))))
 
@@ -6572,21 +6934,26 @@ cursor across sessions."
                    (car arguments))
                   (eval-error "unknown parent capability grant")))
              (restrictions (second arguments))
-             (id-field (assq 'id restrictions))
+             (id-field (consent-host-symbol-assq 'id restrictions))
              (child
               (capability-grant-remove-fields
                parent
                '(id status parent))))
-        (if (not (eq? (capability-grant-status parent) 'active))
+        (if (not (consent-host-symbol-eq?
+                  (capability-grant-status parent)
+                  'active))
             (eval-error "cannot attenuate inactive capability grant"))
         (for-each
          (lambda (field)
-           (if (and (memq (car field) '(library effect))
-                    (not (equal? (capability-grant-field parent (car field))
-                                 field)))
+           (if (and (consent-host-symbol-memq
+                     (car field)
+                     '(library effect))
+                    (not (consent-host-symbol-equal?
+                          (capability-grant-field parent (car field))
+                          field)))
                (eval-error
                 "attenuated grant cannot broaden parent authority"))
-           (if (not (eq? (car field) 'id))
+           (if (not (consent-host-symbol-eq? (car field) 'id))
                (set! child
                      (capability-grant-replace-field
                       child
@@ -6637,7 +7004,9 @@ cursor across sessions."
       (let ((grant-or-id (car arguments))
             (thunk (second arguments)))
         (if (and (pair? grant-or-id)
-                 (eq? (car grant-or-id) 'capability-grant))
+                 (consent-host-symbol-eq?
+                  (car grant-or-id)
+                  'capability-grant))
             (primitive-grant-capability! (list grant-or-id) context)
             (if (not (capability-grant-find
                       (context-capability-grants context)
@@ -6648,15 +7017,16 @@ cursor across sessions."
     (define (portable-handle-datum? value)
       "Return true when VALUE is a Scheme-readable handle datum."
       (and (pair? value)
-           (or (eq? (car value) 'handle)
-               (eq? (car value) 'port-capability))))
+           (or (consent-host-symbol-eq? (car value) 'handle)
+               (consent-host-symbol-eq? (car value) 'port-capability))))
 
     (define (portable-handle-field datum field)
       "Return FIELD from portable handle DATUM, or #f."
       (let loop ((fields (if (pair? datum) (cdr datum) '())))
         (cond
          ((null? fields) #f)
-         ((and (pair? (car fields)) (eq? (caar fields) field))
+         ((and (pair? (car fields))
+               (consent-host-symbol-eq? (caar fields) field))
           (car fields))
          (else (loop (cdr fields))))))
 
@@ -6718,8 +7088,8 @@ cursor across sessions."
         (portable-port-live? value context))
        ((portable-handle-datum? value)
         (let ((status (portable-handle-field-value value 'status)))
-          (or (eq? status 'live)
-              (eq? status 'open))))
+          (or (consent-host-symbol-eq? status 'live)
+              (consent-host-symbol-eq? status 'open))))
        (else #f)))
 
     (define (portable-handle-replace-status datum status)
@@ -6730,7 +7100,8 @@ cursor across sessions."
           (if seen?
               (list (car datum))
               (list (car datum) (list 'status status))))
-         ((and (pair? (car fields)) (eq? (caar fields) 'status))
+         ((and (pair? (car fields))
+               (consent-host-symbol-eq? (caar fields) 'status))
           (cons (car datum)
                 (cons (list 'status status)
                       (cdr fields))))
@@ -6897,7 +7268,7 @@ cursor across sessions."
 
     (define (helper-option-ref options key default)
       "Return KEY from OPTIONS, or DEFAULT if absent."
-      (let ((entry (assq key options)))
+      (let ((entry (consent-host-symbol-assq key options)))
         (if entry
             (let ((value (cdr entry)))
               (if (and (pair? value) (null? (cdr value)))
@@ -6963,7 +7334,11 @@ cursor across sessions."
          'agent-helper
          (list (list 'operation "agent-helper-store-save!")
                (list 'scope scope)
-               (list 'library (helper-model:helper-record-name record))
+               (list 'library
+                     (portable-library-call
+                      helper-model:helper-record-name
+                      context
+                      record))
                (list 'record record)))
         record))
 
@@ -6983,7 +7358,10 @@ cursor across sessions."
             (eval-error "unknown helper library" (car arguments)))
         (drain-state
          (eval-sequence (consent-host-datum->consent-datum
-                         (helper-model:helper-record-forms record))
+                         (portable-library-call
+                          helper-model:helper-record-forms
+                          context
+                          record))
                         (context-interaction-environment context)
                         context
                         #t
@@ -7034,7 +7412,7 @@ cursor across sessions."
 
     (define (agent-test-budget-option? key)
       "Return #t when KEY names an allowed self-test budget option."
-      (memq key agent-test-budget-option-keys))
+      (consent-host-symbol-memq key agent-test-budget-option-keys))
 
     (define (agent-test-option-entry entry)
       "Return one normalized evaluator option entry, or #f for unknown keys."
@@ -7065,16 +7443,26 @@ cursor across sessions."
                      (car arguments)
                      "agent-test-eval-source-result source"))
             (options (if (pair? (cdr arguments)) (second arguments) '())))
-        (consent-eval-source-result
-         source
-         #f
-         (agent-test-options options))))
+        (own-runtime-datum
+         (consent-eval-source-result
+          source
+          #f
+          (agent-test-options options))
+         context)))
 
     (define (plan-memory-scope plan-scope)
       "Return the memory scope corresponding to PLAN-SCOPE."
       (if (eq? plan-scope 'fresh)
           'instance
           plan-scope))
+
+    (define (portable-plan-record-id record context)
+      "Return RECORD's id through the compiled portable plan library."
+      (portable-library-call plan-model:plan-record-id context record))
+
+    (define (portable-plan-record-scope record context)
+      "Return RECORD's scope through the compiled portable plan library."
+      (portable-library-call plan-model:plan-record-scope context record))
 
     (define (primitive-plan-create! arguments context)
       "Create or replace a portable plan record."
@@ -7091,8 +7479,10 @@ cursor across sessions."
                                    context
                                    interpreter-memory-store
                                    (plan-memory-scope
-                                    (plan-model:plan-record-scope record))
-                                   (plan-model:plan-record-id record)
+                                    (portable-plan-record-scope
+                                     record
+                                     context))
+                                   (portable-plan-record-id record context)
                                    (list
                                     (list 'tags '(plan important))
                                     (list 'value record)
@@ -7102,8 +7492,9 @@ cursor across sessions."
          context
          'agent-plan
          (list (list 'operation "plan-store-create!")
-               (list 'plan (plan-model:plan-record-id record))
-               (list 'scope (plan-model:plan-record-scope record))
+               (list 'plan (portable-plan-record-id record context))
+               (list 'scope
+                     (portable-plan-record-scope record context))
                (list 'record record)))
         record))
 
@@ -7133,7 +7524,7 @@ cursor across sessions."
          context
          'agent-plan
          (list (list 'operation "plan-store-step-add!")
-               (list 'plan (plan-model:plan-record-id record))
+               (list 'plan (portable-plan-record-id record context))
                (list 'record record)))
         record))
 
@@ -7150,7 +7541,7 @@ cursor across sessions."
          context
          'agent-plan
          (list (list 'operation "plan-store-step-status!")
-               (list 'plan (plan-model:plan-record-id record))
+               (list 'plan (portable-plan-record-id record context))
                (list 'step (second arguments))
                (list 'status (third arguments))
                (list 'record record)))
@@ -7168,7 +7559,7 @@ cursor across sessions."
          context
          'agent-plan
          (list (list 'operation "plan-store-status!")
-               (list 'plan (plan-model:plan-record-id record))
+               (list 'plan (portable-plan-record-id record context))
                (list 'status (second arguments))
                (list 'record record)))
         record))
@@ -7187,16 +7578,17 @@ cursor across sessions."
          context
          'agent-plan
          (list (list 'operation "plan-yield")
-               (list 'plan (plan-model:plan-record-id record))
-               (list 'scope (plan-model:plan-record-scope record))))
+               (list 'plan (portable-plan-record-id record context))
+               (list 'scope
+                     (portable-plan-record-scope record context))))
         record))
 
     (define (model-record-head datum)
       "Return DATUM's model-record head or #f for association-list payloads."
       (if (and (pair? datum)
                (not (and (pair? (car datum))
-                         (symbol? (caar datum))))
-               (symbol? (car datum)))
+                         (interpreter-symbol? (caar datum))))
+               (interpreter-symbol? (car datum)))
           (car datum)
           #f))
 
@@ -7211,7 +7603,7 @@ cursor across sessions."
               (cond
                ((null? cursor) (reverse result))
                ((and (pair? (car cursor))
-                     (symbol? (caar cursor)))
+                     (interpreter-symbol? (caar cursor)))
                 (loop (cdr cursor) (cons (car cursor) result)))
                (else (loop (cdr cursor) result)))))))
 
@@ -7220,72 +7612,83 @@ cursor across sessions."
       (let loop ((fields (model-field-values datum)))
         (cond
          ((null? fields) default)
-         ((eq? (car (car fields)) name)
+         ((consent-host-symbol-eq? (car (car fields)) name)
           (if (null? (cdr (car fields)))
               default
               (car (cdr (car fields)))))
          (else (loop (cdr fields))))))
 
-    (define (model-name value description)
+    (define (model-name value description context)
       "Return VALUE as a provider/model name."
       (cond
-       ((symbol? value) value)
-       ((string? value) (string->symbol value))
+       ((interpreter-symbol? value) value)
+       ((string? value) (interpreter-string->symbol value context))
        (else (eval-error
               (string-append description " must be a symbol or string")
               value))))
 
-    (define (model-name-string value description)
-      "Return VALUE as a provider/model name string."
-      (symbol->string (model-name value description)))
-
-    (define (model-name-list datum description)
+    (define (model-name-list datum description context)
       "Return DATUM as a list of model names."
-      (map (lambda (item) (model-name item description))
+      (map (lambda (item)
+             (model-name item description context))
            (proper-list-elements datum description)))
 
     (define (model-truthy? value)
       "Return VALUE's truth value using Scheme conventions."
       (if value #t #f))
 
-    (define (model-normalize-model datum)
+    (define (model-normalize-model datum context)
       "Normalize a model profile datum."
       (list
-       (cons 'id (model-name (model-field-value datum 'id #f)
-                             "model id"))
+       (cons 'id
+             (model-name
+              (model-field-value datum 'id #f)
+              "model id"
+              context))
        (cons 'roles
              (model-name-list (model-field-value datum 'roles '())
-                              "model roles"))
+                              "model roles"
+                              context))
        (cons 'privacy
              (model-name (model-field-value datum 'privacy 'public)
-                         "model privacy"))
+                         "model privacy"
+                         context))
        (cons 'status
              (model-name (model-field-value datum 'status 'available)
-                         "model status"))
+                         "model status"
+                         context))
        (cons 'raw datum)))
 
-    (define (model-normalize-provider datum)
+    (define (model-normalize-provider datum context)
       "Normalize a provider profile datum."
-      (if (not (eq? (model-record-head datum) 'model-provider))
+      (if (not (consent-host-symbol-eq?
+                (model-record-head datum)
+                'model-provider))
           (eval-error
            "model-provider-register! expects a model-provider datum"
            datum))
       (list
-       (cons 'id (model-name (model-field-value datum 'id #f)
-                             "provider id"))
+       (cons 'id
+             (model-name
+              (model-field-value datum 'id #f)
+              "provider id"
+              context))
        (cons 'kind
              (model-name (model-field-value datum 'kind 'local)
-                         "provider kind"))
+                         "provider kind"
+                         context))
        (cons 'transport
              (model-name
               (model-field-value datum 'transport 'openai-compatible-http)
-              "provider transport"))
+              "provider transport"
+              context))
        (cons 'endpoint (model-field-value datum 'endpoint #f))
        (cons 'credentials (model-field-value datum 'credentials #f))
        (cons 'available
              (model-truthy? (model-field-value datum 'available #t)))
        (cons 'models
-             (map model-normalize-model
+             (map (lambda (model)
+                    (model-normalize-model model context))
                   (proper-list-elements
                    (model-field-value datum 'models '())
                    "provider models")))
@@ -7293,7 +7696,7 @@ cursor across sessions."
 
     (define (model-entry-ref entry field)
       "Return FIELD from normalized model/provider ENTRY."
-      (let ((cell (assq field entry)))
+      (let ((cell (consent-host-symbol-assq field entry)))
         (if cell (cdr cell) #f)))
 
     (define (model-register-provider! provider)
@@ -7304,7 +7707,9 @@ cursor across sessions."
            ((null? cursor)
             (set! interpreter-model-providers
                   (append (reverse result) (list provider))))
-           ((eq? id (model-entry-ref (car cursor) 'id))
+           ((consent-host-symbol-eq?
+             id
+             (model-entry-ref (car cursor) 'id))
             (set! interpreter-model-providers
                   (append (reverse result) (cons provider (cdr cursor)))))
            (else (loop (cdr cursor) (cons (car cursor) result)))))))
@@ -7312,15 +7717,15 @@ cursor across sessions."
     (define (model-available? model)
       "Return #t when MODEL is selectable."
       (let ((status (model-entry-ref model 'status)))
-        (or (eq? status 'available)
-            (eq? status 'ready))))
+        (or (consent-host-symbol-eq? status 'available)
+            (consent-host-symbol-eq? status 'ready))))
 
     (define (model-role? model role)
       "Return #t when ROLE is declared by MODEL."
       (let loop ((roles (model-entry-ref model 'roles)))
         (cond
          ((null? roles) #f)
-         ((eq? (car roles) role) #t)
+         ((consent-host-symbol-eq? (car roles) role) #t)
          (else (loop (cdr roles))))))
 
     (define (model-role-candidates role)
@@ -7342,7 +7747,9 @@ cursor across sessions."
                       (if (and (model-entry-ref provider 'available)
                                (model-available? model)
                                (model-role? model role))
-                          (if (eq? (model-entry-ref provider 'kind) 'local)
+                          (if (consent-host-symbol-eq?
+                               (model-entry-ref provider 'kind)
+                               'local)
                               (model-loop (cdr models)
                                           (cons (cons provider model)
                                                 next-local)
@@ -7391,7 +7798,7 @@ cursor across sessions."
        (list 'status (model-entry-ref model 'status))
        (list 'privacy (model-entry-ref model 'privacy))))
 
-    (define (model-provider-diagnostic provider)
+    (define (model-provider-diagnostic provider context)
       "Return a provider diagnostic datum."
       (append
        (list
@@ -7404,8 +7811,9 @@ cursor across sessions."
        (let ((credentials (model-entry-ref provider 'credentials)))
          (if credentials
              (list (list 'credentials
-                         (redaction-model:redact credentials
-                                                 'model-diagnostics)))
+                         (portable-redact credentials
+                                          'model-diagnostics
+                                          context)))
              '()))
        (list
         (list 'models
@@ -7414,34 +7822,40 @@ cursor across sessions."
 
     (define (primitive-model-provider-register! arguments context)
       "Register a portable model provider profile."
-      (let ((provider (model-normalize-provider (car arguments))))
+      (let ((provider
+             (model-normalize-provider (car arguments) context)))
         (model-register-provider! provider)
-        (model-provider-diagnostic provider)))
+        (model-provider-diagnostic provider context)))
 
     (define (primitive-model-providers arguments context)
       "Return registered provider diagnostics."
       (list 'providers
-            (map model-provider-diagnostic interpreter-model-providers)))
+            (map (lambda (provider)
+                   (model-provider-diagnostic provider context))
+                 interpreter-model-providers)))
 
     (define (primitive-model-route arguments context)
       "Return a portable model routing decision."
-      (let* ((role (model-name (car arguments) "model role"))
+      (let* ((role (model-name (car arguments) "model role" context))
              (candidate (model-select role)))
         (model-routing-decision role candidate)))
 
     (define (primitive-model-complete arguments context)
       "Complete through the portable local OpenAI-compatible transport."
-      (let* ((role (model-name (car arguments) "model role"))
+      (let* ((role (model-name (car arguments) "model role" context))
              (raw-prompt (cadr arguments))
              (options (if (null? (cddr arguments)) '() (third arguments)))
              (candidate (model-select role)))
         (if (not candidate)
             (eval-error "no registered provider model supports role" role)
             (let ((provider (car candidate)))
-              (if (and (eq? (model-entry-ref provider 'kind) 'remote)
-                       (not (redaction-model:safe-for-provider?
+              (if (and (consent-host-symbol-eq?
+                        (model-entry-ref provider 'kind)
+                        'remote)
+                       (not (portable-safe-for-provider?
                              raw-prompt
-                             (model-entry-ref provider 'id))))
+                             (model-entry-ref provider 'id)
+                             context)))
                   (eval-error
                    "local-only context requires explicit approval"))
               (let ((prompt
@@ -7459,32 +7873,42 @@ cursor across sessions."
       "Return redacted portable model provider diagnostics."
       (list 'model-provider-diagnostics
             (list 'providers
-                  (map model-provider-diagnostic
+                  (map (lambda (provider)
+                         (model-provider-diagnostic provider context))
                        interpreter-model-providers))))
 
     (define (primitive-secret-source? arguments context)
       "Report whether a datum contains secret-prone source data."
-      (if (redaction-model:secret-source? (car arguments)) #t #f))
+      (if (portable-library-call redaction-model:secret-source?
+                                 context
+                                 (car arguments))
+          #t
+          #f))
 
     (define (primitive-redact arguments context)
       "Return a datum with secrets and local-only context redacted."
-      (redaction-model:redact (car arguments) (second arguments)))
+      (portable-redact (car arguments) (second arguments) context))
 
     (define (primitive-context-local-only! arguments context)
       "Mark a datum as local-only context."
-      (redaction-model:context-local-only! (car arguments)
-                                           (second arguments)))
+      (portable-library-call redaction-model:context-local-only!
+                             context
+                             (car arguments)
+                             (second arguments)))
 
     (define (primitive-redaction-log arguments context)
       "Return the portable redaction decision log."
       (if (null? arguments)
-          (redaction-model:redaction-log)
-          (redaction-model:redaction-log (car arguments))))
+          (portable-library-call redaction-model:redaction-log context)
+          (portable-library-call redaction-model:redaction-log
+                                 context
+                                 (car arguments))))
 
     (define (primitive-safe-for-provider? arguments context)
       "Report whether a datum can be routed to a provider without redaction."
-      (if (redaction-model:safe-for-provider? (car arguments)
-                                              (second arguments))
+      (if (portable-safe-for-provider? (car arguments)
+                                       (second arguments)
+                                       context)
           #t
           #f))
 
@@ -7736,7 +8160,7 @@ cursor across sessions."
                '(read close)
                (capability-grant-id grant)
                limits
-               (port-capability-handle-id)
+               (port-capability-handle-id context)
                'open
                (file-authorization-path authorization)
                '())))
@@ -7769,7 +8193,7 @@ cursor across sessions."
                '(read close)
                (capability-grant-id grant)
                limits
-               (port-capability-handle-id)
+               (port-capability-handle-id context)
                'open
                (file-authorization-path authorization)
                '())))
@@ -7803,7 +8227,7 @@ cursor across sessions."
                '(write flush close)
                (capability-grant-id grant)
                limits
-               (port-capability-handle-id)
+               (port-capability-handle-id context)
                'open
                (file-authorization-path authorization)
                '())))
@@ -7831,7 +8255,7 @@ cursor across sessions."
                '(write flush close)
                (capability-grant-id grant)
                limits
-               (port-capability-handle-id)
+               (port-capability-handle-id context)
                'open
                (file-authorization-path authorization)
                '())))
@@ -8097,7 +8521,8 @@ cursor across sessions."
             (cons (environment-specifier-environment specifier)
                   (environment-specifier-syntax-environment specifier)))
           (cons (or (context-interaction-environment context)
-                    (consent-make-base-environment))
+                    (consent-make-base-environment
+                     (context-symbol-table context)))
                 (context-syntax-environment context))))
 
     (define (primitive-load arguments context)
@@ -9028,13 +9453,21 @@ cursor across sessions."
 
     (define (eqv-value? left right)
       "Implement eqv? comparison with Consent Scheme numeric representation."
-      (if (and (consent-number? left) (consent-number? right))
-          (numeric-representation-eqv? left right)
-          (eqv? left right)))
+      (cond
+       ((or (consent-symbol? left) (consent-symbol? right))
+        (and (consent-symbol? left)
+             (consent-symbol? right)
+             (consent-symbol-equivalent? left right)))
+       ((and (consent-number? left) (consent-number? right))
+        (numeric-representation-eqv? left right))
+       (else (eqv? left right))))
 
     (define (eq-value? left right)
-      "Implement eq? comparison with canonical-number identity semantics."
+      "Implement eq? comparison with owned-symbol and number semantics."
       (or (eq? left right)
+          (and (consent-symbol? left)
+               (consent-symbol? right)
+               (consent-symbol-equivalent? left right))
           (and (consent-number? left)
                (consent-number? right)
                (numeric-representation-eqv? left right))))
@@ -9093,8 +9526,12 @@ cursor across sessions."
 
     (define (primitive-memq arguments context)
       "Implement the `memq` primitive with argument validation and Consent Scheme values."
-      (let ((result (memq (car arguments) (second arguments))))
-        (if result result #f)))
+      (let loop ((cursor (second arguments)))
+        (cond
+         ((null? cursor) #f)
+         ((not (pair? cursor)) #f)
+         ((eq-value? (car arguments) (car cursor)) cursor)
+         (else (loop (cdr cursor))))))
 
     (define (primitive-memv arguments context)
       "Implement the `memv` primitive with argument validation and Consent Scheme values."
@@ -9117,8 +9554,14 @@ cursor across sessions."
 
     (define (primitive-assq arguments context)
       "Implement the `assq` primitive with argument validation and Consent Scheme values."
-      (let ((result (assq (car arguments) (second arguments))))
-        (if result result #f)))
+      (let loop ((cursor (second arguments)))
+        (cond
+         ((null? cursor) #f)
+         ((not (pair? cursor)) #f)
+         ((and (pair? (car cursor))
+               (eq-value? (car arguments) (caar cursor)))
+          (car cursor))
+         (else (loop (cdr cursor))))))
 
     (define (primitive-assv arguments context)
       "Implement the `assv` primitive with argument validation and Consent Scheme values."
@@ -9374,7 +9817,8 @@ cursor across sessions."
 
     (define (library-primitive-implementation-for-name name)
       "Resolve primitive implementations requested by the library module."
-      (let ((entry (assq name library-primitive-implementation-table)))
+      (let ((entry
+             (host-assq name library-primitive-implementation-table)))
         (if entry
             (cdr entry)
             (eval-error "unknown library primitive implementation" name))))
@@ -9565,7 +10009,8 @@ cursor across sessions."
 
     (define (base-primitive-implementation-for-name name)
       "Resolve primitive implementation names requested by the base module."
-      (let ((entry (assq name base-primitive-implementation-table)))
+      (let ((entry
+             (host-assq name base-primitive-implementation-table)))
         (if entry
             (cdr entry)
             (eval-error "unknown base primitive implementation" name))))
@@ -9576,11 +10021,29 @@ cursor across sessions."
        base-primitive-implementation-for-name
        trampoline
        eval-define-syntax))
-    (define (rest-environment rest)
+    (define (own-environment-symbols! environment context)
+      "Normalize ENVIRONMENT's binding names into CONTEXT once at ingress."
+      (let loop ((cursor environment))
+        (if cursor
+            (begin
+              (set-environment-frame!
+               cursor
+               (map (lambda (binding)
+                      (cons (own-runtime-datum (car binding) context)
+                            (cdr binding)))
+                    (environment-frame cursor)))
+              (set-environment-imported-names!
+               cursor
+               (map (lambda (name) (own-runtime-datum name context))
+                    (environment-imported-names cursor)))
+              (loop (environment-parent cursor)))))
+      environment)
+
+    (define (rest-environment rest context)
       "Return the optional caller environment or a fresh base environment."
       (if (or (null? rest) (not (car rest)))
-          (consent-make-base-environment)
-          (car rest)))
+          (consent-make-base-environment (context-symbol-table context))
+          (own-environment-symbols! (car rest) context)))
 
     (define (rest-options rest)
       "Return the optional caller options alist, defaulting to empty."
@@ -9617,7 +10080,9 @@ cursor across sessions."
            (eq? (car grant) 'capability-grant)
            (eq? (capability-grant-field-value grant 'domain) 'port)
            (eq? (capability-grant-status grant) 'active)
-           (memq operation (capability-grant-field-values grant 'operations))
+           (consent-host-symbol-memq
+            operation
+            (capability-grant-field-values grant 'operations))
            (eq? (standard-stream-grant-backing grant) backing)))
 
     (define (find-standard-stream-grant context backing operation)
@@ -9702,17 +10167,25 @@ cursor across sessions."
       "Report whether PORT draws from a host program-input reader."
       (and (consent-port? port)
            (eq? (consent-port-backing-domain port) 'stdio)
-           (assq 'program-input-reader (consent-port-counters port))
+           (host-assq
+            'program-input-reader
+            (consent-port-counters port))
            #t))
 
     (define (program-input-reader-of port)
       "Return PORT's host input reader procedure."
-      (let ((entry (assq 'program-input-reader (consent-port-counters port))))
+      (let ((entry
+             (host-assq
+              'program-input-reader
+              (consent-port-counters port))))
         (and entry (cdr entry))))
 
     (define (program-input-eof? port)
       "Report whether PORT's host reader has reached end of stream."
-      (let ((entry (assq 'program-input-eof (consent-port-counters port))))
+      (let ((entry
+             (host-assq
+              'program-input-eof
+              (consent-port-counters port))))
         (and entry (cdr entry))))
 
     (define (program-input-set-eof! port)
@@ -9772,12 +10245,13 @@ cursor across sessions."
       (program-input-fill-until!
        port context
        (lambda ()
-         (memq (consent-recovery-step-status
-                (consent-read-recover-from-string-at
-                 (consent-port-source port)
-                 (consent-port-position port)
-                 (context-reader-options context)))
-               '(datum invalid))))
+         (consent-host-symbol-memq
+          (consent-recovery-step-status
+           (consent-read-recover-from-string-at
+            (consent-port-source port)
+            (consent-port-position port)
+            (context-reader-options context)))
+          '(datum invalid))))
       (let ((result (consent-read-from-string-at
                      (consent-port-source port)
                      (consent-port-position port)
@@ -9802,7 +10276,7 @@ cursor across sessions."
                '(read close)
                grant-id
                limits
-               (port-capability-handle-id)
+               (port-capability-handle-id context)
                'open
                'program-input
                (list (cons 'program-input-reader reader)))))
@@ -9838,17 +10312,25 @@ cursor across sessions."
       "Report whether PORT draws bytes from a host program-input byte reader."
       (and (consent-port? port)
            (eq? (consent-port-backing-domain port) 'stdio)
-           (assq 'program-input-byte-reader (consent-port-counters port))
+           (host-assq
+            'program-input-byte-reader
+            (consent-port-counters port))
            #t))
 
     (define (program-binary-input-reader-of port)
       "Return PORT's host input byte reader procedure."
-      (let ((entry (assq 'program-input-byte-reader (consent-port-counters port))))
+      (let ((entry
+             (host-assq
+              'program-input-byte-reader
+              (consent-port-counters port))))
         (and entry (cdr entry))))
 
     (define (program-binary-input-eof? port)
       "Report whether PORT's host byte reader has reached end of stream."
-      (let ((entry (assq 'program-input-byte-eof (consent-port-counters port))))
+      (let ((entry
+             (host-assq
+              'program-input-byte-eof
+              (consent-port-counters port))))
         (and entry (cdr entry))))
 
     (define (program-binary-input-set-eof! port)
@@ -9909,7 +10391,7 @@ cursor across sessions."
                '(read close)
                grant-id
                limits
-               (port-capability-handle-id)
+               (port-capability-handle-id context)
                'open
                'program-input
                (list (cons 'program-input-byte-reader reader)))))
@@ -9942,12 +10424,17 @@ cursor across sessions."
       (and (consent-port? port)
            (consent-port-output? port)
            (eq? (consent-port-backing-domain port) 'stdio)
-           (assq 'program-output-writer (consent-port-counters port))
+           (host-assq
+            'program-output-writer
+            (consent-port-counters port))
            #t))
 
     (define (program-output-writer-of port)
       "Return PORT's host output writer procedure."
-      (let ((entry (assq 'program-output-writer (consent-port-counters port))))
+      (let ((entry
+             (host-assq
+              'program-output-writer
+              (consent-port-counters port))))
         (and entry (cdr entry))))
 
     (define (make-program-output-port context grant writer purpose)
@@ -9965,7 +10452,7 @@ cursor across sessions."
                '(write flush close)
                grant-id
                limits
-               (port-capability-handle-id)
+               (port-capability-handle-id context)
                'open
                purpose
                (list (cons 'program-output-writer writer)))))
@@ -10000,13 +10487,17 @@ cursor across sessions."
       (and (consent-port? port)
            (consent-port-output? port)
            (eq? (consent-port-backing-domain port) 'stdio)
-           (assq 'program-output-byte-writer (consent-port-counters port))
+           (host-assq
+            'program-output-byte-writer
+            (consent-port-counters port))
            #t))
 
     (define (program-binary-output-writer-of port)
       "Return PORT's host output byte writer procedure."
-      (let ((entry (assq 'program-output-byte-writer
-                         (consent-port-counters port))))
+      (let ((entry
+             (host-assq
+              'program-output-byte-writer
+              (consent-port-counters port))))
         (and entry (cdr entry))))
 
     (define (make-program-binary-output-port context grant writer purpose)
@@ -10024,7 +10515,7 @@ cursor across sessions."
                '(write flush close)
                grant-id
                limits
-               (port-capability-handle-id)
+               (port-capability-handle-id context)
                'open
                purpose
                (list (cons 'program-output-byte-writer writer)))))
@@ -10157,12 +10648,14 @@ cursor across sessions."
              "absent."))))
         (returns . "The value produced by evaluating EXPRESSION.")
         (effects host-eval state-read state-write error))
-      (let ((context (new-eval-context (rest-options rest)))
-            (environment (rest-environment rest)))
+      (let* ((context (new-eval-context (rest-options rest)))
+             (environment (rest-environment rest context)))
         (set-context-interaction-environment! context environment)
         (connect-standard-streams! context (rest-options rest))
         (ensure-base-syntax! context environment)
-        (trampoline expression environment context)))
+        (trampoline (own-runtime-datum expression context)
+                    environment
+                    context)))
 
     (define (consent-eval-source source . rest)
       "Read and evaluate a source body as a sequence that may contain"
@@ -10176,9 +10669,12 @@ cursor across sessions."
              "absent."))))
         (returns . ("The value of the last form in the evaluated sequence."))
         (effects host-eval state-read state-write error))
-      (let ((context (new-eval-context (rest-options rest)))
-            (environment (rest-environment rest))
-            (forms (consent-read-all source (rest-options rest))))
+      (let* ((context (new-eval-context (rest-options rest)))
+             (environment (rest-environment rest context))
+             (forms (consent-read-all
+                     source
+                     (append (rest-options rest)
+                             (context-reader-options context)))))
         (set-context-interaction-environment! context environment)
         (connect-standard-streams! context (rest-options rest))
         (ensure-base-syntax! context environment)
@@ -10211,8 +10707,8 @@ cursor across sessions."
           ("An `evaluation-result' datum capturing the value or the"
             "raised condition.")))
         (effects host-eval state-read state-write))
-      (let ((context (new-eval-context (rest-options rest)))
-            (environment (rest-environment rest)))
+      (let* ((context (new-eval-context (rest-options rest)))
+             (environment (rest-environment rest context)))
         (set-context-interaction-environment! context environment)
         (connect-standard-streams! context (rest-options rest))
         (ensure-base-syntax! context environment)
@@ -10220,7 +10716,9 @@ cursor across sessions."
          context
          (lambda ()
            (ok-result-datum
-            (trampoline expression environment context)
+            (trampoline (own-runtime-datum expression context)
+                        environment
+                        context)
             context)))))
 
     (define (consent-eval-source-result source . rest)
@@ -10238,15 +10736,18 @@ cursor across sessions."
           ("An `evaluation-result' datum capturing the value or the"
             "raised condition.")))
         (effects host-eval state-read state-write))
-      (let ((context (new-eval-context (rest-options rest)))
-            (environment (rest-environment rest)))
+      (let* ((context (new-eval-context (rest-options rest)))
+             (environment (rest-environment rest context)))
         (set-context-interaction-environment! context environment)
         (connect-standard-streams! context (rest-options rest))
         (ensure-base-syntax! context environment)
         (call-with-result-condition-handler
          context
          (lambda ()
-           (let ((forms (consent-read-all source (rest-options rest))))
+           (let ((forms (consent-read-all
+                         source
+                         (append (rest-options rest)
+                                 (context-reader-options context)))))
              (ok-result-datum
               (trampoline (make-sequence forms #t) environment context)
               context))))))
@@ -10264,11 +10765,13 @@ cursor across sessions."
     ;; through instead of being rebuilt per call.  This is the portable peer of
     ;; the Emacs session evaluator that drives `consent-repl-eval-source'.
     (define-record-type <consent-interaction-context>
-      (make-consent-interaction-context options environment syntax-environment
+      (make-consent-interaction-context options symbol-table
+                                        environment syntax-environment
                                         libraries program-output-port
                                         program-input-port)
       consent-interaction-context?
       (options interaction-context-options)
+      (symbol-table interaction-context-symbol-table)
       (environment interaction-context-environment)
       (syntax-environment interaction-context-syntax-environment)
       (libraries interaction-context-libraries
@@ -10282,7 +10785,7 @@ cursor across sessions."
 
     (define (interaction-context-session-id-from-options options)
       "Return the SESSION-ID configured in OPTIONS, or #f when unsessioned."
-      (let ((entry (assq 'session-id options)))
+      (let ((entry (consent-host-symbol-assq 'session-id options)))
         (and entry (cdr entry))))
 
     (define (make-interaction-program-output-port)
@@ -10297,7 +10800,8 @@ cursor across sessions."
       "The multi-session REPL injects one shared stdin port into every"
       "session's interaction context so switching sessions never forks the"
       "single stdin cursor."
-      (let ((entry (assq 'program-input-port options)))
+      (let ((entry
+             (consent-host-symbol-assq 'program-input-port options)))
         (and entry (cdr entry))))
 
     (define (consent-make-interaction-context . rest)
@@ -10323,7 +10827,9 @@ cursor across sessions."
         (effects state-read allocation))
       (let* ((options (if (null? rest) '() (car rest)))
              (context (new-eval-context options))
-             (environment (consent-make-base-environment))
+             (environment
+              (consent-make-base-environment
+               (context-symbol-table context)))
              (reader (program-input-reader-from-options options))
              (grant (and reader
                          (find-standard-stream-grant context 'stdin 'read)))
@@ -10334,7 +10840,8 @@ cursor across sessions."
         (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
         (make-consent-interaction-context
-         options environment (context-syntax-environment context)
+         options (context-symbol-table context)
+         environment (context-syntax-environment context)
          (context-libraries context)
          (make-interaction-program-output-port)
          input-port)))
@@ -10379,10 +10886,13 @@ cursor across sessions."
          (description "The seeded MANAGER."))
         (effects state-write allocation))
       (session-model:session-manager-reset! manager)
-      (let* ((id (if (symbol? session-id)
-                     session-id
-                     (string->symbol session-id)))
-             (initial (consent-make-interaction-context options))
+      (let* ((initial (consent-make-interaction-context options))
+             (id
+              (consent-intern-symbol
+               (interaction-context-symbol-table initial)
+               (if (interpreter-symbol? session-id)
+                   (interpreter-symbol-name session-id)
+                   session-id)))
              (shared-port
               (consent-interaction-program-input-port initial)))
         (session-model:session-manager-set-context-factory!
@@ -10392,7 +10902,11 @@ cursor across sessions."
             (cons (cons 'session-id sid)
                   (cons (cons 'program-input-port shared-port)
                         options)))))
-        (session-model:session-manager-seed! manager id 'named initial))
+        (session-model:session-manager-seed!
+         manager
+         (consent-runtime-datum->native-datum id)
+         'named
+         initial))
       manager)
 
     (define (consent-interaction-program-input-port interaction)
@@ -10517,12 +11031,14 @@ cursor across sessions."
                 context
                 (lambda ()
                   (ok-result-datum
-                   (trampoline (make-sequence (list form) #t)
+                   (trampoline (make-sequence
+                                (list (own-runtime-datum form context))
+                                #t)
                                environment
                                context)
                    context)))))
           (set-interaction-context-libraries! interaction
                                               (context-libraries context))
-          result)))
+          (consent-runtime-datum->native-datum result))))
 
     ))

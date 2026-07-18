@@ -104,6 +104,10 @@
   (expand-file-name "scheme/stdlib/" consent-library-test--root)
   "Directory containing the stdlib collection manifest.")
 
+(defconst consent-library-test--data-manifest-directory
+  (expand-file-name "scheme/data/" consent-library-test--root)
+  "Directory containing the data collection manifest.")
+
 (defun consent-library-test--manifest-source-file (key)
   "Return the absolute manifest-declared source file for library KEY."
   (let ((entry (consent--library-collection-manifest-entry key)))
@@ -1499,6 +1503,151 @@
       (should (equal (plist-get entry :source-file) "manifest.sld"))
       (should (equal (plist-get entry :exports)
                      '("manifest-index" "manifest-index-ref"))))))
+
+(ert-deftest consent-library-test-data-collection-is-public-source-root ()
+  "Discover the public data collection from the root manifest."
+  (let ((spec
+         (cl-find-if
+          (lambda (candidate)
+            (eq (plist-get candidate :collection) 'data))
+          (consent--library-collection-manifest-specs))))
+    (should spec)
+    (should (equal (plist-get spec :key) "(data manifest)"))
+    (should (equal (plist-get spec :manifest-file) "data/manifest.sld"))
+    (should (equal (plist-get spec :source-root) "data/"))
+    (should (equal (plist-get spec :variable) "data-library-manifest"))))
+
+(ert-deftest consent-library-test-data-source-libraries-are-file-backed ()
+  "Discover source files and exports for public data libraries."
+  (let* ((specs (consent-data-source-library-specs))
+         (manifest
+          (consent-library-test--standard-source-spec
+           "(data manifest)" specs))
+         (avl-tree
+          (consent-library-test--standard-source-spec
+           "(data avl-tree)" specs))
+         (avl-mapping
+          (consent-library-test--standard-source-spec
+           "(data mapping avl)" specs))
+         (transient-map
+          (consent-library-test--standard-source-spec
+           "(data transient-map)" specs))
+         (source-file (and manifest (plist-get manifest :source-file))))
+    (should manifest)
+    (should avl-tree)
+    (should avl-mapping)
+    (should transient-map)
+    (should-not
+     (consent-library-test--standard-source-spec
+      "(data avl-tree implementation)" specs))
+    (should (equal (plist-get manifest :exports)
+                   '("data-library-manifest"
+                     "data-library-manifest-ref")))
+    (should (member "avl-tree-delete" (plist-get avl-tree :exports)))
+    (should (member "avl-tree-ref/key" (plist-get avl-tree :exports)))
+    (should (member "avl-tree-split" (plist-get avl-tree :exports)))
+    (should (member "avl-tree-valid?" (plist-get avl-tree :exports)))
+    (should (equal (plist-get avl-mapping :exports)
+                   '("avl-mapping"
+                     "avl-mapping-unfold"
+                     "alist->avl-mapping")))
+    (should (member "transient-map-persistent!"
+                    (plist-get transient-map :exports)))
+    (should (member "transient-map-reset!"
+                    (plist-get transient-map :exports)))
+    (should (string-suffix-p "scheme/data/manifest.sld" source-file))
+    (should (file-readable-p source-file))
+    (should
+     (string-suffix-p
+      "scheme/data/avl-tree.sld"
+      (plist-get avl-tree :source-file)))
+    (should
+     (string-suffix-p
+      "scheme/data/mapping/avl.sld"
+      (plist-get avl-mapping :source-file)))
+    (should
+     (string-suffix-p
+      "scheme/data/transient-map.sld"
+      (plist-get transient-map :source-file)))))
+
+(ert-deftest consent-library-test-data-manifests-link-user-specifications ()
+  "Link public data structures to collection-local user specifications."
+  (let (missing)
+    (dolist (key '("(data avl-tree)"
+                   "(data mapping avl)"
+                   "(data transient-map)"))
+      (let* ((entry (consent--library-collection-manifest-entry key))
+             (provenance (plist-get entry :provenance))
+             (documents
+              (and provenance
+                   (consent--library-catalog-manifest-field
+                    provenance "local-reference-documents" nil))))
+        (if (not documents)
+            (push (format "%s missing local-reference-documents" key)
+                  missing)
+          (dolist (document
+                   (consent-library-test--reference-documents documents))
+            (let ((path (consent--library-catalog-manifest-field
+                         document "path" nil))
+                  (role (consent--library-catalog-manifest-field
+                         document "role" nil))
+                  (source (consent--library-catalog-manifest-field
+                           document "source" nil)))
+              (cond
+               ((not path)
+                (push (format "%s reference document lacks path" key)
+                      missing))
+               ((file-name-absolute-p path)
+                (push (format "%s reference file is absolute: %s" key path)
+                      missing))
+               ((string-match-p "\\`\\(?:docs\\|scheme\\)/" path)
+                (push (format "%s reference file is repo-relative: %s"
+                              key path)
+                      missing))
+               ((not (file-exists-p
+                      (expand-file-name
+                       path consent-library-test--data-manifest-directory)))
+                (push (format "%s missing reference file %s" key path)
+                      missing)))
+              (unless (and (consent-symbol-p role)
+                           (equal (consent-symbol-name role) "specification"))
+                (push (format "%s reference role is %S" key role) missing))
+              (unless (and (consent-symbol-p source)
+                           (equal (consent-symbol-name source) "consent"))
+                (push (format "%s reference source is %S" key source)
+                      missing)))))))
+    (should-not (nreverse missing))))
+
+(ert-deftest consent-library-test-data-avl-tree-imports ()
+  "Import and use the public persistent AVL tree through the bootstrap."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (data avl-tree))
+      (let* ((tree (avl-tree-set (make-avl-tree <) 2 'two))
+             (next (avl-tree-set tree 1 'one)))
+        (list (avl-tree-ref next 1)
+              (avl-tree-size next)
+              (avl-tree->alist tree)))")
+    "(one 2 ((2 . two)))")))
+
+(ert-deftest consent-library-test-data-avl-mapping-imports ()
+  "Use AVL constructors through the standard Mapping interface."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (scheme comparator)
+              (scheme mapping)
+              (data mapping avl))
+      (define comparator
+        (make-comparator integer? = < number-hash))
+      (let* ((mapping (avl-mapping comparator 2 'two 1 'one))
+             (next (mapping-set mapping 3 'three)))
+        (list (mapping? next)
+              (mapping->alist next)
+              (mapping->alist mapping)))")
+    "(#t ((1 . one) (2 . two) (3 . three)) ((1 . one) (2 . two)))")))
 
 (ert-deftest consent-library-test-root-manifest-drives-collections ()
   "Bootstrap collection discovery from system/user root `manifest.sld' files."
@@ -3450,13 +3599,7 @@
                      '((scheme mapping) (srfi 146) (srfi srfi-146)))
              (equal?
               (manifest-field entry 'dependencies)
-              '((library (scheme base))
-                (library (scheme case-lambda))
-                (library (stdlib list))
-                (library (stdlib receive))
-                (library (stdlib comparator))
-                (library (stdlib assume))
-                (library (stdlib rbtree))))
+              '((library (stdlib mapping implementation))))
              (equal? (manifest-field scheme-alias 'target)
                      '(stdlib mapping))
              (equal? (manifest-field alias 'target) '(stdlib mapping))

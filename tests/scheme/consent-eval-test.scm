@@ -21,11 +21,24 @@
                 (consent-eval-source-result raw-consent-eval-source-result))
         (only (consent macro)
               consent-syntax-source)
+        (prefix (agent approval) native-approval:)
+        (only (agent session)
+              session-manager-current-id)
+        (only (consent symbol)
+              consent-symbol?
+              consent-intern-symbol
+              consent-make-symbol-table)
+        (only (consent symbol-boundary)
+              consent-host-symbol-eq?
+              consent-host-symbol-equal?
+              consent-host-symbol-memq
+              consent-host-symbol-assq)
         (only (consent reader)
               consent-datum->external
               consent-number?
               consent-number-value
               consent-make-canonical-integer
+              consent-source-metadata-count
               consent-read)
         (only (consent version)
               consent-version-datum)
@@ -34,6 +47,7 @@
               audit-network-capability-result!
               authorize-process-capability
               authorize-network-capability
+              consent-register-native-library!
               consent-set-library-search-directories!
               consent-library-search-directory-list
               consent-set-library-user-directories!
@@ -55,9 +69,21 @@
         (testing runner)
         (stdlib testing))
 
+;; Keep the (scheme base) comparison procedures unshadowed so ordinary
+;; assertions retain their specified semantics and identity assertions observe
+;; real symbol identity.  Mixed host/owned comparisons name the
+;; consent-host-symbol-* boundary procedures explicitly.  Globally rebinding
+;; eq? also makes Gambit expand this large test program with pathological
+;; memory growth.
+
 ;; Shared evaluator behavior runs through consent-fixture-test.scm. This
 ;; file keeps portable evaluator API and bootstrap invariants close to the R7RS
 ;; library.
+
+;; Compiled host-run programs select linked realizations of compiler-native
+;; libraries; direct hosts exercise source registration and its parse cache.
+(define compiled-host-run?
+  (if (get-environment-variable "TESTING_RUNNER_HOST_RUN") #t #f))
 
 ;; Minimum check duration emitted as a fine-grained CI timing diagnostic.
 (define consent-ci-check-minimum-milliseconds 10)
@@ -255,10 +281,18 @@
               (newline))))
       result)))
 
-;; Compare ACTUAL and EXPECTED using R7RS equal? and record a named failure.
+;; Compare ACTUAL and EXPECTED across the private bootstrap-symbol boundary.
 (define (check-value name actual expected)
-  "Compare ACTUAL and EXPECTED through SRFI 64."
-  (test-equal name expected actual))
+  "Compare ACTUAL and EXPECTED through the owned-symbol boundary."
+  (let ((matches? (consent-host-symbol-equal? expected actual)))
+    (if (not matches?)
+        (begin
+          (write (list 'consent-check-mismatch
+                       (list 'name name)
+                       (list 'actual actual)
+                       (list 'expected expected)))
+          (newline)))
+    (test-assert name matches?)))
 
 ;; Time one evaluator check and then compare its value.
 (define-syntax check
@@ -268,6 +302,22 @@
       name
       (lambda ()
         (check-value name actual expected))))))
+
+;; Check CONDITION and include RESULT's external form in failure diagnostics.
+(define (check-result-condition name result condition)
+  (if (not condition)
+      (let* ((external (consent-result->external result))
+             (maximum 2000)
+             (preview
+              (if (> (string-length external) maximum)
+                  (string-append (substring external 0 maximum)
+                                 "...<truncated>")
+                  external)))
+        (write (list 'consent-result-mismatch
+                     (list 'name name)
+                     (list 'result preview)))
+        (newline)))
+  (check name condition #t))
 
 ;; Evaluate SOURCE and compare the stable external value representation.
 (define (check-external name source expected)
@@ -1379,15 +1429,22 @@
 (define (find-primitive-spec name specs)
   (cond
    ((null? specs) #f)
-   ((eq? (cadr (assq 'name (car specs))) name) (car specs))
+   ((consent-host-symbol-eq?
+     (cadr (consent-host-symbol-assq 'name (car specs)))
+     name)
+    (car specs))
    (else (find-primitive-spec name (cdr specs)))))
 
 ;; Find manifest metadata by LIBRARY and NAME in SPECS.
 (define (find-manifest-spec library name specs)
   (cond
    ((null? specs) #f)
-   ((and (equal? (cadr (assq 'library (car specs))) library)
-         (eq? (cadr (assq 'name (car specs))) name))
+   ((and (consent-host-symbol-equal?
+          (cadr (consent-host-symbol-assq 'library (car specs)))
+          library)
+         (consent-host-symbol-eq?
+          (cadr (consent-host-symbol-assq 'name (car specs)))
+          name))
     (car specs))
    (else (find-manifest-spec library name (cdr specs)))))
 
@@ -1395,7 +1452,10 @@
 (define (find-source-library-spec name specs)
   (cond
    ((null? specs) #f)
-   ((equal? (cadr (assq 'name (car specs))) name) (car specs))
+   ((consent-host-symbol-equal?
+     (cadr (consent-host-symbol-assq 'name (car specs)))
+     name)
+    (car specs))
    (else (find-source-library-spec name (cdr specs)))))
 
 ;; Return #t when SPEC carries public manifest documentation metadata.
@@ -1483,36 +1543,36 @@
       (specs (consent-base-primitive-specs))
       (binding-specs (consent-base-binding-specs)))
   (check 'base-registry-names
-         (if (and (memq '+ names)
-                  (memq 'apply names)
-                  (memq 'car names)
-                  (memq 'vector-ref names)
-                  (not (memq 'append names))
-                  (not (memq 'cadr names))
-                  (not (memq 'length names))
-                  (not (memq 'map names))
-                  (not (memq 'string-map names))
-                  (not (memq 'string-for-each names))
-                  (not (memq 'vector-map names))
-                  (not (memq 'vector-for-each names))
-                  (not (memq 'zero? names))
-                  (memq 'append prelude-names)
-                  (memq 'cadr prelude-names)
-                  (memq 'length prelude-names)
-                  (memq 'map prelude-names)
-                  (memq 'string-map prelude-names)
-                  (memq 'string-for-each prelude-names)
-                  (memq 'vector-map prelude-names)
-                  (memq 'vector-for-each prelude-names)
-                  (memq 'zero? prelude-names)
-                  (memq 'call-with-values names)
-                  (memq 'call/cc names)
-                  (memq 'dynamic-wind names)
-                  (memq 'features names)
-                  (memq 'make-parameter names)
-                  (memq 'string->utf8 names)
-                  (memq 'utf8->string names)
-                  (memq 'values names))
+         (if (and (consent-host-symbol-memq '+ names)
+                  (consent-host-symbol-memq 'apply names)
+                  (consent-host-symbol-memq 'car names)
+                  (consent-host-symbol-memq 'vector-ref names)
+                  (not (consent-host-symbol-memq 'append names))
+                  (not (consent-host-symbol-memq 'cadr names))
+                  (not (consent-host-symbol-memq 'length names))
+                  (not (consent-host-symbol-memq 'map names))
+                  (not (consent-host-symbol-memq 'string-map names))
+                  (not (consent-host-symbol-memq 'string-for-each names))
+                  (not (consent-host-symbol-memq 'vector-map names))
+                  (not (consent-host-symbol-memq 'vector-for-each names))
+                  (not (consent-host-symbol-memq 'zero? names))
+                  (consent-host-symbol-memq 'append prelude-names)
+                  (consent-host-symbol-memq 'cadr prelude-names)
+                  (consent-host-symbol-memq 'length prelude-names)
+                  (consent-host-symbol-memq 'map prelude-names)
+                  (consent-host-symbol-memq 'string-map prelude-names)
+                  (consent-host-symbol-memq 'string-for-each prelude-names)
+                  (consent-host-symbol-memq 'vector-map prelude-names)
+                  (consent-host-symbol-memq 'vector-for-each prelude-names)
+                  (consent-host-symbol-memq 'zero? prelude-names)
+                  (consent-host-symbol-memq 'call-with-values names)
+                  (consent-host-symbol-memq 'call/cc names)
+                  (consent-host-symbol-memq 'dynamic-wind names)
+                  (consent-host-symbol-memq 'features names)
+                  (consent-host-symbol-memq 'make-parameter names)
+                  (consent-host-symbol-memq 'string->utf8 names)
+                  (consent-host-symbol-memq 'utf8->string names)
+                  (consent-host-symbol-memq 'values names))
              #t
              #f)
          #t)
@@ -1786,6 +1846,80 @@
          (and json-spec
               (cadr (assq 'source-file json-spec)))
          "stdlib/json.sld")))
+
+(testing-registry-case
+ 'data-source-library-files '(portable core)
+(let* ((source-specs (consent-data-source-library-specs))
+       (manifest-spec
+        (find-source-library-spec '(data manifest) source-specs))
+       (avl-mapping-spec
+        (find-source-library-spec '(data mapping avl) source-specs)))
+  (check 'data-source-library-files
+         (and manifest-spec
+              (equal? (cadr (assq 'exports manifest-spec))
+                      '(data-library-manifest
+                        data-library-manifest-ref))
+              (string? (cadr (assq 'source-file manifest-spec))))
+         #t)
+  (check 'data-source-library-manifest-file
+         (and manifest-spec
+              (cadr (assq 'source-file manifest-spec)))
+         "data/manifest.sld")
+  (check 'data-source-library-avl-mapping-file
+         (and avl-mapping-spec
+              (cadr (assq 'source-file avl-mapping-spec)))
+         "data/mapping/avl.sld")))
+
+(testing-registry-case
+ 'manifest-source-library-parsing-is-cached '(portable core symbol)
+(let ((before (consent-source-metadata-count)))
+  (consent-eval-source "(import (data avl-tree)) 0")
+  (let ((after-first (consent-source-metadata-count)))
+    (consent-eval-source "(import (data avl-tree)) 0")
+    (let ((after-second (consent-source-metadata-count)))
+      (consent-eval-source "(import (data avl-tree)) 0")
+      (let ((after-third (consent-source-metadata-count)))
+        (if compiled-host-run?
+            (check 'compiled-import-retains-only-program-source
+                   (- after-first before)
+                   (- after-second after-first))
+            (check 'first-import-retains-distinct-library-source
+                   (< (- after-second after-first)
+                      (- after-first before))
+                   #t))
+        (check 'repeated-imports-retain-only-program-source
+               (- after-third after-second)
+               (- after-second after-first)))))))
+
+(testing-registry-case
+ 'data-avl-tree-source-import '(portable core)
+(check 'data-avl-tree-source-import
+       (consent-value->external
+        (consent-eval-source
+         "(import (data avl-tree))
+          (let* ((tree (avl-tree-set (make-avl-tree <) 2 'two))
+                 (next (avl-tree-set tree 1 'one)))
+            (list (avl-tree-ref next 1)
+                  (avl-tree-size next)
+                  (avl-tree->alist tree)))"))
+       "(one 2 ((2 . two)))"))
+
+(testing-registry-case
+ 'data-avl-mapping-source-import '(portable core)
+(check 'data-avl-mapping-source-import
+       (consent-value->external
+        (consent-eval-source
+         "(import (scheme base)
+                  (scheme comparator)
+                  (scheme mapping)
+                  (data mapping avl))
+          (define comparator
+            (make-comparator integer? = < number-hash))
+          (mapping->alist
+           (mapping-set (avl-mapping comparator 2 'two 1 'one)
+                        3
+                        'three))"))
+       "((1 . one) (2 . two) (3 . three))"))
 
 (testing-registry-case
  'user-manifest-root-path-list-import '(portable core)
@@ -2864,13 +2998,7 @@
                                   (srfi srfi-146)))
                         (equal?
                          (manifest-field entry 'dependencies)
-                         '((library (scheme base))
-                           (library (scheme case-lambda))
-                           (library (stdlib list))
-                           (library (stdlib receive))
-                           (library (stdlib comparator))
-                           (library (stdlib assume))
-                           (library (stdlib rbtree))))
+                         '((library (stdlib mapping implementation))))
                         (equal? (manifest-field scheme-alias 'target)
                                 '(stdlib mapping))
                         (equal? (manifest-field alias 'target)
@@ -2923,6 +3051,61 @@
                        (boolean=? #t (not #f))
                        (string->symbol (symbol->string 'consent)))"
                 "(5/2 4 3 25 #t consent)"))
+
+(testing-registry-case
+ 'owned-symbol-user-semantics '(portable core symbol)
+(check-external
+ 'owned-symbol-user-semantics
+ "(let* ((quoted 'portable)
+         (converted (string->symbol \"portable\")))
+    (list (symbol? quoted)
+          (symbol? \"portable\")
+          (symbol->string quoted)
+          (symbol=? quoted converted)
+          (eq? quoted converted)
+          (eqv? quoted converted)
+          (equal? quoted converted)
+          (let-syntax ((introduce
+                        (syntax-rules () ((_ ) 'portable))))
+            (eq? (introduce) converted))))"
+ "(#t #f \"portable\" #t #t #t #t #t)"))
+
+(testing-registry-case
+ 'evaluator-context-shares-symbol-table '(portable core symbol)
+(let* ((table (consent-make-symbol-table))
+       (options (list (cons 'symbol-table table)))
+       (seed (consent-intern-symbol table "shared"))
+       (read-value (consent-eval-source "'shared" #f options))
+       (converted-value
+        (consent-eval-source "(string->symbol \"shared\")" #f options)))
+  (check 'reader-uses-context-table (eq? seed read-value) #t)
+  (check 'string-conversion-uses-context-table
+         (eq? seed converted-value)
+         #t)
+  (check 'caller-expression-symbol-is-owned
+         (consent-eval
+          (list 'symbol? (list 'quote 'private-bootstrap-symbol)))
+         #t)))
+
+(testing-registry-case
+ 'isolated-owned-symbol-equality '(portable core symbol)
+(let* ((left-table (consent-make-symbol-table))
+       (right-table (consent-make-symbol-table))
+       (left (consent-intern-symbol left-table "transported"))
+       (right (consent-intern-symbol right-table "transported"))
+       (quote-left (list 'quote left))
+       (quote-right (list 'quote right)))
+  (check-value
+   'isolated-owned-symbol-equality
+   (consent-eval
+    (list 'list
+          (list 'eq? quote-left quote-right)
+          (list 'eqv? quote-left quote-right)
+          (list 'equal? quote-left quote-right)
+          (list 'memq quote-left (list 'quote (list right)))
+          (list 'assq quote-left
+                (list 'quote (list (cons right 'value))))))
+   (list #t #t #t (list right) (cons right 'value)))))
 
 (testing-registry-case
  'numeric-tower-exact-rationals '(portable core)
@@ -3042,6 +3225,18 @@
                        '("(status ok)"
                          "(restart (id abort)"
                          "(restart (id continue-with-warning)")))
+
+(testing-registry-case
+ 'debugger-string-restart-id-is-owned '(portable core symbol)
+(check-external
+ 'debugger-string-restart-id-is-owned
+ "(import (scheme base) (agent debugger))
+  (let* ((result (restart-invoke! \"continue-with-warning\" '()))
+         (id (cadr (assq 'id (cdr result)))))
+    (list (symbol? id)
+          (eq? id (string->symbol \"continue-with-warning\"))
+          result))"
+ "(#t #t (restart-result (id continue-with-warning) (status continued) (options ())))"))
 
 (testing-registry-case
  'debugger-yield-event '(portable core)
@@ -4323,6 +4518,25 @@
                 "(a \"b\" #u8(1 2))"))
 
 (testing-registry-case
+ 'owned-symbol-read-write-round-trip '(portable core symbol)
+(let ((actual
+       (consent-eval-source
+        "(import (scheme base) (scheme read) (scheme write))
+         (let* ((symbol (string->symbol \"K. Harper, M.D.\"))
+                (out (open-output-string)))
+           (write symbol out)
+           (let ((read-back
+                  (read
+                   (open-input-string
+                    (get-output-string out)))))
+             (list (get-output-string out)
+                   (symbol? read-back)
+                   (eq? symbol read-back))))")))
+  (check-value 'owned-symbol-read-write-round-trip
+               actual
+               '("|K. Harper, M.D.|" #t #t))))
+
+(testing-registry-case
  'standard-bytevector-ports-read-and-write '(portable core)
 (check-external 'standard-bytevector-ports-read-and-write
                 "(import (scheme base))
@@ -5188,16 +5402,17 @@
        (revocation (find-event events 'capability-revocation))
        (decision (find-event-with-field
                   events 'capability-decision 'status 'denied)))
-  (check 'standard-file-grant-revocation-audits
-         (and (equal? (field-value result 'status) 'error)
-              revocation
-              decision
-              (equal? (field-value revocation 'target)
-                      '(grant portable-file-grant))
-              (equal? (field-value revocation 'status) 'revoked)
-              (equal? (field-value decision 'grant) 'portable-file-grant)
-              #t)
-         #t)))
+  (check-result-condition
+   'standard-file-grant-revocation-audits
+   result
+   (and (equal? (field-value result 'status) 'error)
+        revocation
+        decision
+        (equal? (field-value revocation 'target)
+                '(grant portable-file-grant))
+        (equal? (field-value revocation 'status) 'revoked)
+        (equal? (field-value decision 'grant) 'portable-file-grant)
+        #t))))
 
 (testing-registry-case
  'standard-file-policy-allowed-audits '(portable core)
@@ -5333,7 +5548,7 @@
         (consent-eval-source
          "(import (scheme base) (agent io) (agent reflect))
           (agent-yield '(first 1))
-          (list (capability-info 'file-exists?)
+          (list (capability-info \"file-exists?\")
                 (current-budget)
                 (current-imports)
                 (recent-yields))"
@@ -5570,12 +5785,15 @@
                 (policy buffer-edit)
                 (effect (buffer-replace! h-1 1 2 \"x\"))
                 (reason \"Replace text?\"))))
-          (list id (approval-status id))"))
+          (list id
+                (approval-status id)
+                (symbol? id)
+                (eq? id (string->symbol (symbol->string id))))"))
        (value (field-value result 'value)))
   (check 'agent-approval-request-status
          (and (equal? (field-value result 'status) 'ok)
               (string=? (consent-value->external value)
-                        "(a-1 pending)")
+                        "(a-1 pending #t #t)")
               #t)
          #t)))
 
@@ -5694,6 +5912,56 @@
     (kind local)
     (transport openai-compatible-http)
     (endpoint \"http://127.0.0.1:11434/v1\"))")))
+
+(testing-registry-case
+ 'native-library-symbols-marshal-at-runtime-boundary '(portable core)
+(check-external/options
+ 'native-library-symbols-marshal-at-runtime-boundary
+ "(import (scheme base) (agent models openai))
+  (define (string-contains? text fragment)
+    (let ((text-length (string-length text))
+          (fragment-length (string-length fragment)))
+      (let loop ((start 0))
+        (cond
+         ((> (+ start fragment-length) text-length) #f)
+         ((string=? (substring text start (+ start fragment-length))
+                    fragment)
+          #t)
+         (else (loop (+ start 1)))))))
+  (define tool
+    '(model-tool
+      (name local-echo)
+      (schema
+       (openai-tool
+        (type function)
+        (function
+         (name \"local-echo\")
+         (description \"Echo text.\")
+         (parameters
+          ((type \"object\")
+           (properties
+            ((text ((type \"string\")))))
+           (required (\"text\")))))))))
+  (let* ((request
+          (model-openai-request-json
+           \"qwen-coder\"
+           \"Use local-echo.\"
+           (list (list 'tools (list tool))
+                 (list 'tool-choice tool))))
+         (response
+          (model-openai-parse-response
+           (string-append
+            \"{\\\"choices\\\":[{\\\"message\\\":{\\\"content\\\":\"
+            \"\\\"Use a tool.\\\",\\\"tool_calls\\\":[{\\\"id\\\":\"
+            \"\\\"call-1\\\",\\\"type\\\":\\\"function\\\",\\\"function\\\":{\"
+            \"\\\"name\\\":\\\"local-echo\\\",\\\"arguments\\\":\\\"{}\\\"}}]}}]}\")))
+         (call (car (cadr (car (cddr response)))))
+         (name (cadr (assq 'name (cdr call)))))
+    (list (string-contains? request \"local-echo\")
+          (eq? (car response) 'model-message)
+          (eq? name 'local-echo)))"
+ '((max-host-callbacks . 30000))
+ "(#t #t #t)"))
 
 (testing-registry-case
  'agent-models-route-skips-unavailable '(portable core)
@@ -6110,16 +6378,17 @@
           (list (portable-helper 41)
                 (agent-helper-list 'project-private))"))
        (value (field-value result 'value)))
-  (check 'agent-helper-save-list-load
-         (and (equal? (field-value result 'status) 'ok)
-              (string-contains?
-               (consent-value->external value)
-               "(42 ((agent-helper-library")
-              (string-contains?
-               (consent-value->external value)
-               "(name (agent helpers portable))")
-              #t)
-         #t)))
+  (check-result-condition
+   'agent-helper-save-list-load
+   result
+   (and (equal? (field-value result 'status) 'ok)
+        (string-contains?
+         (consent-value->external value)
+         "(42 ((agent-helper-library")
+        (string-contains?
+         (consent-value->external value)
+         "(name (agent helpers portable))")
+        #t))))
 
 (testing-registry-case
  'agent-helper-artifact-and-skill-candidate '(portable core)
@@ -6144,17 +6413,18 @@
                       (expect \"ok\"))))))"))
        (events (field-value result 'events))
        (value (field-value result 'value)))
-  (check 'agent-helper-artifact-and-skill-candidate
-         (and (equal? (field-value result 'status) 'ok)
-              (equal? (car value) 'agent-skill-candidate)
-              (string-contains?
-               (consent-value->external value)
-               "(name \"portable-candidate\")")
-              (string-contains?
-               (consent-result->external (list 'events events))
-               "(yield (agent-artifact")
-              #t)
-         #t)))
+  (check-result-condition
+   'agent-helper-artifact-and-skill-candidate
+   result
+   (and (equal? (field-value result 'status) 'ok)
+        (consent-host-symbol-eq? (car value) 'agent-skill-candidate)
+        (string-contains?
+         (consent-value->external value)
+         "(name \"portable-candidate\")")
+        (string-contains?
+         (consent-result->external (list 'events events))
+         "(yield (agent-artifact")
+        #t))))
 
 (testing-registry-case
  'agent-test-group-results '(portable core)
@@ -6170,7 +6440,7 @@
        (value (field-value result 'value)))
   (check 'agent-test-group-results
          (and (equal? (field-value result 'status) 'ok)
-              (equal? (car value) 'agent-test-group)
+              (consent-host-symbol-eq? (car value) 'agent-test-group)
               (string-contains?
                (consent-value->external value)
                "(summary (total 3) (pass 2) (fail 1) (error 0) (skipped 0) (budget-exhausted 0))")
@@ -6213,7 +6483,7 @@
        (value (field-value result 'value)))
   (check 'agent-test-skill-and-srfi64
          (and (equal? (field-value result 'status) 'ok)
-              (equal? (car value) 'agent-test-group)
+              (consent-host-symbol-eq? (car value) 'agent-test-group)
               (string-contains?
                (consent-value->external value)
                "(kind skill)")
@@ -6311,7 +6581,7 @@
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent context))
-          (context-yield 'request)
+          (context-yield \"request\")
           (list (current-request)
                 (current-conversation-summary)
                 (current-focus)
@@ -6443,8 +6713,8 @@
                         "#t"))
 
 (testing-registry-case
- 'manifest-resolution-requires-manifest-root '(portable core)
-(check 'manifest-resolution-requires-manifest-root
+ 'manifest-resolution-selects-available-provider '(portable core compiler)
+(check 'manifest-resolution-selects-available-provider
        (let ((directories (consent-library-search-directory-list)))
          (dynamic-wind
            (lambda ()
@@ -6459,7 +6729,7 @@
                  '((internal-libraries-allowed . #t))))))
            (lambda ()
              (consent-set-library-search-directories! directories))))
-       #t))
+       (not compiled-host-run?)))
 
 ;; The grant only exposes libraries that actually exist as runtime source; it
 ;; does not turn every (consent ...) name into a phantom library.
@@ -7120,6 +7390,88 @@
   (check 'interaction-current-error-port-output
          (consent-interaction-program-output interaction)
          "diagnostic")))
+
+;; A borrowed source host exposes ordinary host symbols at its outer API
+;; barrier. A compiled Consent runtime keeps owned symbols because its portable
+;; symbol table is the runtime's sole identity domain; a future machine-code
+;; backend has no second host symbol table to egress into.
+(testing-registry-case
+ 'interaction-result-symbol-egress '(portable core symbol boundary compiler)
+(let* ((interaction (consent-make-interaction-context))
+       (result
+        (consent-interaction-eval-form
+         interaction
+         ''portable-result-symbol))
+       (value (field-value result 'value)))
+  (test-assert 'interaction-result-tag-has-runtime-symbol-identity
+               (if compiled-host-run?
+                   (consent-symbol? (car result))
+                   (and (symbol? (car result))
+                        (not (consent-symbol? (car result))))))
+  (test-assert 'interaction-result-value-has-runtime-symbol-identity
+               (if compiled-host-run?
+                   (consent-symbol? value)
+                   (and (symbol? value)
+                        (not (consent-symbol? value)))))
+  (test-assert 'interaction-result-value-keeps-name
+               (eq? value 'portable-result-symbol))))
+
+(testing-registry-case
+ 'repl-session-manager-runtime-symbol-key
+ '(portable core symbol boundary compiler)
+(let ((manager (consent-repl-session-manager)))
+  (consent-repl-seed-initial-session! manager "native-session-key" '())
+  (let ((id (session-manager-current-id manager)))
+    (test-assert 'repl-session-manager-key-has-runtime-symbol-identity
+                 (if compiled-host-run?
+                     (consent-symbol? id)
+                     (and (symbol? id)
+                          (not (consent-symbol? id)))))
+    (test-assert 'repl-session-manager-key-keeps-name
+                 (eq? id 'native-session-key)))))
+
+;; A compiled realization of a portable source library must win over
+;; re-interpreting that source while retaining its manifest-defined primitive
+;; overlay. Compilation changes realization, not library semantics.
+(testing-registry-case
+ 'registered-native-source-library-keeps-manifest-semantics
+ '(portable core compiler)
+(begin
+  (consent-register-native-library!
+   '(agent approval)
+   (list
+    (cons 'consent-approval-statuses '(1729))
+    (cons 'consent-make-approval-store
+          native-approval:consent-make-approval-store)
+    (cons 'consent-approval-store?
+          native-approval:consent-approval-store?)
+    (cons 'approval-store-request!
+          native-approval:approval-store-request!)
+    (cons 'approval-store-status
+          native-approval:approval-store-status)
+    (cons 'approval-store-ref native-approval:approval-store-ref)
+    (cons 'approval-store-records
+          native-approval:approval-store-records)
+    (cons 'approval-store-resolve!
+          native-approval:approval-store-resolve!)
+    (cons 'approval-store-cancel!
+          native-approval:approval-store-cancel!)
+    (cons 'approval-store-pending
+          native-approval:approval-store-pending)))
+  (test-assert
+   'registered-native-source-library-used
+   (raw-consent-eval-source
+    "(import (only (agent approval) consent-approval-statuses))
+     (= (car consent-approval-statuses) 1729)"
+    #f
+    '((internal-libraries-allowed . #t))))
+  (test-assert
+   'registered-native-source-library-overlay-used
+   (raw-consent-eval-source
+    "(import (only (agent approval) approval-request!))
+     (procedure? approval-request!)"
+    #f
+    '((internal-libraries-allowed . #t))))))
 
 ;; Keep this import-error regression at the end: Racket's R7RS host preserves
 ;; enough handler state after this rejected import to perturb later checks.

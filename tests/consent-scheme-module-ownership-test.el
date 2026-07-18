@@ -65,6 +65,26 @@ comments or docstrings do not."
       (unless (string-prefix-p core-root path)
         (push (file-relative-name path consent--test-root) relative-paths)))))
 
+(defun consent-scheme-module-ownership-test--library-paths ()
+  "Return every repository-relative portable Scheme library path."
+  (let ((scheme-root (expand-file-name "scheme" consent--test-root)))
+    (mapcar
+     (lambda (path)
+       (file-relative-name path consent--test-root))
+     (sort (directory-files-recursively scheme-root "\\.sld\\'") #'string<))))
+
+(defun consent-scheme-module-ownership-test--code-match-p (source regexp)
+  "Return non-nil when REGEXP matches SOURCE outside strings and comments."
+  (with-temp-buffer
+    (insert source)
+    (scheme-mode)
+    (goto-char (point-min))
+    (let (found)
+      (while (and (not found) (re-search-forward regexp nil t))
+        (unless (nth 8 (syntax-ppss (match-beginning 0)))
+          (setq found t)))
+      found)))
+
 (ert-deftest consent-scheme-module-ownership-test-runtime-result-own-definitions ()
   "Keep runtime values and result rendering out of the portable evaluator."
   (let ((runtime
@@ -158,6 +178,68 @@ comments or docstrings do not."
      (string-match-p "(define (trampoline" eval))
     (should
      (< (length (split-string eval "\n")) 80))))
+
+(ert-deftest consent-scheme-module-ownership-test-symbol-boundary-is-confined ()
+  "Keep mixed host/owned symbol handling inside the Consent runtime."
+  (let ((standard-names '("eq?"
+                          "eqv?"
+                          "equal?"
+                          "symbol?"
+                          "symbol->string"
+                          "string->symbol"
+                          "memq"
+                          "assq"
+                          "member"
+                          "assoc")))
+    (dolist (path (consent-scheme-module-ownership-test--library-paths))
+      (let ((source (consent-scheme-module-ownership-test--read path)))
+        (dolist (name standard-names)
+          (ert-info ((format "path=%s name=%s" path name))
+            (should-not
+             (consent-scheme-module-ownership-test--code-match-p
+              source
+              (concat
+               "(define\\s-+"
+               (regexp-quote name)
+               "\\_>"))))))))
+  (let ((forbidden-boundary-names
+         '("consent-host-symbol?"
+           "consent-host-symbol-name"
+           "consent-boundary-string->symbol"
+           "consent-with-boundary-symbol-table"
+           "consent-host-symbol-eq?"
+           "consent-host-symbol-eqv?"
+           "consent-host-symbol-equal?"
+           "consent-host-symbol-memq"
+           "consent-host-symbol-assq"
+           "consent-host-symbol-member"
+           "consent-host-symbol-assoc")))
+    (dolist
+        (path
+         (consent-scheme-module-ownership-test--non-core-library-paths))
+      (let ((source (consent-scheme-module-ownership-test--read path)))
+        (should-not
+         (consent-scheme-module-ownership-test--code-match-p
+          source
+          (regexp-quote "(consent symbol-boundary)")))
+        (dolist (name forbidden-boundary-names)
+          (ert-info ((format "path=%s name=%s" path name))
+            (should-not
+             (consent-scheme-module-ownership-test--contains-symbol-p
+              source
+              name)))))))
+  (let ((boundary
+         (consent-scheme-module-ownership-test--read
+          "scheme/consent/symbol-boundary.sld")))
+    (should
+     (string-match-p
+      "(define (consent-host-symbol-eq?" boundary))
+    (should-not
+     (string-match-p "consent-host-string->symbol" boundary))
+    (should-not
+     (string-match-p "consent-boundary-string->symbol" boundary))
+    (should-not
+     (string-match-p "consent-with-boundary-symbol-table" boundary))))
 
 (ert-deftest consent-scheme-module-ownership-test-portable-libraries-use-scheme-numbers ()
   "Keep reader-owned numeric constructors and accessors out of pure libraries."

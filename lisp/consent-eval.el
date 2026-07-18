@@ -109,7 +109,10 @@ is the result of the last command or definition."
         (progn
           (consent-policy-authorize
            'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
-          (let* ((forms (consent-read-all source options))
+          (let* ((forms
+                  (consent-read-all
+                   source
+                   (consent--eval-context-reader-options context options)))
                  (sequence (consent--make-sequence forms t)))
             (consent--ensure-base-syntax context eval-environment)
             (let ((value
@@ -199,7 +202,10 @@ agent events, and handle references across calls."
             (let ((consent--memory-current-session session)
                   (consent--approval-current-session
                    (consent-session-id session)))
-              (let* ((forms (consent-read-all source options))
+              (let* ((forms
+                      (consent-read-all
+                       source
+                       (consent--eval-context-reader-options context options)))
                      (sequence (consent--make-sequence forms t)))
                 (consent--ensure-base-syntax context environment)
                 (unless base-syntax-installed
@@ -271,7 +277,10 @@ agent events, and handle references across calls."
         (progn
           (consent-policy-authorize
            'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
-          (let* ((forms (consent-read-all source options))
+          (let* ((forms
+                  (consent-read-all
+                   source
+                   (consent--eval-context-reader-options context options)))
                  (sequence (consent--make-sequence forms t)))
             (consent--ensure-base-syntax context eval-environment)
             (let ((value

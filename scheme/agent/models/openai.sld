@@ -584,7 +584,8 @@
         (map
          (lambda (field)
            (cons
-            (model-openai-name (car field) "schema field")
+            (string->symbol
+             (model-openai-name-string (car field) "schema field"))
             (model-openai-json-value
              (model-openai-schema-entry-value field))))
          datum))
@@ -884,10 +885,13 @@
         (returns (type (or string model-message))
          (description "Completion text or a canonical model-message datum."))
         (effects host-eval error))
-      (if (not (eq? (model-openai-field-value provider 'kind #f) 'local))
+      (if (not (model-openai-field-name=?
+                (model-openai-field-value provider 'kind #f)
+                'local))
           (error "remote model transport is not configured" role))
-      (if (not (eq? (model-openai-field-value provider 'transport #f)
-                    'openai-compatible-http))
+      (if (not (model-openai-field-name=?
+                (model-openai-field-value provider 'transport #f)
+                'openai-compatible-http))
           (error "unsupported local model transport"
                  (model-openai-field-value provider 'transport #f)))
       (let ((endpoint (model-openai-field-value provider 'endpoint #f)))

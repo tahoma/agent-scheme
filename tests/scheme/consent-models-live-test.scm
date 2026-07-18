@@ -42,7 +42,8 @@
   (string-append
    "(import (scheme base) (agent models))
     (define (field datum name)
-      (let loop ((fields (if (and (pair? datum) (symbol? (car datum)))
+      (let loop ((fields (if (and (pair? datum)
+                                  (not (pair? (car datum))))
                              (cdr datum)
                              datum)))
         (cond
@@ -86,7 +87,9 @@
            (arguments (field call 'arguments))
            (text (field arguments 'text)))
       (list (eq? (car response) 'model-message)
-            (field call 'name)
+            (let ((name (field call 'name)))
+              (and (symbol? name)
+                   (string=? (symbol->string name) \"local-echo\")))
             (string? text)))"))
 
 (define (run-live-tool-call-check)
@@ -108,9 +111,10 @@
         (begin
           (test-assert "portable live model message"
                        (and (pair? value) (car value)))
-          (test-equal "portable live model tool name"
-                      'local-echo
-                      (and (pair? value) (pair? (cdr value)) (cadr value)))
+          (test-assert "portable live model tool name"
+                       (and (pair? value)
+                            (pair? (cdr value))
+                            (cadr value)))
           (test-assert "portable live model tool argument string"
                        (and (pair? value)
                             (pair? (cdr value))

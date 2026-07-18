@@ -24,8 +24,25 @@
           consent-value->external)
   (import (scheme base)
           (consent reader)
+          (consent symbol)
+          (consent symbol-boundary)
           (consent runtime))
   (begin
+    ;; This module serializes values assembled on both sides of the bootstrap
+    ;; boundary. Keep the imported base procedures as the local default and
+    ;; name the exceptional mixed-symbol operations at their call sites.
+    (define host-eq? eq?)
+    ;; Recognize result symbols across the owned/bootstrap boundary.
+    (define result-symbol? consent-host-symbol?)
+    ;; Read result symbol names across the owned/bootstrap boundary.
+    (define result-symbol-name consent-host-symbol-name)
+    ;; Compare result names across the owned/bootstrap boundary.
+    (define result-symbol-eq? consent-host-symbol-eq?)
+    ;; Compare result datums across the owned/bootstrap boundary.
+    (define result-datum-equal? consent-host-symbol-equal?)
+    ;; Look up result fields across the owned/bootstrap boundary.
+    (define result-assq consent-host-symbol-assq)
+
     (define (result-field name . values)
       "Construct a named field for public result datums."
       #((parameters
@@ -54,7 +71,7 @@
         (cond
          ((or (boolean? value)
               (null? value)
-              (symbol? value)
+              (result-symbol? value)
               (char? value)
               (number? value)
               (consent-number? value)
@@ -137,17 +154,48 @@
          ((identifier? value)
           (identifier-name value))
          ((pair? value)
-          (if (memq value seen)
-              value
-              (cons (strip-identifiers (car value) (cons value seen))
-                    (strip-identifiers (cdr value) (cons value seen)))))
+          (let ((prior
+                 (let loop ((entries seen))
+                   (cond
+                    ((null? entries) #f)
+                    ((host-eq? value (caar entries)) (cdar entries))
+                    (else (loop (cdr entries)))))))
+            (if prior
+                prior
+                (let* ((copy (cons #f #f))
+                       (next-seen (cons (cons value copy) seen))
+                       (head (strip-identifiers (car value) next-seen))
+                       (tail (strip-identifiers (cdr value) next-seen)))
+                  (if (and (host-eq? head (car value))
+                           (host-eq? tail (cdr value)))
+                      value
+                      (begin
+                        (set-car! copy head)
+                        (set-cdr! copy tail)
+                        (consent-copy-datum-source! copy value #t)))))))
          ((vector? value)
-          (if (memq value seen)
-              value
-              (list->vector
-               (map (lambda (item)
-                      (strip-identifiers item (cons value seen)))
-                    (vector->list value)))))
+          (let ((prior
+                 (let loop ((entries seen))
+                   (cond
+                    ((null? entries) #f)
+                    ((host-eq? value (caar entries)) (cdar entries))
+                    (else (loop (cdr entries)))))))
+            (if prior
+                prior
+                (let* ((copy (make-vector (vector-length value) #f))
+                       (next-seen (cons (cons value copy) seen)))
+                  (let loop ((index 0) (changed? #f))
+                    (if (< index (vector-length value))
+                        (let* ((element (vector-ref value index))
+                               (stripped
+                                (strip-identifiers element next-seen)))
+                          (vector-set! copy index stripped)
+                          (loop (+ index 1)
+                                (or changed?
+                                    (not (host-eq? stripped element)))))
+                        (if changed?
+                            (consent-copy-datum-source! copy value #t)
+                            value)))))))
          ((consent-record? value)
           value)
          ((consent-record-type? value)
@@ -221,7 +269,7 @@
       (let loop ((irritants (condition-irritants condition)))
         (cond
          ((null? irritants) #f)
-         ((symbol? (car irritants)) (car irritants))
+         ((result-symbol? (car irritants)) (car irritants))
          (else (loop (cdr irritants))))))
 
     (define (condition-message condition)
@@ -240,7 +288,7 @@
           (if (and (string-contains? message "unbound identifier") symbol)
               (string-append message
                              ": "
-                             (symbol->string symbol))
+                             (result-symbol-name symbol))
               message))))
 
     (define (debugger-condition-type condition message)
@@ -285,18 +333,18 @@
 
     (define (debugger-documentation-field fields name)
       "Return documentation metadata field NAME from FIELDS, or #f."
-      (assq name fields))
+      (result-assq name fields))
 
     (define (debugger-documentation-origin documentation)
       "Return debugger documentation origin data."
       (let ((origins (documentation-metadata-origins documentation)))
         (cond
          ((null? origins) '(signature))
-         ((equal? origins '(implementation-procedure-string))
+         ((result-datum-equal? origins '(implementation-procedure-string))
           '(implementation-procedure string))
-         ((equal? origins '(primitive-manifest-string))
+         ((result-datum-equal? origins '(primitive-manifest-string))
           '(primitive-manifest string))
-         ((equal? origins '(primitive-manifest-metadata))
+         ((result-datum-equal? origins '(primitive-manifest-metadata))
           '(primitive-manifest metadata))
          (else (cons 'body-literal origins)))))
 
@@ -337,7 +385,9 @@
         (append
          (list 'binding
                (result-field 'name
-                             (if (symbol? name) name 'unknown-binding)))
+                             (if (result-symbol? name)
+                                 name
+                                 'unknown-binding)))
          (if documentation
              (list (result-field 'procedure-documentation documentation))
              '()))))
@@ -428,7 +478,8 @@
         (returns (type list)
          (description "The field values for FIELD, or the empty list."))
         (effects pure))
-      (let ((entry (and (pair? datum) (assq field (cdr datum)))))
+      (let ((entry (and (pair? datum)
+                        (result-assq field (cdr datum)))))
         (if entry (cdr entry) '())))
 
     (define (debugger-field-value datum field)
@@ -453,22 +504,36 @@
         (returns (type pair)
          (description "DATUM when it is tagged as a debugger condition."))
         (effects error))
-      (if (not (and (pair? datum) (eq? (car datum) 'condition)))
+      (if (not (and (pair? datum)
+                    (result-symbol-eq? (car datum) 'condition)))
           (eval-error
            (string-append operation " expected a debugger condition")))
       datum)
 
-    (define (debugger-restart-id-name id)
+    (define (debugger-restart-id-name id . maybe-context)
       "Return ID as a debugger restart symbol."
       #((parameters
          (id (type (or symbol string))
-          (description "Restart id as a symbol or string.")))
+          (description "Restart id as a symbol or string."))
+         (maybe-context (type list)
+          (description
+           "Optional singleton evaluation context owning string ids.")))
         (returns (type symbol)
          (description "ID as a symbol."))
-        (effects error))
+        (effects state-read state-write allocation error))
       (cond
-       ((symbol? id) id)
-       ((string? id) (string->symbol id))
+       ((result-symbol? id)
+        (if (null? maybe-context)
+            id
+            (consent-intern-symbol
+             (context-symbol-table (car maybe-context))
+             (result-symbol-name id))))
+       ((string? id)
+        (if (null? maybe-context)
+            (string->symbol id)
+            (consent-intern-symbol
+             (context-symbol-table (car maybe-context))
+             id)))
        (else (eval-error "restart id must be a symbol or string"))))
 
     (define (debugger-condition-datum condition context)
@@ -503,7 +568,7 @@
              (list (result-field 'irritants irritants)))
          ;; A budget exhaustion names the dimension that stopped the run so the
          ;; stop receipt answers "which budget was no longer admissible?".
-         (if (and (eq? type 'budget-exhausted)
+         (if (and (result-symbol-eq? type 'budget-exhausted)
                   (context-exhaustion-reason context))
              (list (result-field 'reason (context-exhaustion-reason context)))
              '())
@@ -591,10 +656,12 @@
         (effects pure))
       (and (pair? value)
            (cond
-            ((eq? (car value) 'condition)
-             (eq? (debugger-field-value value 'type) 'budget-exhausted))
-            ((eq? (car value) 'evaluation-result)
-             (let ((error-entry (assq 'error (cdr value))))
+            ((result-symbol-eq? (car value) 'condition)
+             (result-symbol-eq?
+              (debugger-field-value value 'type)
+              'budget-exhausted))
+            ((result-symbol-eq? (car value) 'evaluation-result)
+             (let ((error-entry (result-assq 'error (cdr value))))
                (and (pair? error-entry)
                     (let ((condition
                            (debugger-field-value error-entry 'condition)))
@@ -629,7 +696,7 @@
        ((consent-port? value)
         (string-append
          "#<"
-         (symbol->string (consent-port-medium value))
+         (result-symbol-name (consent-port-medium value))
          "-port"
          (if (consent-port-open? value) "" " closed")
          ">"))
@@ -642,7 +709,7 @@
        ((consent-primitive-procedure? value)
         (string-append
          "#<primitive "
-         (symbol->string (primitive-procedure-name value))
+         (result-symbol-name (primitive-procedure-name value))
          ">"))
        ((continuation? value)
         "#<continuation>")

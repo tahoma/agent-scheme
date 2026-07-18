@@ -63,6 +63,7 @@
      (library (agent models))
      (library (agent models primitive))
      (library (agent context))
+     (library (agent context primitive))
      (library (agent reflect))
      (library (agent redaction))
      (library (agent session))

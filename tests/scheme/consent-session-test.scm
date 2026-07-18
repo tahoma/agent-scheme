@@ -21,6 +21,15 @@
         (testing runner)
         (stdlib testing))
 
+;; Session records leave the evaluator through its native result boundary, so
+;; this host-side consumer sees ordinary Scheme symbols throughout.
+
+(define (test-symbol-equal name expected actual)
+  "Assert that EXPECTED and ACTUAL are the same host symbol."
+  (test-assert name
+               (and (symbol? actual)
+                    (eq? expected actual))))
+
 ;; Return the single value of field NAME in tagged list DATUM, or #f.
 (define (field datum name)
   (let ((entry (and (pair? datum) (assq name (cdr datum)))))
@@ -140,17 +149,21 @@
     (let* ((created-result (list-ref results 1))
            (value (result-value created-result))
            (events (field (field created-result 'evaluation-result) 'events)))
-      (test-equal 'create-returns-session-record 'session (kind value))
-      (test-equal 'create-record-id 'inspect-a (field value 'id))
-      (test-equal 'create-record-status 'new (field value 'status))
+      (test-symbol-equal 'create-returns-session-record
+                         'session
+                         (kind value))
+      (test-symbol-equal 'create-record-id 'inspect-a (field value 'id))
+      (test-symbol-equal 'create-record-status
+                         'new
+                         (field value 'status))
       (test-assert 'create-emits-capability-request
              (has-audit? events 'capability-request "create-session"))
       (test-assert 'create-emits-lifecycle-audit
              (has-audit? events 'session-lifecycle 'create)))
     ;; current-session (no switch yet) names the initial project-main session.
-    (test-equal 'current-before-switch-id
-             'project-main
-             (field (result-value (list-ref results 2)) 'id))
+    (test-symbol-equal 'current-before-switch-id
+                       'project-main
+                       (field (result-value (list-ref results 2)) 'id))
     ;; list-sessions returns a list of session records including both sessions.
     (let ((listed (result-value (list-ref results 3))))
       (test-assert 'list-sessions-is-list (list? listed))
@@ -201,9 +214,13 @@
          "(close-session 'close-a)\n"))))
   (let ((results (records-of records 'repl-result)))
     (let ((closed (result-value (list-ref results 2))))
-      (test-equal 'close-returns-session-record 'session (kind closed))
-      (test-equal 'close-record-id 'close-a (field closed 'id))
-      (test-equal 'close-record-status 'retired (field closed 'status))))
+      (test-symbol-equal 'close-returns-session-record
+                         'session
+                         (kind closed))
+      (test-symbol-equal 'close-record-id 'close-a (field closed 'id))
+      (test-symbol-equal 'close-record-status
+                         'retired
+                         (field closed 'status))))
   (test-equal 'close-no-conditions 0 (count-of records 'repl-condition))))
 
 (testing-runner-main "Consent Session portable tests" (command-line))

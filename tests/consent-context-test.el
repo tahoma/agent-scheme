@@ -142,8 +142,10 @@
             "(import (scheme base) (agent context) (agent redaction))
              (let ((context (current-buffer-context)))
                (list (safe-for-provider? context 'openai)
+                     (vector? (cadr (cadr context)))
                      context))")))
       (should (string-match-p (regexp-quote "(#f") external))
+      (should (string-match-p (regexp-quote "(#f #f") external))
       (should (string-match-p (regexp-quote "(local-only #t)") external))
       (should (string-match-p
                (regexp-quote "(local-only-reason \"private buffer\")")

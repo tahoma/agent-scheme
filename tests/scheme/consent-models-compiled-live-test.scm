@@ -15,7 +15,8 @@
 
 (define (field datum name)
   "Return NAME from DATUM, or #f when the field is absent."
-  (let loop ((fields (if (and (pair? datum) (symbol? (car datum)))
+  (let loop ((fields (if (and (pair? datum)
+                              (not (pair? (car datum))))
                          (cdr datum)
                          datum)))
     (cond
@@ -71,8 +72,9 @@
     (test-assert "compiled host returns a model message"
                  (and (pair? response)
                       (eq? (car response) 'model-message)))
-    (test-equal "compiled host receives the forced tool name"
-                'local-echo
-                (field call 'name))
+    (test-assert "compiled host receives the forced tool name"
+                 (let ((name (field call 'name)))
+                   (and (symbol? name)
+                        (string=? (symbol->string name) "local-echo"))))
     (test-assert "compiled host receives a string tool argument"
                  (string? text))))

@@ -274,18 +274,26 @@
                  (define present-false '(sample (present #f)))
                  (define missing '(sample))
                  (list (reflection-field present-false 'present 'default)
+                       (reflection-field present-false \"present\" 'default)
                        (reflection-field missing 'present 'default)
                        (reflection-field #f 'present 'default)
                        (documentation-field (documentation '+) 'documentation)
+                       (documentation-field
+                        (documentation '+)
+                        \"documentation\")
                        (documentation-field (documentation '+) 'missing 'default)
                        (docstring '+)
+                       (docstring (documentation '+))
                        (docstring 'missing 'default))"
                 (expected-datum-external
                  "(#f
+                   #f
                    default
                    default
                    \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
+                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
                    default
+                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
                    \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
                    default)")))
 

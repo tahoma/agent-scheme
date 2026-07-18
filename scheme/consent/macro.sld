@@ -45,11 +45,30 @@
   (import (scheme base)
           (scheme char)
           (consent reader)
+          (consent symbol)
+          (consent symbol-boundary)
           (consent runtime)
           (consent result)
           (consent base)
           (consent library))
   (begin
+    ;; Macro forms can be host bootstrap declarations or owned syntax.
+    (define macro-symbol? consent-host-symbol?)
+    ;; Read macro names across the owned/bootstrap boundary.
+    (define macro-symbol-name consent-host-symbol-name)
+    ;; Compare macro names across the owned/bootstrap boundary.
+    (define macro-symbol-eq? consent-host-symbol-eq?)
+    ;; Compare macro datums across the owned/bootstrap boundary.
+    (define macro-datum-equal? consent-host-symbol-equal?)
+    ;; Search macro name lists across the owned/bootstrap boundary.
+    (define macro-memq consent-host-symbol-memq)
+    ;; Look up macro fields across the owned/bootstrap boundary.
+    (define macro-assq consent-host-symbol-assq)
+    ;; Search macro datums across the owned/bootstrap boundary.
+    (define macro-member consent-host-symbol-member)
+    ;; Look up macro datums across the owned/bootstrap boundary.
+    (define macro-assoc consent-host-symbol-assoc)
+
     (define (definition-form? form)
       "Report whether FORM is a core define form headed by the raw symbol."
       #((parameters
@@ -59,7 +78,7 @@
           ("True when FORM is a pair whose head is the raw symbol"
             "define.")))
         (effects pure))
-      (and (pair? form) (eq? (car form) 'define)))
+      (and (pair? form) (macro-symbol-eq? (car form) 'define)))
 
     (define (define-values-form? form)
       "Report whether FORM is a define-values form after identifier unwrapping."
@@ -79,7 +98,7 @@
           ("True when FORM is a pair whose head is the raw symbol"
             "begin.")))
         (effects pure))
-      (and (pair? form) (eq? (car form) 'begin)))
+      (and (pair? form) (macro-symbol-eq? (car form) 'begin)))
 
     (define (make-lambda-expression formals body)
       "Construct the lambda expression used by function-definition shorthand."
@@ -110,7 +129,7 @@
         (let ((target (second parts))
               (body (cddr parts)))
           (cond
-           ((symbol? target)
+           ((macro-symbol? target)
             (if (not (= (length body) 1))
                 (eval-error
                  "variable define requires exactly one expression"
@@ -303,7 +322,7 @@
       (let loop ((cursor syntax-environment))
         (cond
          ((not cursor) #f)
-         ((assq name (syntax-environment-frame cursor))
+         ((macro-assq name (syntax-environment-frame cursor))
           => (lambda (cell) (cdr cell)))
          (else (loop (syntax-environment-parent cursor))))))
 
@@ -318,7 +337,7 @@
           (description "Syntax transformer to associate with NAME.")))
         (returns . ("An unspecified value; the frame gains the new binding."))
         (effects state-write error))
-      (if (memq name (syntax-environment-imported-names syntax-environment))
+      (if (macro-memq name (syntax-environment-imported-names syntax-environment))
           (eval-error "cannot redefine imported syntax binding" name))
       (set-syntax-environment-frame!
        syntax-environment
@@ -346,7 +365,7 @@
 
     (define (operator-shadowed? operator environment)
       "Report whether OPERATOR is shadowed by a value binding."
-      (and (symbol? operator) (environment-cell environment operator)))
+      (and (macro-symbol? operator) (environment-cell environment operator)))
 
     (define (special-operator-active? operator environment)
       "Report whether OPERATOR can still dispatch as syntax in ENVIRONMENT."
@@ -404,7 +423,7 @@
     (define (ellipsis-identifier? datum ellipsis)
       "Report whether DATUM names the active syntax-rules ellipsis identifier."
       (and (identifier-datum? datum)
-           (eq? (identifier-datum-name datum) ellipsis)))
+           (macro-symbol-eq? (identifier-datum-name datum) ellipsis)))
 
     (define (proper-list-elements/maybe datum)
       "Return DATUM's list elements, or #f when DATUM is not a proper list."
@@ -485,7 +504,7 @@
         (let loop ((rest literals))
           (cond
            ((null? rest) #f)
-           ((eq? name (identifier-datum-name (car rest))) #t)
+           ((macro-symbol-eq? name (identifier-datum-name (car rest))) #t)
            (else (loop (cdr rest)))))))
 
     (define (make-pattern-bindings)
@@ -494,7 +513,7 @@
 
     (define (pattern-binding-cell bindings name)
       "Return the capture-table cell for pattern variable NAME, or #f."
-      (assoc name (cdr bindings)))
+      (macro-assoc name (cdr bindings)))
 
     (define (pattern-binding bindings name)
       "Return the pattern binding entry for NAME, or #f."
@@ -516,7 +535,7 @@
 
     (define (capture-ref captures path)
       "Return the capture stored for PATH, or #f when none exists."
-      (let ((cell (assoc path captures)))
+      (let ((cell (macro-assoc path captures)))
         (if cell (cdr cell) #f)))
 
     (define (ensure-pattern-binding! bindings name depth)
@@ -541,7 +560,7 @@
       "Record VALUE as NAME's capture at the current ellipsis PATH."
       (let* ((entry (ensure-pattern-binding! bindings name (length path)))
              (captures (pattern-binding-captures entry)))
-        (if (assoc path captures)
+        (if (macro-assoc path captures)
             (eval-error "duplicate pattern variable" name))
         ;; PATH is the repetition-index trail leading to this capture.
         ;; Template expansion reuses it to distribute nested ellipses.
@@ -574,8 +593,8 @@
       (cond
        ((identifier-datum? pattern)
         (let ((name (identifier-datum-name pattern)))
-          (if (or (eq? name '_)
-                  (eq? name ellipsis)
+          (if (or (macro-symbol-eq? name '_)
+                  (macro-symbol-eq? name ellipsis)
                   (syntax-literal? pattern literals))
               '()
               (list name))))
@@ -606,7 +625,7 @@
        (lambda (name)
          (let ((entry
                 (ensure-pattern-binding! bindings name (+ (length path) 1))))
-           (if (not (member path (pattern-binding-empty-prefixes entry)))
+           (if (not (macro-member path (pattern-binding-empty-prefixes entry)))
                (set-pattern-binding-empty-prefixes!
                 entry
                 (cons path (pattern-binding-empty-prefixes entry))))))
@@ -666,8 +685,8 @@
       (cond
        ((and (not left) (not right)) #t)
        ((and left right
-             (eq? (car left) (car right))
-             (eq? (cdr left) (cdr right)))
+             (macro-symbol-eq? (car left) (car right))
+             (macro-symbol-eq? (cdr left) (cdr right)))
         #t)
        (else #f)))
 
@@ -675,7 +694,7 @@
                                        use-environment use-syntax-environment)
       "Report whether a syntax-rules literal matches by name and binding."
       (and (identifier-datum? input)
-           (eq? (identifier-datum-name pattern)
+           (macro-symbol-eq? (identifier-datum-name pattern)
                 (identifier-datum-name input))
            (binding-tokens-equal?
             (identifier-binding-token
@@ -699,7 +718,7 @@
              (syntax-numeric-datum? input))
         (string=? (consent-number->external pattern)
                   (consent-number->external input)))
-       (else (equal? pattern input))))
+       (else (macro-datum-equal? pattern input))))
 
     (define (match-pattern pattern input transformer bindings path
                            use-environment use-syntax-environment)
@@ -710,15 +729,15 @@
          ((identifier-datum? pattern)
           (let ((name (identifier-datum-name pattern)))
             (cond
-             ((and (eq? name '_) (not (syntax-literal? pattern literals)))
+             ((and (macro-symbol-eq? name '_) (not (syntax-literal? pattern literals)))
               #t)
              ((syntax-literal? pattern literals)
               (literal-identifier-match?
                pattern input transformer use-environment
                use-syntax-environment))
-             ((eq? name ellipsis)
+             ((macro-symbol-eq? name ellipsis)
               (and (identifier-datum? input)
-                   (eq? name (identifier-datum-name input))))
+                   (macro-symbol-eq? name (identifier-datum-name input))))
              (else
               (syntax-bind-pattern-variable!
                bindings name input path)))))
@@ -907,7 +926,7 @@
       (cond
        ((identifier-datum? template)
         (let ((name (identifier-datum-name template)))
-          (if (and (not (eq? name ellipsis))
+          (if (and (not (macro-symbol-eq? name ellipsis))
                    (pattern-binding bindings name))
               (list name)
               '())))
@@ -969,7 +988,7 @@
             (cond
              ((not (null? indices))
               (+ (max-number-list indices) 1))
-             ((member path empty-prefixes) 0)
+             ((macro-member path empty-prefixes) 0)
              (else #f)))))
 
     (define (template-repeat-count template bindings ellipsis path)
@@ -1004,7 +1023,7 @@
                   (eval-error
                    "repeated pattern variable used without enough ellipses"
                    name)))
-             (cell (assoc capture-path (pattern-binding-captures entry))))
+             (cell (macro-assoc capture-path (pattern-binding-captures entry))))
         (if cell
             (cdr cell)
             (eval-error "missing pattern variable capture" name))))
@@ -1020,12 +1039,12 @@
         (cond
          ((identifier-datum? template)
           (let* ((name (identifier-datum-name template))
-                 (entry (and (not (eq? name ellipsis))
+                 (entry (and (not (macro-symbol-eq? name ellipsis))
                             (pattern-binding bindings name))))
             (cond
              (entry
               (pattern-binding-value-at entry name path))
-             ((and (eq? name ellipsis) (not ellipsis-literal?))
+             ((and (macro-symbol-eq? name ellipsis) (not ellipsis-literal?))
               (eval-error "misplaced ellipsis in template"))
              (else
               (make-identifier name syntax-context)))))
@@ -1347,7 +1366,7 @@
                    (identifier-named? operator 'let*-values))
                (special-operator-active? operator environment))
           (let ((description
-                 (symbol->string (identifier-datum-name operator))))
+                 (macro-symbol-name (identifier-datum-name operator))))
             (let ((bindings
                    (map (lambda (binding)
                           (let ((binding-parts
@@ -1420,7 +1439,7 @@
       (note-step! context)
       (let ((expanded (expand-expression expression environment context)))
         (cond
-         ((not (eq? expanded expression))
+         ((not (macro-symbol-eq? expanded expression))
           (cond
            ((syntax-scope? expanded)
             (with-syntax-environment
@@ -1536,9 +1555,11 @@
         (returns (type list)
          (description "A list of expanded top-level forms in source order."))
         (effects state-write error))
-      (let ((context (new-eval-context (macro-rest-options rest)))
-            (environment (macro-rest-environment rest))
-            (forms (consent-read-all source (macro-rest-options rest))))
+      (let* ((context (new-eval-context (macro-rest-options rest)))
+             (environment (macro-rest-environment rest))
+             (forms (consent-read-all
+                     source
+                     (context-reader-options context))))
         (ensure-base-syntax! context environment)
         (expand-sequence-forms forms environment context #t)))
 
@@ -1576,12 +1597,12 @@
         (cond
          ((not name)
           (eval-error "macroexpand option name must be an identifier" datum))
-         ((or (eq? name 'max-steps)
-              (eq? name 'max-non-tail-steps)
-              (eq? name 'max-value-nodes)
-              (eq? name 'max-source-metadata)
-              (eq? name 'max-events)
-              (eq? name 'max-event-nodes))
+         ((or (macro-symbol-eq? name 'max-steps)
+              (macro-symbol-eq? name 'max-non-tail-steps)
+              (macro-symbol-eq? name 'max-value-nodes)
+              (macro-symbol-eq? name 'max-source-metadata)
+              (macro-symbol-eq? name 'max-events)
+              (macro-symbol-eq? name 'max-event-nodes))
           name)
          (else
           (eval-error "unknown macroexpand option" name)))))
@@ -1590,8 +1611,8 @@
       "Return VALUE as a host exact integer for macro option NAME."
       (cond
        ((and (consent-number? value)
-             (eq? (consent-number-kind value) 'integer)
-             (eq? (consent-number-exactness value) 'exact))
+             (macro-symbol-eq? (consent-number-kind value) 'integer)
+             (macro-symbol-eq? (consent-number-exactness value) 'exact))
         (consent-number-value value))
        ((and (integer? value) (exact? value))
         value)
@@ -1665,7 +1686,7 @@
                (expanded (expand-expression current environment context))
                (visible-expanded (macro-visible-expanded expanded)))
           (consent-copy-datum-source! visible-expanded current)
-          (if (not (eq? expanded current))
+          (if (not (macro-symbol-eq? expanded current))
               (let ((name (or macro-name 'syntax))
                     (step-index (+ index 1)))
                 (if (or one-step? (syntax-scope? expanded))
@@ -1684,7 +1705,7 @@
                            (macro-step-record
                             step-index name current visible-expanded)
                            steps)
-                          (if (memq name macros)
+                          (if (macro-memq name macros)
                               macros
                               (cons name macros)))))
               (list (cons 'expanded current)
@@ -1694,12 +1715,12 @@
 
     (define (macro-trace-ref trace field)
       "Return FIELD from a trace alist."
-      (cdr (assq field trace)))
+      (cdr (macro-assq field trace)))
 
     (define (macro-condition-datum condition context)
       "Convert a raised condition into a macro-expansion condition datum."
       (map (lambda (field)
-             (if (and (pair? field) (eq? (car field) 'phase))
+             (if (and (pair? field) (macro-symbol-eq? (car field) 'phase))
                  (macro-field 'phase 'macro-expansion)
                  field))
            (debugger-condition-datum condition context)))
@@ -1736,9 +1757,9 @@
           (ensure-base-syntax! child environment)
           (set! trace
                 (macro-trace-top-level
-                 form environment child (eq? mode 'one-step)))
+                 form environment child (macro-symbol-eq? mode 'one-step)))
           (let ((expanded
-                 (if (eq? mode 'one-step)
+                 (if (macro-symbol-eq? mode 'one-step)
                      (macro-trace-ref trace 'expanded)
                      (macro-expand-target/fully
                       (macro-trace-ref trace 'target)
@@ -1833,8 +1854,8 @@
       "Insert RECORD into sorted macro RECORDS by exported name."
       (cond
        ((null? records) (list record))
-       ((string<? (symbol->string (second record))
-                  (symbol->string (second (car records))))
+       ((string<? (macro-symbol-name (second record))
+                  (macro-symbol-name (second (car records))))
         (cons record records))
        (else
         (cons (car records) (insert-macro-record record (cdr records))))))
@@ -1871,7 +1892,7 @@
                              (records '()))
                     (cond
                      ((null? exports) records)
-                     ((eq? (library-binding-kind (car exports)) 'syntax)
+                     ((macro-symbol-eq? (library-binding-kind (car exports)) 'syntax)
                       (loop
                        (cdr exports)
                        (insert-macro-record

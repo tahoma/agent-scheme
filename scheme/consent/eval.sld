@@ -36,6 +36,7 @@
           consent-base-binding-specs
           consent-standard-source-library-specs
           consent-stdlib-source-library-specs
+          consent-data-source-library-specs
           consent-primitive-manifest-binding-specs
           consent-result->external
           consent-value->external
