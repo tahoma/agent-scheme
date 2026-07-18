@@ -52,6 +52,12 @@
              (pair? (library:consent-standard-source-library-specs))))
 
 (testing-registry-case
+ 'data-library-boundary '(portable core)
+(test-equal 'data-library-boundary
+            #t
+            (pair? (library:consent-data-source-library-specs))))
+
+(testing-registry-case
  'macro-boundary '(portable core)
 (test-equal 'macro-boundary
              #t

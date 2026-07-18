@@ -138,8 +138,8 @@
                               declaration "source export"))))))))
     exports))
 
-(defun consent-standard-source-library-specs ()
-  "Return metadata for standard libraries loaded from portable source files."
+(defun consent--source-library-specs-for-category (category description)
+  "Return portable source metadata for CATEGORY using DESCRIPTION."
   (mapcar
    (lambda (manifest-entry)
      (let* ((key (plist-get manifest-entry :name))
@@ -148,7 +148,7 @@
             (form (consent--manifest-source-library-form
                    key
                    source-file
-                   "standard source library"
+                   description
                    root)))
        (list :name key
              :exports
@@ -157,9 +157,21 @@
              (consent--manifest-source-library-file source-file root))))
    (seq-filter
     (lambda (entry)
-      (and (eq (plist-get entry :category) 'standard)
+      (and (eq (plist-get entry :category) category)
            (eq (plist-get entry :source-kind) 'portable-source)))
     (consent--library-collection-manifest-entries))))
+
+(defun consent-standard-source-library-specs ()
+  "Return metadata for standard libraries loaded from portable source files."
+  (consent--source-library-specs-for-category
+   'standard
+   "standard source library"))
+
+(defun consent-data-source-library-specs ()
+  "Return metadata for data libraries loaded from portable source files."
+  (consent--source-library-specs-for-category
+   'data
+   "data source library"))
 
 (defun consent--library-catalog-source-file (key)
   "Return manifest-provided source path for library KEY, or nil."
@@ -2677,7 +2689,12 @@ When REPLACE is non-nil, replace an existing declaration from the same provider.
   (let* ((max-lisp-eval-depth
           (max max-lisp-eval-depth consent--source-library-lisp-eval-depth))
          (consent--source-library-internal-imports-allowed t)
-         (forms (consent-read-all source '(:source-metadata nil))))
+         (forms
+          (consent-read-all
+           source
+           (consent--eval-context-reader-options
+            context
+            '(:source-metadata nil)))))
     (unless (= (length forms) 1)
       (consent--eval-error
        "source library must contain exactly one form"))
@@ -3400,7 +3417,8 @@ When FOLD-CASE is non-nil, read as if the file began with
           (consent-read-all
            (if fold-case
                (concat "#!fold-case\n" source)
-             source))))
+             source)
+           (consent--eval-context-reader-options context nil))))
     (cons forms (file-name-directory path))))
 
 (defun consent--library-include-body-forms
@@ -3429,7 +3447,9 @@ When FOLD-CASE is non-nil, read as if the file began with
                        (with-temp-buffer
                          (insert-file-contents path)
                          (buffer-string))))
-                  (cons (consent-read-all source)
+                  (cons (consent-read-all
+                         source
+                         (consent--eval-context-reader-options context nil))
                         (file-name-directory path)))))
              (forms (car read-result))
              (directory (cdr read-result)))

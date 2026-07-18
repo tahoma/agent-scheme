@@ -1093,18 +1093,52 @@
         (canonical #t))
        (manifest-entry
         (schema-version 1)
-        (kind primitive-library)
+        (kind library)
         (name (agent context))
         (owner agent)
-        (provider host-adapter)
+        (provider repo-source)
         (visibility public)
         (layer api)
+        (source-kind source-library)
+        (source (path "context.sld"))
+        (api-version (compat 0))
+        (source-version unknown)
+        (realization portable-source)
+        (primitive-overlay-library (agent context primitive))
+        (exports
+         (context-field
+          context-present?
+          make-request-context
+          make-conversation-summary
+          make-focus-context
+          make-context-bundle
+          current-request
+          current-focus
+          current-region-context
+          current-buffer-context
+          current-project-context
+          current-conversation-summary
+          context-yield))
+        (dependencies
+         ((library (scheme base))
+          (library (stdlib list))))
+        (provenance ((origin repo)))
+        (status implemented)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind primitive-library)
+        (name (agent context primitive))
+        (owner agent)
+        (provider host-adapter)
+        (visibility internal-agent-primitive)
+        (layer primitive)
         (source-kind primitive-library)
         (source (implementation-id agent-context))
         (implementation-resolver
          (module consent-context)
          (procedure consent-context-primitive-implementation))
-        (api-version (compat 0))
+        (api-version internal)
         (source-version runtime)
         (realization host-primitive)
         (exports
@@ -1473,53 +1507,28 @@
         (canonical #t))
        (manifest-entry
         (schema-version 1)
-        (kind primitive-library)
+        (kind library)
         (name (agent redaction))
         (owner agent)
-        (provider host-adapter)
+        (provider repo-source)
         (visibility public)
         (layer api)
-        (source-kind primitive-library)
-        (source (implementation-id agent-redaction))
-        (implementation-resolver
-         (module consent-redaction)
-         (procedure consent-redaction-primitive-implementation))
+        (source-kind source-library)
+        (source (path "redaction.sld"))
         (api-version (compat 0))
-        (source-version runtime)
-        (realization host-primitive)
+        (source-version unknown)
+        (realization portable-source)
         (exports
          (secret-source?
           redact
           context-local-only!
           redaction-log
-          safe-for-provider?))
-        (primitive-exports
-         ((name secret-source?)
-          (primitive primitive-secret-source?)
-          (arity 1 1)
-          (effects (redaction))
-          (capabilities ()))
-         ((name redact)
-          (primitive primitive-redact)
-          (arity 2 2)
-          (effects (redaction))
-          (capabilities ()))
-         ((name context-local-only!)
-          (primitive primitive-context-local-only!)
-          (arity 2 2)
-          (effects (redaction))
-          (capabilities ()))
-         ((name redaction-log)
-          (primitive primitive-redaction-log)
-          (arity 0 1)
-          (effects (redaction))
-          (capabilities ()))
-         ((name safe-for-provider?)
-          (primitive primitive-safe-for-provider?)
-          (arity 2 2)
-          (effects (redaction))
-          (capabilities ())))
-        (dependencies ())
+          safe-for-provider?
+          consent-redaction-clear!))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme char))
+          (library (stdlib generator))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))

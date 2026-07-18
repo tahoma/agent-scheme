@@ -62,7 +62,9 @@
   (import (scheme base)
           (scheme char)
           (scheme inexact)
-          (scheme write))
+          (scheme write)
+          (consent symbol)
+          (consent symbol-boundary))
   (begin
     ;; Default maximum nested datum depth accepted by the portable reader.
     (define consent-default-maximum-depth 256)
@@ -82,6 +84,7 @@
       ;; Reader state is mutable only for cursor position, fold-case mode, and
       ;; node count.  SOURCE remains the immutable snapshot of input text.
       (make-reader source characters position length line-starts fold-case
+                   symbol-table
                    node-count datum-labels
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
@@ -94,6 +97,7 @@
       (length reader-length)
       (line-starts reader-line-starts)
       (fold-case reader-fold-case set-reader-fold-case!)
+      (symbol-table reader-symbol-table)
       (node-count reader-node-count set-reader-node-count!)
       (datum-labels reader-datum-labels set-reader-datum-labels!)
       (maximum-depth reader-maximum-depth)
@@ -142,6 +146,11 @@
     ;; weak hash table, so the table remains explicit runtime state. Keep the
     ;; cap option-backed so trusted callers can retry with a higher bound.
     (define consent-default-maximum-source-metadata 10000000)
+
+    ;; Recognize owned and bootstrap symbols while reading mixed datums.
+    (define reader-datum-symbol? consent-host-symbol?)
+    ;; Read names from owned and bootstrap symbols.
+    (define reader-datum-symbol-name consent-host-symbol-name)
 
     ;; Current number of retained source metadata entries in the portable table.
     (define consent-source-metadata-entry-count 0)
@@ -339,6 +348,9 @@
                              (source-line-starts characters)
                              #f)
                          #f
+                         (option-ref options
+                                     'symbol-table
+                                     consent-default-symbol-table)
                          0
                          '()
                          (option-count options 'max-depth
@@ -361,6 +373,13 @@
                          source-metadata
                          (option-ref options 'recovery #f)
                          '()))))
+
+    (define (reader-intern-symbol reader name)
+      "Return NAME as an owned symbol, or a private bootstrap symbol."
+      (let ((table (reader-symbol-table reader)))
+        (if table
+            (consent-intern-symbol table name)
+            (string->symbol name))))
 
     (define (source-field name value)
       "Build one Scheme-readable source metadata field."
@@ -428,7 +447,11 @@
           (string? datum)
           (bytevector? datum)
           (consent-number? datum)
-          (consent-record? datum)
+          ;; Owned symbols are represented by records, but retain symbol
+          ;; semantics here: identifiers are atomic datums and must not consume
+          ;; one retained source-metadata entry per occurrence.
+          (and (consent-record? datum)
+               (not (consent-symbol? datum)))
           (consent-record-type? datum)))
 
     (define (consent-datum-source-set! datum source . maybe-limit)
@@ -1742,7 +1765,8 @@
              (parse-number-token reader token))
         => (lambda (number) number))
        ((identifier-token? token)
-        (string->symbol
+        (reader-intern-symbol
+         reader
          (if (reader-fold-case reader)
              (string-foldcase token)
              token)))
@@ -1893,9 +1917,9 @@
                           "bytevector element is not an exact byte"
                           (consent-datum->external (car rest))))))))
 
-    (define (quote-datum name datum)
+    (define (quote-datum reader name datum)
       "Build the canonical abbreviated quote form for NAME and DATUM."
-      (list (string->symbol name) datum))
+      (list (reader-intern-symbol reader name) datum))
 
     (define (reader-label-cell reader id)
       "Find an existing datum-label cell for ID in the reader state."
@@ -2011,18 +2035,20 @@
                    datum))
                 ((char=? char #\|)
                  (let ((datum
-                        (string->symbol (read-vertical-symbol-name reader))))
+                        (reader-intern-symbol
+                         reader
+                         (read-vertical-symbol-name reader))))
                    (note-node! reader)
                    datum))
                 ((char=? char #\')
                  (advance! reader)
-                 (let ((datum (quote-datum "quote"
+                 (let ((datum (quote-datum reader "quote"
                                            (read-datum reader (+ depth 1)))))
                    (note-node! reader)
                    datum))
                 ((char=? char #\`)
                  (advance! reader)
-                 (let ((datum (quote-datum "quasiquote"
+                 (let ((datum (quote-datum reader "quasiquote"
                                            (read-datum reader (+ depth 1)))))
                    (note-node! reader)
                    datum))
@@ -2033,12 +2059,14 @@
                        (advance! reader)
                        (let ((datum
                               (quote-datum
+                               reader
                                "unquote-splicing"
                                (read-datum reader (+ depth 1)))))
                          (note-node! reader)
                          datum))
                      (let ((datum
                             (quote-datum
+                             reader
                              "unquote"
                              (read-datum reader (+ depth 1)))))
                        (note-node! reader)
@@ -2200,7 +2228,7 @@
       "Render one reader-error irritant as stable text for a diagnostic reason."
       (cond
        ((string? value) value)
-       ((symbol? value) (symbol->string value))
+       ((reader-datum-symbol? value) (reader-datum-symbol-name value))
        ((char? value) (string value))
        ((or (consent-number? value) (number? value))
         (consent-number->external value))
@@ -2465,7 +2493,7 @@
                  depth))
       (cond
        ((or (boolean? datum)
-            (symbol? datum)
+            (reader-datum-symbol? datum)
             (char? datum)
             (consent-number? datum))
         (validation-note-node! validation))
@@ -2572,8 +2600,8 @@
         (validate-datum datum options validation 0 '())
         datum))
 
-    (define (escape-string text)
-      "Escape string and symbol text for stable external rendering."
+    (define (escape-text text vertical-symbol?)
+      "Escape TEXT for a string or, when requested, a vertical symbol."
       (let loop ((index 0) (parts '()))
         (if (= index (string-length text))
             (apply string-append (reverse parts))
@@ -2589,9 +2617,17 @@
                  ((char=? char #\return) "\\r")
                  ((char=? char #\") "\\\"")
                  ((char=? char #\\) "\\\\")
-                 ((char=? char #\|) "\\|")
+                 ((and vertical-symbol? (char=? char #\|)) "\\|")
                  (else (string char)))
                 parts))))))
+
+    (define (escape-string text)
+      "Escape string TEXT for stable external rendering."
+      (escape-text text #f))
+
+    (define (escape-symbol-name name)
+      "Escape vertical symbol NAME for stable external rendering."
+      (escape-text name #t))
 
     (define (symbol-needs-bars? name)
       "Report whether NAME requires vertical bars in external syntax."
@@ -2601,7 +2637,7 @@
     (define (write-symbol-name name)
       "Render a symbol name with escaping when the token grammar requires it."
       (if (symbol-needs-bars? name)
-          (string-append "|" (escape-string name) "|")
+          (string-append "|" (escape-symbol-name name) "|")
           name))
 
     (define (write-character-datum char)
@@ -2750,7 +2786,7 @@
 
         (define (record-name->external name)
           (cond
-           ((symbol? name) (symbol->string name))
+           ((reader-datum-symbol? name) (reader-datum-symbol-name name))
            ((string? name) name)
            (else (error "consent reader error: invalid record name"
                         name))))
@@ -2820,10 +2856,10 @@
           (cond
            ((boolean? value) (if value "#t" "#f"))
            ((null? value) "()")
-           ((symbol? value)
+           ((reader-datum-symbol? value)
             (if display?
-                (symbol->string value)
-                (write-symbol-name (symbol->string value))))
+                (reader-datum-symbol-name value)
+                (write-symbol-name (reader-datum-symbol-name value))))
            ((char? value)
             (if display?
                 (string value)

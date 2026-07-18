@@ -185,6 +185,7 @@ per-run resource limits."
   maximum-bytevector-length
   maximum-string-size
   maximum-total-nodes
+  symbol-table
   source-id
   source-metadata
   ;; RECOVERY toggles errors-as-data: when non-nil, reader errors signal a
@@ -198,7 +199,10 @@ per-run resource limits."
   (pending-stack nil))
 
 (defvar consent--symbol-table (make-hash-table :test #'equal)
-  "Intern table for Scheme symbol datums.")
+  "Default process intern table for Scheme symbol datums.")
+
+(defvar consent--active-symbol-table nil
+  "Dynamically active explicit reader symbol table, or nil for the default.")
 
 (defvar consent--datum-source-table
   (make-hash-table :test #'eq :weakness 'key)
@@ -219,11 +223,20 @@ per-run resource limits."
     ("tab" . 9))
   "R7RS named character mapping.")
 
-(defun consent--intern-symbol (name)
-  "Return the interned Scheme symbol datum for NAME."
-  (or (gethash name consent--symbol-table)
-      (puthash name (consent--make-symbol name)
-               consent--symbol-table)))
+(defun consent--make-symbol-table ()
+  "Return a fresh hash-backed Scheme symbol-table handle."
+  (make-hash-table :test #'equal))
+
+(defun consent--intern-symbol (name &optional table)
+  "Return NAME's Scheme symbol from TABLE or the active/default table."
+  (let ((table (or table consent--active-symbol-table consent--symbol-table)))
+    (unless (hash-table-p table)
+      (signal 'wrong-type-argument (list 'hash-table-p table)))
+    (or (gethash name table)
+        (let ((owned-name (copy-sequence name)))
+          (puthash owned-name
+                   (consent--make-symbol owned-name)
+                   table)))))
 
 (defun consent--option (options key default)
   "Return OPTIONS value for KEY, falling back to DEFAULT."
@@ -288,6 +301,8 @@ per-run resource limits."
      :maximum-total-nodes
      (consent--option options :max-total-nodes
                            consent-reader-maximum-total-nodes)
+     :symbol-table
+     (consent--option options :symbol-table consent--symbol-table)
      :source-id
      (and source-metadata
           (consent--source-id source options))
@@ -1559,16 +1574,18 @@ SOURCE may be a string or buffer.  OPTIONS is a plist supporting
 `:max-total-nodes'.  The whole SOURCE must contain exactly one
 datum, apart from intertoken space and comments."
   (let ((reader (consent--new-reader source options)))
-    (setf (consent--reader-datum-labels reader)
-          (make-hash-table :test #'equal))
-    (let ((datum (consent--resolve-datum-labels
-                  (consent--read-datum reader 0)
-                  reader)))
-      (consent--skip-intertoken-space reader 0)
-      (unless (consent--eof-p reader)
-        (consent--reader-error reader "unexpected trailing input"))
-      (consent-validate-datum datum options)
-      datum)))
+    (let ((consent--active-symbol-table
+           (consent--reader-symbol-table reader)))
+      (setf (consent--reader-datum-labels reader)
+            (make-hash-table :test #'equal))
+      (let ((datum (consent--resolve-datum-labels
+                    (consent--read-datum reader 0)
+                    reader)))
+        (consent--skip-intertoken-space reader 0)
+        (unless (consent--eof-p reader)
+          (consent--reader-error reader "unexpected trailing input"))
+        (consent-validate-datum datum options)
+        datum))))
 
 ;;;###autoload
 (defun consent-read-all (source &optional options)
@@ -1578,19 +1595,21 @@ SOURCE may be a string or buffer.  OPTIONS has the same shape as
 `consent-read'."
   (let ((reader (consent--new-reader source options))
         datums)
-    (consent--skip-intertoken-space reader 0)
-    (while (not (consent--eof-p reader))
-      (setf (consent--reader-datum-labels reader)
-            (make-hash-table :test #'equal))
-      (push (consent--resolve-datum-labels
-             (consent--read-datum reader 0)
-             reader)
-            datums)
-      (consent--skip-intertoken-space reader 0))
-    (setq datums (nreverse datums))
-    (dolist (datum datums)
-      (consent-validate-datum datum options))
-    datums))
+    (let ((consent--active-symbol-table
+           (consent--reader-symbol-table reader)))
+      (consent--skip-intertoken-space reader 0)
+      (while (not (consent--eof-p reader))
+        (setf (consent--reader-datum-labels reader)
+              (make-hash-table :test #'equal))
+        (push (consent--resolve-datum-labels
+               (consent--read-datum reader 0)
+               reader)
+              datums)
+        (consent--skip-intertoken-space reader 0))
+      (setq datums (nreverse datums))
+      (dolist (datum datums)
+        (consent-validate-datum datum options))
+      datums)))
 
 (defun consent--read-one-from-string-at (source position &optional options)
   "Read one datum from SOURCE at POSITION.
@@ -1602,19 +1621,21 @@ Return (DATUM . NEXT-POSITION).  DATUM is
                (<= position (length source)))
     (signal 'wrong-type-argument (list 'string-position (list source position))))
   (let ((reader (consent--new-reader source options)))
-    (setf (consent--reader-position reader) position)
-    (consent--skip-intertoken-space reader 0)
-    (if (consent--eof-p reader)
-        (cons consent--read-eof
-              (consent--reader-position reader))
-      (setf (consent--reader-datum-labels reader)
-            (make-hash-table :test #'equal))
-      (let ((datum
-             (consent--resolve-datum-labels
-              (consent--read-datum reader 0)
-              reader)))
-        (consent-validate-datum datum options)
-        (cons datum (consent--reader-position reader))))))
+    (let ((consent--active-symbol-table
+           (consent--reader-symbol-table reader)))
+      (setf (consent--reader-position reader) position)
+      (consent--skip-intertoken-space reader 0)
+      (if (consent--eof-p reader)
+          (cons consent--read-eof
+                (consent--reader-position reader))
+        (setf (consent--reader-datum-labels reader)
+              (make-hash-table :test #'equal))
+        (let ((datum
+               (consent--resolve-datum-labels
+                (consent--read-datum reader 0)
+                reader)))
+          (consent-validate-datum datum options)
+          (cons datum (consent--reader-position reader)))))))
 
 ;;;; Reader recovery: errors as data, resynchronization, and spans.
 
@@ -1808,24 +1829,26 @@ otherwise `complete'.  The resync point is caller-selectable through the
          (spans nil)
          (status 'complete)
          (done nil))
-    (while (not done)
-      (let* ((step (consent--recover-step reader resync line-starts
-                                          source-id options))
-             (step-status (consent-recovery-step-status step)))
-        (cond
-         ((eq step-status 'eof)
-          (setq done t))
-         ((eq step-status 'datum)
-          (push (consent-recovery-step-datum step) datums))
-         ((eq step-status 'incomplete)
-          (push (consent-recovery-step-diagnostic step) diagnostics)
-          (push (consent-recovery-step-span step) spans)
-          (setq status 'incomplete done t))
-         (t
-          (push (consent-recovery-step-diagnostic step) diagnostics)
-          (push (consent-recovery-step-span step) spans)))))
-    (consent--make-recovery-result
-     (nreverse datums) (nreverse diagnostics) (nreverse spans) status)))
+    (let ((consent--active-symbol-table
+           (consent--reader-symbol-table reader)))
+      (while (not done)
+        (let* ((step (consent--recover-step reader resync line-starts
+                                            source-id options))
+               (step-status (consent-recovery-step-status step)))
+          (cond
+           ((eq step-status 'eof)
+            (setq done t))
+           ((eq step-status 'datum)
+            (push (consent-recovery-step-datum step) datums))
+           ((eq step-status 'incomplete)
+            (push (consent-recovery-step-diagnostic step) diagnostics)
+            (push (consent-recovery-step-span step) spans)
+            (setq status 'incomplete done t))
+           (t
+            (push (consent-recovery-step-diagnostic step) diagnostics)
+            (push (consent-recovery-step-span step) spans)))))
+      (consent--make-recovery-result
+       (nreverse datums) (nreverse diagnostics) (nreverse spans) status))))
 
 ;;;###autoload
 (defun consent-read-recover-from-string-at (source position &optional options)
@@ -1843,8 +1866,10 @@ continuation prompts never confuse a valid prefix with a syntax error."
          (source-id (consent--option options :source-id nil))
          (line-starts (consent--source-line-starts source))
          (reader (consent--recovery-reader source options)))
-    (setf (consent--reader-position reader) position)
-    (consent--recover-step reader resync line-starts source-id options)))
+    (let ((consent--active-symbol-table
+           (consent--reader-symbol-table reader)))
+      (setf (consent--reader-position reader) position)
+      (consent--recover-step reader resync line-starts source-id options))))
 
 (defun consent--validate-note-node (reader)
   "Record one validated datum node in READER."
@@ -1927,8 +1952,8 @@ failures."
     (consent--validate-datum datum reader 0 (make-hash-table :test #'eq))
     datum))
 
-(defun consent--escape-string (string)
-  "Return R7RS escaped spelling for STRING contents."
+(defun consent--escape-string (string &optional vertical-symbol-p)
+  "Return escaped STRING contents, including bars for a vertical symbol."
   (let (result)
     (cl-loop for char across string
              do (push
@@ -1940,7 +1965,7 @@ failures."
                    (?\r "\\r")
                    (?\" "\\\"")
                    (?\\ "\\\\")
-                   (?| "\\|")
+                   (?| (if vertical-symbol-p "\\|" "|"))
                    (_ (string char)))
                  result))
     (mapconcat #'identity (nreverse result) "")))
@@ -1953,7 +1978,7 @@ failures."
 (defun consent--write-symbol-name (name)
   "Return external representation of Scheme symbol NAME."
   (if (consent--symbol-needs-bars-p name)
-      (concat "|" (consent--escape-string name) "|")
+      (concat "|" (consent--escape-string name t) "|")
     name))
 
 (defun consent--write-character (code)

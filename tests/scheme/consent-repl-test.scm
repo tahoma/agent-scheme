@@ -21,6 +21,15 @@
         (testing runner)
         (stdlib testing))
 
+;; Contract records leave the evaluator through its native result boundary, so
+;; this host-side consumer sees ordinary Scheme symbols throughout.
+
+(define (test-symbol-equal name expected actual)
+  "Assert that EXPECTED and ACTUAL are the same host symbol."
+  (test-assert name
+               (and (symbol? actual)
+                    (eq? expected actual))))
+
 ;; Normalize a numeric literal across direct hosts and self-hosted runners.
 (define (portable-host-number datum)
   (consent-number-value datum))
@@ -151,9 +160,9 @@
     (test-equal 'unbound-identifier-display-names-symbol
              "consent eval error: unbound identifier: missing-helper"
              (field condition-record 'display))
-    (test-equal 'unbound-identifier-condition-symbol
-             'missing-helper
-             (field condition 'symbol)))))
+    (test-symbol-equal 'unbound-identifier-condition-symbol
+                       'missing-helper
+                       (field condition 'symbol)))))
 
 ;;;; A recoverable reader condition keeps the session open
 
@@ -514,15 +523,15 @@
   (test-equal 'model-transport-detail-head
              'model-provider-error
              (and (pair? detail) (car detail)))
-  (test-equal 'model-transport-detail-provider
-             'local-fail
-             (field detail 'provider))
-  (test-equal 'model-transport-detail-model
-             'qwen-coder
-             (field detail 'model))
-  (test-equal 'model-transport-detail-transport
-             'openai-compatible-http
-             (field detail 'transport))
+  (test-symbol-equal 'model-transport-detail-provider
+                     'local-fail
+                     (field detail 'provider))
+  (test-symbol-equal 'model-transport-detail-model
+                     'qwen-coder
+                     (field detail 'model))
+  (test-symbol-equal 'model-transport-detail-transport
+                     'openai-compatible-http
+                     (field detail 'transport))
   (test-equal 'model-transport-process-head
              'process-failure
              (and (pair? process) (car process)))

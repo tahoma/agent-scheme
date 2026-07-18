@@ -378,7 +378,7 @@ base syntax prelude has already been installed."
   (value-nodes 0)
   ;; Cumulative evaluated `string->symbol' interning operations and the run's
   ;; ceiling.  Each call charges one unit, bounding how many symbols a run can
-  ;; add to the global intern table.
+  ;; add to this context's explicit intern table.
   (interned-symbols 0)
   maximum-interned-symbols
   host-callbacks
@@ -431,7 +431,10 @@ base syntax prelude has already been installed."
   exhaustion-reason
   ;; Script invocation metadata supplied by a batch runner for `(command-line)'.
   command-line
-  boundary-contract-checking)
+  boundary-contract-checking
+  ;; Appended to preserve the positional layout used by existing compiled
+  ;; bootstrap helpers while adding explicit symbol ownership to new contexts.
+  symbol-table)
 
 (defconst consent--missing-cell (make-symbol "consent-missing-cell")
   "Sentinel used when looking up environment cells.")
@@ -555,6 +558,8 @@ unchanged and uncatchable."
      :maximum-interned-symbols
      (consent--eval-option options :max-interned-symbols
                                 consent-eval-maximum-interned-symbols)
+     :symbol-table
+     (consent--eval-option options :symbol-table consent--symbol-table)
      :host-callbacks 0
      :maximum-host-callbacks
      (consent--eval-option options :max-host-callbacks
@@ -633,6 +638,12 @@ unchanged and uncatchable."
      :exhaustion-reason nil
      :command-line
      (copy-sequence (consent--eval-option options :command-line nil)))))
+
+(defun consent--eval-context-reader-options (context options)
+  "Return reader OPTIONS carrying CONTEXT's explicit symbol table."
+  (plist-put (copy-sequence options)
+             :symbol-table
+             (consent--eval-context-symbol-table context)))
 
 (defun consent--apply-current-context-options! (context options)
   "Apply current-context OPTIONS to CONTEXT and return CONTEXT."
@@ -1497,7 +1508,7 @@ The budget is charged before the symbol is recorded so a run that would exceed
 its symbol ceiling fails closed before the new datum lands, like the output and
 value-node budgets."
   (consent--note-interned-symbol context)
-  (consent--intern-symbol name))
+  (consent--intern-symbol name (consent--eval-context-symbol-table context)))
 
 (defun consent--note-host-callback (context _primitive)
   "Record one host callback in CONTEXT.

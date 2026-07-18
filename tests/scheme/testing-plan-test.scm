@@ -122,7 +122,7 @@
                 compiled-library
                 compiled-random
                 compiled-property))))
-    (test-equal "compiled project shard program count" 41
+    (test-equal "compiled project shard program count" 44
                 (length compiled-files))
     (test-assert "compiled project shard includes registered semantics"
                  (member "tests/scheme/consent-context-test.scm"
@@ -133,19 +133,19 @@
     (test-assert "compiled project shard includes runtime manifest smoke"
                  (member "tests/scheme/consent-manifest-smoke-test.scm"
                          compiled-files))
-    (test-equal "programs admitted to compiled self-host" 41
+    (test-equal "programs admitted to compiled self-host" 44
                 (program-count-with-tag programs 'compiled))
-    (test-equal "ordinary full-suite programs" 56
+    (test-equal "ordinary full-suite programs" 60
                 (program-count-with-tag programs 'full))
-    (test-equal "full programs carrying an explicit self-host gap" 16
+    (test-equal "full programs carrying an explicit self-host gap" 17
                 (program-count-with-tag programs 'self-host-gap))
     (test-assert "full programs exactly partition compiled coverage and gaps"
                  (every full-program-self-host-classified? programs))
     (test-equal "balanced direct shard program counts"
-                '(8 1 5 19 16 5 2)
+                '(9 1 5 19 19 5 2)
                 (map length direct-shards))
     (test-equal "balanced compiled shard program counts"
-                '(6 1 14 13 5 2)
+                '(7 1 14 15 5 2)
                 (map length compiled-shards))
     (test-assert "balanced direct shards exactly partition full programs"
                  (programs-exactly-partitioned?

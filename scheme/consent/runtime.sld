@@ -23,6 +23,7 @@
           consent-embedded-source-ref
           consent-register-native-library!
           consent-native-library-ref
+          consent-native-library-documentation-ref
           consent-install-native-applier!
           consent-native-applier-ref
           consent-host-datum->consent-datum
@@ -82,6 +83,8 @@
           primitive-procedure-function
           primitive-procedure-minimum-arity
           primitive-procedure-maximum-arity
+          primitive-procedure-documentation
+          set-primitive-procedure-documentation!
           make-consent-parameter
           consent-parameter?
           parameter-value
@@ -164,6 +167,8 @@
           set-context-interned-symbols!
           context-maximum-interned-symbols
           set-context-maximum-interned-symbols!
+          context-symbol-table
+          set-context-symbol-table!
           context-host-callbacks
           set-context-host-callbacks!
           context-maximum-host-callbacks
@@ -352,8 +357,30 @@
                 get-environment-variable)
           (consent version)
           (consent reader)
+          (consent symbol)
+          (consent symbol-boundary)
           (agent redaction))
   (begin
+    ;; Preserve host operations for implementation identity checks.
+    (define host-memq memq)
+    ;; Look up private host metadata without mixed-symbol semantics.
+    (define host-assq assq)
+    ;; Look up private host datums without mixed-symbol semantics.
+    (define host-assoc assoc)
+
+    ;; Runtime metadata crosses between host literals and owned datums.
+    (define runtime-symbol? consent-host-symbol?)
+    ;; Read runtime symbol names across the owned/bootstrap boundary.
+    (define runtime-symbol-name consent-host-symbol-name)
+    ;; Compare runtime names across the owned/bootstrap boundary.
+    (define runtime-symbol-eq? consent-host-symbol-eq?)
+    ;; Search runtime name lists across the owned/bootstrap boundary.
+    (define runtime-memq consent-host-symbol-memq)
+    ;; Look up runtime fields across the owned/bootstrap boundary.
+    (define runtime-assq consent-host-symbol-assq)
+    ;; Look up runtime datums across the owned/bootstrap boundary.
+    (define runtime-assoc consent-host-symbol-assoc)
+
     ;; Default evaluator step budget for one expansion or evaluation run.
     (define consent-default-maximum-steps 100000)
     ;; Default cumulative value-node allocation budget for one evaluation run.
@@ -528,7 +555,7 @@
           ("The registered source text string, or #f when no entry"
             "exists.")))
         (effects state-read))
-      (let ((entry (assoc relative-path consent-embedded-source-entries)))
+      (let ((entry (runtime-assoc relative-path consent-embedded-source-entries)))
         (and entry (cdr entry))))
 
     ;; Native-library registry: a compiled host's generated main registers, once
@@ -539,9 +566,11 @@
     ;; runner at native speed. Empty for interpreted/source runs, which keep the
     ;; source-loading path.
     (define consent-native-library-entries '())
-
-    (define (consent-register-native-library! key bindings)
-      "Register native BINDINGS, an alist of (name . value), for internal library KEY."
+    ;; Source documentation specs emitted beside compiled library bindings.
+    (define consent-native-library-documentation-entries '())
+    (define (consent-register-native-library!
+             key bindings . maybe-documentation)
+      "Register compiled BINDINGS and optional source documentation for KEY."
       #((parameters
          (key (type (list-of (or symbol exact-integer)))
           (description
@@ -550,11 +579,20 @@
          (bindings (type list)
           (description
            ("Alist of (name . value) entries exported by the native"
-             "library."))))
+             "library.")))
+         (maybe-documentation (type list)
+          (description
+           ("Optional singleton list containing an alist from export"
+             "names to `(formals documentation-literals)' specs."))))
         (returns . "The unspecified value.")
         (effects state-write))
       (set! consent-native-library-entries
             (cons (cons key bindings) consent-native-library-entries))
+      (if (pair? maybe-documentation)
+          (set! consent-native-library-documentation-entries
+                (cons
+                 (cons key (car maybe-documentation))
+                 consent-native-library-documentation-entries)))
       consent-unspecified)
 
     (define (consent-native-library-ref key)
@@ -567,8 +605,24 @@
           ("The registered (name . value) bindings alist, or #f when"
             "absent.")))
         (effects state-read))
-      (let ((entry (assoc key consent-native-library-entries)))
+      (let ((entry (runtime-assoc key consent-native-library-entries)))
         (and entry (cdr entry))))
+
+    (define (consent-native-library-documentation-ref key name)
+      "Return compiled source documentation specification for NAME in KEY."
+      (let* ((library-entry
+              (runtime-assoc
+               key
+               consent-native-library-documentation-entries))
+             (spec-entry
+              (and library-entry
+                   (runtime-assq name (cdr library-entry))))
+             (spec (and spec-entry (cdr spec-entry))))
+        (and
+         spec
+         (pair? spec)
+         (pair? (cdr spec))
+         spec)))
 
     ;; Native applier hook: installed by the interpreter at load time so the
     ;; library layer can apply interpreted closures that a program passes as
@@ -717,12 +771,37 @@
     ;; Primitive procedures are the kernel boundary: each call is budgeted as a
     ;; host callback even when the primitive implements pure R7RS behavior.
     (define-record-type <primitive-procedure>
-      (make-primitive-procedure name function minimum-arity maximum-arity)
+      (make-primitive-procedure-record
+       name
+       function
+       minimum-arity
+       maximum-arity
+       documentation)
       consent-primitive-procedure?
       (name primitive-procedure-name)
       (function primitive-procedure-function)
       (minimum-arity primitive-procedure-minimum-arity)
-      (maximum-arity primitive-procedure-maximum-arity))
+      (maximum-arity primitive-procedure-maximum-arity)
+      (documentation
+       primitive-procedure-documentation
+       set-primitive-procedure-documentation!))
+
+    (define (make-primitive-procedure
+             name
+             function
+             minimum-arity
+             maximum-arity
+             .
+             maybe-documentation)
+      "Create a runtime primitive procedure with optional DOCUMENTATION."
+      (make-primitive-procedure-record
+       name
+       function
+       minimum-arity
+       maximum-arity
+       (if (null? maybe-documentation)
+           #f
+           (car maybe-documentation))))
 
     ;; Record type for parameter procedure state and optional conversion
     ;; function.
@@ -863,7 +942,7 @@
                          internal-libraries-allowed
                          output-bytes maximum-output-bytes
                          maximum-wall-time-ms wall-clock wall-start
-                         exhaustion-reason
+                         exhaustion-reason symbol-table
                          interned-symbols maximum-interned-symbols)
       eval-context?
       (steps context-steps set-context-steps!)
@@ -879,6 +958,7 @@
       (interned-symbols context-interned-symbols set-context-interned-symbols!)
       (maximum-interned-symbols context-maximum-interned-symbols
                                 set-context-maximum-interned-symbols!)
+      (symbol-table context-symbol-table set-context-symbol-table!)
       (host-callbacks context-host-callbacks set-context-host-callbacks!)
       (maximum-host-callbacks context-maximum-host-callbacks
                               set-context-maximum-host-callbacks!)
@@ -1008,7 +1088,7 @@
          . ("The value associated with KEY, or DEFAULT when KEY is"
             "absent."))
         (effects pure))
-      (let ((cell (assq key options)))
+      (let ((cell (runtime-assq key options)))
         (if cell (cdr cell) default)))
 
     (define (eval-error message . irritants)
@@ -1049,9 +1129,9 @@
     (define (normalize-docstring-retention value)
       "Return the normalized docstring retention mode for VALUE."
       (cond
-       ((eq? value #t) 'full)
-       ((eq? value #f) 'none)
-       ((memq value '(full simple none)) value)
+       ((runtime-symbol-eq? value #t) 'full)
+       ((runtime-symbol-eq? value #f) 'none)
+       ((runtime-memq value '(full simple none)) value)
        (else
         (eval-error
          "docstring-retention must be full, simple, none, or #f"
@@ -1060,9 +1140,9 @@
     (define (normalize-boundary-contract-checking value)
       "Return the normalized boundary contract checking mode for VALUE."
       (cond
-       ((eq? value #t) 'shallow)
-       ((or (eq? value #f) (eq? value 'none)) #f)
-       ((eq? value 'shallow) 'shallow)
+       ((runtime-symbol-eq? value #t) 'shallow)
+       ((or (runtime-symbol-eq? value #f) (runtime-symbol-eq? value 'none)) #f)
+       ((runtime-symbol-eq? value 'shallow) 'shallow)
        (else
         (eval-error
          "boundary-contract-checking must be shallow, none, #t, or #f"
@@ -1178,7 +1258,7 @@
 
     (define (capability-field datum field)
       "Return FIELD from DATUM, or #f when it is absent."
-      (let ((entry (and (pair? datum) (assq field (cdr datum)))))
+      (let ((entry (and (pair? datum) (runtime-assq field (cdr datum)))))
         (if entry entry #f)))
 
     (define (capability-field-value datum field)
@@ -1206,7 +1286,7 @@
         (let loop ((rest scope))
           (cond
            ((null? rest) #f)
-           ((and (pair? (car rest)) (eq? (caar rest) name)) (car rest))
+           ((and (pair? (car rest)) (runtime-symbol-eq? (caar rest) name)) (car rest))
            (else (loop (cdr rest)))))))
 
     (define (capability-scope-value grant name)
@@ -1222,19 +1302,19 @@
     (define (file-capability-grant? grant)
       "Report whether GRANT is an active file-domain grant."
       (and (pair? grant)
-           (eq? (car grant) 'capability-grant)
-           (eq? (capability-field-value grant 'domain) 'file)))
+           (runtime-symbol-eq? (car grant) 'capability-grant)
+           (runtime-symbol-eq? (capability-field-value grant 'domain) 'file)))
 
     (define (capability-grant-active? grant)
       "Report whether GRANT currently has active status."
       (let ((status (capability-field-value grant 'status)))
-        (or (not status) (eq? status 'active))))
+        (or (not status) (runtime-symbol-eq? status 'active))))
 
     (define (file-capability-operation? grant operation)
       "Report whether GRANT authorizes OPERATION."
       (let loop ((operations (capability-field-values grant 'operations)))
         (and (pair? operations)
-             (or (eq? (car operations) operation)
+             (or (runtime-symbol-eq? (car operations) operation)
                  (loop (cdr operations))))))
 
     (define (file-capability-grants context)
@@ -1299,7 +1379,7 @@
 
     (define (file-capability-effect operation)
       "Return the effect class for a file capability operation."
-      (if (memq operation '(write create delete))
+      (if (runtime-memq operation '(write create delete))
           'host-file-mutation
           'read-only-observation))
 
@@ -1356,9 +1436,9 @@
       (list 'capability-request
             (list 'library
                   (cond
-                   ((memq operation '(include include-ci library-source))
+                   ((runtime-memq operation '(include include-ci library-source))
                     '(scheme base))
-                   ((eq? operation 'load) '(scheme load))
+                   ((runtime-symbol-eq? operation 'load) '(scheme load))
                    (else '(scheme file))))
             (list 'binding binding)
             (list 'domain 'file)
@@ -1477,7 +1557,7 @@
                (string-append binding
                               " requires policy-gated host file access"))))
         (let ((match (file-capability-match grants path operation context)))
-          (if (or (not match) (eq? (car match) 'denied))
+          (if (or (not match) (runtime-symbol-eq? (car match) 'denied))
               (deny-file-capability!
                context
                request
@@ -1539,7 +1619,7 @@
         (returns (type string)
          (description ("The normalized host path string recorded in AUTHORIZATION.")))
         (effects pure))
-      (cadr (assq 'path authorization)))
+      (cadr (runtime-assq 'path authorization)))
 
     (define (audit-file-capability-result!
              context authorization result error?)
@@ -1557,10 +1637,10 @@
       (record-audit-event!
        context
        'capability-audit
-       (list (list 'request (cadr (assq 'request authorization)))
-             (list 'decision (cadr (assq 'decision authorization)))
+       (list (list 'request (cadr (runtime-assq 'request authorization)))
+             (list 'decision (cadr (runtime-assq 'decision authorization)))
              (list 'domain 'file)
-             (list 'operation (cadr (assq 'operation authorization)))
+             (list 'operation (cadr (runtime-assq 'operation authorization)))
              (list 'result
                    (if error?
                        (list 'error result)
@@ -1577,7 +1657,7 @@
               (list 'resource
                     (list 'path path)
                     (list 'file-request
-                          (cadr (assq 'request authorization))))
+                          (cadr (runtime-assq 'request authorization))))
               (list 'effect 'environment-mutation))))
 
     (define (authorize-code-loading authorization context binding)
@@ -1655,8 +1735,8 @@
       (record-audit-event!
        context
        'capability-audit
-       (list (list 'request (cadr (assq 'request authorization)))
-             (list 'decision (cadr (assq 'decision authorization)))
+       (list (list 'request (cadr (runtime-assq 'request authorization)))
+             (list 'decision (cadr (runtime-assq 'decision authorization)))
              (list 'domain 'code-loading)
              (list 'operation 'load)
              (list 'result
@@ -1667,15 +1747,15 @@
     (define (clock-capability-grant? grant)
       "Report whether GRANT is a clock-domain capability grant."
       (and (pair? grant)
-           (eq? (car grant) 'capability-grant)
-           (eq? (capability-field-value grant 'domain) 'clock)))
+           (runtime-symbol-eq? (car grant) 'capability-grant)
+           (runtime-symbol-eq? (capability-field-value grant 'domain) 'clock)))
 
     (define (clock-capability-operation? grant operation)
       "Report whether GRANT authorizes clock OPERATION."
       (let loop ((operations (capability-field-values grant 'operations)))
         (and (pair? operations)
-             (or (eq? (car operations) operation)
-                 (eq? (car operations) 'read)
+             (or (runtime-symbol-eq? (car operations) operation)
+                 (runtime-symbol-eq? (car operations) 'read)
                  (loop (cdr operations))))))
 
     (define (clock-capability-grants context)
@@ -1695,7 +1775,7 @@
          ((null? rest) denied)
          ((not (clock-capability-operation? (car rest) operation))
           (loop (cdr rest) denied))
-         ((eq? (capability-field-value (car rest) 'status) 'revoked)
+         ((runtime-symbol-eq? (capability-field-value (car rest) 'status) 'revoked)
           (loop (cdr rest)
                 (list 'denied
                       (car rest)
@@ -1755,7 +1835,7 @@
 
     (define (clock-policy-action context)
       "Return CONTEXT's standard host-effect policy action for clock reads."
-      (let ((entry (assq 'standard-host-effect
+      (let ((entry (runtime-assq 'standard-host-effect
                          (context-policy-actions context))))
         (if entry (cdr entry) 'allow)))
 
@@ -1763,7 +1843,7 @@
              context request binding operation grant)
       "Require policy approval after a clock grant covers the operation."
       (let ((grant-id (capability-field-value grant 'id)))
-        (if (eq? (clock-policy-action context) 'allow)
+        (if (runtime-symbol-eq? (clock-policy-action context) 'allow)
             (record-audit-event!
              context
              'policy-decision
@@ -1791,8 +1871,8 @@
     (define (process-environment-capability-grant? grant)
       "Report whether GRANT is an active process-environment-domain grant."
       (and (pair? grant)
-           (eq? (car grant) 'capability-grant)
-           (eq? (capability-field-value grant 'domain) 'process-environment)
+           (runtime-symbol-eq? (car grant) 'capability-grant)
+           (runtime-symbol-eq? (capability-field-value grant 'domain) 'process-environment)
            (capability-grant-active? grant)))
 
     (define (process-environment-granted? context)
@@ -1889,7 +1969,7 @@
                #f
                "no active clock grant covers request")))
         (let ((match (clock-capability-match grants operation)))
-          (if (or (not match) (eq? (car match) 'denied))
+          (if (or (not match) (runtime-symbol-eq? (car match) 'denied))
               (deny-clock-capability!
                context
                request
@@ -1945,10 +2025,10 @@
       (record-audit-event!
        context
        'capability-audit
-       (list (list 'request (cadr (assq 'request authorization)))
-             (list 'decision (cadr (assq 'decision authorization)))
+       (list (list 'request (cadr (runtime-assq 'request authorization)))
+             (list 'decision (cadr (runtime-assq 'decision authorization)))
              (list 'domain 'clock)
-             (list 'operation (cadr (assq 'operation authorization)))
+             (list 'operation (cadr (runtime-assq 'operation authorization)))
              (list 'result
                    (if error?
                        (list 'error result)
@@ -1957,7 +2037,7 @@
     (define (process-name-string value)
       "Return VALUE as a string name when it names a host process resource."
       (cond
-       ((symbol? value) (symbol->string value))
+       ((runtime-symbol? value) (runtime-symbol-name value))
        ((string? value) value)
        (else #f)))
 
@@ -1971,13 +2051,13 @@
     (define (process-resource-fields resource)
       "Return RESOURCE's field alist, accepting either a plain field list or a"
       "`(resource ...)` datum."
-      (if (and (pair? resource) (eq? (car resource) 'resource))
+      (if (and (pair? resource) (runtime-symbol-eq? (car resource) 'resource))
           (cdr resource)
           resource))
 
     (define (process-resource-field-values resource field)
       "Return all values for RESOURCE FIELD."
-      (let ((entry (assq field (process-resource-fields resource))))
+      (let ((entry (runtime-assq field (process-resource-fields resource))))
         (if entry (cdr entry) '())))
 
     (define (process-resource-value resource field)
@@ -2002,7 +2082,7 @@
           ("The symbol process-control for mutating operations, else"
             "read-only-observation.")))
         (effects pure))
-      (if (memq operation '(spawn input interrupt terminate))
+      (if (runtime-memq operation '(spawn input interrupt terminate))
           'process-control
           'read-only-observation))
 
@@ -2018,21 +2098,21 @@
           ("The symbol command-process for process-control effects,"
             "else emacs-read-only.")))
         (effects pure))
-      (if (eq? (process-capability-effect operation) 'process-control)
+      (if (runtime-symbol-eq? (process-capability-effect operation) 'process-control)
           'command-process
           'emacs-read-only))
 
     (define (process-capability-grant? grant)
       "Report whether GRANT is a process-domain grant."
       (and (pair? grant)
-           (eq? (car grant) 'capability-grant)
-           (eq? (capability-field-value grant 'domain) 'process)))
+           (runtime-symbol-eq? (car grant) 'capability-grant)
+           (runtime-symbol-eq? (capability-field-value grant 'domain) 'process)))
 
     (define (process-capability-operation? grant operation)
       "Report whether GRANT authorizes process OPERATION."
       (let loop ((operations (capability-field-values grant 'operations)))
         (and (pair? operations)
-             (or (eq? (car operations) operation)
+             (or (runtime-symbol-eq? (car operations) operation)
                  (loop (cdr operations))))))
 
     (define (process-capability-grants context)
@@ -2129,7 +2209,7 @@
          ((null? rest) denied)
          ((not (process-capability-operation? (car rest) operation))
           (loop (cdr rest) denied))
-         ((eq? (capability-field-value (car rest) 'status) 'revoked)
+         ((runtime-symbol-eq? (capability-field-value (car rest) 'status) 'revoked)
           (loop (cdr rest)
                 (list 'denied
                       (car rest)
@@ -2216,10 +2296,10 @@
 
     (define (process-policy-action context category)
       "Return CONTEXT's configured policy action for CATEGORY."
-      (let ((entry (assq category (context-policy-actions context))))
+      (let ((entry (runtime-assq category (context-policy-actions context))))
         (cond
          (entry (cdr entry))
-         ((eq? category 'emacs-read-only) 'allow)
+         ((runtime-symbol-eq? category 'emacs-read-only) 'allow)
          (else 'deny))))
 
     (define (authorize-process-policy!
@@ -2228,7 +2308,7 @@
       (let* ((category (process-capability-policy-category operation))
              (action (process-policy-action context category))
              (grant-id (capability-field-value grant 'id)))
-        (if (eq? action 'allow)
+        (if (runtime-symbol-eq? action 'allow)
             (record-audit-event!
              context
              'policy-decision
@@ -2313,7 +2393,7 @@
                (list 'cwd
                      (redact (process-resource-value resource 'cwd)
                              'local-only))))
-        (if (and (eq? operation 'spawn)
+        (if (and (runtime-symbol-eq? operation 'spawn)
                  command
                  (not (process-command-allowed?
                        command
@@ -2333,7 +2413,7 @@
              "no active process grant covers request"))
         (let ((match
                (process-capability-match grants operation resource)))
-          (if (or (not match) (eq? (car match) 'denied))
+          (if (or (not match) (runtime-symbol-eq? (car match) 'denied))
               (deny-process-capability!
                context
                request
@@ -2456,10 +2536,10 @@
       (record-audit-event!
        context
        'capability-audit
-       (list (list 'request (cadr (assq 'request authorization)))
-             (list 'decision (cadr (assq 'decision authorization)))
+       (list (list 'request (cadr (runtime-assq 'request authorization)))
+             (list 'decision (cadr (runtime-assq 'decision authorization)))
              (list 'domain 'process)
-             (list 'operation (cadr (assq 'operation authorization)))
+             (list 'operation (cadr (runtime-assq 'operation authorization)))
              (list 'result
                    (if error?
                        (list 'error (redact result 'local-only))
@@ -2468,13 +2548,13 @@
     (define (network-resource-fields resource)
       "Return RESOURCE's field alist, accepting either a plain field list or a"
       "`(resource ...)` datum."
-      (if (and (pair? resource) (eq? (car resource) 'resource))
+      (if (and (pair? resource) (runtime-symbol-eq? (car resource) 'resource))
           (cdr resource)
           resource))
 
     (define (network-resource-field-values resource field)
       "Return all values for RESOURCE FIELD."
-      (let ((entry (assq field (network-resource-fields resource))))
+      (let ((entry (runtime-assq field (network-resource-fields resource))))
         (if entry (cdr entry) '())))
 
     (define (network-resource-value resource field)
@@ -2540,19 +2620,19 @@
                  ((procedure? value)
                   (wrap-procedure value))
                  ((pair? value)
-                  (if (memq value seen)
+                  (if (runtime-memq value seen)
                       value
                       (let* ((next-seen (cons value seen))
                              (head (convert (car value) next-seen))
                              (tail (convert (cdr value) next-seen)))
-                        (if (and (eq? head (car value))
-                                 (eq? tail (cdr value)))
+                        (if (and (runtime-symbol-eq? head (car value))
+                                 (runtime-symbol-eq? tail (cdr value)))
                             value
                             (let ((result (cons head tail)))
                               (consent-copy-datum-source! result value)
                               result)))))
                  ((vector? value)
-                  (if (memq value seen)
+                  (if (runtime-memq value seen)
                       value
                       (let* ((next-seen (cons value seen))
                              (length (vector-length value))
@@ -2565,7 +2645,7 @@
                                       (loop (+ index 1)
                                             (cons next acc)
                                             (or changed
-                                                (not (eq? next element)))))))))
+                                                (not (runtime-symbol-eq? next element)))))))))
                         (if converted
                             (let ((result (list->vector converted)))
                               (consent-copy-datum-source! result value)
@@ -2616,15 +2696,15 @@
           ("The symbol network-stream for stream operations, else"
             "network-egress.")))
         (effects pure))
-      (if (eq? operation 'stream)
+      (if (runtime-symbol-eq? operation 'stream)
           'network-stream
           'network-egress))
 
     (define (network-capability-grant? grant)
       "Report whether GRANT is a network-domain grant."
       (and (pair? grant)
-           (eq? (car grant) 'capability-grant)
-           (eq? (capability-field-value grant 'domain) 'network)))
+           (runtime-symbol-eq? (car grant) 'capability-grant)
+           (runtime-symbol-eq? (capability-field-value grant 'domain) 'network)))
 
     (define (network-capability-operation? grant operation)
       "Report whether GRANT authorizes network OPERATION."
@@ -2632,8 +2712,8 @@
                   (capability-flatten-values
                    (capability-field-values grant 'operations))))
         (and (pair? operations)
-             (or (eq? (car operations) operation)
-                 (eq? (car operations) 'all)
+             (or (runtime-symbol-eq? (car operations) operation)
+                 (runtime-symbol-eq? (car operations) 'all)
                  (loop (cdr operations))))))
 
     (define (network-capability-grants context)
@@ -2730,7 +2810,7 @@
          ((null? rest) denied)
          ((not (network-capability-operation? (car rest) operation))
           (loop (cdr rest) denied))
-         ((eq? (capability-field-value (car rest) 'status) 'revoked)
+         ((runtime-symbol-eq? (capability-field-value (car rest) 'status) 'revoked)
           (loop (cdr rest)
                 (list 'denied
                       (car rest)
@@ -2811,7 +2891,7 @@
 
     (define (network-policy-action context)
       "Return CONTEXT's configured network policy action."
-      (let ((entry (assq 'network-access (context-policy-actions context))))
+      (let ((entry (runtime-assq 'network-access (context-policy-actions context))))
         (if entry (cdr entry) 'deny)))
 
     (define (authorize-network-policy!
@@ -2819,7 +2899,7 @@
       "Require host policy approval for a network capability request."
       (let ((action (network-policy-action context))
             (grant-id (capability-field-value grant 'id)))
-        (if (eq? action 'allow)
+        (if (runtime-symbol-eq? action 'allow)
             (record-audit-event!
              context
              'policy-decision
@@ -2925,7 +3005,7 @@
              "no active network grant covers request"))
         (let ((match
                (network-capability-match grants operation resource)))
-          (if (or (not match) (eq? (car match) 'denied))
+          (if (or (not match) (runtime-symbol-eq? (car match) 'denied))
               (deny-network-capability!
                context
                request
@@ -3044,10 +3124,10 @@
       (record-audit-event!
        context
        'capability-audit
-       (list (list 'request (cadr (assq 'request authorization)))
-             (list 'decision (cadr (assq 'decision authorization)))
+       (list (list 'request (cadr (runtime-assq 'request authorization)))
+             (list 'decision (cadr (runtime-assq 'decision authorization)))
              (list 'domain 'network)
-             (list 'operation (cadr (assq 'operation authorization)))
+             (list 'operation (cadr (runtime-assq 'operation authorization)))
              (list 'result
                    (if error?
                        (list 'error
@@ -3095,7 +3175,7 @@
               (option-ref options 'include-directory "."))))
       (make-eval-context
        0
-       (if (assq 'max-steps options)
+       (if (runtime-assq 'max-steps options)
            (option-count options 'max-steps consent-default-maximum-steps)
            (option-count options
                          'max-non-tail-steps
@@ -3165,6 +3245,7 @@
        (option-ref options 'wall-clock #f)
        #f
        #f
+       (option-ref options 'symbol-table consent-default-symbol-table)
        0
        (option-count options
                      'max-interned-symbols
@@ -3182,7 +3263,8 @@
           ("Association list of reader options derived from CONTEXT.")))
         (effects state-read))
       (list (cons 'max-source-metadata
-                  (context-maximum-source-metadata context))))
+                  (context-maximum-source-metadata context))
+            (cons 'symbol-table (context-symbol-table context))))
 
     (define (record-audit-event! context event fields)
       "Record a Scheme-readable audit EVENT with FIELDS in CONTEXT."
@@ -3480,7 +3562,7 @@
         (cond
          ((or (boolean? value)
               (null? value)
-              (symbol? value)
+              (runtime-symbol? value)
               (identifier? value)
               (char? value)
               ;; Raw host numbers reach here legitimately: public accessors such
@@ -3501,7 +3583,7 @@
               (consent-record-type? value))
           1)
          ((consent-record? value)
-          (if (memq value seen)
+          (if (runtime-memq value seen)
               0
               (let ((fields (consent-record-fields value)))
                 (let loop ((index 0) (count 1))
@@ -3526,13 +3608,13 @@
          ((bytevector? value)
           (+ 1 (bytevector-length value)))
          ((pair? value)
-          (if (memq value seen)
+          (if (runtime-memq value seen)
               0
               (+ 1
                  (value-node-count (car value) (cons value seen) tolerant)
                  (value-node-count (cdr value) (cons value seen) tolerant))))
          ((vector? value)
-          (if (memq value seen)
+          (if (runtime-memq value seen)
               0
               (let loop ((index 0) (count 1))
                 (if (= index (vector-length value))
@@ -3605,13 +3687,13 @@
           ("The first matching numeric field value as a host number,"
             "or #f when none match.")))
         (effects pure))
-      (let ((fields (if (and (pair? spec) (eq? (car spec) 'budget))
+      (let ((fields (if (and (pair? spec) (runtime-symbol-eq? (car spec) 'budget))
                         (cdr spec)
                         spec)))
         (let loop ((remaining keys))
           (if (null? remaining)
               #f
-              (let ((entry (and (list? fields) (assq (car remaining) fields))))
+              (let ((entry (and (list? fields) (runtime-assq (car remaining) fields))))
                 (if (and (pair? entry) (pair? (cdr entry)))
                     (let ((value (cadr entry)))
                       (cond
@@ -3808,11 +3890,11 @@
 
     (define (documentation-field fields name)
       "Return FIELDS entry named NAME, or #f."
-      (assq name fields))
+      (runtime-assq name fields))
 
     (define (documentation-add-origin origins origin)
       "Return ORIGINS with ORIGIN appended once in source order."
-      (if (memq origin origins)
+      (if (runtime-memq origin origins)
           origins
           (append origins (list origin))))
 
@@ -3820,7 +3902,7 @@
       "Return FIELDS with NAME set to VALUE, preserving field order."
       (if (documentation-field fields name)
           (map (lambda (field)
-                 (if (eq? (car field) name)
+                 (if (runtime-symbol-eq? (car field) name)
                      (cons name value)
                      field))
                fields)
@@ -3919,9 +4001,9 @@
                   normalized
                   (cons (list 'type 'any) normalized))))
            ((not (pair? (car rest))) #f)
-           ((not (symbol? (car (car rest)))) #f)
-           ((memq (car (car rest)) names) #f)
-           ((eq? (car (car rest)) 'type)
+           ((not (runtime-symbol? (car (car rest)))) #f)
+           ((runtime-memq (car (car rest)) names) #f)
+           ((runtime-symbol-eq? (car (car rest)) 'type)
             (let ((entry-value
                    (documentation-descriptor-entry-value (car rest))))
               (if entry-value
@@ -3930,7 +4012,7 @@
                         (cons 'type names)
                         #t)
                   #f)))
-           ((eq? (car (car rest)) 'description)
+           ((runtime-symbol-eq? (car (car rest)) 'description)
             (let ((entry-value
                    (documentation-descriptor-entry-value (car rest))))
               (if entry-value
@@ -3957,8 +4039,8 @@
             (cond
              ((null? rest) (reverse normalized))
              ((not (pair? (car rest))) #f)
-             ((not (symbol? (car (car rest)))) #f)
-             ((memq (car (car rest)) names) #f)
+             ((not (runtime-symbol? (car (car rest)))) #f)
+             ((runtime-memq (car (car rest)) names) #f)
              (else
               (let ((descriptor
                      (documentation-normalize-descriptor
@@ -3978,24 +4060,24 @@
             (cond
              ((null? rest) (cons 'ok (reverse names)))
              ((not (pair? (car rest))) #f)
-             ((not (symbol? (car (car rest)))) #f)
-             ((memq (car (car rest)) names) #f)
+             ((not (runtime-symbol? (car (car rest)))) #f)
+             ((runtime-memq (car (car rest)) names) #f)
              (else
               (loop (cdr rest) (cons (car (car rest)) names)))))))
 
     (define (documentation-argument-names arguments)
       "Return `(ok . names)' for valid argument datums, otherwise #f."
       (cond
-       ((symbol? arguments) (cons 'ok (list arguments)))
+       ((runtime-symbol? arguments) (cons 'ok (list arguments)))
        (else
         (let loop ((cursor arguments) (names '()))
           (cond
            ((null? cursor) (cons 'ok (reverse names)))
            ((pair? cursor)
-            (if (not (symbol? (car cursor)))
+            (if (not (runtime-symbol? (car cursor)))
                 #f
                 (loop (cdr cursor) (cons (car cursor) names))))
-           ((symbol? cursor) (cons 'ok (reverse (cons cursor names))))
+           ((runtime-symbol? cursor) (cons 'ok (reverse (cons cursor names))))
            (else #f))))))
 
     (define (documentation-parameters-match-arguments? fields names)
@@ -4010,7 +4092,7 @@
                               (argument-names (cdr argument-names-result)))
                      (cond
                       ((null? rest) #t)
-                      ((memq (car rest) argument-names)
+                      ((runtime-memq (car rest) argument-names)
                        (loop (cdr rest) argument-names))
                       (else #f))))))))
 
@@ -4041,7 +4123,7 @@
                            fields
                            'parameters
                            (append (cdr existing) normalized)))
-                         ((memq (car rest) existing-names) #f)
+                         ((runtime-memq (car rest) existing-names) #f)
                          (else
                           (duplicate-loop
                            (cdr rest)
@@ -4061,7 +4143,7 @@
       "Return FIELDS merged with NAME/VALUE, or #f if malformed."
       (let ((existing (documentation-field fields name)))
         (cond
-         ((eq? name 'documentation)
+         ((runtime-symbol-eq? name 'documentation)
           (if (not (string? value))
               #f
               (if existing
@@ -4072,11 +4154,11 @@
                        (string-append (cdr existing) " " value))
                       #f)
                   (documentation-add-field fields name value))))
-         ((eq? name 'parameters)
+         ((runtime-symbol-eq? name 'parameters)
           (documentation-merge-parameters fields value))
-         ((eq? name 'returns)
+         ((runtime-symbol-eq? name 'returns)
           (documentation-merge-returns fields value))
-         ((memq name documentation-list-field-names)
+         ((runtime-memq name documentation-list-field-names)
           (if (not (proper-list? value))
               #f
               (if existing
@@ -4111,7 +4193,7 @@
               (cond
                ((null? rest) (reverse fields))
                ((not (pair? (car rest))) #f)
-               ((not (symbol? (car (car rest)))) #f)
+               ((not (runtime-symbol? (car (car rest)))) #f)
                (else
                 (loop (cdr rest)
                       (cons (cons (car (car rest)) (cdr (car rest)))
@@ -4148,7 +4230,7 @@
 
     (define (documentation-base-metadata retention maybe-formals)
       "Return generated base metadata for RETENTION and MAYBE-FORMALS."
-      (if (and (pair? maybe-formals) (not (eq? retention 'none)))
+      (if (and (pair? maybe-formals) (not (runtime-symbol-eq? retention 'none)))
           (documentation-metadata-from-formals (car maybe-formals))
           (make-documentation-metadata '() '())))
 
@@ -4225,7 +4307,7 @@
                               (scan
                                cursor
                                merged-validation
-                               (if (memq retention '(full simple))
+                               (if (runtime-memq retention '(full simple))
                                    (documentation-merge-string-run
                                     retained-metadata
                                     ordered-strings)
@@ -4240,7 +4322,7 @@
                     (if merged-validation
                         (scan (cdr rest)
                               merged-validation
-                              (if (eq? retention 'full)
+                              (if (runtime-symbol-eq? retention 'full)
                                   merged-validation
                                   retained-metadata)
                               #t)
@@ -4312,7 +4394,7 @@
         (returns (type symbol)
          (description "The symbol DATUM; raises when DATUM is not a symbol."))
         (effects error))
-      (if (symbol? datum)
+      (if (runtime-symbol? datum)
           datum
           (eval-error
            (string-append description " must be an identifier")
@@ -4328,7 +4410,7 @@
           ("#t when DATUM is a symbol or syntax identifier, #f"
             "otherwise.")))
         (effects pure))
-      (or (symbol? datum) (identifier? datum)))
+      (or (runtime-symbol? datum) (identifier? datum)))
 
     (define (identifier-datum-name datum)
       "Return the symbolic name from a raw or wrapped identifier."
@@ -4339,7 +4421,7 @@
          (description ("The underlying symbol name, or #f when DATUM is neither.")))
         (effects pure))
       (cond
-       ((symbol? datum) datum)
+       ((runtime-symbol? datum) datum)
        ((identifier? datum) (identifier-name datum))
        (else #f)))
 
@@ -4361,7 +4443,7 @@
                     (syntax-context-id context)
                     (identifier-name identifier))
               (identifier-name identifier))))
-       ((symbol? identifier) identifier)
+       ((runtime-symbol? identifier) identifier)
        (else
         (eval-error "expected identifier" identifier))))
 
@@ -4376,7 +4458,7 @@
          (description "#t when DATUM unwraps to NAME, #f otherwise."))
         (effects pure))
       (let ((actual (identifier-datum-name datum)))
-        (and actual (eq? actual name))))
+        (and actual (consent-host-symbol-eq? actual name))))
 
     (define (expect-identifier-key datum description)
       "Return an identifier lookup key or raise a syntax-specific error."
@@ -4425,7 +4507,13 @@
           ("The binding cell for NAME in the current frame, or #f when"
             "absent.")))
         (effects state-read))
-      (let ((cell (assoc name (environment-frame environment))))
+      ;; Context-owned symbols make identity the common lookup path. Import
+      ;; installation normalizes provider names into the consumer's table, so
+      ;; lexical lookup does not need a name-comparison fallback.
+      (let* ((frame (environment-frame environment))
+             (cell (if (pair? name)
+                       (host-assoc name frame)
+                       (host-assq name frame))))
         (if cell (cdr cell) #f)))
 
     (define (environment-cell environment name)
@@ -4462,9 +4550,13 @@
         (and cursor
              (or (let frame-loop ((frame (environment-frame cursor)))
                    (and (not (null? frame))
-                        (or (and (eq? (cdr (car frame)) cell)
-                                 (memq (car (car frame))
-                                       (environment-imported-names cursor)))
+                        (or (and (runtime-symbol-eq? (cdr (car frame)) cell)
+                                 (or (host-memq
+                                      (car (car frame))
+                                      (environment-imported-names cursor))
+                                     (consent-host-symbol-memq
+                                      (car (car frame))
+                                      (environment-imported-names cursor))))
                             (frame-loop (cdr frame)))))
                  (environment-loop (environment-parent cursor))))))
 
@@ -4480,7 +4572,10 @@
           ("A non-#f tail when NAME is imported in this frame, #f"
             "otherwise.")))
         (effects state-read))
-      (memq name (environment-imported-names environment)))
+      (or (host-memq name (environment-imported-names environment))
+          (consent-host-symbol-memq
+           name
+           (environment-imported-names environment))))
 
     (define (environment-define! environment name value)
       "Add NAME to ENVIRONMENT's current frame unless it would redefine import."
@@ -4589,7 +4684,7 @@
                          (environment-cell definition-environment
                                            (identifier-name identifier)))))
               (environment-cell environment (identifier-name identifier)))))
-       ((symbol? identifier)
+       ((runtime-symbol? identifier)
         (environment-cell environment identifier))
        (else #f)))
 
@@ -4651,7 +4746,7 @@
       (let loop ((rest names) (seen '()))
         (if (not (null? rest))
             (begin
-              (if (memq (car rest) seen)
+              (if (runtime-memq (car rest) seen)
                   (eval-error
                    (string-append "duplicate identifier in " description)
                    (car rest)))
@@ -4670,7 +4765,7 @@
             "rest key; raises on malformed formals.")))
         (effects error))
       (cond
-       ((symbol? formals)
+       ((runtime-symbol? formals)
         (make-formals '() (identifier-key formals)))
        ((identifier? formals)
         (make-formals '() (identifier-key formals)))

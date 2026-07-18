@@ -27,7 +27,8 @@
                 (consent-expand raw-consent-expand)
                 (consent-expand-source raw-consent-expand-source)
                 (consent-eval-result raw-consent-eval-result)
-                (consent-eval-source-result raw-consent-eval-source-result)))
+                (consent-eval-source-result raw-consent-eval-source-result))
+        (consent symbol-boundary))
 
 ;; Unique marker for unset CI matrix defaults.
 (define consent-test-option-unset
@@ -204,7 +205,8 @@
 ;; expects multiple values.
 (define (external-values external)
   (let ((datum (consent-read external)))
-    (if (and (pair? datum) (eq? (car datum) 'values))
+    (if (and (pair? datum)
+             (consent-host-symbol-eq? (car datum) 'values))
         (map consent-datum->external (cdr datum))
         #f)))
 

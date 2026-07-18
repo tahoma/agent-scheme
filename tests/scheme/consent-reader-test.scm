@@ -51,6 +51,14 @@
 (testing-registry-case
  'vertical-symbol '(portable core)
 (check-external 'vertical-symbol "|two\\x20;words|" "|two words|"))
+(testing-registry-case
+ 'vertical-symbol-delimiter '(portable core)
+(check-external 'vertical-symbol-delimiter "|left\\|right|" "|left\\|right|"))
+(testing-registry-case
+ 'string-vertical-bar '(portable core)
+(test-equal 'string-vertical-bar
+            "\"left|right\""
+            (consent-datum->external "left|right")))
 
 (testing-registry-case
  'string-escapes '(portable core)

@@ -51,7 +51,6 @@
                 consent-datum->external))
 
   (begin
-
     ;;;; Record field access (the records are the shared cross-host vocabulary)
 
     (define (chrome--kind record)
@@ -437,16 +436,16 @@
     (define (chrome--role-sgr role)
       "Return the SGR parameter string for ROLE, or #f for an uncolored role."
       (cond
-       ((eq? role 'furniture) "90")        ; bright black / gray punctuation
-       ((eq? role 'prompt-session) "36")   ; cyan
-       ((eq? role 'prompt-ordinal) "34")   ; blue
-       ((eq? role 'prompt-nesting) "35")   ; magenta
-       ((eq? role 'result-marker) "32")    ; green
-       ((eq? role 'error-marker) "31")     ; red
-       ((eq? role 'error-text) "31")       ; red
-       ((eq? role 'exit-marker) "33")      ; yellow, matching exit-status
-       ((eq? role 'exit-status) "33")      ; yellow
-       ((eq? role 'output-marker) "90")    ; gray gutter, like the `;;' furniture
+       ((eq? role 'furniture) "90")
+       ((eq? role 'prompt-session) "36")
+       ((eq? role 'prompt-ordinal) "34")
+       ((eq? role 'prompt-nesting) "35")
+       ((eq? role 'result-marker) "32")
+       ((eq? role 'error-marker) "31")
+       ((eq? role 'error-text) "31")
+       ((eq? role 'exit-marker) "33")
+       ((eq? role 'exit-status) "33")
+       ((eq? role 'output-marker) "90")
        ; result-value, submission, output-text, unknown
        (else #f)))
 

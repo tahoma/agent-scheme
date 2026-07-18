@@ -29,8 +29,31 @@
   (import (scheme base)
           (scheme file)
           (consent reader)
+          (consent symbol)
+          (consent symbol-boundary)
           (consent runtime))
   (begin
+    ;; Preserve the host operations needed for implementation identity and
+    ;; bootstrap-to-owned conversion.
+    (define host-eq? eq?)
+    ;; Recognize host symbols in private bootstrap metadata.
+    (define host-symbol? symbol?)
+    ;; Read host symbol names in private bootstrap metadata.
+    (define host-symbol->string symbol->string)
+    ;; Construct host symbols only for private bootstrap dispatch.
+    (define host-string->symbol string->symbol)
+
+    ;; Base bootstrapping consumes both host declarations and owned forms.
+    (define base-symbol? consent-host-symbol?)
+    ;; Compare base names across the owned/bootstrap boundary.
+    (define base-symbol-eq? consent-host-symbol-eq?)
+    ;; Compare base datums across the owned/bootstrap boundary.
+    (define base-datum-equal? consent-host-symbol-equal?)
+    ;; Search base name lists across the owned/bootstrap boundary.
+    (define base-memq consent-host-symbol-memq)
+    ;; Look up base declarations across the owned/bootstrap boundary.
+    (define base-assq consent-host-symbol-assq)
+
     ;; Registry key for the required R7RS `(scheme base)' library.
     (define scheme-base-library-key '(scheme base))
 
@@ -886,7 +909,7 @@
 
     (define (base-primitive-documentation name)
       "Return public manifest documentation for kernel primitive NAME."
-      (let ((entry (assq name base-primitive-documentation-table)))
+      (let ((entry (base-assq name base-primitive-documentation-table)))
         (and entry
              (base-primitive-documentation-fields name (cdr entry)))))
 
@@ -917,10 +940,10 @@
     (define (primitive-effect-for-name name)
       "Return the effect tier for primitive NAME."
       (cond
-       ((memq name primitive-mutation-names) 'mutation)
-       ((memq name primitive-port-io-names) 'port-io)
-       ((memq name primitive-control-names) 'control)
-       ((memq name
+       ((base-memq name primitive-mutation-names) 'mutation)
+       ((base-memq name primitive-port-io-names) 'port-io)
+       ((base-memq name primitive-control-names) 'control)
+       ((base-memq name
               '(current-error-port current-input-port current-output-port
                 make-parameter))
         'dynamic-state)
@@ -929,45 +952,45 @@
     (define (primitive-emitter-hook-for-effect effect)
       "Return a future backend lowering hint for EFFECT."
       (cond
-       ((eq? effect 'mutation) 'runtime-mutation)
-       ((eq? effect 'port-io) 'capability-port)
-       ((eq? effect 'control) 'runtime-control)
-       ((eq? effect 'dynamic-state) 'runtime-parameter)
-       ((eq? effect 'host-file) 'capability-file)
-       ((eq? effect 'host-process) 'capability-process)
-       ((eq? effect 'host-time) 'capability-time)
-       ((eq? effect 'host-repl) 'capability-repl)
-       ((eq? effect 'eval) 'runtime-eval)
+       ((base-symbol-eq? effect 'mutation) 'runtime-mutation)
+       ((base-symbol-eq? effect 'port-io) 'capability-port)
+       ((base-symbol-eq? effect 'control) 'runtime-control)
+       ((base-symbol-eq? effect 'dynamic-state) 'runtime-parameter)
+       ((base-symbol-eq? effect 'host-file) 'capability-file)
+       ((base-symbol-eq? effect 'host-process) 'capability-process)
+       ((base-symbol-eq? effect 'host-time) 'capability-time)
+       ((base-symbol-eq? effect 'host-repl) 'capability-repl)
+       ((base-symbol-eq? effect 'eval) 'runtime-eval)
        (else 'inline-or-call)))
 
     (define (primitive-backend-effect-path-for-effect effect)
       "Return the shared backend execution path for EFFECT."
       (cond
-       ((eq? effect 'pure) 'direct-runtime)
-       ((eq? effect 'mutation) 'runtime-mutation)
-       ((eq? effect 'port-io) 'runtime-port-check)
-       ((eq? effect 'control) 'runtime-control)
-       ((eq? effect 'dynamic-state) 'runtime-parameter)
-       ((memq effect '(host-file host-process host-time host-repl))
+       ((base-symbol-eq? effect 'pure) 'direct-runtime)
+       ((base-symbol-eq? effect 'mutation) 'runtime-mutation)
+       ((base-symbol-eq? effect 'port-io) 'runtime-port-check)
+       ((base-symbol-eq? effect 'control) 'runtime-control)
+       ((base-symbol-eq? effect 'dynamic-state) 'runtime-parameter)
+       ((base-memq effect '(host-file host-process host-time host-repl))
         'shared-capability-request)
        (else 'direct-runtime)))
 
     (define (primitive-test-categories-for-name name effect)
       "Return test category tags for NAME and EFFECT."
       (cond
-       ((memq name '(vector vector? vector-ref vector-set! vector-length
+       ((base-memq name '(vector vector? vector-ref vector-set! vector-length
                     vector-copy vector-copy! vector-fill! vector-append
                     vector->list vector->string vector-map vector-for-each
                     string->vector))
         '(vector))
-       ((memq name '(bytevector bytevector? bytevector-length
+       ((base-memq name '(bytevector bytevector? bytevector-length
                      bytevector-u8-ref bytevector-u8-set! bytevector-copy
                      bytevector-copy! bytevector-append read-bytevector
                      read-bytevector! write-bytevector))
         '(bytevector))
-       ((eq? effect 'port-io)
+       ((base-symbol-eq? effect 'port-io)
         '(port))
-       ((eq? effect 'control)
+       ((base-symbol-eq? effect 'control)
         '(control))
        (else
         '(base))))
@@ -1019,11 +1042,11 @@
             "effect fields.")))
         (effects state-read allocation))
       (map (lambda (spec)
-             (list (assq 'name spec)
-                   (assq 'minimum-arity spec)
-                   (assq 'maximum-arity spec)
-                   (assq 'source spec)
-                   (assq 'effect spec)))
+             (list (base-assq 'name spec)
+                   (base-assq 'minimum-arity spec)
+                   (base-assq 'maximum-arity spec)
+                   (base-assq 'source spec)
+                   (base-assq 'effect spec)))
            (map base-primitive-manifest-spec base-primitive-registry)))
 
     ;; Prelude source paths are the only host-files read during base environment
@@ -1045,6 +1068,36 @@
     (define base-prelude-forms-cache #f)
     ;; Cache for parsed syntax prelude forms shared across evaluation contexts.
     (define base-syntax-forms-cache #f)
+
+    (define (base-own-datum table datum)
+      "Return DATUM with every symbol interned through TABLE."
+      (cond
+       ((consent-symbol? datum)
+        (consent-intern-symbol table (consent-symbol-name datum)))
+       ((host-symbol? datum)
+        (consent-intern-symbol table (host-symbol->string datum)))
+       ((pair? datum)
+        (let ((copy (cons (base-own-datum table (car datum))
+                          (base-own-datum table (cdr datum)))))
+          (consent-copy-datum-source! copy datum #t)))
+       ((vector? datum)
+        (let ((copy (make-vector (vector-length datum))))
+          (let loop ((index 0))
+            (if (< index (vector-length datum))
+                (begin
+                  (vector-set! copy
+                               index
+                               (base-own-datum table
+                                               (vector-ref datum index)))
+                  (loop (+ index 1)))))
+          (consent-copy-datum-source! copy datum #t)))
+       (else datum)))
+
+    (define (base-forms-for-table forms table)
+      "Return FORMS in TABLE's symbol domain, preserving the default cache."
+      (if (host-eq? table consent-default-symbol-table)
+          forms
+          (base-own-datum table forms)))
 
     (define (read-port-string port)
       "Read all characters from PORT into a string."
@@ -1131,46 +1184,60 @@
       (let ((entry (resolve-source-entry relative-path default-paths)))
         (and entry (cdr entry))))
 
-    (define (base-prelude-forms)
+    (define (base-prelude-forms . maybe-table)
       "Prelude forms are cached after reader validation; metadata extraction"
       "depends on each top-level form remaining one define."
-      #((parameters)
+      #((parameters
+         (maybe-table (type list)
+          (description
+           "Optional singleton symbol table used to own prelude identifiers.")))
         (returns (type list)
          (description
           ("The list of parsed top-level base prelude forms, cached"
             "after first read.")))
         (effects state-read state-write allocation error))
-      (or base-prelude-forms-cache
-          (let ((text (resolve-source-text "consent/base-prelude.scm"
-                                           consent-base-prelude-load-paths)))
-            (if text
-                (let ((forms (consent-read-all text)))
-                  (set! base-prelude-forms-cache forms)
-                  forms)
-                (eval-error "unable to load base prelude")))))
+      (base-forms-for-table
+       (or base-prelude-forms-cache
+           (let ((text (resolve-source-text "consent/base-prelude.scm"
+                                            consent-base-prelude-load-paths)))
+             (if text
+                 (let ((forms (consent-read-all text)))
+                   (set! base-prelude-forms-cache forms)
+                   forms)
+                 (eval-error "unable to load base prelude"))))
+       (if (null? maybe-table)
+           consent-default-symbol-table
+           (car maybe-table))))
 
-    (define (base-syntax-forms)
+    (define (base-syntax-forms . maybe-table)
       "Syntax prelude forms are cached separately because they install into the"
       "current syntax environment, not the value environment."
-      #((parameters)
+      #((parameters
+         (maybe-table (type list)
+          (description
+           "Optional singleton symbol table used to own syntax identifiers.")))
         (returns (type list)
          (description
           ("The list of parsed top-level base syntax prelude forms,"
             "cached after first read.")))
         (effects state-read state-write allocation error))
-      (or base-syntax-forms-cache
-          (let ((text (resolve-source-text "consent/base-syntax.scm"
-                                           consent-base-syntax-load-paths)))
-            (if text
-                (let ((forms (consent-read-all text)))
-                  (set! base-syntax-forms-cache forms)
-                  forms)
-                (eval-error "unable to load base syntax prelude")))))
+      (base-forms-for-table
+       (or base-syntax-forms-cache
+           (let ((text (resolve-source-text "consent/base-syntax.scm"
+                                            consent-base-syntax-load-paths)))
+             (if text
+                 (let ((forms (consent-read-all text)))
+                   (set! base-syntax-forms-cache forms)
+                   forms)
+                 (eval-error "unable to load base syntax prelude"))))
+       (if (null? maybe-table)
+           consent-default-symbol-table
+           (car maybe-table))))
 
     (define (formals-arity formals)
       "Return minimum and maximum arity metadata for Scheme formals."
       (cond
-       ((symbol? formals)
+       ((base-symbol? formals)
         (cons 0 #f))
        (else
         (let loop ((cursor formals) (minimum 0))
@@ -1179,7 +1246,7 @@
             (cons minimum minimum))
            ((pair? cursor)
             (loop (cdr cursor) (+ minimum 1)))
-           ((symbol? cursor)
+           ((base-symbol? cursor)
             (cons minimum #f))
            (else
             (eval-error "prelude definition has invalid formals")))))))
@@ -1188,9 +1255,9 @@
       "Report whether FORM is a definition-like body form for documentation"
       "prefix detection."
       (and (pair? form)
-           (or (eq? (car form) 'define)
-               (eq? (car form) 'define-values)
-               (eq? (car form) 'define-record-type))))
+           (or (base-symbol-eq? (car form) 'define)
+               (base-symbol-eq? (car form) 'define-values)
+               (base-symbol-eq? (car form) 'define-record-type))))
 
     (define (base-body-documentation body . maybe-formals)
       "Return documentation metadata from BODY and optional FORMALS, or #f."
@@ -1208,19 +1275,19 @@
     (define (prelude-definition-spec form)
       "Extract name, arity, and source metadata from one prelude define."
       (if (not (and (pair? form)
-                    (eq? (car form) 'define)
+                    (base-symbol-eq? (car form) 'define)
                     (pair? (cdr form))
                     (pair? (cdr (cdr form)))))
           (eval-error "prelude form must be one definition" form))
       (let ((target (second form)))
         (cond
-         ((symbol? target)
+         ((base-symbol? target)
           (if (not (null? (cdr (cdr (cdr form)))))
               (eval-error
                "prelude variable definition must have one initializer"))
           (let ((initializer (third form)))
             (if (not (and (pair? initializer)
-                          (eq? (car initializer) 'lambda)))
+                          (base-symbol-eq? (car initializer) 'lambda)))
                 (eval-error
                  "prelude variable definition must initialize a lambda"))
             (let ((arity (formals-arity (second initializer))))
@@ -1269,7 +1336,7 @@
             "binding.")))
         (effects state-read state-write allocation error))
       (map (lambda (spec)
-             (second (assq 'name spec)))
+             (second (base-assq 'name spec)))
            (consent-base-prelude-binding-specs)))
 
     (define (consent-base-binding-specs)
@@ -1346,8 +1413,8 @@
       (let loop ((rest table))
         (cond
          ((null? rest) #f)
-         ((and (equal? (car (car rest)) library)
-               (eq? (second (car rest)) name))
+         ((and (base-datum-equal? (car (car rest)) library)
+               (base-symbol-eq? (second (car rest)) name))
           (third (car rest)))
          (else (loop (cdr rest))))))
 
@@ -1606,8 +1673,8 @@
               (primitive-manifest-documentation-field
                (primitive-documentation-lookup
                 standard-primitive-documentation-table
-                (second (assq 'library spec))
-                (second (assq 'name spec))))))
+                (second (base-assq 'library spec))
+                (second (base-assq 'name spec))))))
 
     (define (standard-primitive-binding-specs)
       "Return manifest metadata for standard-library primitive bindings."
@@ -1615,7 +1682,7 @@
 
     (define (prelude-manifest-spec spec)
       "Return manifest metadata for portable prelude SPEC."
-      (let* ((name (second (assq 'name spec)))
+      (let* ((name (second (base-assq 'name spec)))
              (effect 'pure))
         (append spec
                 (list (list 'library scheme-base-library-key)
@@ -1669,30 +1736,47 @@
        environment
        name
        (make-primitive-procedure
-        name function minimum-arity maximum-arity)))
+        ;; Binding identity is context-owned, while the private dispatch tag
+        ;; remains a host symbol so the evaluator's compiler-visible `eq?'
+        ;; dispatch stays both correct and constant-time.
+        (if (consent-symbol? name)
+            (host-string->symbol (consent-symbol-name name))
+            name)
+        function
+        minimum-arity
+        maximum-arity)))
 
-    (define (consent-make-base-environment)
+    (define (consent-make-base-environment . maybe-table)
       "The base environment installs primitive kernel bindings first, then"
       "evaluates derived Scheme definitions in the same environment."
-      #((parameters)
+      #((parameters
+         (maybe-table (type list)
+          (description
+           "Optional singleton symbol table used to own environment bindings.")))
         (returns
          . ("A fresh environment populated with kernel primitives and"
             "derived base definitions."))
         (effects state-read state-write allocation host-eval error))
-      (let ((environment (consent-make-empty-environment)))
+      (let ((environment (consent-make-empty-environment))
+            (table (if (null? maybe-table)
+                       consent-default-symbol-table
+                       (car maybe-table))))
         (let loop ((rest base-primitive-registry))
           (if (null? rest)
               (begin
                 ;; Derived base procedures are ordinary Scheme definitions
                 ;; loaded through the same evaluator and trampoline.
                 (base-trampoline
-                 (make-sequence (base-prelude-forms) #t)
+                 (make-sequence (base-prelude-forms table) #t)
                  environment
-                 (new-eval-context '()))
+                 (new-eval-context
+                  (list (cons 'symbol-table table))))
                 environment)
               (begin
                 (define-primitive! environment
-                                   (car (car rest))
+                                   (consent-intern-symbol
+                                    table
+                                    (host-symbol->string (car (car rest))))
                                    (base-primitive-implementation (second (car rest)))
                                    (third (car rest))
                                    (fourth (car rest)))
@@ -1722,7 +1806,7 @@
                 environment
                 context
                 (context-syntax-environment context)))
-             (base-syntax-forms))
+             (base-syntax-forms (context-symbol-table context)))
             (set-context-base-syntax-installed! context #t))))
 
     ))

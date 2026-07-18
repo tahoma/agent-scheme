@@ -34,6 +34,32 @@
   (should-error (consent-eval-source "()")
                 :type 'consent-eval-error))
 
+(ert-deftest consent-eval-test-context-symbol-table-identity ()
+  "Share one explicit symbol table across source reads and string->symbol."
+  (let* ((table (consent--make-symbol-table))
+         (options (list :symbol-table table))
+         (seed (consent--intern-symbol "shared" table)))
+    (should (eq seed (consent-eval-source "'shared" nil options)))
+    (should (eq seed
+                (consent-eval-source
+                 "(string->symbol \"shared\")"
+                 nil
+                 options)))))
+
+(ert-deftest consent-eval-test-isolated-symbol-tables-remain-name-equal ()
+  "Keep R7RS symbol equality across symbols interned in isolated handles."
+  (let* ((left-table (consent--make-symbol-table))
+         (right-table (consent--make-symbol-table))
+         (left (consent--intern-symbol "transported" left-table))
+         (right (consent--intern-symbol "transported" right-table)))
+    (should-not (eq left right))
+    (should
+     (eq (consent-eval
+          (list (consent--intern-symbol "eq?")
+                (list (consent--intern-symbol "quote") left)
+                (list (consent--intern-symbol "quote") right)))
+         consent-true))))
+
 (ert-deftest consent-eval-test-process-environment-capability ()
   "Environment reads are denied by default and supplied under a grant.
 An unset variable read under the process-environment grant returns #f rather

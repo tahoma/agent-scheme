@@ -105,6 +105,18 @@
    (path "tests/scheme/consent-script-test.scm")
     (tags (full direct integration self-host-gap registered)))
    (program
+    (path "tests/scheme/data-avl-tree-test.scm")
+    (tags (full direct data self-host-gap registered)))
+   (program
+    (path "tests/scheme/data-avl-tree-smoke-test.scm")
+    (tags (full direct compiled data registered)))
+   (program
+    (path "tests/scheme/data-transient-map-test.scm")
+    (tags (full direct compiled data registered)))
+   (program
+    (path "tests/scheme/consent-symbol-test.scm")
+    (tags (full direct compiled runtime registered)))
+   (program
    (path "tests/scheme/stdlib-list-test.scm")
     (tags (full direct compiled stdlib registered)))
    (program
@@ -203,6 +215,7 @@
       (not (tag integration))
       (not (tag repl))
       (not (tag parity))
+      (not (tag data))
       (not (tag stdlib)))))
    (shard
     (name evaluator)
@@ -227,7 +240,7 @@
     (selector
      (and
       (tag full)
-      (tag stdlib)
+      (or (tag data) (tag stdlib))
       (not (tag random))
       (not (tag property)))))
    (shard
@@ -252,6 +265,7 @@
       (not (tag integration))
       (not (tag repl))
       (not (tag parity))
+      (not (tag data))
       (not (tag stdlib)))))
    (shard
     (name compiled-integration)
@@ -273,7 +287,7 @@
     (selector
      (and
       (tag compiled)
-      (tag stdlib)
+      (or (tag data) (tag stdlib))
       (not (tag random))
       (not (tag property)))))
    (shard

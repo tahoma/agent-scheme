@@ -46,6 +46,70 @@
    (equal (consent-reader-test--external "|two words|")
           "|two words|")))
 
+(ert-deftest consent-reader-test-writer-distinguishes-string-and-symbol-bars ()
+  "Escape delimiter bars only inside vertical symbol syntax."
+  (should (equal (consent-datum->external "left|right")
+                 "\"left|right\""))
+  (should (equal (consent-reader-test--external "|left\\|right|")
+                 "|left\\|right|")))
+
+(ert-deftest consent-reader-test-explicit-symbol-table-handles ()
+  "Intern reads through the selected hash-backed symbol-table handle."
+  (let* ((left-table (consent--make-symbol-table))
+         (right-table (consent--make-symbol-table))
+         (left-options (list :symbol-table left-table))
+         (right-options (list :symbol-table right-table))
+         (left (consent-read "shared" left-options))
+         (left-again (consent-read "|shared|" left-options))
+         (right (consent-read "shared" right-options)))
+    (should (eq left left-again))
+    (should-not (eq left right))
+    (should (equal (consent-symbol-name left)
+                   (consent-symbol-name right)))
+    (should (eq right
+                (car (consent-read-all "shared other" right-options))))))
+
+(ert-deftest consent-reader-test-symbol-table-owns-input-names ()
+  "Keep mutable input strings outside table-owned keys and records."
+  (let* ((table (consent--make-symbol-table))
+         (input (copy-sequence "stable"))
+         (symbol (consent--intern-symbol input table)))
+    (aset input 0 ?u)
+    (should (equal (consent-symbol-name symbol) "stable"))
+    (should (eq symbol (consent--intern-symbol "stable" table)))
+    (should (= (hash-table-count table) 1))))
+
+(ert-deftest consent-reader-test-symbol-table-bulk-identity ()
+  "Preserve every identity through hash collisions and table growth."
+  (let ((table (consent--make-symbol-table))
+        symbols)
+    (dotimes (index 300)
+      (let ((name (format "owned-symbol-%d" index)))
+        (push (consent--intern-symbol name table) symbols)))
+    (dotimes (index 300)
+      (should
+       (eq (nth (- 299 index) symbols)
+           (consent--intern-symbol (format "owned-symbol-%d" index)
+                                   table))))
+    (should (= (hash-table-count table) 300))))
+
+(ert-deftest consent-reader-test-symbol-table-contracts ()
+  "Reject values that cannot participate in owned symbol identity."
+  (should-error (consent--intern-symbol "name" 'not-a-table)
+                :type 'wrong-type-argument)
+  (should-error (consent-symbol-name 'host-symbol)
+                :type 'wrong-type-argument))
+
+(ert-deftest consent-reader-test-explicit-table-recovery-path ()
+  "Use the explicit symbol table for recovery and incremental reads."
+  (let* ((table (consent--make-symbol-table))
+         (options (list :symbol-table table))
+         (seed (consent-read "recovered" options))
+         (recovery (consent-read-recover "broken )\nrecovered" options))
+         (step (consent-read-recover-from-string-at "recovered" 0 options)))
+    (should (memq seed (consent-recovery-result-datums recovery)))
+    (should (eq seed (consent-recovery-step-datum step)))))
+
 (ert-deftest consent-reader-test-strings-and-characters ()
   "Read strings and character literals with R7RS escapes."
   (should

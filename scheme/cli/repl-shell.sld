@@ -119,7 +119,6 @@
       (define (repl--port-tty? port) (and port #f)))))
 
   (begin
-
     ;;;; Small string helpers (kept R7RS-portable; no SRFI dependencies)
 
     (define (repl--whitespace? char)
@@ -405,8 +404,9 @@
       "Return #t when reader DATUM is a process-context exit/emergency-exit call."
       (let ((stripped (strip-identifiers datum)))
         (and (pair? stripped)
-             (memq (car stripped) '(exit emergency-exit))
-             #t)))
+             (let ((operator (consent-value->external (car stripped))))
+               (or (string=? operator "exit")
+                   (string=? operator "emergency-exit"))))))
 
     (define (repl--exit-disposition datum)
       "Return (cons STATUS DETAIL) for an exit DATUM per the close-status rules."

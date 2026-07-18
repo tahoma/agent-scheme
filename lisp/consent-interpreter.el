@@ -21,6 +21,13 @@
 (require 'consent-policy)
 (require 'consent-debugger)
 
+(defun consent--scheme-vector-p (value)
+  "Return non-nil when VALUE is a Scheme vector, not a host record.
+Emacs implements `cl-defstruct' values with vectors, but those runtime
+records remain opaque at the Scheme boundary."
+  (and (vectorp value)
+       (not (cl-struct-p value))))
+
 (defun consent--dynamic-wind-prefix-before (frame stack)
   "Return the prefix of STACK before FRAME, comparing frames with `eq'."
   (let ((cursor stack)
@@ -733,7 +740,7 @@ Unknown type extensions remain advisory and therefore pass."
       ("pair" (consp value))
       ("list" (consent--proper-list-p value))
       ("null" (null value))
-      ("vector" (vectorp value))
+      ("vector" (consent--scheme-vector-p value))
       ("bytevector" (consent-bytevector-p value))
       ("procedure" (consent--contract-procedure-p value))
       ("port" (consent--port-p value))
@@ -765,7 +772,7 @@ Unknown type extensions remain advisory and therefore pass."
            t))
         ("vector-of"
          (if (= (length type) 2)
-             (and (vectorp value)
+             (and (consent--scheme-vector-p value)
                   (cl-loop for item across value
                            always
                            (consent--contract-type-matches-p
@@ -799,7 +806,7 @@ Unknown type extensions remain advisory and therefore pass."
     ((null value) "list")
     ((and (consp value) (consent--proper-list-p value)) "list")
     ((consp value) "pair")
-    ((vectorp value) "vector")
+    ((consent--scheme-vector-p value) "vector")
     ((consent-bytevector-p value) "bytevector")
     ((consent--contract-procedure-p value) "procedure")
     ((consent--port-p value) "port")
@@ -1424,7 +1431,12 @@ each initializer."
 	          (consent--eval-error "quote requires exactly one datum"))
 	        (consent--continue
                  continuation
-                 (consent--charge-literal (cadr parts) context)))
+                 (consent--charge-literal
+                  (consent--strip-identifiers
+                   (cadr parts)
+                   nil
+                   (consent--eval-context-symbol-table context))
+                  context)))
 	       ((and (consent--symbol-named-p operator "quasiquote")
 	             (consent--special-operator-active-p operator environment))
 	        ;; The quasiquote builder assembles its result with host cons/append
@@ -1433,7 +1445,10 @@ each initializer."
 	        (consent--continue
                  continuation
                  (consent--charge-literal
-	          (consent--eval-quasiquote parts environment context)
+	          (consent--strip-identifiers
+                   (consent--eval-quasiquote parts environment context)
+                   nil
+                   (consent--eval-context-symbol-table context))
 	          context)))
 	       ((and (consent--symbol-named-p operator "lambda")
 	             (consent--special-operator-active-p operator environment))
@@ -2050,7 +2065,7 @@ When ALLOW-END is non-nil, LIMIT itself is accepted."
 
 (defun consent--expect-vector (datum description)
   "Return DATUM as a vector or signal an error naming DESCRIPTION."
-  (unless (vectorp datum)
+  (unless (consent--scheme-vector-p datum)
     (consent--eval-error
      "%s must be a vector, got %s"
      description
@@ -3904,11 +3919,13 @@ whole `datum' is buffered or the prefix is `invalid';
      (memq (consent-recovery-step-status
             (consent-read-recover-from-string-at
              (consent--port-source port)
-             (consent--port-position port)))
+             (consent--port-position port)
+             (consent--eval-context-reader-options context nil)))
            '(datum invalid))))
   (let ((result (consent--read-one-from-string-at
                  (consent--port-source port)
-                 (consent--port-position port))))
+                 (consent--port-position port)
+                 (consent--eval-context-reader-options context nil))))
     (setf (consent--port-position port) (cdr result))
     (consent-capability-audit-port-result port 'read 'datum)
     (if (eq (car result) consent--read-eof)
@@ -5487,7 +5504,9 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
              (insert-file-contents path)
              (buffer-string))))
       (consent-capability-audit-file-result authorization 'read)
-      (list (consent-read-all source)
+      (list (consent-read-all
+             source
+             (consent--eval-context-reader-options context nil))
             (file-name-directory path)
             authorization))))
 
@@ -6118,7 +6137,8 @@ When KEEP-RESULTS is non-nil, return the collected values."
 
 (defun consent--primitive-vector? (arguments _context)
   "Primitive vector? over ARGUMENTS."
-  (consent--scheme-boolean (vectorp (car arguments))))
+  (consent--scheme-boolean
+   (consent--scheme-vector-p (car arguments))))
 
 (defun consent--primitive-make-vector (arguments context)
   "Primitive make-vector over ARGUMENTS."

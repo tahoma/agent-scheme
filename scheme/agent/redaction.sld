@@ -367,5 +367,8 @@
           ("#t when DATUM has no detected secret or local-only"
             "content; otherwise #f.")))
         (effects pure))
-      (and (not (secret-source? datum))
-           (not (local-only? datum))))))
+      ;; Local-only context records carry an explicit top-level marker. Check
+      ;; it first so provider admission can reject them without needlessly
+      ;; walking opaque handles and the rest of a potentially large context.
+      (and (not (local-only? datum))
+           (not (secret-source? datum))))))
