@@ -27,28 +27,32 @@ own LLIR/native backend (the Milestone M5 compiler chunks; the roadmap's
 `#115`–`#121`). Recognizing this reframes the host-compiled path (Chunk 0.15) as
 the staging layer those chunks plug into, not a parallel mechanism.
 
-**The seam, made principled (in part).** A real front-end computes the
-module/dependency closure from the program; it does not hand-maintain it. The
-runtime already declares its runtime-loaded source set as data: `base.sld`
+**The seam, made principled.** A real front-end computes the module/dependency
+closure from the program; it does not hand-maintain it. The compiler image in
+`scheme/consent/compiler-manifest.sld` declares product roots, generated units,
+target-provided library namespaces, and the roots installed as native runtime
+libraries. `(consent compiler-plan)` joins those image facts with the canonical
+collection manifests, validates project dependencies, rejects cycles, and
+produces a deterministic dependency-topological unit plan. Both borrowed-host
+backends consume that same plan: Racket precompiles its units and derives the
+generated main's project imports from its roots; Gambit additionally uses its
+unit order as the native link order. A future Consent-native backend consumes
+the same front-end record while selecting a native image whose target-provided
+namespaces and primitive realizations differ.
+
+The runtime also declares its runtime-loaded source set as data: `base.sld`
 owns `consent-base-prelude-load-paths` /
 `consent-base-syntax-load-paths`, and `library.sld` derives source-library paths
 from the manifest-backed seed inventory, then exposes it through one accessor,
-`consent-runtime-source-files`. The
+`consent-runtime-source-files`. This is a related but different projection. The
 embed/install manifest is **derived** from that accessor: `make compile`
 enumerates it through the compile host's interpreter, writes a per-host
 `runtime-source-manifest`, and both the embedded `(consent embedded-source)`
 module and the `Makefile`'s install/dist rules read from it. The runtime is the
-single source of truth; the hand-synced `embedded_source_specs()` /
-`CONSENT_RUNTIME_LIBRARY_FILES` copies are gone.
-
-Two manifests of the same graph remain hand-maintained, and are the next steps to
-fold into the same derivation: the Gambit `compile_gambit_module …` sequence and
-the generated mains' prefix-import lists. (Tellingly, the Racket path already
-*derives* its module set — `generate_racket_collections` globs every `.sld` —
-while the Gambit path still hand-enumerates: the inconsistency a staging script
-shows before it fully recognizes itself as a front-end.) The remaining clean
-direction is to compute those from the same closure, with the code-generation
-backend behind an interface rather than two parallel hardcoded code paths.
+single source of truth; the hand-synced runtime-source, Gambit module-order,
+generated-main project-import, and native-library-registration inventories are
+gone. Backend code remains responsible for lowering and linking a resolved
+plan, not for choosing the graph it compiles.
 
 ## 2. The embedded source store is a capability-addressable VFS underlay
 
@@ -109,13 +113,11 @@ diagnostics from importing the diagnostics library).
 ## Status
 
 What exists today: the embedded store backs bootstrap library resolution; gated
-file capabilities resolve against the host filesystem. The reframes above are
-design directions whose seeds and seams are already present and named here —
-the embedded store, the `authorize-file-capability` chokepoint, the
-`context-file-paths` grant table, the runtime's library-declaration tables. §1's
-manifest single-sourcing is **done** — the embed/install manifest is derived from
-`consent-runtime-source-files`. The remaining work — folding the Gambit module
-list and the generated mains' imports into the same closure, a pluggable code-gen
-backend, and the larger §2 surfaces (VFS-backed file capabilities, staged native
-sandboxes; tracked as a separate issue) — should build on these seams rather than
-reinvent them.
+file capabilities resolve against the host filesystem. The compiler image and
+compiler plan provide the backend-neutral module graph described in §1, and the
+embed/install manifest is independently derived from
+`consent-runtime-source-files`. Racket and Gambit remain borrowed lowering and
+linking backends; a native code-generation backend has not yet replaced them.
+The larger §2 surfaces (VFS-backed file capabilities and staged native
+sandboxes, tracked separately) remain design directions. They should build on
+these seams rather than creating parallel staging paths.
