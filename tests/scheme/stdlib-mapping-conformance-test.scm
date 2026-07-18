@@ -13,6 +13,11 @@
         (scheme write)
         (stdlib comparator)
         (stdlib mapping)
+        (data mapping avl)
+        (only (stdlib mapping implementation)
+              mapping-provider=?
+              mapping-storage-provider
+              red-black-mapping-provider)
         (scheme process-context)
         (testing registry)
         (testing runner)
@@ -48,6 +53,11 @@
 ;; Shared default comparator for upstream-style symbolic-key checks.
 (define default-comparator
   (make-default-comparator))
+
+(define (same-provider? left right)
+  "Return #t when LEFT and RIGHT use the same Mapping provider."
+  (mapping-provider=? (mapping-storage-provider left)
+                      (mapping-storage-provider right)))
 
 (testing-registry-case
  'predicate-mapping '(portable stdlib)
@@ -635,5 +645,84 @@
            (list (mapping-ref/default without-one 1 'missing)
                  (mapping->alist (mapping-intersection mapping2 overlap))
                  (mapping->alist (mapping-difference mapping2 overlap)))))))
+
+(testing-registry-case
+ 'avl-constructors-and-derived-provider '(portable data stdlib)
+(let* ((avl (avl-mapping integer-comparator 3 30 1 10 2 20))
+       (from-alist
+        (alist->avl-mapping integer-comparator '((3 . 30) (1 . 10) (2 . 20))))
+       (from-unfold
+        (avl-mapping-unfold null?
+                            (lambda (rest) (values (caar rest) (cdar rest)))
+                            cdr
+                            '((3 . 30) (1 . 10) (2 . 20))
+                            integer-comparator)))
+  (test-assert 'avl-constructors-return-mappings
+               (and (mapping? avl)
+                    (mapping? from-alist)
+                    (mapping? from-unfold)
+                    (not (mapping-provider=?
+                          (mapping-storage-provider avl)
+                          red-black-mapping-provider))))
+  (test-equal 'avl-constructors-agree
+              '(((1 . 10) (2 . 20) (3 . 30))
+                ((1 . 10) (2 . 20) (3 . 30))
+                ((1 . 10) (2 . 20) (3 . 30)))
+              (map mapping->alist (list avl from-alist from-unfold)))
+  (let-values (((partition-in partition-out)
+                (mapping-partition (lambda (key value) (< key 3)) avl))
+               ((split< split<= split= split>= split>)
+                (mapping-split avl 2)))
+    (test-assert
+     'avl-derived-provider-preserved
+     (let loop
+         ((derived
+           (list (mapping-set avl 4 40)
+                 (mapping-delete avl 1)
+                 (mapping-copy avl)
+                 (mapping-filter (lambda (key value) (< key 3)) avl)
+                 partition-in partition-out
+                 (mapping-range>= avl 2)
+                 split< split<= split= split>= split>
+                 (mapping-union avl (avl-mapping integer-comparator 4 40))
+                 (mapping-map/monotone
+                  (lambda (key value) (values (+ key 10) value))
+                  integer-comparator
+                  avl))))
+       (or (null? derived)
+           (and (same-provider? avl (car derived))
+                (loop (cdr derived)))))))))
+
+(testing-registry-case
+ 'mixed-provider-operations '(portable data stdlib)
+(let* ((red-black (mapping integer-comparator 1 10 2 20 4 40))
+       (avl (avl-mapping integer-comparator 2 20 3 30 5 50))
+       (avl-left (avl-mapping integer-comparator 1 10 2 20))
+       (red-black-right (mapping integer-comparator 4 40 5 50))
+       (red-black-left (mapping integer-comparator 1 10 2 20))
+       (avl-right (avl-mapping integer-comparator 4 40 5 50)))
+  (test-assert 'mixed-provider-result-selection
+               (and (same-provider? avl (mapping-union avl red-black))
+                    (same-provider? red-black (mapping-union red-black avl))
+                    (same-provider? avl (mapping-intersection avl red-black))
+                    (same-provider? avl (mapping-difference avl red-black))
+                    (same-provider? avl (mapping-xor avl red-black))
+                    (same-provider?
+                     avl-left
+                     (mapping-catenate integer-comparator
+                                        avl-left 3 30 red-black-right))
+                    (same-provider?
+                     red-black-left
+                     (mapping-catenate integer-comparator
+                                        red-black-left 3 30 avl-right))))
+  (test-assert 'mixed-provider-equality
+               (mapping=? integer-comparator
+                          (avl-mapping integer-comparator 1 10 2 20)
+                          (mapping integer-comparator 1 10 2 20)))
+  (test-equal 'mixed-provider-catenate-values
+              '((1 . 10) (2 . 20) (3 . 30) (4 . 40) (5 . 50))
+              (mapping->alist
+               (mapping-catenate integer-comparator
+                                  avl-left 3 30 red-black-right)))))
 
 (testing-runner-main "Stdlib Mapping Conformance portable tests" (command-line))
