@@ -1362,6 +1362,45 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (consent symbol))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "symbol.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-symbol?
+          consent-symbol-name
+          consent-symbol-equivalent?
+          consent-symbol=?
+          consent-symbol-table?
+          consent-make-symbol-table
+          consent-symbol-table-from-root
+          consent-symbol-table-root
+          consent-symbol-table-root-set!
+          consent-intern-symbol
+          consent-default-symbol-table))
+        (dependencies
+         ((library (scheme base))
+          (library (data avl-tree))))
+        (provenance
+         ((origin repo)
+          (identity owned-portable-symbol)
+          (storage persistent-avl-root)))
+        (verification
+         ((test-status
+           (interning shared-root-branches isolated-root-equivalence
+                      root-installation portable-host-suite
+                      compiled-host-suite))))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (consent reader))
         (owner consent-core)
         (provider repo-source)
@@ -1852,6 +1891,7 @@
         (exports
          (consent-standard-source-library-specs
           consent-stdlib-source-library-specs
+          consent-data-source-library-specs
           consent-runtime-source-files
           consent-library-catalog-entries
           consent-library-catalog-entry
@@ -2042,6 +2082,7 @@
           consent-base-binding-specs
           consent-standard-source-library-specs
           consent-stdlib-source-library-specs
+          consent-data-source-library-specs
           consent-primitive-manifest-binding-specs
           consent-result->external
           consent-value->external
@@ -2109,6 +2150,7 @@
           consent-base-binding-specs
           consent-standard-source-library-specs
           consent-stdlib-source-library-specs
+          consent-data-source-library-specs
           consent-primitive-manifest-binding-specs
           consent-result->external
           consent-value->external
