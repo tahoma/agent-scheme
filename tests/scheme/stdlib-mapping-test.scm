@@ -11,6 +11,11 @@
         (scheme write)
         (stdlib comparator)
         (stdlib mapping)
+        (data mapping avl)
+        (only (stdlib mapping implementation)
+              mapping-provider=?
+              mapping-storage-provider
+              red-black-mapping-provider)
         (scheme process-context)
         (testing registry)
         (testing runner)
@@ -122,6 +127,16 @@
 (define default-comparator
   (make-default-comparator))
 
+(define (red-black-backed? mapping)
+  "Return #t when MAPPING retains the standard red-black provider."
+  (mapping-provider=? (mapping-storage-provider mapping)
+                      red-black-mapping-provider))
+
+(define (same-provider? left right)
+  "Return #t when LEFT and RIGHT use the same Mapping provider."
+  (mapping-provider=? (mapping-storage-provider left)
+                      (mapping-storage-provider right)))
+
 ;; Empty symbolic-key mapping fixture.
 (define empty-symbols
   (mapping default-comparator))
@@ -129,6 +144,10 @@
 ;; Ordered symbolic-key mapping fixture built from shuffled constructor input.
 (define symbols
   (mapping default-comparator 'b 2 'a 1 'c 3))
+
+;; AVL-backed peer of SYMBOLS for provider-neutral behavior checks.
+(define avl-symbols
+  (avl-mapping default-comparator 'b 2 'a 1 'c 3))
 
 (testing-registry-case
  'predicate-mapping '(portable stdlib)
@@ -144,6 +163,15 @@
 (test-equal 'constructor-orders-keys
              '((a . 1) (b . 2) (c . 3))
              (mapping->alist symbols)))
+(testing-registry-case
+ 'avl-constructor-is-standard-mapping '(portable data stdlib)
+(test-assert 'avl-constructor-is-standard-mapping
+             (and (mapping? avl-symbols)
+                  (not (red-black-backed? avl-symbols))
+                  (same-provider? avl-symbols
+                                  (mapping-set avl-symbols 'd 4))
+                  (equal? '((a . 1) (b . 2) (c . 3))
+                          (mapping->alist avl-symbols)))))
 (testing-registry-case
  'mapping-ref '(portable stdlib)
 (test-equal 'mapping-ref 2 (mapping-ref symbols 'b)))
@@ -349,5 +377,42 @@
 (test-equal 'model-range>=
              (model-range>= model-after-adjoin 4)
              (mapping->alist (mapping-range>= mapping-after-adjoin 4))))
+
+(testing-registry-case
+ 'default-provider-preserved '(portable stdlib)
+(let-values (((partition-in partition-out)
+              (mapping-partition (lambda (key value) (< key 3)) numbers))
+             ((split< split<= split= split>= split>)
+              (mapping-split numbers 3)))
+  (test-assert
+   'default-provider-preserved
+   (let loop
+       ((mappings
+         (list numbers
+               (mapping-set numbers 5 'five)
+               (mapping-delete numbers 1)
+               (mapping-copy numbers)
+               (mapping-filter (lambda (key value) (< key 4)) numbers)
+               partition-in
+               partition-out
+               (mapping-range>= numbers 3)
+               split<
+               split<=
+               split=
+               split>=
+               split>
+               (mapping-catenate integer-comparator
+                                  (mapping integer-comparator 1 'one)
+                                  2
+                                  'two
+                                  (mapping integer-comparator 3 'three))
+               (mapping-union numbers (mapping integer-comparator 5 'five))
+               (mapping-map/monotone
+                (lambda (key value) (values (+ key 10) value))
+                integer-comparator
+                numbers))))
+     (or (null? mappings)
+         (and (red-black-backed? (car mappings))
+              (loop (cdr mappings))))))))
 
 (testing-runner-main "Stdlib Mapping portable tests" (command-line))
