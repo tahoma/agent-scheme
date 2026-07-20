@@ -50,20 +50,21 @@ cross-process exchange.
 
 | Scheme value | Self-hosted semantic representation | Canonical invariants |
 | --- | --- | --- |
-| Exact integer | Sign plus a little-endian sequence of backend-selected base-2^w limbs | Zero has no negative sign and no high zero limbs. Each limb is in `[0, 2^w - 1]`. |
+| Exact integer | A profile-bounded immediate host fixnum, or a sign plus a little-endian sequence of backend-selected base-2^w limbs | Immediate magnitudes are at most both the host's configured fixnum limit and `B^2 - 1`. Larger values have no high zero limbs and each limb is in `[0, B - 1]`. Results promote on overflow and demote after normalization. |
 | Exact rational | Owned numerator integer plus owned denominator integer | Denominator is positive, numerator and denominator are coprime, and zero is `0/1`. A denominator of one is represented as an integer. |
 | Finite inexact real | Binary64 semantic tuple: class, sign, unbiased exponent, and 53-bit significand stored with owned integers | Round to nearest, ties to even. Subnormals are supported. Consent's baseline canonicalizes both zero signs to positive zero, which R7RS permits. |
 | Infinity | Inexact-real class `infinity` plus sign | Exactly two infinity values. |
 | NaN | Inexact-real class `nan` | One canonical quiet NaN. Input `-nan.0` normalizes to it; no payload or signaling distinction is exposed. |
 | Complex | Ordered pair of canonical real components | Components are never complex. The value is exact only when both components are exact. |
 
-The current owned representation has no fixnum/bignum storage split. Even zero
-and one-limb exact integers use the sign-and-limb record above. In this
-document, `fixnum` therefore means only an immediate exact integer supplied by
-the implementation host and used behind a checked accelerator. It is not a
-Consent numeric type or a limit on language-visible integers. A later storage
-specialization may encode profile-bounded small integers directly and promote
-on overflow without changing these semantics.
+The owned representation has a fixnum/bignum storage split. `Fixnum` names the
+direct implementation representation, not a distinct Consent numeric type or
+a limit on language-visible integers. The backend fixes a symmetric immediate
+bound as the lesser of its limb accumulator bound and its target's configured
+fixnum bound. It represents values inside that range directly, promotes larger
+results to owned limbs, and demotes normalized results that return to the
+range. This removes record and vector allocation from ordinary evaluator
+integer arithmetic while keeping exact integers unbounded.
 
 ### Exact-integer limb profiles
 
@@ -85,10 +86,11 @@ limit, so the bootstrap's hot inner loop does not allocate host bignums. A
 31-bit limb would raise the same bound to `2^62 - 1` and cross that Emacs
 fixnum limit.
 
-For this default profile, the owned backend's checked host-integer accelerator
-accepts magnitudes through `B^2 - 1 = 2^60 - 1`. That symmetric bound is a
-backend portability choice, not the maximum fixnum of every host: for example,
-the measured Emacs build has one additional positive fixnum bit.
+For this default profile, the owned backend's fixnum range is
+`[-(B^2 - 1), B^2 - 1]`, or `[-(2^60 - 1), 2^60 - 1]`. The same bound governs
+checked host-integer accumulators. That symmetric bound is a backend portability
+choice, not the maximum fixnum of every host: for example, the measured Emacs
+build has one additional positive fixnum bit.
 
 The Emacs bootstrap and representative 64-bit builds of every R7RS
 implementation wired into the development and oracle matrix use the same broad
@@ -139,8 +141,12 @@ Thirty bits is the largest profile whose multiplication accumulator is proven
 to remain an immediate integer across the common 64-bit bootstrap matrix.
 Wider profiles may allocate host bignums while tested on an existing R7RS host;
 a native implementation must reject them unless it provides the stronger exact
-accumulator operations. The boundary corpus exercises `w = 62` as the
-representative signed-128-bit profile.
+accumulator operations. The portable implementation also caps direct integers
+at the common `2^60 - 1` fixnum limit independently of `w`, so a `w = 62`
+simulation promotes values above that limit rather than mistaking a host
+bignum for a fixnum. A native 128-bit target may specialize that separate
+fixnum bound after proving its tagged representation and ABI. The boundary
+corpus exercises `w = 62` as the representative signed-128-bit limb profile.
 
 Serialized values, hashing, external rendering, and language semantics do not
 expose `w`. Native code compiled for different limb profiles cannot exchange raw
@@ -213,19 +219,28 @@ exact whenever R7RS requires an exact result.
 The owned core has two optional fast paths that do not change its storage or
 fallback semantics:
 
-- Exact add, multiply, division, import, and canonical rendering may use a host
-  fixnum only after their value and result bounds have been proved against the
-  selected profile's `B^2 - 1` accumulator maximum. Results are immediately
-  imported into owned limbs. Values outside that proof use the same schoolbook,
-  long-division, parsing, and rendering algorithms exercised at `B^2` by the
-  alternate-profile tests; the fast path therefore never asks the host for a
-  bignum.
+- Exact add, multiply, division, import, and canonical rendering may use host
+  arithmetic only after their value and result bounds have been proved against
+  the selected profile's `B^2 - 1` accumulator maximum. Results remain directly
+  represented only through the separately configured fixnum limit; larger
+  results promote to owned limbs. On a simulated wider profile the host may
+  use bignums for these checked accumulators, while a production native target
+  must provide the profile's proven fixed-width operations. Values outside the
+  accumulator proof use the same schoolbook, long-division, parsing, and
+  rendering algorithms exercised beyond `B^2` by the alternate-profile tests.
 - A host with the checked binary64 behavior may accelerate ordinary finite
   addition, subtraction, multiplication, and division. Results are immediately
   decoded into the owned class/sign/significand/exponent tuple, and any cached
   host float is private and rebuildable. The software binary64 operations remain
   the defining fallback and are tested directly for arithmetic, rounding,
   subnormal, overflow, infinity, and NaN behavior.
+
+The host-math seam reconstructs an uncached finite tuple directly from its
+at-most-53-bit significand and power-of-two exponent. It must never format the
+tuple as shortest decimal text and parse it back: parsed source literals
+naturally lack a host cache, so that design turns ordinary repeated constants
+into arbitrary-precision rendering work inside every arithmetic loop. Decimal
+search belongs only to external rendering.
 
 These are implementation accelerators for already-owned algorithms, not
 deferred semantic work.
@@ -352,12 +367,14 @@ must pass the same corpus before it can replace an owned path.
 
 The owned backend additionally runs white-box tests parameterized by
 `limb-bits`. Boundary cases cover `B - 1`, `B`, `B + 1`, `B^2 - 1`, and
-`B^2`, plus sign normalization, carry propagation, quotient correction, and
-checked accelerator fallback. Deterministic multi-limb cases verify quotient
-reconstruction and remainder bounds under both division conventions, square
-root reconstruction, GCD, large-factor rational cancellation, rounding modes,
-and radix round trips. A fixed large-value corpus must also produce identical
-canonical results under every profile.
+`B^2`, plus each profile's separate positive and negative fixnum limit,
+promotion one integer beyond it, and demotion after arithmetic returns to the
+limit. They also cover sign normalization, carry propagation, quotient
+correction, and checked accelerator fallback. Deterministic multi-limb cases
+verify quotient reconstruction and remainder bounds under both division
+conventions, square root reconstruction, GCD, large-factor rational
+cancellation, rounding modes, and radix round trips. A fixed large-value
+corpus must also produce identical canonical results under every profile.
 
 The binary64 matrix covers exact-dyadic and shortest-decimal round trips,
 subnormal underflow, the subnormal/normal boundary, the `2^53` integer
