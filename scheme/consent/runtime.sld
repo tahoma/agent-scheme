@@ -610,6 +610,16 @@
 
     (define (consent-native-library-documentation-ref key name)
       "Return compiled source documentation specification for NAME in KEY."
+      #((parameters
+         (key (type (list-of (or symbol exact-integer)))
+          (description "Library key to look up in the documentation registry."))
+         (name (type symbol)
+          (description "Export name whose compiled documentation is sought.")))
+        (returns (type (or list boolean))
+         (description
+          ("The compiled `(formals documentation-literals)' specification,"
+            "or #f when no specification is registered.")))
+        (effects state-read))
       (let* ((library-entry
               (runtime-assoc
                key
@@ -794,6 +804,20 @@
              .
              maybe-documentation)
       "Create a runtime primitive procedure with optional DOCUMENTATION."
+      #((parameters
+         (name (type symbol)
+          (description "Private dispatch name for the primitive."))
+         (function (type procedure)
+          (description "Host procedure implementing the primitive."))
+         (minimum-arity (type exact-integer)
+          (description "Minimum number of accepted arguments."))
+         (maximum-arity (type (or exact-integer boolean))
+          (description "Maximum accepted arguments, or #f for unbounded."))
+         (maybe-documentation (type list)
+          (description "Optional singleton list of procedure documentation.")))
+        (returns (type primitive-procedure)
+         (description "Fresh primitive procedure record."))
+        (effects allocation))
       (make-primitive-procedure-record
        name
        function

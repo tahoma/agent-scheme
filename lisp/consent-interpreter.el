@@ -1957,6 +1957,93 @@ allocation that produced it."
         description
         (consent-value->external datum))))))
 
+(defun consent--positive-integer-bit-length (value)
+  "Return the significant bit count of nonnegative host integer VALUE."
+  (let ((remaining value)
+        (bits 0))
+    (while (> remaining 0)
+      (setq remaining (ash remaining -1))
+      (setq bits (1+ bits)))
+    bits))
+
+(defun consent--host-integer-compare (left right)
+  "Compare host integers LEFT and RIGHT, returning -1, 0, or 1."
+  (cond
+   ((< left right) -1)
+   ((> left right) 1)
+   (t 0)))
+
+(defun consent--compare-positive-ratio-shifted
+    (numerator denominator shift)
+  "Compare NUMERATOR with DENOMINATOR times two to signed power SHIFT."
+  (if (>= shift 0)
+      (consent--host-integer-compare numerator (ash denominator shift))
+    (consent--host-integer-compare
+     (ash numerator (- shift)) denominator)))
+
+(defun consent--rational-binary-exponent (numerator denominator)
+  "Return floor(log2(NUMERATOR / DENOMINATOR)) for positive host integers."
+  (let* ((guess (- (consent--positive-integer-bit-length numerator)
+                   (consent--positive-integer-bit-length denominator)))
+         (comparison
+          (consent--compare-positive-ratio-shifted
+           numerator denominator guess)))
+    (if (< comparison 0) (1- guess) guess)))
+
+(defun consent--round-positive-ratio (numerator denominator)
+  "Round positive host ratio NUMERATOR/DENOMINATOR to nearest, ties even."
+  (let* ((quotient (/ numerator denominator))
+         (remainder (% numerator denominator))
+         (comparison
+          (consent--host-integer-compare (* remainder 2) denominator)))
+    (if (or (> comparison 0)
+            (and (= comparison 0) (cl-oddp quotient)))
+        (1+ quotient)
+      quotient)))
+
+(defun consent--round-scaled-ratio (numerator denominator shift)
+  "Round NUMERATOR/DENOMINATOR times two to signed power SHIFT."
+  (if (>= shift 0)
+      (consent--round-positive-ratio
+       (ash numerator shift) denominator)
+    (consent--round-positive-ratio
+     numerator (ash denominator (- shift)))))
+
+(defun consent--rational-pair->binary64-float (pair)
+  "Correctly round exact rational host PAIR into an Emacs binary64 float."
+  (let ((numerator (car pair))
+        (denominator (cdr pair)))
+    (if (zerop numerator)
+        0.0
+      (let* ((sign (cl-signum numerator))
+             (absolute (abs numerator))
+             (binary-exponent
+              (consent--rational-binary-exponent absolute denominator)))
+        (cond
+         ((> binary-exponent 1023)
+          (/ (float sign) 0.0))
+         ((>= binary-exponent -1022)
+          (let* ((significand
+                  (consent--round-scaled-ratio
+                   absolute denominator (- 52 binary-exponent)))
+                 (carried (= significand (ash 1 53)))
+                 (adjusted-exponent
+                  (if carried (1+ binary-exponent) binary-exponent))
+                 (adjusted-significand
+                  (if carried (/ significand 2) significand)))
+            (if (> adjusted-exponent 1023)
+                (/ (float sign) 0.0)
+              (ldexp
+               (float (* sign adjusted-significand))
+               (- adjusted-exponent 52)))))
+         (t
+          (let ((significand
+                 (consent--round-scaled-ratio
+                  absolute denominator 1074)))
+            (if (zerop significand)
+                0.0
+              (ldexp (float (* sign significand)) -1074)))))))))
+
 (defun consent--number-from-rational-pair
     (pair &optional exactness)
   "Return number datum for rational PAIR and EXACTNESS."
@@ -1964,7 +2051,7 @@ allocation that produced it."
                  (car pair) (cdr pair) (or exactness 'exact) 10)))
     (if (eq exactness 'inexact)
         (consent--make-canonical-decimal
-         (/ (float (car pair)) (cdr pair)))
+         (consent--rational-pair->binary64-float pair))
       number)))
 
 (defun consent--number-inexact (datum)
@@ -1974,11 +2061,12 @@ allocation that produced it."
     ((or 'decimal 'infnan) datum)
     ('integer
      (consent--make-canonical-decimal
-      (float (consent-number-value datum))))
+      (consent--rational-pair->binary64-float
+       (cons (consent-number-value datum) 1))))
     ('rational
      (let ((value (consent-number-value datum)))
        (consent--make-canonical-decimal
-        (/ (float (car value)) (cdr value)))))
+        (consent--rational-pair->binary64-float value))))
     ('complex
      (let ((value (consent-number-value datum)))
        (consent--make-canonical-complex

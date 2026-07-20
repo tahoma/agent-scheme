@@ -3,6 +3,7 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 (import (scheme base)
+        (scheme cxr)
         (scheme process-context)
         (consent numeric)
         (testing registry)
@@ -20,6 +21,15 @@
 (define (integer-text backend value)
   "Render owned integer VALUE as decimal text."
   (numeric backend 'integer->string value 10))
+
+(define (integer=? backend left right)
+  "Report whether owned integers LEFT and RIGHT are equal."
+  (= (numeric backend 'integer-compare left right) 0))
+
+(define (require-condition condition message detail)
+  "Raise MESSAGE with DETAIL unless CONDITION is true."
+  (if (not condition)
+      (error message detail)))
 
 (define (raises? thunk)
   "Report whether THUNK raises an exception."
@@ -207,6 +217,572 @@
      "0"
      (integer-text backend (integer backend "-0")))))
 
+(define (check-divmod-case backend dividend-text divisor-text)
+  "Check both division conventions for the owned decimal operands."
+  (let* ((dividend (integer backend dividend-text))
+         (divisor (integer backend divisor-text))
+         (absolute-divisor (numeric backend 'integer-abs divisor))
+         (truncated
+          (numeric
+           backend 'integer-divmod-truncate dividend divisor))
+         (floored
+          (numeric backend 'integer-divmod-floor dividend divisor)))
+    (define (check-result label result remainder-follows)
+      (let* ((quotient-value (car result))
+             (remainder-value (cdr result))
+             (reconstructed
+              (numeric
+               backend
+               'integer-add
+               (numeric
+                backend 'integer-multiply quotient-value divisor)
+               remainder-value))
+             (absolute-remainder
+              (numeric backend 'integer-abs remainder-value)))
+        (require-condition
+         (integer=? backend reconstructed dividend)
+         "division reconstruction failed"
+         (list label dividend-text divisor-text))
+        (require-condition
+         (< (numeric
+             backend 'integer-compare absolute-remainder absolute-divisor)
+            0)
+         "division remainder escaped divisor bound"
+         (list label dividend-text divisor-text))
+        (require-condition
+         (or (numeric backend 'integer-zero? remainder-value)
+             (eq?
+              (numeric backend 'integer-negative? remainder-value)
+              (numeric backend 'integer-negative? remainder-follows)))
+         "division remainder has the wrong sign"
+         (list label dividend-text divisor-text))))
+    (check-result 'truncate truncated dividend)
+    (check-result 'floor floored divisor)
+    #t))
+
+(define (check-radix-roundtrip backend value radix)
+  "Require VALUE to survive rendering and parsing in RADIX."
+  (let* ((text (numeric backend 'integer->string value radix))
+         (parsed (numeric backend 'integer-parse text radix)))
+    (require-condition
+     (and parsed (integer=? backend value parsed))
+     "owned integer radix round trip failed"
+     (list radix text))))
+
+(define (check-exact-stress-profile limb-bits)
+  "Stress multi-limb exact algorithms under LIMB-BITS."
+  (let* ((backend (consent-make-numeric-backend limb-bits))
+         (one (integer backend "1"))
+         (high
+          (numeric
+           backend 'integer-shift-left one (+ (* limb-bits 5) 7)))
+         (middle
+          (numeric
+           backend 'integer-shift-left one (+ (* limb-bits 2) 3)))
+         (dividend
+          (numeric
+           backend
+           'integer-add
+           high
+           (numeric
+            backend
+            'integer-add
+            (numeric backend 'integer-multiply-small middle 12345)
+            (integer backend "6789"))))
+         (divisor
+          (numeric
+           backend
+           'integer-add
+           (numeric
+            backend 'integer-shift-left one (+ (* limb-bits 2) 1))
+           (integer backend "54321")))
+         (dividend-text (integer-text backend dividend))
+         (divisor-text (integer-text backend divisor))
+         (negative-dividend-text
+          (string-append "-" dividend-text))
+         (negative-divisor-text
+          (string-append "-" divisor-text))
+         (common
+          (numeric backend 'integer-add high one))
+         (gcd-left
+          (numeric backend 'integer-multiply-small common 65536))
+         (gcd-right
+          (numeric backend 'integer-multiply-small common 65537))
+         (root-candidate
+          (numeric
+           backend
+           'integer-add
+           high
+           (numeric backend 'integer-add middle (integer backend "17"))))
+         (radicand
+          (numeric
+           backend
+           'integer-add
+           (numeric
+            backend 'integer-multiply root-candidate root-candidate)
+           root-candidate))
+         (root-result
+          (numeric backend 'integer-square-root radicand))
+         (next-root-bound
+          (numeric
+           backend
+           'integer-add
+           (numeric backend 'integer-multiply-small (car root-result) 2)
+           one))
+         (negative-value (numeric backend 'integer-negate dividend)))
+    (check-divmod-case backend dividend-text divisor-text)
+    (check-divmod-case backend negative-dividend-text divisor-text)
+    (check-divmod-case backend dividend-text negative-divisor-text)
+    (check-divmod-case
+     backend negative-dividend-text negative-divisor-text)
+    (require-condition
+     (integer=? backend
+                (numeric backend 'integer-gcd gcd-left gcd-right)
+                common)
+     "multi-limb GCD lost the common factor"
+     limb-bits)
+    (require-condition
+     (integer=? backend (car root-result) root-candidate)
+     "multi-limb square root selected the wrong root"
+     limb-bits)
+    (require-condition
+     (integer=? backend
+                (numeric
+                 backend
+                 'integer-add
+                 (numeric
+                  backend
+                  'integer-multiply
+                  (car root-result)
+                  (car root-result))
+                 (cdr root-result))
+                radicand)
+     "square-root result does not reconstruct the radicand"
+     limb-bits)
+    (require-condition
+     (< (numeric
+         backend 'integer-compare (cdr root-result) next-root-bound)
+        0)
+     "square-root remainder permits a larger root"
+     limb-bits)
+    (for-each
+     (lambda (radix)
+       (check-radix-roundtrip backend dividend radix)
+       (check-radix-roundtrip backend negative-value radix))
+     '(2 8 10 16))
+    (require-condition
+     (not (numeric backend 'integer-parse "deadbeeg" 16))
+     "radix parser accepted a digit outside the radix"
+     limb-bits)
+    (require-condition
+     (not (numeric backend 'integer-parse "0" 1))
+     "integer parser accepted an unsupported radix"
+     limb-bits)
+    (require-condition
+     (raises?
+      (lambda ()
+        (numeric backend 'integer->string dividend 17)))
+     "integer renderer accepted an unsupported radix"
+     limb-bits)
+    (require-condition
+     (raises?
+      (lambda ()
+        (numeric
+         backend 'integer-divmod-truncate dividend (integer backend "0"))))
+     "owned integer division by zero did not raise"
+     limb-bits)
+    (require-condition
+     (raises?
+      (lambda ()
+        (numeric backend 'integer-square-root negative-value)))
+     "owned integer square root accepted a negative radicand"
+     limb-bits)
+    (require-condition
+     (raises?
+      (lambda ()
+        (numeric
+         backend 'integer-power dividend (integer backend "-1"))))
+     "owned integer power accepted a negative exponent"
+     limb-bits)
+    #t))
+
+(define (exact-profile-signature limb-bits)
+  "Return canonical exact results that must not depend on limb width."
+  (let* ((backend (consent-make-numeric-backend limb-bits))
+         (left
+          (integer
+           backend
+           "115792089237316195423570985008687907853269984665640564039457584007913129639936"))
+         (right
+          (integer backend "123456789012345678901234567890123456789"))
+         (divisor
+          (integer backend "98765432109876543210987654321"))
+         (division
+          (numeric backend 'integer-divmod-truncate left divisor))
+         (ratio
+          (numeric
+           backend
+           'rational-normalize
+           (numeric backend 'integer-multiply-small left 21)
+           (numeric backend 'integer-multiply-small left 35))))
+    (list
+     (integer-text backend
+                   (numeric backend 'integer-add left right))
+     (integer-text backend
+                   (numeric backend 'integer-multiply right divisor))
+     (integer-text backend (car division))
+     (integer-text backend (cdr division))
+     (numeric backend 'integer->string left 2)
+     (numeric backend 'integer->string left 16)
+     (integer-text backend (car ratio))
+     (integer-text backend (cdr ratio)))))
+
+(define (check-rational-stress-profile limb-bits)
+  "Stress rational normalization and rounding under LIMB-BITS."
+  (let* ((backend (consent-make-numeric-backend limb-bits))
+         (one (integer backend "1"))
+         (factor
+          (numeric
+           backend
+           'integer-add
+           (numeric
+            backend 'integer-shift-left one (+ (* limb-bits 4) 5))
+           (integer backend "37")))
+         (other-factor
+          (numeric
+           backend
+           'integer-add
+           (numeric
+            backend 'integer-shift-left one (+ (* limb-bits 3) 2))
+           (integer backend "39")))
+         (left
+          (numeric
+           backend
+           'rational-normalize
+           (numeric backend 'integer-multiply-small factor 3)
+           (numeric backend 'integer-multiply-small other-factor 5)))
+         (right
+          (numeric
+           backend
+           'rational-normalize
+           (numeric backend 'integer-multiply-small other-factor 7)
+           (numeric backend 'integer-multiply-small factor 11)))
+         (product (numeric backend 'rational-multiply left right))
+         (three-factor
+          (numeric backend 'integer-multiply-small factor 3))
+         (six-factor
+          (numeric backend 'integer-multiply-small factor 6))
+         (sum
+          (numeric
+           backend
+           'rational-add
+           (numeric backend 'rational-normalize one three-factor)
+           (numeric backend 'rational-normalize one six-factor)))
+         (two-factor
+          (numeric backend 'integer-multiply-small factor 2))
+         (less
+          (numeric
+           backend
+           'rational-normalize
+           (numeric backend 'integer-subtract factor one)
+           factor))
+         (more
+          (numeric
+           backend
+           'rational-normalize
+           factor
+           (numeric backend 'integer-add factor one))))
+    (require-condition
+     (and (string=? (integer-text backend (car product)) "21")
+          (string=? (integer-text backend (cdr product)) "55"))
+     "rational cross-cancellation produced a noncanonical result"
+     limb-bits)
+    (require-condition
+     (and (integer=? backend (car sum) one)
+          (integer=? backend (cdr sum) two-factor))
+     "rational addition failed to exploit a large common denominator"
+     limb-bits)
+    (require-condition
+     (= (numeric backend 'rational-compare less more) -1)
+     "close large rationals compared in the wrong order"
+     limb-bits)
+    (for-each
+     (lambda (entry)
+       (let* ((numerator (integer backend (car entry)))
+              (denominator (integer backend (cadr entry)))
+              (mode (caddr entry))
+              (expected (cadddr entry))
+              (pair
+               (numeric
+                backend 'rational-normalize numerator denominator)))
+         (require-condition
+          (string=?
+           (integer-text
+            backend
+            (numeric backend 'rational-round pair mode))
+           expected)
+          "rational rounding matrix mismatch"
+          (list limb-bits entry))))
+     '(("7" "3" truncate "2")
+       ("7" "3" floor "2")
+       ("7" "3" ceiling "3")
+       ("5" "2" round "2")
+       ("7" "2" round "4")
+       ("-7" "3" truncate "-2")
+       ("-7" "3" floor "-3")
+       ("-7" "3" ceiling "-2")
+       ("-5" "2" round "-2")
+       ("-7" "2" round "-4")))
+    (let ((zero
+           (numeric
+            backend
+            'rational-normalize
+            (integer backend "0")
+            (numeric backend 'integer-negate factor)))
+          (negative-denominator
+           (numeric
+            backend
+            'rational-normalize
+            (integer backend "9")
+            (integer backend "-12"))))
+      (require-condition
+       (and (string=? (integer-text backend (car zero)) "0")
+            (string=? (integer-text backend (cdr zero)) "1"))
+       "rational zero was not normalized to 0/1"
+       limb-bits)
+      (require-condition
+       (and
+        (string=? (integer-text backend (car negative-denominator)) "-3")
+        (string=? (integer-text backend (cdr negative-denominator)) "4"))
+       "negative denominator was not normalized"
+       limb-bits))
+    (require-condition
+     (raises?
+      (lambda ()
+        (numeric
+         backend
+         'rational-divide
+         left
+         (numeric
+          backend
+          'rational-normalize
+          (integer backend "0")
+          one))))
+     "rational division by zero did not raise"
+     limb-bits)
+    (require-condition
+     (raises?
+      (lambda ()
+        (numeric
+         backend
+         'rational-normalize
+         one
+         (integer backend "0"))))
+     "zero rational denominator did not raise"
+     limb-bits)
+    #t))
+
+;; Decimal inputs and canonical outputs spanning binary64 representation edges.
+(define binary64-roundtrip-corpus
+  '(("0" "0.0")
+    ("-0" "0.0")
+    ("0.1" "0.1")
+    ("9007199254740991" "9007199254740991.0")
+    ("9007199254740992" "9007199254740992.0")
+    ("9007199254740993" "9007199254740992.0")
+    ("5e-324" "5e-324")
+    ("2.225073858507201e-308" "2.225073858507201e-308")
+    ("2.2250738585072014e-308" "2.2250738585072014e-308")
+    ("1.7976931348623157e308" "1.7976931348623157e+308")
+    ("1.7976931348623158e308" "1.7976931348623157e+308")))
+
+(define (check-binary64-profile limb-bits)
+  "Stress binary64 conversion and special arithmetic under LIMB-BITS."
+  (let* ((backend (consent-make-numeric-backend limb-bits))
+         (one-integer (integer backend "1"))
+         (zero (numeric backend 'binary64-zero))
+         (one (numeric backend 'binary64-parse "1.0"))
+         (negative-one (numeric backend 'binary64-parse "-1.0"))
+         (half (numeric backend 'binary64-parse "0.5"))
+         (positive-infinity
+          (numeric backend 'binary64-special 'infinity 1))
+         (negative-infinity
+          (numeric backend 'binary64-special 'infinity -1))
+         (nan (numeric backend 'binary64-special 'nan 1))
+         (two-to-1075
+          (numeric backend 'integer-shift-left one-integer 1075))
+         (two-to-1076
+          (numeric backend 'integer-shift-left one-integer 1076))
+         (half-subnormal
+          (numeric
+           backend
+           'binary64-from-rational
+           (numeric
+            backend 'rational-normalize one-integer two-to-1075)))
+         (above-half-subnormal
+          (numeric
+           backend
+           'binary64-from-rational
+           (numeric
+            backend
+            'rational-normalize
+            (integer backend "3")
+            two-to-1076)))
+         (normal-midpoint
+          (numeric
+           backend
+           'binary64-from-rational
+           (numeric
+            backend
+            'rational-normalize
+            (integer backend "9007199254740991")
+            two-to-1075)))
+         (half-ulp
+          (numeric backend 'binary64-parse "1.1102230246251565e-16"))
+         (three-half-ulps
+          (numeric backend 'binary64-parse "3.3306690738754696e-16"))
+         (tie-add-down
+          (numeric backend 'binary64-binary one half-ulp '+))
+         (tie-add-up
+          (numeric backend 'binary64-binary one three-half-ulps '+))
+         (smallest
+          (numeric backend 'binary64-parse "5e-324"))
+         (signature '()))
+    (for-each
+     (lambda (entry)
+       (let* ((parsed
+               (numeric backend 'binary64-parse (car entry)))
+              (rendered
+               (and parsed (numeric backend 'binary64->string parsed)))
+              (reparsed
+               (and rendered
+                    (numeric backend 'binary64-parse rendered)))
+              (exact-pair
+               (and parsed
+                    (numeric backend 'binary64->rational parsed)))
+              (exact-roundtrip
+               (and exact-pair
+                    (numeric
+                     backend 'binary64-from-rational exact-pair))))
+         (require-condition
+          (and parsed (string=? rendered (cadr entry)))
+          "binary64 canonical rendering mismatch"
+          (list limb-bits entry rendered))
+         (require-condition
+          (and reparsed
+               (numeric backend 'binary64-equal? parsed reparsed))
+          "binary64 decimal round trip changed the value"
+          (list limb-bits entry))
+         (require-condition
+          (and exact-roundtrip
+               (numeric
+                backend 'binary64-equal? parsed exact-roundtrip))
+          "binary64 exact dyadic round trip changed the value"
+          (list limb-bits entry))
+         (set! signature (cons rendered signature))))
+     binary64-roundtrip-corpus)
+    (for-each
+     (lambda (text)
+       (require-condition
+        (not (numeric backend 'binary64-parse text))
+        "binary64 parser accepted malformed decimal text"
+        (list limb-bits text)))
+     '("" "+" "-" "." "+." "e3" "1e" "1e3.0" "1..0" "1e2e3"))
+    (require-condition
+     (and (numeric backend 'binary64-zero? half-subnormal)
+          (string=?
+           (numeric backend 'binary64->string above-half-subnormal)
+           "5e-324"))
+     "binary64 subnormal halfway rounding is not ties-to-even"
+     limb-bits)
+    (require-condition
+     (string=?
+      (numeric backend 'binary64->string normal-midpoint)
+      "2.2250738585072014e-308")
+     "binary64 normal/subnormal midpoint rounded the wrong way"
+     limb-bits)
+    (require-condition
+     (and
+      (string=? (numeric backend 'binary64->string tie-add-down) "1.0")
+      (string=?
+       (numeric backend 'binary64->string tie-add-up)
+       "1.0000000000000004"))
+     "binary64 addition did not round halfway cases to even"
+     limb-bits)
+    (require-condition
+     (eq?
+      (numeric
+       backend
+       'binary64-class
+       (numeric
+        backend
+        'binary64-binary
+        positive-infinity
+        negative-infinity
+        '+))
+      'nan)
+     "opposite infinities did not produce NaN"
+     limb-bits)
+    (require-condition
+     (eq?
+      (numeric
+       backend
+       'binary64-class
+       (numeric backend 'binary64-binary zero zero '/))
+      'nan)
+     "zero divided by zero did not produce NaN"
+     limb-bits)
+    (let ((negative-product
+           (numeric
+            backend
+            'binary64-binary
+            positive-infinity
+            negative-one
+            '*))
+          (negative-quotient
+           (numeric
+            backend 'binary64-binary negative-one zero '/))
+          (finite-over-infinity
+           (numeric
+            backend 'binary64-binary one positive-infinity '/))
+          (underflow
+           (numeric backend 'binary64-binary smallest half '*))
+          (cancellation
+           (numeric backend 'binary64-binary one negative-one '+)))
+      (require-condition
+       (and
+        (eq? (numeric backend 'binary64-class negative-product)
+             'infinity)
+        (= (numeric backend 'binary64-sign negative-product) -1)
+        (eq? (numeric backend 'binary64-class negative-quotient)
+             'infinity)
+        (= (numeric backend 'binary64-sign negative-quotient) -1))
+       "binary64 special arithmetic lost its result sign"
+       limb-bits)
+      (require-condition
+       (and
+        (numeric backend 'binary64-zero? finite-over-infinity)
+        (numeric backend 'binary64-zero? underflow)
+        (numeric backend 'binary64-zero? cancellation)
+        (= (numeric backend 'binary64-sign cancellation) 1))
+       "binary64 zero normalization failed"
+       limb-bits))
+    (require-condition
+     (eq? (numeric backend 'binary64-compare nan one) #f)
+     "binary64 NaN participated in ordering"
+     limb-bits)
+    (require-condition
+     (and
+      (raises?
+       (lambda ()
+         (numeric backend 'binary64-special 'finite 1)))
+      (raises?
+       (lambda ()
+         (numeric backend 'binary64-special 'infinity 0))))
+     "binary64 special constructor accepted a noncanonical tuple"
+     limb-bits)
+    (reverse signature)))
+
 (testing-registry-case
  'parameterized-limb-boundaries '(portable runtime numeric)
 (begin
@@ -226,6 +802,43 @@
   (test-assert 'small-grid-14 (check-small-integer-grid 14))
   (test-assert 'small-grid-30 (check-small-integer-grid 30))
   (test-assert 'small-grid-62 (check-small-integer-grid 62))))
+
+(testing-registry-case
+ 'multi-limb-exact-invariants '(portable runtime numeric stress)
+(let ((signature-14 (exact-profile-signature 14))
+      (signature-30 (exact-profile-signature 30))
+      (signature-62 (exact-profile-signature 62)))
+  (test-assert
+   'multi-limb-invariants-14
+   (check-exact-stress-profile 14))
+  (test-assert
+   'multi-limb-invariants-30
+   (check-exact-stress-profile 30))
+  (test-assert
+   'multi-limb-invariants-62
+   (check-exact-stress-profile 62))
+  (test-equal
+   'exact-results-independent-of-30-bit-profile
+   signature-14
+   signature-30)
+  (test-equal
+   'exact-results-independent-of-62-bit-profile
+   signature-14
+   signature-62)))
+
+(testing-registry-case
+ 'rational-normalization-and-rounding-stress
+ '(portable runtime numeric stress)
+(begin
+  (test-assert
+   'rational-invariants-14
+   (check-rational-stress-profile 14))
+  (test-assert
+   'rational-invariants-30
+   (check-rational-stress-profile 30))
+  (test-assert
+   'rational-invariants-62
+   (check-rational-stress-profile 62))))
 
 (testing-registry-case
  'owned-large-exact-arithmetic '(portable runtime numeric)
@@ -445,5 +1058,19 @@
                                   one
                                   1024)
                          one))))))
+
+(testing-registry-case
+ 'binary64-boundary-matrix '(portable runtime numeric stress)
+(let ((signature-14 (check-binary64-profile 14))
+      (signature-30 (check-binary64-profile 30))
+      (signature-62 (check-binary64-profile 62)))
+  (test-equal
+   'binary64-results-independent-of-30-bit-profile
+   signature-14
+   signature-30)
+  (test-equal
+   'binary64-results-independent-of-62-bit-profile
+   signature-14
+   signature-62)))
 
 (testing-runner-main "Consent owned numeric backend" (command-line))

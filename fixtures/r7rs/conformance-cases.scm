@@ -358,6 +358,18 @@
      (source "(import (scheme inexact)) (list (+ +inf.0 -inf.0) (* +inf.0 -1.0) (/ +inf.0 +inf.0) (finite? 1.0+2.0i) (nan? 1.0+nan.0i))")
      (expect (value "(+nan.0 -inf.0 +nan.0 #t #t)")))
 
+    ((id numeric-binary64-rounding-boundaries)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category numeric-tower)
+     (section "6.2.4")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description "Exact conversion and arithmetic round binary64 boundary cases to nearest, ties to even.")
+     (source "(list (number->string (inexact (/ 1 (expt 2 1075)))) (number->string (inexact (/ 3 (expt 2 1076)))) (number->string (inexact (/ (- (expt 2 53) 1) (expt 2 1075)))) (number->string (inexact 9007199254740993)) (number->string (+ 1.0 (inexact (/ 1 (expt 2 53))))) (number->string (+ 1.0 (inexact (/ 3 (expt 2 53))))))")
+     (expect (value "(\"0.0\" \"5e-324\" \"2.2250738585072014e-308\" \"9007199254740992.0\" \"1.0\" \"1.0000000000000004\")")))
+
     ((id numeric-complex-division)
      (kind r7rs-conformance)
      (phase eval)

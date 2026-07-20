@@ -623,32 +623,45 @@
         (+ 10 (- (char->integer character) (char->integer #\A))))
        (else #f)))
 
+    (define (supported-integer-radix? radix)
+      "Report whether RADIX is one of the owned integer textual bases."
+      (and (integer? radix)
+           (exact? radix)
+           (or (= radix 2)
+               (= radix 8)
+               (= radix 10)
+               (= radix 16))))
+
     (define (integer-parse backend text radix)
       "Parse signed integer TEXT in RADIX without constructing a host bignum."
-      (let* ((length (string-length text))
-             (negative?
-              (and (> length 0) (char=? (string-ref text 0) #\-)))
-             (signed?
-              (and (> length 0)
-                   (or negative? (char=? (string-ref text 0) #\+))))
-             (start (if signed? 1 0)))
-        (and (< start length)
-             (let loop ((index start) (value owned-zero))
-               (if (= index length)
-                   (if negative? (integer-negate value) value)
-                   (let ((digit
-                          (numeric-digit-value (string-ref text index))))
-                     (and digit
-                          (< digit radix)
-                          (loop
-                           (+ index 1)
-                           (integer-add-small
-                            backend
-                            (integer-multiply-small backend value radix)
-                            digit)))))))))
+      (and
+       (supported-integer-radix? radix)
+       (let* ((length (string-length text))
+              (negative?
+               (and (> length 0) (char=? (string-ref text 0) #\-)))
+              (signed?
+               (and (> length 0)
+                    (or negative? (char=? (string-ref text 0) #\+))))
+              (start (if signed? 1 0)))
+         (and (< start length)
+              (let loop ((index start) (value owned-zero))
+                (if (= index length)
+                    (if negative? (integer-negate value) value)
+                    (let ((digit
+                           (numeric-digit-value (string-ref text index))))
+                      (and digit
+                           (< digit radix)
+                           (loop
+                            (+ index 1)
+                            (integer-add-small
+                             backend
+                             (integer-multiply-small backend value radix)
+                             digit))))))))))
 
     (define (integer->string backend value radix)
       "Render owned integer VALUE in RADIX."
+      (if (not (supported-integer-radix? radix))
+          (error "owned integer radix must be 2, 8, 10, or 16" radix))
       (let ((small
              (integer->small
               backend value (backend-small-accelerator-limit backend))))
@@ -890,6 +903,11 @@
 
     (define (binary64-special backend class sign)
       "Construct a canonical binary64 infinity or NaN."
+      (if (not (or (eq? class 'infinity) (eq? class 'nan)))
+          (error "owned binary64 special class must be infinity or nan"
+                 class))
+      (if (not (or (= sign -1) (= sign 1)))
+          (error "owned binary64 sign must be -1 or 1" sign))
       (make-owned-binary64 class
                            (if (eq? class 'nan) 1 sign)
                            (integer-from-small backend 0)
@@ -1376,31 +1394,31 @@
                    (after-point? #f))
           (cond
            ((= index length)
-            (let ((integer
-                   (integer-parse
-                    backend
-                    (if (null? digits)
-                        "0"
-                        (list->string (reverse digits)))
-                    10)))
-              (and integer
-                   (rational-normalize
-                    backend
-                    (if negative? (integer-negate integer) integer)
-                    (decimal-power backend fraction-digits)))))
+            (and
+             (pair? digits)
+             (let ((integer
+                    (integer-parse
+                     backend
+                     (list->string (reverse digits))
+                     10)))
+               (and integer
+                    (rational-normalize
+                     backend
+                     (if negative? (integer-negate integer) integer)
+                     (decimal-power backend fraction-digits))))))
            ((or (char=? (string-ref text index) #\e)
                 (char=? (string-ref text index) #\E))
             (let* ((exponent-text
                     (substring text (+ index 1) length))
                    (exponent (string->number exponent-text)))
-              (and exponent
+              (and (pair? digits)
+                   exponent
+                   (exact? exponent)
                    (integer? exponent)
                    (let* ((integer
                            (integer-parse
                             backend
-                            (if (null? digits)
-                                "0"
-                                (list->string (reverse digits)))
+                            (list->string (reverse digits))
                             10))
                           (scale (- exponent fraction-digits)))
                      (and integer
