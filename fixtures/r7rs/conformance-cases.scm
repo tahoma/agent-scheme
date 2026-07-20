@@ -334,6 +334,18 @@
      (source "(list (exact #i3/2) (inexact #e3/2) (exact (inexact #e.125)) (number->string (inexact #e3/2)))")
      (expect (value "(3/2 1.5 1/8 \"1.5\")")))
 
+    ((id numeric-mixed-exact-inexact-ordering)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category numeric-tower)
+     (section "6.2.5")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description "Mixed comparisons retain distinctions beyond binary64 precision.")
+     (source "(let* ((base (expt 2 100)) (rounded (inexact base)) (next (+ base 1))) (list (= next rounded) (> next rounded) (= base rounded)))")
+     (expect (value "(#f #t #t)")))
+
     ((id numeric-inexact-edge-arithmetic)
      (kind r7rs-conformance)
      (phase eval)

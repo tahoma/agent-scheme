@@ -55,6 +55,34 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (consent numeric))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "numeric.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-make-numeric-backend
+          consent-default-numeric-backend
+          consent-numeric-backend-limb-bits
+          consent-numeric))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme char))))
+        (provenance ((origin repo)))
+        (verification
+         ((test-status
+           (exact-limbs rational-arithmetic binary64-core
+                        default-profile alternate-profile))))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (consent compiler-plan))
         (owner consent-core)
         (provider repo-source)
@@ -1531,6 +1559,7 @@
           consent-number-radix
           consent-number-kind
           consent-number-value
+          consent-number-owned-value
           consent-make-canonical-integer
           consent-make-canonical-decimal
           consent-make-canonical-rational
@@ -1554,6 +1583,7 @@
           (library (scheme char))
           (library (scheme inexact))
           (library (scheme write))
+          (library (consent numeric))
           (library (consent symbol))
           (library (consent symbol-boundary))))
         (provenance ((origin repo)))
@@ -2202,6 +2232,7 @@
           (library (scheme process-context))
           (library (scheme read))
           (library (scheme write))
+          (library (consent numeric))
           (library (consent reader))
           (library (consent symbol))
           (library (consent symbol-boundary))

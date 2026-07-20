@@ -23,6 +23,12 @@ does; retaining an ERT test does not make it the semantic source of truth.
   classifications, JSON Lines, and JSON Text Sequences are canonical in
   `tests/scheme/stdlib-json-reference-test.scm`.
 - Shared R7RS and REPL corpora are exercised by both portable and Emacs hosts.
+- `(consent numeric)` exact limbs, rational arithmetic, binary64 fallback, and
+  conversion semantics are canonical in
+  `tests/scheme/consent-numeric-test.scm`. The suite exercises the default
+  30-bit profile, an alternate 14-bit bootstrap profile, and a 62-bit native
+  profile at `B - 1`, `B`, `B + 1`, `B^2 - 1`, and `B^2`, so checked fixnum
+  acceleration and owned fallback share one cross-host boundary corpus.
 - `(data avl-tree)` semantics are canonical in
   `tests/scheme/data-avl-tree-test.scm`; its public smoke corpus also runs on
   compiled hosts. The direct-host suite alone imports the internal invariant
@@ -172,8 +178,8 @@ Scheme-plan shards directly; the aggregate live targets run the Emacs-host
 checks beside them, never as their discovery or process-control parent.
 
 The same plan makes compiled self-host coverage auditable rather than an
-allowlist hidden in shell orchestration. All 61 ordinary `full` programs carry
-exactly one of `compiled` or `self-host-gap`; the compiled shard contains 46
+allowlist hidden in shell orchestration. All 62 ordinary `full` programs carry
+exactly one of `compiled` or `self-host-gap`; the compiled shard contains 47
 programs total. The 16 current gaps are acceptance inputs to #346 and #432.
 Their issue comments
 name the exact registered cases or first failing manual checks. As those runtime

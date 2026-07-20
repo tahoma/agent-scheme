@@ -312,15 +312,14 @@ table before entering language-visible data.
 
 #### Portable numeric ownership
 
-Language-visible numbers are Consent-owned values even while the bootstrap
-implementations retain host integers and flonums behind explicit acceleration
-seams. The self-hosted representation uses owned limb integers, normalized
-rationals, deterministic finite-inexact tuples, canonical infinities and NaN,
-and rectangular complex pairs. Exact arithmetic, mixed-exactness comparison,
-conversion, and rendering must become owned algorithms before a self-hosted
-root can claim numeric independence; transcendental host math may remain a
-normalized, parity-tested accelerator through the compiled-runtime ABI
-milestone.
+Language-visible numbers are Consent-owned values. The portable R7RS runtime
+implements sign-and-limb exact integers, normalized rationals, deterministic
+binary64 tuples, canonical infinities and NaN, and rectangular complex pairs.
+Its exact arithmetic, finite arithmetic, mixed-exactness comparison, conversion,
+and rendering are owned algorithms. The Emacs bootstrap retains host integers
+and floats behind its private implementation seam, while transcendental host
+math remains a normalized, parity-tested accelerator through the
+compiled-runtime ABI milestone.
 
 The full representation, operation, host-dependency, ABI, allocation, and
 conformance contract is recorded in
@@ -1041,6 +1040,7 @@ where they implement shared language behavior.
 Likely portable R7RS modules:
 
 - `scheme/consent/reader.sld`
+- `scheme/consent/numeric.sld`
 - `scheme/consent/runtime.sld`
 - `scheme/consent/base.sld`
 - `scheme/consent/datum.sld`

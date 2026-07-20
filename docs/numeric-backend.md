@@ -1,11 +1,11 @@
 # Self-Hostable Numeric Backend
 
-Consent Scheme owns the meaning of Scheme numbers even while its bootstrap
-implementations use host integers, flonums, and math procedures as temporary
-accelerators. This document fixes the representation and operation contract
-that a self-hosted runtime must implement, inventories the remaining host
-dependencies, and defines the boundary later compiler and allocation work must
-consume.
+Consent Scheme owns the meaning and portable implementation of Scheme numbers.
+The R7RS runtime uses owned exact-integer limbs, normalized rationals, and
+software binary64 tuples; host numbers remain only at checked adapter and
+transcendental seams. This document fixes that representation and operation
+contract, inventories the remaining host dependencies, and defines the boundary
+later compiler and allocation work must consume.
 
 The R7RS-small numerical tower in [section 6.2](r7rs-small-report.md#62-numbers)
 is the language contract. This document chooses one deterministic semantic
@@ -17,15 +17,16 @@ record layout public API.
 
 Numeric ownership has three stages:
 
-1. **Canonical bootstrap values.** The current readers and evaluators wrap
-   language-visible numbers in Consent-owned records. Exactness, special values,
-   complex components, and external rendering are decided by Consent code, but
-   exact payloads and finite inexact calculations still use host numbers.
+1. **Canonical bootstrap values.** The Emacs bootstrap wraps language-visible
+   numbers in Consent-owned records while using Emacs integers and floats behind
+   its private accelerator seams.
 2. **Self-hosted semantic backend.** Exact integers, exact rationals, finite
    inexact reals, mixed-exactness comparison, conversion, and rendering use the
    owned representations and algorithms below. Host numeric procedures may be
    selected only as checked accelerators whose result is normalized through the
-   same contract.
+   same contract. The portable runtime implements this stage in
+   `(consent numeric)` and stores its values behind `(consent reader)`'s
+   canonical number shell.
 3. **Compiled representation.** The runtime ABI work in
    [#120](https://github.com/tahoma/consent/issues/120) chooses immediate versus
    boxed encodings and call conventions. The allocation and collection contract
@@ -33,10 +34,9 @@ Numeric ownership has three stages:
    traversal, roots, and collector behavior. Neither issue may redefine the
    numerical semantics fixed here.
 
-Stage 1 remains a valid bootstrap posture. It is not evidence that stage 2 is
-complete. In particular, a `consent-number` record containing a host bignum or
-flonum is language-owned at its outer boundary but is not yet self-hostable at
-its payload boundary.
+Stage 1 remains a valid bootstrap posture for Emacs, but the portable R7RS
+reader and evaluator are at stage 2. Their `consent-number` records contain
+opaque owned payloads rather than host bignums or flonums.
 
 ## Semantic representation
 
@@ -109,23 +109,31 @@ limbs when they provide the corresponding double-width operations. The largest
 valid limb is not automatically the fastest choice, so a native backend may
 choose a narrower measured profile.
 
-A bootstrap must reject a configured profile at startup if its primitive
+A backend must reject a configured profile at startup if its primitive
 working arithmetic cannot represent the profile's proven bounds exactly.
 Backend source must derive radix operations from `limb-bits`, `B`, and the limb
 mask rather than embedding a profile's numeric literals. Algorithm thresholds
 must be expressed in value bits or tuned per profile instead of assuming that a
 limb count has the same cost everywhere.
 
+The portable constructor accepts every positive `w`, so the representation and
+algorithms can be exercised for future targets without changing their API.
+Thirty bits is the largest profile whose multiplication accumulator is proven
+to remain an immediate integer across the common 64-bit bootstrap matrix.
+Wider profiles may allocate host bignums while tested on an existing R7RS host;
+a native implementation must reject them unless it provides the stronger exact
+accumulator operations. The boundary corpus exercises `w = 62` as the
+representative signed-128-bit profile.
+
 Serialized values, hashing, external rendering, and language semantics do not
 expose `w`. Native code compiled for different limb profiles cannot exchange raw
 numeric object bytes; it must use canonical numeric structure or external form
 at that boundary.
 
-The current `integer`, `rational`, `decimal`, `infnan`, and `complex` record
-kinds are a transition shell. The self-hosted backend may preserve those tags
-while replacing their payloads, or may merge `decimal` and `infnan` into one
-inexact-real object. Callers must use numeric operations and predicates rather
-than branch on a physical payload layout.
+The `integer`, `rational`, `decimal`, `infnan`, and `complex` record kinds are a
+canonical shell around the owned payloads. Callers outside the reader and
+evaluator use numeric operations and predicates rather than branch on the
+physical payload layout.
 
 ## Required owned algorithms
 
@@ -183,7 +191,29 @@ Rectangular addition, subtraction, multiplication, division, predicates,
 They must not unwrap components into a host complex type. Exact inputs remain
 exact whenever R7RS requires an exact result.
 
-## Temporary accelerators
+## Checked accelerators
+
+The owned core has two optional fast paths that do not change its storage or
+fallback semantics:
+
+- Exact add, multiply, division, import, and canonical rendering may use a host
+  fixnum only after their value and result bounds have been proved against the
+  selected profile's `B^2 - 1` accumulator maximum. Results are immediately
+  imported into owned limbs. Values outside that proof use the same schoolbook,
+  long-division, parsing, and rendering algorithms exercised at `B^2` by the
+  alternate-profile tests; the fast path therefore never asks the host for a
+  bignum.
+- A host with the checked binary64 behavior may accelerate ordinary finite
+  addition, subtraction, multiplication, and division. Results are immediately
+  decoded into the owned class/sign/significand/exponent tuple, and any cached
+  host float is private and rebuildable. The software binary64 operations remain
+  the defining fallback and are tested directly for arithmetic, rounding,
+  subnormal, overflow, infinity, and NaN behavior.
+
+These are implementation accelerators for already-owned algorithms, not
+deferred semantic work.
+
+### Deferred math accelerators
 
 The current bootstrap may retain host implementations of `sqrt`, `exp`, `log`,
 `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, polar construction, magnitude,
@@ -217,10 +247,10 @@ call without changing its role does not change its classification.
 
 | Current dependency | Current seam | Classification | Required closure |
 | --- | --- | --- | --- |
-| Host exact integers in reader digit accumulation, decimal scaling, gcd, rational reduction, and radix rendering | `(consent reader)` integer parser and canonical constructors | Semantic blocker | Replace payload work with owned limbs and exact algorithms. |
-| Host exact integers in evaluator arithmetic, comparison, quotient/remainder, rounding, `gcd`, `lcm`, `expt`, `rationalize`, and exact square root | `(consent interpreter)` exact helpers | Semantic blocker | Operate on owned integers and rationals without `consent-number-value` unwrapping. |
-| Host flonums in decimal/rational input, finite arithmetic, comparison, `exact`/`inexact`, and decimal rendering | `number->reader-float`, `number->host-float`, canonical decimal construction, and number rendering | Semantic blocker | Install binary64 parsing, arithmetic, exact-dyadic comparison, conversion, and shortest rendering. |
-| Divide-by-zero host expressions used to manufacture infinities and NaN | canonical special-value ingress/egress | Semantic blocker | Construct and classify owned inexact classes directly. |
+| Owned limbs in reader digit accumulation, decimal scaling, gcd, rational reduction, and radix rendering | `(consent numeric)` through `(consent reader)` | Closed in portable runtime | All language-sized exact payload work uses owned algorithms. |
+| Owned exact evaluator arithmetic, comparison, quotient/remainder, rounding, `gcd`, `lcm`, `expt`, `rationalize`, and exact square root | `(consent numeric)` through `(consent interpreter)` | Closed in portable runtime | No evaluator exact operation unwraps to a host bignum; bounded host-fixnum shortcuts use the profile-derived accumulator proof and retain the owned fallback. |
+| Owned binary64 tuples in decimal/rational input, finite arithmetic, comparison, `exact`/`inexact`, and decimal rendering | `(consent numeric)` binary64 operations | Closed in portable runtime | Conversion rounds ties to even; mixed comparisons use exact dyadic rationals; rendering searches the shortest round-tripping significand; checked host binary64 arithmetic may accelerate the owned software fallback. |
+| Explicit owned infinity and NaN values | canonical special-value ingress/egress | Closed in portable runtime | Finite arithmetic constructs and classifies special values without host divide-by-zero expressions. |
 | Host `sqrt` and transcendental/math library procedures | `primitive-inexact-unary`, `primitive-sqrt`, polar, magnitude, and angle helpers | Temporary accelerator | Keep behind canonical conversion and parity fixtures until the post-ABI owned fallback. |
 | Emacs integer, float, and math operations in the bootstrap twin | `consent--number-*` helpers | Temporary bootstrap accelerator | Preserve the same semantic normalization and shared parity corpus; do not make Emacs objects part of the portable representation. |
 | Raw host numbers at native source-library and compiled host-run boundaries | datum conversion and native-call bridges in `(consent runtime)` and `(consent library)` | Later backend concern | #120 defines value/call marshalling; #333 defines ownership and traversal. No raw host number may cross a native Consent ABI. |
@@ -234,8 +264,8 @@ primitive, writer, or library is otherwise a boundary regression.
 
 The canonical constructors in `(consent reader)` are the only ingress for
 language-visible numeric values. Special-value classification and external
-rendering are Consent operations, even when a current constructor temporarily
-accepts a host payload.
+rendering are Consent operations. A constructor may accept a host number from a
+bootstrap adapter, but it immediately imports that value into owned storage.
 
 The portable inexact accelerator fence consists of:
 
@@ -251,9 +281,10 @@ The Emacs bootstrap uses the parallel private `consent--number->float`,
 `consent--primitive-inexact-unary`, and canonical constructors. These are
 bootstrap seams, not portable APIs.
 
-Exact payload unwrapping is not an accepted long-term fence. Its distributed
-use is recorded above as a semantic blocker so the owned limb migration cannot
-be declared complete after merely renaming `consent-number-value`.
+`consent-number-owned-value` is the opaque reader/evaluator payload seam.
+`consent-number-value` remains a compatibility adapter for small host counts,
+legacy tests, and finite transcendental arguments. It refuses to manufacture a
+host bignum; language-sized arithmetic never calls it.
 
 ## ABI and allocation contract
 
@@ -288,6 +319,7 @@ vary across bootstrap hosts:
 - `numeric-exact-integer-growth`;
 - `numeric-rational-reduction-growth`;
 - `numeric-exactness-conversion-boundary`;
+- `numeric-mixed-exact-inexact-ordering`;
 - `numeric-inexact-edge-arithmetic`;
 - `numeric-complex-division`;
 - `numeric-canonical-rendering`;
@@ -300,14 +332,14 @@ to the `compiled` test-plan partition is the concrete self-host closure exposed
 by [#659](https://github.com/tahoma/consent/issues/659). A future accelerator
 must pass the same corpus before it can replace an owned path.
 
-The owned exact-integer backend must additionally run white-box boundary tests
+The owned exact-integer backend additionally runs white-box boundary tests
 parameterized by `limb-bits`. Those tests cover `B - 1`, `B`, `B + 1`,
 `B^2 - 1`, and `B^2`, plus sign normalization, carry propagation, quotient
 correction, and parsing and rendering across each boundary. Continuous
-integration for that backend must exercise the default 30-bit profile and at
-least one alternate profile so the parameter does not become a nominal,
-untested option.
+integration for that backend exercises the default 30-bit profile, the
+constrained-bootstrap 14-bit profile, and the signed-128-bit 62-bit profile so
+the parameter does not become a nominal, untested option.
 
-These fixtures prove the staged semantic contract and the current accelerator
-fences. They do not assert that stage 2's limb and software-binary64 algorithms
-already replace every stage 1 payload.
+These fixtures prove the portable stage-2 semantic contract and the remaining
+accelerator fences. The Emacs bootstrap continues to satisfy the same
+language-level corpus through its private host-number implementation.

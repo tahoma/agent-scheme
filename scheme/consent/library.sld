@@ -3047,11 +3047,19 @@
           (set! source-library-internal-import-depth
                 (- source-library-internal-import-depth 1)))))
 
+    (define (native-number-or-owned value)
+      "Return VALUE's bounded host scalar, preserving owned numeric storage"
+      "when the bootstrap adapter cannot represent it."
+      (guard (condition (else value))
+        (let ((host (consent-number-value value)))
+          (if (number? host) host value))))
+
     (define (native-callback-result value seen convert-symbols?)
       "Convert an interpreted callback's result for native consumption."
-      "Canonical number records become raw host numbers -- a custom resync"
+      "Canonical number records become bounded host numbers -- a custom resync"
       "strategy returns an offset the reader clamps with host arithmetic --"
-      "and the interpreter's end-of-file record becomes the host end-of-file"
+      "while values outside the adapter range keep their owned representation."
+      "The interpreter's end-of-file record becomes the host end-of-file"
       "object a native input driver tests with eof-object?. Owned symbols are"
       "converted only for native libraries that inspect their callback result;"
       "higher-order host controls such as `call-with-input-file' return callback"
@@ -3062,8 +3070,7 @@
        ((and convert-symbols? (consent-symbol? value))
         (host-string->symbol (consent-symbol-name value)))
        ((consent-number? value)
-        (let ((host (consent-number-value value)))
-          (if (number? host) host value)))
+        (native-number-or-owned value))
        ((consent-eof-object? value)
         (eof-object))
        ((pair? value)
@@ -3125,8 +3132,7 @@
        ((consent-symbol? value)
         (host-string->symbol (consent-symbol-name value)))
        ((consent-number? value)
-        (let ((host (consent-number-value value)))
-          (if (number? host) host value)))
+        (native-number-or-owned value))
        ((consent-eof-object? value)
         (eof-object))
        ((pair? value)
@@ -3442,8 +3448,7 @@
        ((consent-symbol? value)
         (host-string->symbol (consent-symbol-name value)))
        ((consent-number? value)
-        (let ((host (consent-number-value value)))
-          (if (number? host) host value)))
+        (native-number-or-owned value))
        ((consent-eof-object? value)
         (eof-object))
        ((or (consent-procedure? value)
@@ -3486,9 +3491,10 @@
       "procedure record, which native predicates, accessors, and the shared"
       "apply machinery already handle (consent-procedure? on a"
       "consent-eval-source result must see the record, not a wrapper)."
-      "Symbols, numbers, and eof objects cross as plain host Scheme values,"
-      "and containers are walked so nested scalars and the options-alist"
-      "callback convention both preserve the portable library surface."
+      "Symbols, bounded numbers, and eof objects cross as plain host Scheme"
+      "values; larger numbers retain owned storage. Containers are walked so"
+      "nested scalars and the options-alist callback convention both preserve"
+      "the portable library surface."
       #((parameters
          (value (type object)
           (description

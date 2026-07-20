@@ -1985,11 +1985,31 @@ allocation that produced it."
         (consent--number-inexact (car value))
         (consent--number-inexact (cdr value)))))))
 
+(defun consent--scale-float-power-of-two (value exponent)
+  "Return float VALUE multiplied exactly by 2^EXPONENT."
+  (while (> exponent 1023)
+    (setq value (* value (expt 2.0 1023)))
+    (setq exponent (- exponent 1023)))
+  (* value (expt 2.0 exponent)))
+
 (defun consent--decimal->exact-rational-pair (number)
-  "Return an exact rational approximation for decimal NUMBER."
-  (let* ((text (number-to-string number))
-         (parsed (consent-read (concat "#e" text))))
-    (consent--number->rational-pair parsed "exact")))
+  "Return finite float NUMBER as its exact dyadic rational pair."
+  (if (zerop number)
+      '(0 . 1)
+    (let* ((sign (if (< number 0.0) -1 1))
+           (absolute (abs number))
+           (binary-exponent (logb absolute))
+           (dyadic-exponent (- binary-exponent 52))
+           (significand
+            (truncate
+             (consent--scale-float-power-of-two
+              absolute
+              (- dyadic-exponent)))))
+      (if (>= dyadic-exponent 0)
+          (cons (* sign significand (ash 1 dyadic-exponent)) 1)
+        (consent--normalize-rational-pair
+         (* sign significand)
+         (ash 1 (- dyadic-exponent)))))))
 
 (defun consent--number-exact (datum)
   "Return an exact representation of DATUM."
@@ -2365,13 +2385,17 @@ the maximum endpoint for DESCRIPTION."
          (eq (consent-number-kind right) 'infnan)
          (eq (consent-number-value left)
              (consent-number-value right))))
-   ((or (consent--number-inexact-p left)
-        (consent--number-inexact-p right))
-    (= (consent--number->float left "=")
-       (consent--number->float right "=")))
    (t
-    (let ((left-pair (consent--number->rational-pair left "="))
-          (right-pair (consent--number->rational-pair right "=")))
+    (let ((left-pair
+           (if (eq (consent-number-kind left) 'decimal)
+               (consent--decimal->exact-rational-pair
+                (consent-number-value left))
+             (consent--number->rational-pair left "=")))
+          (right-pair
+           (if (eq (consent-number-kind right) 'decimal)
+               (consent--decimal->exact-rational-pair
+                (consent-number-value right))
+             (consent--number->rational-pair right "="))))
       (= (* (car left-pair) (cdr right-pair))
          (* (car right-pair) (cdr left-pair)))))))
 
@@ -2383,16 +2407,22 @@ the maximum endpoint for DESCRIPTION."
    ((or (consent--number-nan-p left)
         (consent--number-nan-p right))
     nil)
-   ((or (consent--number-inexact-p left)
-        (consent--number-inexact-p right)
-        (eq (consent-number-kind left) 'infnan)
+   ((or (eq (consent-number-kind left) 'infnan)
         (eq (consent-number-kind right) 'infnan))
     (let ((left-key (consent--number->float left description))
           (right-key (consent--number->float right description)))
       (funcall predicate left-key right-key)))
    (t
-    (let ((left-pair (consent--number->rational-pair left description))
-          (right-pair (consent--number->rational-pair right description)))
+    (let ((left-pair
+           (if (eq (consent-number-kind left) 'decimal)
+               (consent--decimal->exact-rational-pair
+                (consent-number-value left))
+             (consent--number->rational-pair left description)))
+          (right-pair
+           (if (eq (consent-number-kind right) 'decimal)
+               (consent--decimal->exact-rational-pair
+                (consent-number-value right))
+             (consent--number->rational-pair right description))))
       (funcall predicate
                (* (car left-pair) (cdr right-pair))
                (* (car right-pair) (cdr left-pair)))))))
