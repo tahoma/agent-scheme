@@ -73,6 +73,32 @@ limit, so the bootstrap's hot inner loop does not allocate host bignums. A
 31-bit limb would raise the same bound to `2^62 - 1` and cross that Emacs
 fixnum limit.
 
+The Emacs bootstrap and representative 64-bit builds of every R7RS
+implementation wired into the development and oracle matrix use the same broad
+strategy: exact integers inside a host-specific bound are immediate fixnums,
+while larger exact integers take a non-fixnum bignum path. The observed bounds
+below are implementation and build properties, not R7RS guarantees:
+
+| Host path | Repository role | Observed positive fixnum limit | Largest `w` whose `B^2 - 1` multiplication accumulator remains immediate |
+| --- | --- | ---: | ---: |
+| Emacs 30.2 | bootstrap twin | `2^61 - 1` | 30 |
+| Gambit 4.9.7 | canonical direct and compiled host | `2^60 - 1` | 30 |
+| Racket CS 9.2 | default direct and compiled host | `2^60 - 1` | 30 |
+| Guile 3.0.11 | direct host and portable lint gate | `2^61 - 1` | 30 |
+| Gauche 0.9.15 | direct host and oracle | `2^61 - 1` | 30 |
+| Chibi 0.12.0 | optional direct host and oracle | `2^62 - 1` | 31 |
+| CHICKEN 5.4.0 | oracle | `2^62 - 1` | 31 |
+| Sagittarius 0.9.14 | oracle | `2^61 - 1` | 30 |
+
+These observations use each implementation's fixnum predicate or fixnum-range
+library and confirm that `2^100` remains an exact non-fixnum integer. The
+30-bit profile therefore keeps the stated multiplication step immediate across
+the complete representative host matrix. Racket and Gambit have no spare
+fixnum bit at that bound, so an implementation must not fold additional terms
+into the accumulator without a stronger proof. Chibi and CHICKEN may benefit
+from a measured 31-bit specialization, but the one-bit increase is not part of
+the common default.
+
 A different backend may select another width when it proves every intermediate
 bound used by its multiplication, division, parsing, and rendering algorithms.
 Useful profiles include `w = 14` for a constrained bootstrap with signed 30-bit
