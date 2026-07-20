@@ -619,7 +619,9 @@ EOF
               (if (and pwd (> (string-length pwd) 0)) pwd "."))
             (lambda (chunk) (display chunk)))))
       (if (eq? outcome #t)
-          (exit 0)
+          ;; Return normally so host profilers and runtime finalizers can
+          ;; observe a successful host-run. Falling off main still exits zero.
+          #t
           (begin
             (display "consent: host-run failed: " (current-error-port))
             (write outcome (current-error-port))
@@ -937,7 +939,9 @@ EOF
               (if (and pwd (> (string-length pwd) 0)) pwd "."))
             (lambda (chunk) (display chunk)))))
       (if (eq? outcome #t)
-          (exit 0)
+          ;; Return normally so host profilers and runtime finalizers can
+          ;; observe a successful host-run. Falling off main still exits zero.
+          #t
           (begin
             (display "consent: host-run failed: " (current-error-port))
             (write outcome (current-error-port))

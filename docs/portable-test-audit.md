@@ -27,8 +27,11 @@ does; retaining an ERT test does not make it the semantic source of truth.
   conversion semantics are canonical in
   `tests/scheme/consent-numeric-test.scm`. The suite exercises the default
   30-bit profile, an alternate 14-bit bootstrap profile, and a 62-bit native
-  profile at `B - 1`, `B`, `B + 1`, `B^2 - 1`, and `B^2`, so checked fixnum
-  acceleration and owned fallback share one cross-host boundary corpus.
+  limb profile at `B - 1`, `B`, `B + 1`, `B^2 - 1`, and `B^2`, plus the
+  separate positive and negative fixnum limits, promotion, and demotion.
+  Multi-limb division, GCD, square root, rational reduction, radix conversion,
+  and uncached binary64-to-host reconstruction keep checked acceleration and
+  owned fallback in one cross-host boundary corpus.
 - `(data avl-tree)` semantics are canonical in
   `tests/scheme/data-avl-tree-test.scm`; its public smoke corpus also runs on
   compiled hosts. The direct-host suite alone imports the internal invariant

@@ -125,6 +125,17 @@
            (else (error "unsupported test profile" limb-bits))))
          (base (integer backend base-text))
          (one (integer backend "1"))
+         (fixnum-limit-text
+          (cond
+           ((= limb-bits 14) "268435455")
+           (else "1152921504606846975")))
+         (fixnum-limit (integer backend fixnum-limit-text))
+         (fixnum-overflow
+          (numeric backend 'integer-add fixnum-limit one))
+         (negative-fixnum-limit
+          (numeric backend 'integer-negate fixnum-limit))
+         (negative-fixnum-overflow
+          (numeric backend 'integer-negate fixnum-overflow))
          (base-minus-one (numeric backend 'integer-subtract base one))
          (base-plus-one (numeric backend 'integer-add base one))
          (base-squared (numeric backend 'integer-multiply base base))
@@ -150,6 +161,39 @@
       (string-append "profile-" (number->string limb-bits) "-width"))
      limb-bits
      (consent-numeric-backend-limb-bits backend))
+    (test-equal
+     (string->symbol
+      (string-append "profile-" (number->string limb-bits)
+                     "-positive-fixnum-boundary"))
+     #t
+     (numeric backend 'integer-fixnum? fixnum-limit))
+    (test-equal
+     (string->symbol
+      (string-append "profile-" (number->string limb-bits)
+                     "-negative-fixnum-boundary"))
+     #t
+     (numeric backend 'integer-fixnum? negative-fixnum-limit))
+    (test-equal
+     (string->symbol
+      (string-append "profile-" (number->string limb-bits)
+                     "-positive-promotion"))
+     #f
+     (numeric backend 'integer-fixnum? fixnum-overflow))
+    (test-equal
+     (string->symbol
+      (string-append "profile-" (number->string limb-bits)
+                     "-negative-promotion"))
+     #f
+     (numeric backend 'integer-fixnum? negative-fixnum-overflow))
+    (test-equal
+     (string->symbol
+      (string-append "profile-" (number->string limb-bits)
+                     "-demotion-after-subtract"))
+     #t
+     (numeric
+      backend
+      'integer-fixnum?
+      (numeric backend 'integer-subtract fixnum-overflow one)))
     (test-equal
      (string->symbol
       (string-append "profile-" (number->string limb-bits) "-carry"))
@@ -663,7 +707,10 @@
               (exact-roundtrip
                (and exact-pair
                     (numeric
-                     backend 'binary64-from-rational exact-pair))))
+                     backend 'binary64-from-rational exact-pair)))
+              (host-value
+               (and parsed (numeric backend 'binary64->host parsed)))
+              (expected-host (string->number (cadr entry))))
          (require-condition
           (and parsed (string=? rendered (cadr entry)))
           "binary64 canonical rendering mismatch"
@@ -674,11 +721,15 @@
           "binary64 decimal round trip changed the value"
           (list limb-bits entry))
          (require-condition
-          (and exact-roundtrip
+         (and exact-roundtrip
                (numeric
                 backend 'binary64-equal? parsed exact-roundtrip))
           "binary64 exact dyadic round trip changed the value"
           (list limb-bits entry))
+         (require-condition
+          (and expected-host (= host-value expected-host))
+          "binary64 direct host reconstruction changed the value"
+          (list limb-bits entry host-value))
          (set! signature (cons rendered signature))))
      binary64-roundtrip-corpus)
     (for-each

@@ -4,10 +4,11 @@
 ;;;
 ;;; This library deliberately uses host exact arithmetic only for limb-sized
 ;;; working values, indexes, exponents, and values proved within the selected
-;;; profile's B^2 - 1 accelerator bound. Language-visible exact values are
-;;; sign-and-limb records. The public surface is a small backend dispatcher so
-;;; alternate limb profiles exercise the same algorithms without putting a
-;;; profile tag in every integer.
+;;; profile's B^2 - 1 accumulator bound. Language-visible exact values inside
+;;; both that bound and the portable host fixnum bound use immediate host
+;;; fixnums; larger values use sign-and-limb records. The public surface is a
+;;; small backend dispatcher so alternate limb profiles exercise the same
+;;; algorithms without putting a profile tag in every integer.
 
 (define-library (consent numeric)
   (export consent-make-numeric-backend
@@ -19,18 +20,21 @@
   (begin
     ;; A backend fixes the limb profile for all integers passed to it.
     (define-record-type <consent-numeric-backend>
-      (make-numeric-backend limb-bits limb-base accelerator-limit)
+      (make-numeric-backend
+       limb-bits limb-base accumulator-limit fixnum-limit)
       consent-numeric-backend?
       (limb-bits consent-numeric-backend-limb-bits)
       (limb-base numeric-backend-limb-base)
-      (accelerator-limit numeric-backend-accelerator-limit))
+      (accumulator-limit numeric-backend-accumulator-limit)
+      (fixnum-limit numeric-backend-fixnum-limit))
 
-    ;; Owned integers contain only a sign and normalized little-endian limbs.
-    (define-record-type <owned-integer>
-      (make-owned-integer sign limbs)
-      owned-integer?
-      (sign owned-integer-sign)
-      (limbs owned-integer-limbs))
+    ;; Values inside a backend's proved direct bound are represented by host
+    ;; fixnums. Only promoted values allocate this bignum record.
+    (define-record-type <owned-bignum>
+      (make-owned-bignum sign limbs)
+      owned-bignum?
+      (sign owned-bignum-sign)
+      (limbs owned-bignum-limbs))
 
     ;; Owned binary64 values use an explicit class and an exact dyadic payload.
     ;; A finite nonzero value is SIGN * SIGNIFICAND * 2^EXPONENT.
@@ -49,6 +53,11 @@
         (if (= remaining 0)
             result
             (loop (* result base) (- remaining 1)))))
+
+    ;; Racket and Gambit provide the narrowest observed positive fixnum bound
+    ;; among the supported 64-bit hosts. A target with a wider proven fixnum
+    ;; representation may specialize this constant together with its ABI.
+    (define portable-positive-fixnum-limit 1152921504606846975)
 
     (define (consent-make-numeric-backend limb-bits)
       "Create an owned numeric backend using LIMB-BITS bits per limb."
@@ -70,9 +79,12 @@
              (maximum-limb (- base 1))
              ;; Derive B^2 - 1 without first constructing B^2, which is one
              ;; above the proven common fixnum floor for the 30-bit profile.
-             (accelerator-limit
-              (+ (* maximum-limb base) maximum-limb)))
-        (make-numeric-backend limb-bits base accelerator-limit)))
+             (accumulator-limit
+              (+ (* maximum-limb base) maximum-limb))
+             (fixnum-limit
+              (min accumulator-limit portable-positive-fixnum-limit)))
+        (make-numeric-backend
+         limb-bits base accumulator-limit fixnum-limit)))
 
     ;; The common 64-bit bootstrap profile.
     (define consent-default-numeric-backend
@@ -98,55 +110,98 @@
                 limbs
                 (vector-copy-prefix limbs length)))))
 
-    (define (integer-normalize sign limbs)
-      "Construct a normalized owned integer from SIGN and LIMBS."
-      (let ((normalized (normalize-limbs limbs)))
-        (make-owned-integer
-         (if (= (vector-length normalized) 0)
-             0
-             (if (< sign 0) -1 1))
-         normalized)))
+    (define (owned-fixnum? value)
+      "Report whether VALUE is a directly represented owned integer."
+      (and (integer? value) (exact? value)))
 
-    ;; Shared canonical owned integer constants.
-    (define owned-zero (make-owned-integer 0 (vector)))
+    (define (owned-integer? value)
+      "Report whether VALUE is an owned fixnum or bignum."
+      (or (owned-fixnum? value) (owned-bignum? value)))
+
+    (define (integer-sign value)
+      "Return the normalized sign of owned integer VALUE."
+      (if (owned-fixnum? value)
+          (cond ((< value 0) -1) ((> value 0) 1) (else 0))
+          (owned-bignum-sign value)))
+
+    (define (integer-limbs backend value)
+      "Return owned VALUE's normalized limbs under BACKEND."
+      (if (owned-fixnum? value)
+          (let ((base (numeric-backend-limb-base backend)))
+            (let loop ((remaining (abs value)) (digits '()))
+              (if (= remaining 0)
+                  (list->vector (reverse digits))
+                  (loop (quotient remaining base)
+                        (cons (modulo remaining base) digits)))))
+          (owned-bignum-limbs value)))
+
+    (define (integer-normalize backend sign limbs)
+      "Demote normalized LIMBS to a fixnum or construct an owned bignum."
+      (let* ((normalized (normalize-limbs limbs))
+             (length (vector-length normalized)))
+        (cond
+         ((= length 0) 0)
+         ((<= length 2)
+          (let* ((base (numeric-backend-limb-base backend))
+                 (magnitude
+                  (+ (vector-ref normalized 0)
+                     (if (= length 2)
+                         (* (vector-ref normalized 1) base)
+                         0))))
+            (if (<= magnitude (numeric-backend-fixnum-limit backend))
+                (if (< sign 0) (- magnitude) magnitude)
+                (make-owned-bignum
+                 (if (< sign 0) -1 1)
+                 normalized))))
+         (else
+          (make-owned-bignum
+           (if (< sign 0) -1 1)
+           normalized)))))
+
+    ;; Shared canonical owned integer constant.
+    (define owned-zero 0)
 
     (define (integer-from-small backend value)
-      "Convert a limb-sized host exact integer VALUE into owned storage."
-      (let ((base (numeric-backend-limb-base backend))
-            (sign (cond ((< value 0) -1) ((> value 0) 1) (else 0))))
-        (if (= sign 0)
-            owned-zero
-            (let loop ((remaining (if (< value 0) (- value) value))
-                       (digits '()))
-              (if (= remaining 0)
-                  (integer-normalize sign (list->vector (reverse digits)))
-                  (loop (quotient remaining base)
-                        (cons (modulo remaining base) digits)))))))
+      "Import host integer VALUE, retaining it directly when profile-safe."
+      (let ((limit (numeric-backend-fixnum-limit backend)))
+        (if (<= (abs value) limit)
+            value
+            (let ((base (numeric-backend-limb-base backend))
+                  (sign (if (< value 0) -1 1)))
+              (let loop ((remaining (abs value)) (digits '()))
+                (if (= remaining 0)
+                    (integer-normalize
+                     backend sign (list->vector (reverse digits)))
+                    (loop (quotient remaining base)
+                          (cons (modulo remaining base) digits))))))))
 
     (define (integer-zero? value)
       "Report whether owned integer VALUE is zero."
-      (= (owned-integer-sign value) 0))
+      (= (integer-sign value) 0))
 
     (define (integer-negative? value)
       "Report whether owned integer VALUE is negative."
-      (< (owned-integer-sign value) 0))
+      (< (integer-sign value) 0))
 
     (define (integer-positive? value)
       "Report whether owned integer VALUE is positive."
-      (> (owned-integer-sign value) 0))
+      (> (integer-sign value) 0))
 
     (define (integer-abs value)
       "Return the absolute value of owned integer VALUE."
-      (if (integer-negative? value)
-          (make-owned-integer 1 (owned-integer-limbs value))
-          value))
+      (cond
+       ((owned-fixnum? value) (abs value))
+       ((integer-negative? value)
+        (make-owned-bignum 1 (owned-bignum-limbs value)))
+       (else value)))
 
     (define (integer-negate value)
       "Return the additive inverse of owned integer VALUE."
-      (if (integer-zero? value)
-          value
-          (make-owned-integer (- (owned-integer-sign value))
-                              (owned-integer-limbs value))))
+      (if (owned-fixnum? value)
+          (- value)
+          (make-owned-bignum
+           (- (owned-bignum-sign value))
+           (owned-bignum-limbs value))))
 
     (define (magnitude-compare left right)
       "Compare normalized magnitude vectors LEFT and RIGHT."
@@ -168,16 +223,20 @@
 
     (define (integer-compare left right)
       "Return -1, 0, or 1 according to the order of owned integers."
-      (let ((left-sign (owned-integer-sign left))
-            (right-sign (owned-integer-sign right)))
+      (let ((left-sign (integer-sign left))
+            (right-sign (integer-sign right)))
         (cond
          ((< left-sign right-sign) -1)
          ((> left-sign right-sign) 1)
          ((= left-sign 0) 0)
+         ((and (owned-fixnum? left) (owned-fixnum? right))
+          (cond ((< left right) -1) ((> left right) 1) (else 0)))
+         ((owned-fixnum? left) (- left-sign))
+         ((owned-fixnum? right) right-sign)
          (else
           (* left-sign
-             (magnitude-compare (owned-integer-limbs left)
-                                (owned-integer-limbs right)))))))
+             (magnitude-compare (owned-bignum-limbs left)
+                                (owned-bignum-limbs right)))))))
 
     (define (magnitude-add backend left right)
       "Add magnitude vectors LEFT and RIGHT."
@@ -226,35 +285,39 @@
       "Add owned integers LEFT and RIGHT."
       (or
        (small-add-accelerator backend left right)
-       (let ((left-sign (owned-integer-sign left))
-             (right-sign (owned-integer-sign right)))
+       (let ((left-sign (integer-sign left))
+             (right-sign (integer-sign right))
+             (left-limbs (integer-limbs backend left))
+             (right-limbs (integer-limbs backend right)))
          (cond
           ((= left-sign 0) right)
           ((= right-sign 0) left)
           ((= left-sign right-sign)
            (integer-normalize
+            backend
             left-sign
             (magnitude-add backend
-                           (owned-integer-limbs left)
-                           (owned-integer-limbs right))))
+                           left-limbs
+                           right-limbs)))
           (else
            (let ((comparison
-                  (magnitude-compare (owned-integer-limbs left)
-                                     (owned-integer-limbs right))))
+                  (magnitude-compare left-limbs right-limbs)))
              (cond
               ((= comparison 0) owned-zero)
               ((> comparison 0)
                (integer-normalize
+                backend
                 left-sign
                 (magnitude-subtract backend
-                                    (owned-integer-limbs left)
-                                    (owned-integer-limbs right))))
+                                    left-limbs
+                                    right-limbs)))
               (else
                (integer-normalize
+                backend
                 right-sign
                 (magnitude-subtract backend
-                                    (owned-integer-limbs right)
-                                    (owned-integer-limbs left)))))))))))
+                                    right-limbs
+                                    left-limbs))))))))))
 
     (define (integer-subtract backend left right)
       "Subtract owned integer RIGHT from LEFT."
@@ -267,8 +330,8 @@
        (if (or (integer-zero? left) (integer-zero? right))
            owned-zero
            (let* ((base (numeric-backend-limb-base backend))
-                  (left-limbs (owned-integer-limbs left))
-                  (right-limbs (owned-integer-limbs right))
+                  (left-limbs (integer-limbs backend left))
+                  (right-limbs (integer-limbs backend right))
                   (left-length (vector-length left-limbs))
                   (right-length (vector-length right-limbs))
                   (result (make-vector (+ left-length right-length) 0)))
@@ -294,8 +357,9 @@
                                     (quotient accumulator base)))))
                      (outer (+ left-index 1)))
                    (integer-normalize
-                    (* (owned-integer-sign left)
-                       (owned-integer-sign right))
+                    backend
+                    (* (integer-sign left)
+                       (integer-sign right))
                     result)))))))
 
     (define (magnitude-multiply-small backend limbs factor)
@@ -326,9 +390,10 @@
          (integer-multiply-small backend value (- factor))))
        (else
         (integer-normalize
-         (owned-integer-sign value)
+         backend
+         (integer-sign value)
          (magnitude-multiply-small backend
-                                   (owned-integer-limbs value)
+                                   (integer-limbs backend value)
                                    factor)))))
 
     (define (integer-add-small backend value addend)
@@ -354,9 +419,12 @@
       "Divide owned integer VALUE by positive small DIVISOR."
       (let ((result
              (magnitude-divide-small backend
-                                     (owned-integer-limbs (integer-abs value))
+                                     (integer-limbs
+                                      backend
+                                      (integer-abs value))
                                      divisor)))
-        (cons (integer-normalize (owned-integer-sign value) (car result))
+        (cons (integer-normalize
+               backend (integer-sign value) (car result))
               (cdr result))))
 
     (define (small-bit-length value)
@@ -368,7 +436,7 @@
 
     (define (integer-bit-length backend value)
       "Return the magnitude bit length of owned integer VALUE."
-      (let* ((limbs (owned-integer-limbs value))
+      (let* ((limbs (integer-limbs backend value))
              (length (vector-length limbs)))
         (if (= length 0)
             0
@@ -381,7 +449,7 @@
       (let* ((width (consent-numeric-backend-limb-bits backend))
              (limb-index (quotient index width))
              (bit-index (modulo index width))
-             (limbs (owned-integer-limbs value)))
+             (limbs (integer-limbs backend value)))
         (if (>= limb-index (vector-length limbs))
             0
             (modulo
@@ -396,7 +464,7 @@
           (let* ((width (consent-numeric-backend-limb-bits backend))
                  (whole (quotient count width))
                  (partial (modulo count width))
-                 (source (owned-integer-limbs value))
+                 (source (integer-limbs backend value))
                  (scaled
                   (if (= partial 0)
                       source
@@ -405,7 +473,7 @@
                  (result (make-vector (+ whole (vector-length scaled)) 0)))
             (let loop ((index 0))
               (if (= index (vector-length scaled))
-                  (integer-normalize (owned-integer-sign value) result)
+                  (integer-normalize backend (integer-sign value) result)
                   (begin
                     (vector-set! result
                                  (+ whole index)
@@ -420,7 +488,7 @@
                  (base (numeric-backend-limb-base backend))
                  (whole (quotient count width))
                  (partial (modulo count width))
-                 (source (owned-integer-limbs value))
+                 (source (integer-limbs backend value))
                  (source-length (vector-length source)))
             (if (>= whole source-length)
                 owned-zero
@@ -430,7 +498,7 @@
                   (let loop ((source-index (- source-length 1))
                              (carry 0))
                     (if (< source-index whole)
-                        (integer-normalize 1 result)
+                        (integer-normalize backend 1 result)
                         (let* ((accumulator
                                 (+ (* carry base)
                                    (vector-ref source source-index)))
@@ -454,7 +522,7 @@
           (let* ((width (consent-numeric-backend-limb-bits backend))
                  (whole (quotient count width))
                  (partial (modulo count width))
-                 (limbs (owned-integer-limbs value))
+                 (limbs (integer-limbs backend value))
                  (length (vector-length limbs)))
             (let loop ((index 0))
               (cond
@@ -507,7 +575,9 @@
                    (make-vector (quotient (+ bits (- width 1)) width) 0)))
              (let loop ((index (- bits 1)) (remainder owned-zero))
                (if (< index 0)
-                   (cons (integer-normalize 1 quotient-limbs) remainder)
+                   (cons
+                    (integer-normalize backend 1 quotient-limbs)
+                    remainder)
                    (let* ((doubled
                            (integer-multiply-small backend remainder 2))
                           (next
@@ -530,8 +600,8 @@
                                        (integer-abs dividend)
                                        (integer-abs divisor)))
              (quotient
-              (if (= (owned-integer-sign dividend)
-                     (owned-integer-sign divisor))
+              (if (= (integer-sign dividend)
+                     (integer-sign divisor))
                   (car unsigned)
                   (integer-negate (car unsigned))))
              (remainder
@@ -547,8 +617,8 @@
              (quotient (car truncated))
              (remainder (cdr truncated)))
         (if (or (integer-zero? remainder)
-                (= (owned-integer-sign dividend)
-                   (owned-integer-sign divisor)))
+                (= (integer-sign dividend)
+                   (integer-sign divisor)))
             truncated
             (cons (integer-subtract
                    backend quotient (integer-from-small backend 1))
@@ -563,8 +633,9 @@
 
     (define (integer-even? value)
       "Report whether owned integer VALUE is even."
-      (or (integer-zero? value)
-          (= (modulo (vector-ref (owned-integer-limbs value) 0) 2) 0)))
+      (if (owned-fixnum? value)
+          (= (modulo value 2) 0)
+          (= (modulo (vector-ref (owned-bignum-limbs value) 0) 2) 0)))
 
     (define (integer-power backend base exponent)
       "Raise owned BASE to nonnegative owned integer EXPONENT."
@@ -687,19 +758,23 @@
 
     (define (integer->small backend value maximum)
       "Convert owned VALUE to host integer when its magnitude is <= MAXIMUM."
-      (let* ((base (numeric-backend-limb-base backend))
-             (limbs (owned-integer-limbs value))
-             (limit maximum))
-        (let loop ((index (- (vector-length limbs) 1)) (result 0))
-          (if (< index 0)
-              (if (integer-negative? value) (- result) result)
-              (let ((limb (vector-ref limbs index)))
-                (and (<= result (quotient (- limit limb) base))
-                     (loop (- index 1) (+ (* result base) limb))))))))
+      (if (owned-fixnum? value)
+          (and (<= (abs value) maximum) value)
+          (let* ((base (numeric-backend-limb-base backend))
+                 (limbs (owned-bignum-limbs value))
+                 (limit maximum))
+            (let loop ((index (- (vector-length limbs) 1)) (result 0))
+              (if (< index 0)
+                  (if (integer-negative? value) (- result) result)
+                  (let ((limb (vector-ref limbs index)))
+                    (and (<= result (quotient (- limit limb) base))
+                         (loop
+                          (- index 1)
+                          (+ (* result base) limb)))))))))
 
     (define (backend-small-accelerator-limit backend)
       "Return the profile-derived safe host accumulator maximum."
-      (numeric-backend-accelerator-limit backend))
+      (numeric-backend-accumulator-limit backend))
 
     (define (small-add-accelerator backend left right)
       "Add LEFT and RIGHT with checked profile-safe host fixnums, or return #f."
@@ -1517,7 +1592,21 @@
          (/ (if (< (owned-binary64-sign value) 0) -1.0 1.0) 0.0))
         (else
          (or (owned-binary64-host-cache value)
-             (string->number (binary64->string backend value))))))
+             (let ((significand
+                    (integer->small
+                     backend
+                     (owned-binary64-significand value)
+                     9007199254740991)))
+               (if (not significand)
+                   (error
+                    "owned binary64 significand exceeds 53-bit host seam"
+                    value))
+               (let ((magnitude
+                      (* (inexact significand)
+                         (expt 2.0 (owned-binary64-exponent value)))))
+                 (if (< (owned-binary64-sign value) 0)
+                     (- magnitude)
+                     magnitude)))))))
 
     ;; Powers used only by the borrowed-host binary64 decoder. They are private
     ;; accelerator constants, not integer-limb or language-visible payloads.
@@ -1602,6 +1691,7 @@
           (error "consent-numeric expected a numeric backend" backend))
       (case operation
         ((integer?) (owned-integer? (car arguments)))
+        ((integer-fixnum?) (owned-fixnum? (car arguments)))
         ((integer-zero) owned-zero)
         ((integer-from-small)
          (integer-from-small backend (car arguments)))

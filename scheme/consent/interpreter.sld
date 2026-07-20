@@ -1617,9 +1617,17 @@ cursor across sessions."
       (let ((parts (proper-list-elements expression "expression")))
         (if (null? parts)
             (eval-error "empty list is not an expression"))
-        (let ((operator (car parts)))
+        (let* ((operator (car parts))
+               (operator-symbol (identifier-datum-name operator))
+               ;; Resolve a mixed owned/bootstrap symbol name once. Ordinary
+               ;; procedure calls otherwise repeat this boundary conversion
+               ;; for every special-form candidate below.
+               (operator-name
+                (and operator-symbol
+                     (interpreter-symbol-name operator-symbol))))
           (cond
-           ((and (identifier-named? operator 'quote)
+           ((and operator-name
+                 (string=? operator-name "quote")
                  (special-operator-active? operator environment))
             (if (not (= (length parts) 2))
                 (eval-error "quote requires exactly one datum" parts))
@@ -1627,7 +1635,8 @@ cursor across sessions."
                       (charge-literal!
                        (strip-identifiers (second parts))
                        context)))
-           ((and (identifier-named? operator 'quasiquote)
+           ((and operator-name
+                 (string=? operator-name "quasiquote")
                  (special-operator-active? operator environment))
             ;; The quasiquote builder assembles its result with host cons/append
             ;; rather than the charged primitives, so charge the realized result
@@ -1638,7 +1647,8 @@ cursor across sessions."
               (strip-identifiers
                (eval-quasiquote parts environment context))
               context)))
-           ((and (identifier-named? operator 'lambda)
+           ((and operator-name
+                 (string=? operator-name "lambda")
                  (special-operator-active? operator environment))
             (if (< (length parts) 3)
                 (eval-error "lambda requires formals and a body" parts))
@@ -1654,61 +1664,75 @@ cursor across sessions."
                                  environment
                                  (car documentation-result)
                                  (context-syntax-environment context))))))
-           ((and (identifier-named? operator 'if)
+           ((and operator-name
+                 (string=? operator-name "if")
                  (special-operator-active? operator environment))
             (eval-if parts environment context tail? continuation))
-           ((and (identifier-named? operator 'set!)
+           ((and operator-name
+                 (string=? operator-name "set!")
                  (special-operator-active? operator environment))
             (eval-set! parts environment context continuation))
-           ((and (identifier-named? operator 'let-values)
+           ((and operator-name
+                 (string=? operator-name "let-values")
                  (special-operator-active? operator environment))
             (eval-let-values
              parts environment context tail? #f continuation))
-           ((and (identifier-named? operator 'let*-values)
+           ((and operator-name
+                 (string=? operator-name "let*-values")
                  (special-operator-active? operator environment))
             (eval-let-values
              parts environment context tail? #t continuation))
-           ((and (identifier-named? operator 'letrec)
+           ((and operator-name
+                 (string=? operator-name "letrec")
                  (special-operator-active? operator environment))
             (eval-letrec
              parts environment context tail? #f continuation))
-           ((and (identifier-named? operator 'letrec*)
+           ((and operator-name
+                 (string=? operator-name "letrec*")
                  (special-operator-active? operator environment))
             (eval-letrec
              parts environment context tail? #t continuation))
-           ((and (identifier-named? operator 'define)
+           ((and operator-name
+                 (string=? operator-name "define")
                  (special-operator-active? operator environment))
             (eval-error "define is not valid in expression position" parts))
-           ((and (identifier-named? operator 'define-values)
+           ((and operator-name
+                 (string=? operator-name "define-values")
                  (special-operator-active? operator environment))
             (eval-error
              "define-values is not valid in expression position"
              parts))
-           ((and (identifier-named? operator 'define-record-type)
+           ((and operator-name
+                 (string=? operator-name "define-record-type")
                  (special-operator-active? operator environment))
             (eval-error
              "define-record-type is not valid in expression position"
              parts))
-           ((and (identifier-named? operator 'define-syntax)
+           ((and operator-name
+                 (string=? operator-name "define-syntax")
                  (special-operator-active? operator environment))
             (eval-error
              "define-syntax is not valid in expression position"
              parts))
-           ((and (identifier-named? operator 'define-library)
+           ((and operator-name
+                 (string=? operator-name "define-library")
                  (special-operator-active? operator environment))
             (eval-error
              "define-library is not valid in expression position"
              parts))
-           ((and (identifier-named? operator 'import)
+           ((and operator-name
+                 (string=? operator-name "import")
                  (special-operator-active? operator environment))
             (eval-error
              "import is not valid in expression position"
              parts))
-           ((and (identifier-named? operator 'begin)
+           ((and operator-name
+                 (string=? operator-name "begin")
                  (special-operator-active? operator environment))
             (eval-sequence
              (cdr parts) environment context tail? #f continuation))
-           ((and (identifier-named? operator 'with-budget)
+           ((and operator-name
+                 (string=? operator-name "with-budget")
                  (special-operator-active? operator environment))
             (eval-with-budget parts environment context tail? continuation))
            (else

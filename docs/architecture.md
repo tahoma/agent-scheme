@@ -313,13 +313,13 @@ table before entering language-visible data.
 #### Portable numeric ownership
 
 Language-visible numbers are Consent-owned values. The portable R7RS runtime
-implements sign-and-limb exact integers, normalized rationals, deterministic
-binary64 tuples, canonical infinities and NaN, and rectangular complex pairs.
-Its exact arithmetic, finite arithmetic, mixed-exactness comparison, conversion,
-and rendering are owned algorithms. The Emacs bootstrap retains host integers
-and floats behind its private implementation seam, while transcendental host
-math remains a normalized, parity-tested accelerator through the
-compiled-runtime ABI milestone.
+implements profile-bounded fixnums with promotion to sign-and-limb bignums,
+normalized rationals, deterministic binary64 tuples, canonical infinities and
+NaN, and rectangular complex pairs. Its exact arithmetic, finite arithmetic,
+mixed-exactness comparison, conversion, and rendering are owned algorithms.
+The Emacs bootstrap retains host integers and floats behind its private
+implementation seam, while transcendental host math remains a normalized,
+parity-tested accelerator through the compiled-runtime ABI milestone.
 
 The full representation, operation, host-dependency, ABI, allocation, and
 conformance contract is recorded in
