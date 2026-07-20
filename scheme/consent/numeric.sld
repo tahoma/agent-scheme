@@ -14,6 +14,7 @@
   (export consent-make-numeric-backend
           consent-default-numeric-backend
           consent-numeric-backend-limb-bits
+          consent-numeric-backend-positive-fixnum-limit
           consent-numeric)
   (import (scheme base)
           (scheme char))
@@ -26,7 +27,7 @@
       (limb-bits consent-numeric-backend-limb-bits)
       (limb-base numeric-backend-limb-base)
       (accumulator-limit numeric-backend-accumulator-limit)
-      (fixnum-limit numeric-backend-fixnum-limit))
+      (fixnum-limit consent-numeric-backend-positive-fixnum-limit))
 
     ;; Values inside a backend's proved direct bound are represented by host
     ;; fixnums. Only promoted values allocate this bignum record.
@@ -54,10 +55,21 @@
             result
             (loop (* result base) (- remaining 1)))))
 
-    ;; Racket and Gambit provide the narrowest observed positive fixnum bound
-    ;; among the supported 64-bit hosts. A target with a wider proven fixnum
-    ;; representation may specialize this constant together with its ABI.
-    (define portable-positive-fixnum-limit 1152921504606846975)
+    (define (low-bits-mask bit-count)
+      "Return an exact integer whose low BIT-COUNT bits are one."
+      "The construction never materializes the one-past-limit power of two."
+      (let loop ((mask 0) (remaining bit-count))
+        (if (= remaining 0)
+            mask
+            (loop (+ (* mask 2) 1) (- remaining 1)))))
+
+    ;; Racket and Gambit provide the narrowest observed positive fixnum
+    ;; magnitude width among the supported 64-bit hosts. A target with a wider
+    ;; proven fixnum representation may specialize this constant with its ABI.
+    (define portable-fixnum-magnitude-bits 60)
+
+    (define portable-positive-fixnum-limit
+      (low-bits-mask portable-fixnum-magnitude-bits))
 
     (define (consent-make-numeric-backend limb-bits)
       "Create an owned numeric backend using LIMB-BITS bits per limb."
@@ -148,7 +160,9 @@
                      (if (= length 2)
                          (* (vector-ref normalized 1) base)
                          0))))
-            (if (<= magnitude (numeric-backend-fixnum-limit backend))
+            (if (<=
+                 magnitude
+                 (consent-numeric-backend-positive-fixnum-limit backend))
                 (if (< sign 0) (- magnitude) magnitude)
                 (make-owned-bignum
                  (if (< sign 0) -1 1)
@@ -163,7 +177,8 @@
 
     (define (integer-from-small backend value)
       "Import host integer VALUE, retaining it directly when profile-safe."
-      (let ((limit (numeric-backend-fixnum-limit backend)))
+      (let ((limit
+             (consent-numeric-backend-positive-fixnum-limit backend)))
         (if (<= (abs value) limit)
             value
             (let ((base (numeric-backend-limb-base backend))

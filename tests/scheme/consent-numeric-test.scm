@@ -26,6 +26,13 @@
   "Report whether owned integers LEFT and RIGHT are equal."
   (= (numeric backend 'integer-compare left right) 0))
 
+(define (low-bits-mask bit-count)
+  "Return an exact host integer whose low BIT-COUNT bits are one."
+  (let loop ((mask 0) (remaining bit-count))
+    (if (= remaining 0)
+        mask
+        (loop (+ (* mask 2) 1) (- remaining 1)))))
+
 (define (require-condition condition message detail)
   "Raise MESSAGE with DETAIL unless CONDITION is true."
   (if (not condition)
@@ -125,10 +132,10 @@
            (else (error "unsupported test profile" limb-bits))))
          (base (integer backend base-text))
          (one (integer backend "1"))
-         (fixnum-limit-text
-          (cond
-           ((= limb-bits 14) "268435455")
-           (else "1152921504606846975")))
+         (fixnum-magnitude-bits (min (* limb-bits 2) 60))
+         (fixnum-limit-host
+          (low-bits-mask fixnum-magnitude-bits))
+         (fixnum-limit-text (number->string fixnum-limit-host))
          (fixnum-limit (integer backend fixnum-limit-text))
          (fixnum-overflow
           (numeric backend 'integer-add fixnum-limit one))
@@ -161,6 +168,12 @@
       (string-append "profile-" (number->string limb-bits) "-width"))
      limb-bits
      (consent-numeric-backend-limb-bits backend))
+    (test-equal
+     (string->symbol
+      (string-append "profile-" (number->string limb-bits)
+                     "-positive-fixnum-limit"))
+     fixnum-limit-host
+     (consent-numeric-backend-positive-fixnum-limit backend))
     (test-equal
      (string->symbol
       (string-append "profile-" (number->string limb-bits)
