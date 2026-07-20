@@ -69,6 +69,72 @@
     (should (eq right
                 (car (consent-read-all "shared other" right-options))))))
 
+(ert-deftest consent-reader-test-process-default-symbol-table-identity ()
+  "Keep direct reader calls on the process-default table handle."
+  (let ((first (consent-read "process-default-owned-symbol"))
+        (second (consent-read "|process-default-owned-symbol|")))
+    (should (consent--symbol-table-p consent--symbol-table))
+    (should (eq first second))))
+
+(ert-deftest consent-reader-test-symbol-table-shared-root-branches ()
+  "Share inherited identity while keeping fork insertions branch-local."
+  (let* ((origin (consent--make-symbol-table))
+         (inherited (consent--intern-symbol "inherited" origin))
+         (root (consent--symbol-table-root origin))
+         (left (consent--symbol-table-from-root root))
+         (right (consent--symbol-table-from-root root))
+         (left-inherited (consent--intern-symbol "inherited" left))
+         (right-inherited (consent--intern-symbol "inherited" right))
+         (left-only (consent--intern-symbol "left-only" left))
+         (left-new (consent--intern-symbol "new-in-both" left))
+         (right-new (consent--intern-symbol "new-in-both" right)))
+    (should (consent--symbol-table-root-p root))
+    (should (eq inherited left-inherited))
+    (should (eq inherited right-inherited))
+    (should
+     (eq left-only
+         (gethash "left-only" (consent--symbol-table-entries left))))
+    (should-not
+     (gethash "left-only" (consent--symbol-table-entries right)))
+    (should (= (hash-table-count
+                (consent--symbol-table-root-entries root))
+               1))
+    (should-not (eq left-new right-new))
+    (should (equal (consent-symbol-name left-new)
+                   (consent-symbol-name right-new)))))
+
+(ert-deftest consent-reader-test-symbol-table-root-installation-is-local ()
+  "Install one branch root without changing a sibling table."
+  (let* ((base (consent--make-symbol-table))
+         (root (consent--symbol-table-root base))
+         (source (consent--symbol-table-from-root root))
+         (sibling (consent--symbol-table-from-root root))
+         (installed (consent--intern-symbol "installed" source)))
+    (should
+     (eq base
+         (consent--symbol-table-root-set!
+          base
+          (consent--symbol-table-root source))))
+    (should (eq installed (consent--intern-symbol "installed" base)))
+    (should-not
+     (gethash "installed" (consent--symbol-table-entries sibling)))))
+
+(ert-deftest consent-reader-test-symbol-table-root-installation-rolls-back ()
+  "Discard post-snapshot insertions while retaining inherited identity."
+  (let* ((table (consent--make-symbol-table))
+         (kept (consent--intern-symbol "kept" table))
+         (root (consent--symbol-table-root table))
+         (discarded (consent--intern-symbol "discarded" table)))
+    (consent--symbol-table-root-set! table root)
+    (let ((replacement (consent--intern-symbol "discarded" table)))
+      (should (eq kept (consent--intern-symbol "kept" table)))
+      (should-not (eq discarded replacement))
+      (should (equal (consent-symbol-name discarded)
+                     (consent-symbol-name replacement)))
+      (should (= (hash-table-count
+                  (consent--symbol-table-root-entries root))
+                 1)))))
+
 (ert-deftest consent-reader-test-symbol-table-owns-input-names ()
   "Keep mutable input strings outside table-owned keys and records."
   (let* ((table (consent--make-symbol-table))
@@ -77,7 +143,9 @@
     (aset input 0 ?u)
     (should (equal (consent-symbol-name symbol) "stable"))
     (should (eq symbol (consent--intern-symbol "stable" table)))
-    (should (= (hash-table-count table) 1))))
+    (should (= (hash-table-count
+                (consent--symbol-table-entries table))
+               1))))
 
 (ert-deftest consent-reader-test-symbol-table-bulk-identity ()
   "Preserve every identity through hash collisions and table growth."
@@ -91,10 +159,23 @@
        (eq (nth (- 299 index) symbols)
            (consent--intern-symbol (format "owned-symbol-%d" index)
                                    table))))
-    (should (= (hash-table-count table) 300))))
+    (should (= (hash-table-count
+                (consent--symbol-table-entries table))
+               300))))
 
 (ert-deftest consent-reader-test-symbol-table-contracts ()
   "Reject values that cannot participate in owned symbol identity."
+  (let ((table (consent--make-symbol-table))
+        (root (consent--symbol-table-root
+               (consent--make-symbol-table))))
+    (should-error (consent--symbol-table-root 'not-a-table)
+                  :type 'wrong-type-argument)
+    (should-error (consent--symbol-table-from-root 'not-a-root)
+                  :type 'wrong-type-argument)
+    (should-error (consent--symbol-table-root-set! 'not-a-table root)
+                  :type 'wrong-type-argument)
+    (should-error (consent--symbol-table-root-set! table 'not-a-root)
+                  :type 'wrong-type-argument))
   (should-error (consent--intern-symbol "name" 'not-a-table)
                 :type 'wrong-type-argument)
   (should-error (consent-symbol-name 'host-symbol)

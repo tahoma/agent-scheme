@@ -254,8 +254,14 @@ after a loose evaluator exists.
 User-visible symbols are opaque Consent values, not host Scheme or Emacs Lisp
 symbols. `(consent symbol)` interns immutable names through an explicit table
 handle. Portable tables stage changes in `(data transient-map)` and materialize
-checkpoint-visible persistent `(data avl-tree)` roots; the Emacs bootstrap
-carries the same explicit handle contract over its hash-backed adapter.
+checkpoint-visible persistent `(data avl-tree)` roots. The Emacs bootstrap
+carries the same table/root lifecycle through dedicated handle and snapshot
+records over its hash-backed adapter. Creating or installing an Emacs root
+copies the hash index while sharing inherited owned-symbol records, so forks
+preserve inherited identity, later insertions remain branch-local, and root
+installation can commit or discard a branch without replacing the context's
+table handle. This host adapter uses linear-time snapshots rather than
+duplicating the portable AVL implementation.
 
 The portable implementation is the native-compiler destination, not merely a
 cross-host reference model. A native Consent image links `(consent symbol)` and
