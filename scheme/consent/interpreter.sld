@@ -80,6 +80,7 @@
     ;; Portable number semantics use one fixed 30-bit owned backend. Host
     ;; flonums remain confined to the documented transcendental accelerator.
     (define numeric-backend consent-default-numeric-backend)
+    ;; Bound checked host-integer conversions to this backend's direct range.
     (define host-adapter-positive-integer-limit
       (consent-numeric-backend-positive-fixnum-limit numeric-backend))
 

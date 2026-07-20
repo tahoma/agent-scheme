@@ -183,6 +183,7 @@
     ;; One fixed profile backs the portable runtime. White-box tests instantiate
     ;; alternate profiles directly through `(consent numeric)'.
     (define numeric-backend consent-default-numeric-backend)
+    ;; Bound checked host-integer conversions to this backend's direct range.
     (define host-adapter-positive-integer-limit
       (consent-numeric-backend-positive-fixnum-limit numeric-backend))
 

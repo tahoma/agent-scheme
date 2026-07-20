@@ -68,6 +68,7 @@
     ;; proven fixnum representation may specialize this constant with its ABI.
     (define portable-fixnum-magnitude-bits 60)
 
+    ;; Derived common positive endpoint used by direct-representation checks.
     (define portable-positive-fixnum-limit
       (low-bits-mask portable-fixnum-magnitude-bits))
 
