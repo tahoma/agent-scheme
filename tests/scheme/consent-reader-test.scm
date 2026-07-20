@@ -161,6 +161,9 @@
  'exact-decimal '(portable core)
 (check-external 'exact-decimal "#e1.5" "3/2"))
 (testing-registry-case
+ 'owned-decimal-exponent '(portable core)
+(check-external 'owned-decimal-exponent "#e0e1000001" "0"))
+(testing-registry-case
  'inexact-rational '(portable core)
 (check-external 'inexact-rational "#i3/2" "1.5"))
 (testing-registry-case

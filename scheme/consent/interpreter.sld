@@ -58,6 +58,7 @@
                   (get-environment-variables host-get-environment-variables))
           (scheme write)
           (data avl-tree)
+          (consent numeric)
           (consent reader)
           (consent symbol)
           (consent symbol-boundary)
@@ -76,6 +77,14 @@
           (prefix (agent session) session-model:)
           (consent macro))
   (begin
+    ;; Portable number semantics use one fixed 30-bit owned backend. Host
+    ;; flonums remain confined to the documented transcendental accelerator.
+    (define numeric-backend consent-default-numeric-backend)
+
+    (define (owned-numeric operation . arguments)
+      "Apply owned numeric OPERATION to ARGUMENTS."
+      (apply consent-numeric numeric-backend operation arguments))
+
     ;; Preserve host operations used for implementation identity and private
     ;; bootstrap metadata.
     (define host-symbol? symbol?)
@@ -2026,9 +2035,9 @@ cursor across sessions."
                     (string=? (consent-number-value datum) "+nan.0"))
                (and (eq? (consent-number-kind datum) 'complex)
                     (or (number-nan?
-                         (car (consent-number-value datum)))
+                         (car (consent-number-owned-value datum)))
                         (number-nan?
-                         (cdr (consent-number-value datum))))))))
+                         (cdr (consent-number-owned-value datum))))))))
 
     (define (number-infinite? datum)
       "Report whether DATUM contains an infinite numeric component."
@@ -2038,9 +2047,9 @@ cursor across sessions."
                         (string=? (consent-number-value datum) "-inf.0")))
                (and (eq? (consent-number-kind datum) 'complex)
                     (or (number-infinite?
-                         (car (consent-number-value datum)))
+                         (car (consent-number-owned-value datum)))
                         (number-infinite?
-                         (cdr (consent-number-value datum))))))))
+                         (cdr (consent-number-owned-value datum))))))))
 
     (define (number-finite? datum)
       "Report whether DATUM is neither infinite nor NaN."
@@ -2060,7 +2069,7 @@ cursor across sessions."
     (define (complex-parts number)
       "Return NUMBER's rectangular parts, using zero imaginary part for reals."
       (if (number-complex-representation? number)
-          (consent-number-value number)
+          (consent-number-owned-value number)
           (cons number (consent-make-canonical-integer 0))))
 
     (define (number-real? datum)
@@ -2068,13 +2077,13 @@ cursor across sessions."
       (and (consent-number? datum)
            (or (not (number-complex-representation? datum))
                (number-exact-zero?
-                (cdr (consent-number-value datum))))))
+                (cdr (consent-number-owned-value datum))))))
 
     (define (number-rational? datum)
       "Report whether DATUM is a finite real number."
       (and (number-real? datum)
            (let ((real (if (number-complex-representation? datum)
-                           (car (consent-number-value datum))
+                           (car (consent-number-owned-value datum))
                            datum)))
              (not (eq? (consent-number-kind real) 'infnan)))))
 
@@ -2084,15 +2093,28 @@ cursor across sessions."
            (cond
             ((number-complex-representation? datum)
              (and (number-exact-zero?
-                   (cdr (consent-number-value datum)))
+                   (cdr (consent-number-owned-value datum)))
                   (number-integer?
-                   (car (consent-number-value datum)))))
+                   (car (consent-number-owned-value datum)))))
             ((eq? (consent-number-kind datum) 'integer) #t)
             ((eq? (consent-number-kind datum) 'rational)
-             (= (cdr (consent-number-value datum)) 1))
+             (= (owned-numeric
+                 'integer-compare
+                 (cdr (consent-number-owned-value datum))
+                 (owned-numeric 'integer-from-small 1))
+                0))
             ((eq? (consent-number-kind datum) 'decimal)
-             (let ((value (consent-number-value datum)))
-               (= value (truncate value))))
+             (let* ((pair
+                     (owned-numeric
+                      'binary64->rational
+                      (consent-number-owned-value datum)))
+                    (rounded
+                     (owned-numeric 'rational-round pair 'truncate)))
+               (= (owned-numeric
+                   'rational-compare
+                   pair
+                   (cons rounded (owned-numeric 'integer-from-small 1)))
+                  0)))
             (else #f))))
 
     (define (number->rational-pair datum description)
@@ -2100,13 +2122,15 @@ cursor across sessions."
       (let ((number (expect-number datum description)))
         (cond
          ((eq? (consent-number-kind number) 'integer)
-          (cons (consent-number-value number) 1))
+          (cons (consent-number-owned-value number)
+                (owned-numeric 'integer-from-small 1)))
          ((eq? (consent-number-kind number) 'rational)
-          (consent-number-value number))
+          (consent-number-owned-value number))
          ((number-complex-representation? number)
-          (if (number-exact-zero? (cdr (consent-number-value number)))
+          (if (number-exact-zero?
+               (cdr (consent-number-owned-value number)))
               (number->rational-pair
-               (car (consent-number-value number))
+               (car (consent-number-owned-value number))
                description)
               (eval-error
                (string-append description " expected real number")
@@ -2121,12 +2145,20 @@ cursor across sessions."
       (let ((number (expect-number datum description)))
         (cond
          ((eq? (consent-number-kind number) 'integer)
-          (inexact (consent-number-value number)))
+          (owned-numeric
+           'binary64->host
+           (owned-numeric
+            'binary64-from-rational
+            (number->rational-pair number description))))
          ((eq? (consent-number-kind number) 'rational)
-          (let ((value (consent-number-value number)))
-            (/ (inexact (car value)) (inexact (cdr value)))))
+          (owned-numeric
+           'binary64->host
+           (owned-numeric
+            'binary64-from-rational
+            (consent-number-owned-value number))))
          ((eq? (consent-number-kind number) 'decimal)
-          (consent-number-value number))
+          (owned-numeric
+           'binary64->host (consent-number-owned-value number)))
          ((eq? (consent-number-kind number) 'infnan)
           (cond
            ((string=? (consent-number-value number) "+inf.0")
@@ -2135,13 +2167,28 @@ cursor across sessions."
             (/ -1.0 0.0))
            (else (/ 0.0 0.0))))
          ((number-complex-representation? number)
-          (if (number-exact-zero? (cdr (consent-number-value number)))
+          (if (number-exact-zero?
+               (cdr (consent-number-owned-value number)))
               (number->host-float
-               (car (consent-number-value number))
+               (car (consent-number-owned-value number))
                description)
               (eval-error
                (string-append description " expected real number")
                datum))))))
+
+    (define (rational-pair->binary64 pair)
+      "Convert owned rational PAIR through a checked exact or software path."
+      (let ((numerator
+             (owned-numeric
+              'integer->small (car pair) 9007199254740991))
+            (denominator
+             (owned-numeric
+              'integer->small (cdr pair) 9007199254740991)))
+        (if (and numerator denominator)
+            (owned-numeric
+             'binary64-import-host
+             (/ (inexact numerator) (inexact denominator)))
+            (owned-numeric 'binary64-from-rational pair))))
 
     (define (number-from-rational-pair pair . maybe-exactness)
       "Build an Consent Scheme number from a numerator/denominator pair."
@@ -2155,7 +2202,7 @@ cursor across sessions."
                10)))
         (if (eq? exactness 'inexact)
             (consent-make-canonical-decimal
-             (/ (inexact (car pair)) (inexact (cdr pair))))
+             (rational-pair->binary64 pair))
             number)))
 
     (define (number-inexact number)
@@ -2167,24 +2214,60 @@ cursor across sessions."
           datum)
          ((eq? (consent-number-kind datum) 'integer)
           (consent-make-canonical-decimal
-           (inexact (consent-number-value datum))))
+           (rational-pair->binary64
+            (number->rational-pair datum "inexact"))))
          ((eq? (consent-number-kind datum) 'rational)
-          (let ((value (consent-number-value datum)))
-            (consent-make-canonical-decimal
-             (/ (inexact (car value)) (inexact (cdr value))))))
+          (consent-make-canonical-decimal
+           (rational-pair->binary64
+            (consent-number-owned-value datum))))
          ((number-complex-representation? datum)
-          (let ((value (consent-number-value datum)))
+          (let ((value (consent-number-owned-value datum)))
             (consent-make-canonical-complex
              (number-inexact (car value))
              (number-inexact (cdr value))))))))
 
     (define (decimal->exact-rational-pair number)
-      "Reparse an inexact decimal as its exact rational representation."
-      (number->rational-pair
-       (consent-read
-        (string-append "#e" (consent-number->external number))
-        '((source-metadata . #f)))
-       "exact"))
+      "Return finite inexact NUMBER as its exact binary64 dyadic rational."
+      (owned-numeric
+       'binary64->rational (consent-number-owned-value number)))
+
+    (define (number->binary64 number description)
+      "Convert real NUMBER to an owned binary64 tuple."
+      (let ((datum (expect-number number description)))
+        (cond
+         ((or (eq? (consent-number-kind datum) 'integer)
+              (eq? (consent-number-kind datum) 'rational))
+          (rational-pair->binary64
+           (number->rational-pair datum description)))
+         ((eq? (consent-number-kind datum) 'decimal)
+          (consent-number-owned-value datum))
+         ((eq? (consent-number-kind datum) 'infnan)
+          (owned-numeric
+           'binary64-special
+           (if (string=? (consent-number-value datum) "+nan.0")
+               'nan
+               'infinity)
+           (if (string=? (consent-number-value datum) "-inf.0") -1 1)))
+         ((number-complex-representation? datum)
+          (if (number-exact-zero?
+               (cdr (consent-number-owned-value datum)))
+              (number->binary64
+               (car (consent-number-owned-value datum))
+               description)
+              (eval-error
+               (string-append description " expected real number")
+               datum))))))
+
+    (define (number-from-binary64 value)
+      "Wrap owned binary64 VALUE as a canonical Consent Scheme number."
+      (case (owned-numeric 'binary64-class value)
+        ((nan) (consent-make-canonical-infnan "+nan.0"))
+        ((infinity)
+         (consent-make-canonical-infnan
+          (if (< (owned-numeric 'binary64-sign value) 0)
+              "-inf.0"
+              "+inf.0")))
+        (else (consent-make-canonical-decimal value))))
 
     (define (number-exact number)
       "Convert NUMBER to an exact Consent Scheme number when representable."
@@ -2197,22 +2280,32 @@ cursor across sessions."
           (number-from-rational-pair
            (decimal->exact-rational-pair datum)))
          ((number-complex-representation? datum)
-          (let ((value (consent-number-value datum)))
+          (let ((value (consent-number-owned-value datum)))
             (consent-make-canonical-complex
              (number-exact (car value))
              (number-exact (cdr value)))))
          ((eq? (consent-number-kind datum) 'infnan)
           (eval-error "exact cannot represent inexact special value" datum)))))
 
-    (define (exact-integer->host datum description)
-      "Return DATUM through the staged exact-payload bootstrap seam."
+    (define (exact-integer-owned datum description)
+      "Return DATUM's owned exact integer payload."
       (if (and (consent-number? datum)
                (eq? (consent-number-kind datum) 'integer)
                (eq? (consent-number-exactness datum) 'exact))
-          (consent-number-value datum)
+          (consent-number-owned-value datum)
           (eval-error
            (string-append description " must be an exact integer")
            datum)))
+
+    (define (exact-integer->host datum description)
+      "Return bounded exact integer DATUM for a host adapter operation."
+      (let ((owned (exact-integer-owned datum description)))
+        (or (owned-numeric
+             'integer->small owned 1152921504606846975)
+            (eval-error
+             (string-append description
+                            " exact integer exceeds host adapter range")
+             datum))))
 
     (define (expect-nonnegative-index datum limit description allow-end?)
       "Validate nonnegative index input and raise an evaluator error on mismatch."
@@ -2312,85 +2405,56 @@ cursor across sessions."
 
     (define (binary-rational left right operation description)
       "Apply exact rational arithmetic for one binary operation."
-      (let* ((left-pair (number->rational-pair left description))
-             (right-pair (number->rational-pair right description))
-             (left-numerator (car left-pair))
-             (left-denominator (cdr left-pair))
-             (right-numerator (car right-pair))
-             (right-denominator (cdr right-pair)))
-        (cond
-         ((eq? operation '+)
-          (number-from-rational-pair
-           (cons (+ (* left-numerator right-denominator)
-                    (* right-numerator left-denominator))
-                 (* left-denominator right-denominator))))
-         ((eq? operation '-)
-          (number-from-rational-pair
-           (cons (- (* left-numerator right-denominator)
-                    (* right-numerator left-denominator))
-                 (* left-denominator right-denominator))))
-         ((eq? operation '*)
-          (number-from-rational-pair
-           (cons (* left-numerator right-numerator)
-                 (* left-denominator right-denominator))))
-         ((eq? operation '/)
-          (if (zero? right-numerator)
-              (eval-error (string-append description " division by zero")))
-          (number-from-rational-pair
-           (cons (* left-numerator right-denominator)
-                 (* left-denominator right-numerator)))))))
-
-    (define (special-inexact-binary left right operation description)
-      "Handle NaN and infinity cases for inexact binary arithmetic."
-      (cond
-       ((or (number-nan? left) (number-nan? right))
-        (consent-make-canonical-infnan "+nan.0"))
-       ((or (eq? (consent-number-kind left) 'infnan)
-            (eq? (consent-number-kind right) 'infnan))
-        (let ((left-kind
-               (and (eq? (consent-number-kind left) 'infnan)
-                    (consent-number-value left)))
-              (right-kind
-               (and (eq? (consent-number-kind right) 'infnan)
-                    (consent-number-value right))))
-          (cond
-           ((eq? operation '+)
-            (cond
-             ((and left-kind right-kind (not (string=? left-kind right-kind)))
-              (consent-make-canonical-infnan "+nan.0"))
-             (left-kind left)
-             (right-kind right)
-             (else #f)))
-           ((eq? operation '-)
-            (cond
-             ((and left-kind right-kind (string=? left-kind right-kind))
-              (consent-make-canonical-infnan "+nan.0"))
-             (left-kind left)
-             ((and right-kind (string=? right-kind "+inf.0"))
-              (consent-make-canonical-infnan "-inf.0"))
-             ((and right-kind (string=? right-kind "-inf.0"))
-              (consent-make-canonical-infnan "+inf.0"))
-             (else #f)))
-           (else
-            (consent-host-datum->consent-datum
-             ((if (eq? operation '*) * /)
-              (number->host-float left description)
-              (number->host-float right description)))))))
-       (else #f)))
+      (if (and (not (eq? operation '/))
+               (eq? (consent-number-kind left) 'integer)
+               (eq? (consent-number-kind right) 'integer))
+          (consent-make-canonical-integer
+           (owned-numeric
+            (case operation
+              ((+) 'integer-add)
+              ((-) 'integer-subtract)
+              (else 'integer-multiply))
+            (consent-number-owned-value left)
+            (consent-number-owned-value right)))
+          (let* ((left-pair (number->rational-pair left description))
+                 (right-pair (number->rational-pair right description)))
+            (if (and (eq? operation '/)
+                     (owned-numeric 'integer-zero? (car right-pair)))
+                (eval-error (string-append description " division by zero")))
+            (number-from-rational-pair
+             (owned-numeric
+              (case operation
+                ((+) 'rational-add)
+                ((-) 'rational-subtract)
+                ((*) 'rational-multiply)
+                (else 'rational-divide))
+              left-pair
+              right-pair)))))
 
     (define (binary-real-number left right operation description)
       "Apply a binary arithmetic operation to real numbers."
-      (or (special-inexact-binary left right operation description)
-          (if (or (number-inexact? left) (number-inexact? right))
+      (if (or (number-inexact? left) (number-inexact? right))
+          (if (or (eq? (consent-number-kind left) 'infnan)
+                  (eq? (consent-number-kind right) 'infnan))
+              (number-from-binary64
+               (owned-numeric
+                'binary64-binary
+                (number->binary64 left description)
+                (number->binary64 right description)
+                operation))
+              ;; Borrowed hosts accelerate ordinary binary64 arithmetic. The
+              ;; result immediately re-enters the owned tuple constructor; the
+              ;; software operation above remains the self-hosted fallback and
+              ;; is exercised directly by `(consent numeric)' tests.
               (consent-make-canonical-decimal
-               ((cond
-                 ((eq? operation '+) +)
-                 ((eq? operation '-) -)
-                 ((eq? operation '*) *)
-                 (else /))
+               ((case operation
+                  ((+) +)
+                  ((-) -)
+                  ((*) *)
+                  (else /))
                 (number->host-float left description)
-                (number->host-float right description)))
-              (binary-rational left right operation description))))
+                (number->host-float right description))))
+          (binary-rational left right operation description)))
 
     (define (binary-number left right operation description)
       "Apply a binary arithmetic operation to real or complex numbers."
@@ -2522,12 +2586,20 @@ cursor across sessions."
       "Return NUMBER's real component or reject non-real complex values."
       (let ((datum (expect-number number description)))
         (if (number-complex-representation? datum)
-            (if (number-exact-zero? (cdr (consent-number-value datum)))
-                (car (consent-number-value datum))
+            (if (number-exact-zero?
+                 (cdr (consent-number-owned-value datum)))
+                (car (consent-number-owned-value datum))
                 (eval-error
                  (string-append description " expected real number")
                  datum))
             datum)))
+
+    (define (number->comparison-rational number description)
+      "Return finite real NUMBER as an exact owned rational pair."
+      (if (eq? (consent-number-kind number) 'decimal)
+          (owned-numeric
+           'binary64->rational (consent-number-owned-value number))
+          (number->rational-pair number description)))
 
     (define (number=2 left right)
       "Compare two Consent Scheme numbers for Scheme numeric equality."
@@ -2545,14 +2617,25 @@ cursor across sessions."
              (eq? (consent-number-kind right) 'infnan)
              (string=? (consent-number-value left)
                        (consent-number-value right))))
-       ((or (number-inexact? left) (number-inexact? right))
-        (= (number->host-float left "=")
-           (number->host-float right "=")))
+       ((and (eq? (consent-number-kind left) 'integer)
+             (eq? (consent-number-kind right) 'integer))
+        (= (owned-numeric
+            'integer-compare
+            (consent-number-owned-value left)
+            (consent-number-owned-value right))
+           0))
+       ((and (eq? (consent-number-kind left) 'decimal)
+             (eq? (consent-number-kind right) 'decimal))
+        (owned-numeric
+         'binary64-equal?
+         (consent-number-owned-value left)
+         (consent-number-owned-value right)))
        (else
-        (let ((left-pair (number->rational-pair left "="))
-              (right-pair (number->rational-pair right "=")))
-          (= (* (car left-pair) (cdr right-pair))
-             (* (car right-pair) (cdr left-pair)))))))
+        (= (owned-numeric
+            'rational-compare
+            (number->comparison-rational left "=")
+            (number->comparison-rational right "="))
+           0))))
 
     (define (number-order2 left right predicate description)
       "Compare two real Consent Scheme numbers with PREDICATE."
@@ -2560,20 +2643,41 @@ cursor across sessions."
             (ordered-right (number-real-part-for-ordering right description)))
         (cond
          ((or (number-nan? ordered-left) (number-nan? ordered-right)) #f)
-         ((or (number-inexact? ordered-left)
-              (number-inexact? ordered-right)
-              (eq? (consent-number-kind ordered-left) 'infnan)
-              (eq? (consent-number-kind ordered-right) 'infnan))
-          (predicate (number->host-float ordered-left description)
-                     (number->host-float ordered-right description)))
+         ((eq? (consent-number-kind ordered-left) 'infnan)
+          (predicate
+           (if (string=? (consent-number-value ordered-left) "-inf.0")
+               -1
+               1)
+           0))
+         ((eq? (consent-number-kind ordered-right) 'infnan)
+          (predicate
+           0
+           (if (string=? (consent-number-value ordered-right) "-inf.0")
+               -1
+               1)))
+         ((and (eq? (consent-number-kind ordered-left) 'integer)
+               (eq? (consent-number-kind ordered-right) 'integer))
+          (predicate
+           (owned-numeric
+            'integer-compare
+            (consent-number-owned-value ordered-left)
+            (consent-number-owned-value ordered-right))
+           0))
+         ((and (eq? (consent-number-kind ordered-left) 'decimal)
+               (eq? (consent-number-kind ordered-right) 'decimal))
+          (let ((comparison
+                 (owned-numeric
+                  'binary64-compare
+                  (consent-number-owned-value ordered-left)
+                  (consent-number-owned-value ordered-right))))
+            (and comparison (predicate comparison 0))))
          (else
-          (let ((left-pair
-                 (number->rational-pair ordered-left description))
-                (right-pair
-                 (number->rational-pair ordered-right description)))
-            (predicate
-             (* (car left-pair) (cdr right-pair))
-             (* (car right-pair) (cdr left-pair))))))))
+          (predicate
+           (owned-numeric
+            'rational-compare
+            (number->comparison-rational ordered-left description)
+            (number->comparison-rational ordered-right description))
+           0)))))
 
     (define (primitive-compare arguments predicate description)
       "Implement the `compare` primitive with argument validation and Consent"
@@ -2668,68 +2772,63 @@ cursor across sessions."
 
     (define (primitive-odd? arguments context)
       "Implement the `odd?` primitive with argument validation and Consent Scheme values."
-      (odd? (exact-integer->host (car arguments) "odd?")))
+      (not (owned-numeric
+            'integer-even?
+            (exact-integer-owned (car arguments) "odd?"))))
 
     (define (primitive-even? arguments context)
       "Implement the `even?` primitive with argument validation and Consent"
       "Scheme values."
-      (even? (exact-integer->host (car arguments) "even?")))
+      (owned-numeric
+       'integer-even?
+       (exact-integer-owned (car arguments) "even?")))
 
-    (define (truncate-quotient-value left right)
-      "Return integer quotient rounded toward zero for exact host integers."
-      (let ((quotient (quotient (abs left) (abs right))))
-        (if (= (if (< left 0) -1 1)
-               (if (< right 0) -1 1))
-            quotient
-            (- quotient))))
-
-    (define (truncate-remainder-value left right)
-      "Return the remainder paired with truncate-quotient-value."
-      (- left (* right (truncate-quotient-value left right))))
-
-    (define (integer-quotient arguments quotient-function description)
-      "Validate two exact integers and apply QUOTIENT-FUNCTION."
-      (let ((left (exact-integer->host (car arguments) description))
-            (right (exact-integer->host (second arguments) description)))
-        (if (zero? right)
+    (define (integer-divmod arguments mode description)
+      "Validate two exact integers and apply owned division MODE."
+      (let ((left (exact-integer-owned (car arguments) description))
+            (right (exact-integer-owned (second arguments) description)))
+        (if (owned-numeric 'integer-zero? right)
             (eval-error (string-append description " division by zero")))
-        (consent-make-canonical-integer
-         (quotient-function left right))))
+        (owned-numeric mode left right)))
+
+    (define (integer-quotient arguments mode description)
+      "Return the quotient from owned integer division MODE."
+      (consent-make-canonical-integer
+       (car (integer-divmod arguments mode description))))
 
     (define (primitive-quotient arguments context)
       "Implement the `quotient` primitive with argument validation and Consent"
       "Scheme values."
-      (integer-quotient arguments truncate-quotient-value "quotient"))
+      (integer-quotient
+       arguments 'integer-divmod-truncate "quotient"))
 
     (define (primitive-floor-quotient arguments context)
       "Implement the `floor-quotient` primitive with argument validation and"
       "Consent Scheme values."
-      (integer-quotient arguments floor-quotient "floor-quotient"))
+      (integer-quotient
+       arguments 'integer-divmod-floor "floor-quotient"))
 
     (define (primitive-truncate-quotient arguments context)
       "Implement the `truncate-quotient` primitive with argument validation and"
       "Consent Scheme values."
-      (integer-quotient arguments truncate-quotient-value "truncate-quotient"))
+      (integer-quotient
+       arguments 'integer-divmod-truncate "truncate-quotient"))
 
     (define (primitive-remainder arguments context)
       "Implement the `remainder` primitive with argument validation and Consent"
       "Scheme values."
-      (let ((left (exact-integer->host (car arguments) "remainder"))
-            (right (exact-integer->host (second arguments) "remainder")))
-        (if (zero? right)
-            (eval-error "remainder division by zero"))
-        (consent-make-canonical-integer
-         (truncate-remainder-value left right))))
+      (consent-make-canonical-integer
+       (cdr
+        (integer-divmod
+         arguments 'integer-divmod-truncate "remainder"))))
 
     (define (primitive-modulo arguments context)
       "Implement the `modulo` primitive with argument validation and Consent"
       "Scheme values."
-      (let ((left (exact-integer->host (car arguments) "modulo"))
-            (right (exact-integer->host (second arguments) "modulo")))
-        (if (zero? right)
-            (eval-error "modulo division by zero"))
-        (consent-make-canonical-integer
-         (floor-remainder left right))))
+      (consent-make-canonical-integer
+       (cdr
+        (integer-divmod
+         arguments 'integer-divmod-floor "modulo"))))
 
     (define (primitive-floor-remainder arguments context)
       "Implement the `floor-remainder` primitive with argument validation and"
@@ -2743,35 +2842,19 @@ cursor across sessions."
 
     (define (floor-rational-pair pair)
       "Return the mathematical floor of a rational pair."
-      (floor-quotient (car pair) (cdr pair)))
+      (owned-numeric 'rational-round pair 'floor))
 
     (define (ceiling-rational-pair pair)
       "Return the mathematical ceiling of a rational pair."
-      (- (floor-quotient (- (car pair)) (cdr pair))))
+      (owned-numeric 'rational-round pair 'ceiling))
 
     (define (truncate-rational-pair pair)
       "Return a rational pair rounded toward zero."
-      (let* ((numerator (car pair))
-             (denominator (cdr pair))
-             (quotient (quotient (abs numerator) denominator)))
-        (if (< numerator 0) (- quotient) quotient)))
+      (owned-numeric 'rational-round pair 'truncate))
 
     (define (round-rational-pair pair)
       "Return a rational pair rounded using Scheme's ties-to-even rule."
-      (let* ((numerator (car pair))
-             (denominator (cdr pair))
-             (sign (if (< numerator 0) -1 1))
-             (absolute (abs numerator))
-             (quotient (quotient absolute denominator))
-             (remainder (modulo absolute denominator))
-             (twice (* 2 remainder))
-             (rounded
-              (cond
-               ((< twice denominator) quotient)
-               ((> twice denominator) (+ quotient 1))
-               ((even? quotient) quotient)
-               (else (+ quotient 1)))))
-        (* sign rounded)))
+      (owned-numeric 'rational-round pair 'round))
 
     (define (primitive-rounding arguments function description)
       "Implement the `rounding` primitive with argument validation and Consent"
@@ -2784,9 +2867,12 @@ cursor across sessions."
           (consent-make-canonical-integer
            (function (number->rational-pair number description))))
          ((eq? (consent-number-kind number) 'decimal)
-          (consent-make-canonical-decimal
-           (inexact
-            (function (decimal->exact-rational-pair number)))))
+          (let ((rounded
+                 (function (decimal->exact-rational-pair number))))
+            (consent-make-canonical-decimal
+             (owned-numeric
+              'binary64-from-rational
+              (cons rounded (owned-numeric 'integer-from-small 1))))))
          ((eq? (consent-number-kind number) 'infnan)
           number))))
 
@@ -2811,13 +2897,16 @@ cursor across sessions."
       (primitive-rounding arguments round-rational-pair "round"))
 
     (define (integer-argument datum description)
-      "Return DATUM as a host integer, accepting exact and inexact integers."
+      "Return DATUM as an owned integer, accepting exact and inexact integers."
       (let ((number (expect-number datum description)))
         (cond
          ((and (number-exact? number) (number-integer? number))
           (car (number->rational-pair number description)))
          ((and (number-inexact? number) (number-integer? number))
-          (truncate (number->host-float number description)))
+          (owned-numeric
+           'rational-round
+           (decimal->exact-rational-pair number)
+           'truncate))
          (else
           (eval-error
            (string-append description " expected integer")
@@ -2825,23 +2914,16 @@ cursor across sessions."
 
     (define (integer-gcd left right)
       "Compute the nonnegative greatest common divisor for exact integers."
-      (let loop ((a (abs left)) (b (abs right)))
-        (if (zero? b) a (loop b (modulo a b)))))
+      (owned-numeric 'integer-gcd left right))
 
     (define (integer-power base exponent)
       "Compute BASE raised to nonnegative EXPONENT for reader number parsing."
-      (let loop ((result 1) (factor base) (power exponent))
-        (cond
-         ((zero? power) result)
-         ((odd? power)
-          (loop (* result factor) (* factor factor) (quotient power 2)))
-         (else
-          (loop result (* factor factor) (quotient power 2))))))
+      (owned-numeric 'integer-power base exponent))
 
     (define (primitive-gcd arguments context)
       "Implement the `gcd` primitive with argument validation and Consent Scheme values."
       (let loop ((rest (numeric-arguments arguments "gcd"))
-                 (result 0)
+                 (result (owned-numeric 'integer-from-small 0))
                  (inexact? #f))
         (if (null? rest)
             (let ((value (consent-make-canonical-integer result)))
@@ -2853,17 +2935,25 @@ cursor across sessions."
     (define (primitive-lcm arguments context)
       "Implement the `lcm` primitive with argument validation and Consent Scheme values."
       (let loop ((rest (numeric-arguments arguments "lcm"))
-                 (result 1)
+                 (result (owned-numeric 'integer-from-small 1))
                  (inexact? #f))
         (if (null? rest)
             (let ((value (consent-make-canonical-integer result)))
               (if inexact? (number-inexact value) value))
-            (let ((value (abs (integer-argument (car rest) "lcm"))))
+            (let ((value
+                   (owned-numeric
+                    'integer-abs
+                    (integer-argument (car rest) "lcm"))))
               (loop (cdr rest)
-                    (if (or (zero? result) (zero? value))
-                        0
-                        (quotient (* result value)
-                                  (integer-gcd result value)))
+                    (if (or (owned-numeric 'integer-zero? result)
+                            (owned-numeric 'integer-zero? value))
+                        (owned-numeric 'integer-from-small 0)
+                        (car
+                         (owned-numeric
+                          'integer-divmod-truncate
+                          (owned-numeric
+                           'integer-multiply result value)
+                          (integer-gcd result value))))
                     (or inexact? (number-inexact? (car rest))))))))
 
     (define (primitive-numerator arguments context)
@@ -2908,10 +2998,14 @@ cursor across sessions."
                    (exponent
                     (car (number->rational-pair power "expt")))
                    (numerator
-                    (integer-power (car base-pair) (abs exponent)))
+                    (integer-power
+                     (car base-pair)
+                     (owned-numeric 'integer-abs exponent)))
                    (denominator
-                    (integer-power (cdr base-pair) (abs exponent))))
-              (if (>= exponent 0)
+                    (integer-power
+                     (cdr base-pair)
+                     (owned-numeric 'integer-abs exponent))))
+              (if (not (owned-numeric 'integer-negative? exponent))
                   (number-from-rational-pair
                    (cons numerator denominator))
                   (number-from-rational-pair
@@ -2981,130 +3075,116 @@ cursor across sessions."
              (consent-make-canonical-decimal (sqrt (- value))))
             (consent-make-canonical-decimal (sqrt value)))))
 
-    (define (integer-sqrt value)
-      "Return the greatest integer whose square is no larger than VALUE."
-      (let loop ((low 0) (high (+ value 1)))
-        (if (<= (- high low) 1)
-            low
-            (let ((mid (quotient (+ low high) 2)))
-              (if (> (* mid mid) value)
-                  (loop low mid)
-                  (loop mid high))))))
-
     (define (primitive-exact-integer-sqrt arguments context)
       "Implement the `exact-integer-sqrt` primitive with argument validation"
       "and Consent Scheme values."
-      (let ((value (exact-integer->host
+      (let ((value (exact-integer-owned
                     (car arguments)
                     "exact-integer-sqrt")))
-        (if (< value 0)
+        (if (owned-numeric 'integer-negative? value)
             (eval-error
              "exact-integer-sqrt expected non-negative integer"))
-        (let ((root (integer-sqrt value)))
+        (let ((result (owned-numeric 'integer-square-root value)))
           (make-multiple-values
-           (list (consent-make-canonical-integer root)
-                 (consent-make-canonical-integer
-                  (- value (* root root))))))))
+           (list (consent-make-canonical-integer (car result))
+                 (consent-make-canonical-integer (cdr result)))))))
 
     (define (primitive-floor/ arguments context)
       "Implement the `floor/` primitive with argument validation and Consent"
       "Scheme values."
-      (let ((left (exact-integer->host (car arguments) "floor/"))
-            (right (exact-integer->host (second arguments) "floor/")))
-        (if (zero? right)
-            (eval-error "floor/ division by zero"))
-        (let* ((quotient (floor-quotient left right))
-               (remainder (- left (* right quotient))))
-          (make-multiple-values
-           (list (consent-make-canonical-integer quotient)
-                 (consent-make-canonical-integer remainder))))))
+      (let ((result
+             (integer-divmod
+              arguments 'integer-divmod-floor "floor/")))
+        (make-multiple-values
+         (list (consent-make-canonical-integer (car result))
+               (consent-make-canonical-integer (cdr result))))))
 
     (define (primitive-truncate/ arguments context)
       "Implement the `truncate/` primitive with argument validation and Consent"
       "Scheme values."
-      (let ((left (exact-integer->host (car arguments) "truncate/"))
-            (right (exact-integer->host (second arguments) "truncate/")))
-        (if (zero? right)
-            (eval-error "truncate/ division by zero"))
-        (let* ((quotient (truncate-quotient-value left right))
-               (remainder (- left (* right quotient))))
-          (make-multiple-values
-           (list (consent-make-canonical-integer quotient)
-                 (consent-make-canonical-integer remainder))))))
+      (let ((result
+             (integer-divmod
+              arguments 'integer-divmod-truncate "truncate/")))
+        (make-multiple-values
+         (list (consent-make-canonical-integer (car result))
+               (consent-make-canonical-integer (cdr result))))))
 
     (define (rational-pair< left right)
       "Report whether rational pair LEFT is less than RIGHT."
-      (< (* (car left) (cdr right))
-         (* (car right) (cdr left))))
+      (< (owned-numeric 'rational-compare left right) 0))
 
     (define (rational-pair-normalize pair)
       "Normalize a rational pair to positive denominator and lowest terms."
-      (let* ((numerator (car pair))
-             (denominator (cdr pair))
-             (adjusted
-              (if (< denominator 0)
-                  (cons (- numerator) (- denominator))
-                  pair))
-             (divisor (integer-gcd (car adjusted) (cdr adjusted))))
-        (cons (quotient (car adjusted) divisor)
-              (quotient (cdr adjusted) divisor))))
+      (owned-numeric 'rational-normalize (car pair) (cdr pair)))
 
     (define (rational-pair-negate pair)
       "Negate a rational pair without changing its denominator."
-      (cons (- (car pair)) (cdr pair)))
+      (cons (owned-numeric 'integer-negate (car pair)) (cdr pair)))
 
     (define (rational-pair+ left right)
       "Add two rational pairs and normalize the result."
-      (rational-pair-normalize
-       (cons (+ (* (car left) (cdr right))
-                (* (car right) (cdr left)))
-             (* (cdr left) (cdr right)))))
+      (owned-numeric 'rational-add left right))
 
     (define (rational-pair- left right)
       "Subtract RIGHT from LEFT as rational pairs."
-      (rational-pair+ left (rational-pair-negate right)))
+      (owned-numeric 'rational-subtract left right))
 
     (define (rational-pair-reciprocal pair)
       "Return the reciprocal of a rational pair in normalized form."
-      (rational-pair-normalize (cons (cdr pair) (car pair))))
+      (owned-numeric
+       'rational-normalize (cdr pair) (car pair)))
 
     (define (rational-pair-integer? pair)
       "Report whether a rational pair has denominator one."
-      (= (cdr pair) 1))
+      (= (owned-numeric
+          'integer-compare
+          (cdr pair)
+          (owned-numeric 'integer-from-small 1))
+         0))
+
+    (define (small-rational numerator denominator)
+      "Construct an owned rational pair from small host integers."
+      (cons (owned-numeric 'integer-from-small numerator)
+            (owned-numeric 'integer-from-small denominator)))
 
     (define (simplest-positive-rational-pair lower upper)
       "Return the simplest nonnegative rational pair in [LOWER, UPPER]."
       (cond
-       ((not (rational-pair< (cons 0 1) lower))
-        (cons 0 1))
+       ((not (rational-pair< (small-rational 0 1) lower))
+        (small-rational 0 1))
        ((rational-pair-integer? lower)
         lower)
        (else
-        (let ((lower-floor (floor-quotient (car lower) (cdr lower)))
-              (upper-floor (floor-quotient (car upper) (cdr upper))))
-          (if (< lower-floor upper-floor)
-              (cons (+ lower-floor 1) 1)
+        (let ((lower-floor
+               (owned-numeric 'rational-round lower 'floor))
+              (upper-floor
+               (owned-numeric 'rational-round upper 'floor))
+              (one (owned-numeric 'integer-from-small 1)))
+          (if (< (owned-numeric
+                  'integer-compare lower-floor upper-floor)
+                 0)
+              (cons (owned-numeric 'integer-add lower-floor one) one)
               (rational-pair+
-               (cons lower-floor 1)
+               (cons lower-floor one)
                (rational-pair-reciprocal
                 (simplest-positive-rational-pair
                  (rational-pair-reciprocal
                   (rational-pair-
                    upper
-                   (cons upper-floor 1)))
+                   (cons upper-floor one)))
                  (rational-pair-reciprocal
                   (rational-pair-
                    lower
-                   (cons lower-floor 1)))))))))))
+                   (cons lower-floor one)))))))))))
 
     (define (simplest-rational-pair lower upper)
       "Return the simplest rational pair in the interval [LOWER, UPPER]."
       (cond
        ((rational-pair< upper lower)
         (eval-error "rationalize tolerance produced empty interval"))
-       ((not (rational-pair< (cons 0 1) lower))
-        (if (not (rational-pair< upper (cons 0 1)))
-            (cons 0 1)
+       ((not (rational-pair< (small-rational 0 1) lower))
+        (if (not (rational-pair< upper (small-rational 0 1)))
+            (small-rational 0 1)
             (rational-pair-negate
              (simplest-positive-rational-pair
               (rational-pair-negate upper)
@@ -3179,7 +3259,7 @@ cursor across sessions."
       "Scheme values."
       (let ((number (expect-number (car arguments) "real-part")))
         (if (number-complex-representation? number)
-            (car (consent-number-value number))
+            (car (consent-number-owned-value number))
             number)))
 
     (define (primitive-imag-part arguments context)
@@ -3187,7 +3267,7 @@ cursor across sessions."
       "Scheme values."
       (let ((number (expect-number (car arguments) "imag-part")))
         (if (number-complex-representation? number)
-            (cdr (consent-number-value number))
+            (cdr (consent-number-owned-value number))
             (consent-make-canonical-integer 0))))
 
     (define (primitive-magnitude arguments context)
@@ -3195,7 +3275,7 @@ cursor across sessions."
       "Scheme values."
       (let ((number (expect-number (car arguments) "magnitude")))
         (if (number-complex-representation? number)
-            (let* ((parts (consent-number-value number))
+            (let* ((parts (consent-number-owned-value number))
                    (real (number->host-float (car parts) "magnitude"))
                    (imaginary (number->host-float
                                (cdr parts)
@@ -3209,7 +3289,7 @@ cursor across sessions."
       "Scheme values."
       (let ((number (expect-number (car arguments) "angle")))
         (if (number-complex-representation? number)
-            (let* ((parts (consent-number-value number))
+            (let* ((parts (consent-number-owned-value number))
                    (real (number->host-float (car parts) "angle"))
                    (imaginary (number->host-float
                                (cdr parts)
@@ -3425,10 +3505,10 @@ cursor across sessions."
       (cond
        ((eq? (consent-number-kind number) 'integer)
         (consent-integer->radix-string
-         (consent-number-value number)
+         (consent-number-owned-value number)
          radix))
        ((eq? (consent-number-kind number) 'rational)
-        (let ((value (consent-number-value number)))
+        (let ((value (consent-number-owned-value number)))
           (string-append
            (consent-integer->radix-string (car value) radix)
            "/"
@@ -9442,13 +9522,32 @@ cursor across sessions."
            (if (and (number-complex-representation? left)
                     (number-complex-representation? right))
                (and (numeric-representation-eqv?
-                     (car (consent-number-value left))
-                     (car (consent-number-value right)))
+                     (car (consent-number-owned-value left))
+                     (car (consent-number-owned-value right)))
                     (numeric-representation-eqv?
-                     (cdr (consent-number-value left))
-                     (cdr (consent-number-value right))))
-               (equal? (consent-number-value left)
-                       (consent-number-value right)))))
+                     (cdr (consent-number-owned-value left))
+                     (cdr (consent-number-owned-value right))))
+               (case (consent-number-kind left)
+                 ((integer)
+                  (= (owned-numeric
+                      'integer-compare
+                      (consent-number-owned-value left)
+                      (consent-number-owned-value right))
+                     0))
+                 ((rational)
+                  (= (owned-numeric
+                      'rational-compare
+                      (consent-number-owned-value left)
+                      (consent-number-owned-value right))
+                     0))
+                 ((decimal)
+                  (owned-numeric
+                   'binary64-equal?
+                   (consent-number-owned-value left)
+                   (consent-number-owned-value right)))
+                 (else
+                  (equal? (consent-number-owned-value left)
+                          (consent-number-owned-value right)))))))
 
     (define (eqv-value? left right)
       "Implement eqv? comparison with Consent Scheme numeric representation."

@@ -41,6 +41,7 @@
           consent-number-radix
           consent-number-kind
           consent-number-value
+          consent-number-owned-value
           consent-make-canonical-integer
           consent-make-canonical-decimal
           consent-make-canonical-rational
@@ -63,6 +64,7 @@
           (scheme char)
           (scheme inexact)
           (scheme write)
+          (consent numeric)
           (consent symbol)
           (consent symbol-boundary))
   (begin
@@ -166,13 +168,10 @@
       consent-source-metadata-entry-count)
 
     ;; Consent-owned numbers preserve lexical exactness, radix, and special
-    ;; values instead of trusting the host Scheme's numeric tower to round-trip.
-    ;; Host payload pieces are the staged bootstrap accelerators inventoried in
-    ;; docs/numeric-backend.md, not the self-hosted representation contract.
+    ;; values without entrusting payload semantics to the host numeric tower.
     (define-record-type <consent-number>
-      ;; Consent Scheme owns numeric syntax even in the portable implementation.
-      ;; Host numbers are used only as temporary representation pieces inside
-      ;; this datum and must not escape as language-visible numeric values.
+      ;; VALUE is an owned integer, rational pair, binary64 tuple, special tag,
+      ;; or pair of canonical real components.
       (make-consent-number lexeme exactness radix kind value)
       consent-number?
       (lexeme consent-number-lexeme)
@@ -181,21 +180,61 @@
       (kind consent-number-kind)
       (value consent-number-value-field))
 
+    ;; One fixed profile backs the portable runtime. White-box tests instantiate
+    ;; alternate profiles directly through `(consent numeric)'.
+    (define numeric-backend consent-default-numeric-backend)
+
+    (define (owned-numeric operation . arguments)
+      "Apply owned numeric OPERATION to ARGUMENTS."
+      (apply consent-numeric numeric-backend operation arguments))
+
+    (define (consent-number-owned-value datum)
+      "Return the opaque owned payload of canonical number DATUM."
+      #((parameters
+         (datum (type consent-number)
+          (description "Canonical number whose owned payload is requested.")))
+        (returns
+         (type
+          (or owned-integer owned-rational owned-binary64 string pair))
+         (description "Opaque integer, rational, binary64, or component payload."))
+        (effects error))
+      (if (consent-number? datum)
+          (consent-number-value-field datum)
+          (error "consent-number-owned-value expected a canonical number"
+                 datum)))
+
+    (define (owned-integer->host value)
+      "Convert small owned integer VALUE for a bootstrap adapter."
+      (or (owned-numeric
+           'integer->small value 1152921504606846975)
+          (error "canonical integer exceeds checked host adapter range"
+                 (owned-numeric 'integer->string value 10))))
+
     (define (consent-number-value datum)
-      "Return the host payload of canonical number DATUM."
-      "A plain host number is returned unchanged: values that cross the"
-      "compiled host-runner boundary arrive unwrapped to host representation,"
-      "so the public accessor accepts both forms with the same answer on"
-      "every posture."
+      "Return DATUM through the checked bootstrap host-adapter seam."
+      "Core numeric code uses `consent-number-owned-value`; this compatibility"
+      "accessor is limited to small metadata integers, finite host-math inputs,"
+      "and legacy tests. It refuses to manufacture a host bignum."
       #((parameters
          (datum (type (or consent-number number))
-          (description ("Canonical number record or plain host number to unwrap."))))
-        (returns (type number)
+          (description "Canonical number or plain bootstrap host number.")))
+        (returns (type (or number pair string))
          (description
-          ("The host payload of a canonical number record, or DATUM"
-            "itself when it is already a plain host number.")))
+          ("A bounded host adapter value, structured rational or special"
+           "payload, or DATUM when already a host number.")))
         (effects error))
       (cond
+       ((and (consent-number? datum)
+             (eq? (consent-number-kind datum) 'integer))
+        (owned-integer->host (consent-number-value-field datum)))
+       ((and (consent-number? datum)
+             (eq? (consent-number-kind datum) 'rational))
+        (let ((pair (consent-number-value-field datum)))
+          (cons (owned-integer->host (car pair))
+                (owned-integer->host (cdr pair)))))
+       ((and (consent-number? datum)
+             (eq? (consent-number-kind datum) 'decimal))
+        (owned-numeric 'binary64->host (consent-number-value-field datum)))
        ((consent-number? datum) (consent-number-value-field datum))
        ((number? datum) datum)
        (else (error "consent-number-value expected a canonical number" datum))))
@@ -279,7 +318,7 @@
       "formatting."
       #((parameters
          (integer (type exact-integer)
-          (description "Host integer to render as canonical digit text."))
+          (description "Owned or bootstrap host integer to render."))
          (radix (type exact-integer)
           (description ("Numeric base from 2 through 16 for the digit conversion."))))
         (returns (type string)
@@ -287,19 +326,12 @@
           ("A string of RADIX digits for INTEGER, with a leading minus"
             "sign for negative values and \"0\" for zero.")))
         (effects allocation))
-      (let ((digits "0123456789abcdef")
-            (negative? (< integer 0))
-            (value (abs integer)))
-        (let loop ((remaining value) (parts '()))
-          (if (zero? remaining)
-              (let ((body
-                     (if (null? parts)
-                         "0"
-                         (list->string parts))))
-                (if negative? (string-append "-" body) body))
-              (let* ((digit (modulo remaining radix))
-                     (next (quotient remaining radix)))
-                (loop next (cons (string-ref digits digit) parts)))))))
+      (owned-numeric
+       'integer->string
+       (if (owned-numeric 'integer? integer)
+           integer
+           (owned-numeric 'integer-import-host integer))
+       radix))
 
     (define (option-ref options key default)
       "Return the option value for KEY or DEFAULT when KEY is absent."
@@ -313,7 +345,7 @@
       "same Scheme numeric surface as source-hosted code."
       (let ((value (option-ref options key default)))
         (if (consent-number? value)
-            (consent-number-value-field value)
+            (consent-number-value value)
             value)))
 
     (define (source-line-starts characters)
@@ -807,30 +839,22 @@
 
     (define (integer-gcd left right)
       "Compute the nonnegative greatest common divisor for exact integers."
-      (let loop ((a (abs left)) (b (abs right)))
-        (if (zero? b) a (loop b (modulo a b)))))
+      (owned-numeric 'integer-gcd left right))
 
     (define (integer-power base exponent)
       "Compute BASE raised to nonnegative EXPONENT for reader number parsing."
-      (let loop ((result 1) (factor base) (power exponent))
-        (cond
-         ((zero? power) result)
-         ((odd? power)
-          (loop (* result factor) (* factor factor) (quotient power 2)))
-         (else
-          (loop result (* factor factor) (quotient power 2))))))
+      (owned-numeric
+       'integer-power
+       (if (owned-numeric 'integer? base)
+           base
+           (owned-numeric 'integer-from-small base))
+       (if (owned-numeric 'integer? exponent)
+           exponent
+           (owned-numeric 'integer-from-small exponent))))
 
     (define (normalize-rational-pair numerator denominator)
       "Normalize a rational numerator and denominator to canonical sign and gcd."
-      (if (zero? denominator)
-          (error "zero denominator"))
-      (let* ((adjusted
-              (if (< denominator 0)
-                  (cons (- numerator) (- denominator))
-                  (cons numerator denominator)))
-             (divisor (integer-gcd (car adjusted) (cdr adjusted))))
-        (cons (quotient (car adjusted) divisor)
-              (quotient (cdr adjusted) divisor))))
+      (owned-numeric 'rational-normalize numerator denominator))
 
     (define (consent-make-canonical-integer value . rest)
       "Canonical number constructors are the public boundary for"
@@ -842,7 +866,7 @@
       #((parameters
          (value (type exact-integer)
           (description
-           ("Host integer, or an already-canonical number returned"
+           ("Owned or bootstrap host integer, or canonical number returned"
              "unchanged.")))
          (rest (type exact-integer)
           (description
@@ -859,12 +883,16 @@
                 (radix (if (or (null? rest) (null? (cdr rest)))
                            10
                            (cadr rest))))
-            (make-consent-number
-             (consent-integer->radix-string value 10)
+            (let ((owned
+                   (if (owned-numeric 'integer? value)
+                       value
+                       (owned-numeric 'integer-import-host value))))
+              (make-consent-number
+             (consent-integer->radix-string owned 10)
              exactness
              radix
              'integer
-             value))))
+             owned)))))
 
     (define (host-inexact-special-kind value)
       "Classify a host-accelerated inexact value at the canonical ingress seam."
@@ -874,12 +902,18 @@
        ((= value (/ -1.0 0.0)) "-inf.0")
        (else #f)))
 
-    (define (canonical-component value)
-      "Return numeric component VALUE as a host number."
-      "An already-canonical record is unwrapped, while plain host numbers"
-      "pass through unchanged across compiled and source-hosted postures."
+    (define (owned-exact-component value)
+      "Return exact component VALUE in owned integer storage."
       (if (consent-number? value)
           (consent-number-value-field value)
+          (if (owned-numeric 'integer? value)
+              value
+              (owned-numeric 'integer-import-host value))))
+
+    (define (canonical-component value)
+      "Return VALUE through the bounded bootstrap host adapter."
+      (if (consent-number? value)
+          (consent-number-value value)
           value))
 
     (define (consent-make-canonical-decimal value . maybe-lexeme)
@@ -889,7 +923,7 @@
       #((parameters
          (value (type (or number consent-number))
           (description
-           ("Host inexact number, or an already-canonical number"
+           ("Owned or host inexact number, or canonical number"
              "returned unchanged.")))
          (maybe-lexeme (type string)
           (description
@@ -903,19 +937,38 @@
         (effects allocation))
       (if (consent-number? value)
           value
-          (let* ((normalized-value (if (zero? value) 0.0 value))
+          (let* ((owned-input? (owned-numeric 'binary64? value))
+                 (normalized-host
+                  (and (not owned-input?)
+                       (if (= value 0.0) 0.0 value)))
+                 (owned-value
+                  (if owned-input?
+                      value
+                      (owned-numeric
+                       'binary64-import-host normalized-host)))
                  (special-kind
-                  (host-inexact-special-kind normalized-value)))
+                  (case (owned-numeric 'binary64-class owned-value)
+                    ((nan) "+nan.0")
+                    ((infinity)
+                     (if (< (owned-numeric 'binary64-sign owned-value) 0)
+                         "-inf.0"
+                         "+inf.0"))
+                    (else #f))))
             (if special-kind
                 (consent-make-canonical-infnan special-kind)
                 (make-consent-number
                  (if (null? maybe-lexeme)
-                     (number->string normalized-value)
+                     ;; The lexeme is private syntax metadata. Host-created
+                     ;; values may retain the checked accelerator's spelling;
+                     ;; external rendering always uses the owned tuple.
+                     (if owned-input?
+                         (owned-numeric 'binary64->string owned-value)
+                         (number->string normalized-host))
                      (car maybe-lexeme))
                  'inexact
                  10
                  'decimal
-                 normalized-value)))))
+                 owned-value)))))
 
     (define (consent-make-canonical-rational
              raw-numerator raw-denominator . rest)
@@ -935,8 +988,8 @@
           ("A normalized canonical rational record, collapsing to a"
             "canonical integer when the reduced denominator is one.")))
         (effects allocation))
-      (let* ((numerator (canonical-component raw-numerator))
-             (denominator (canonical-component raw-denominator))
+      (let* ((numerator (owned-exact-component raw-numerator))
+             (denominator (owned-exact-component raw-denominator))
              (pair (normalize-rational-pair numerator denominator))
              (normalized-numerator (car pair))
              (normalized-denominator (cdr pair))
@@ -944,7 +997,11 @@
              (radix (if (or (null? rest) (null? (cdr rest)))
                         10
                         (cadr rest))))
-        (if (= normalized-denominator 1)
+        (if (= (owned-numeric
+                'integer-compare
+                normalized-denominator
+                (owned-numeric 'integer-from-small 1))
+               0)
             (consent-make-canonical-integer
              normalized-numerator
              exactness
@@ -1019,16 +1076,19 @@
       (and (consent-number? number)
            (cond
             ((eq? (consent-number-kind number) 'integer)
-             (zero? (consent-number-value number)))
+             (owned-numeric
+              'integer-zero? (consent-number-value-field number)))
             ((eq? (consent-number-kind number) 'rational)
-             (zero? (car (consent-number-value number))))
+             (owned-numeric
+              'integer-zero? (car (consent-number-value-field number))))
             ((eq? (consent-number-kind number) 'decimal)
-             (zero? (consent-number-value number)))
+             (owned-numeric
+              'binary64-zero? (consent-number-value-field number)))
             ((eq? (consent-number-kind number) 'complex)
              (and (consent-number-zero?
-                   (car (consent-number-value number)))
+                   (car (consent-number-value-field number)))
                   (consent-number-zero?
-                   (cdr (consent-number-value number)))))
+                   (cdr (consent-number-value-field number)))))
             (else #f))))
 
     (define (consent-number-negative? number)
@@ -1043,11 +1103,14 @@
         (effects pure))
       (cond
        ((eq? (consent-number-kind number) 'integer)
-        (< (consent-number-value number) 0))
+        (owned-numeric
+         'integer-negative? (consent-number-value-field number)))
        ((eq? (consent-number-kind number) 'rational)
-        (< (car (consent-number-value number)) 0))
+        (owned-numeric
+         'integer-negative? (car (consent-number-value-field number))))
        ((eq? (consent-number-kind number) 'decimal)
-        (< (consent-number-value number) 0))
+        (owned-numeric
+         'binary64-negative? (consent-number-value-field number)))
        ((eq? (consent-number-kind number) 'infnan)
         (string=? (consent-number-value number) "-inf.0"))
        (else #f)))
@@ -1067,19 +1130,24 @@
       (cond
        ((eq? (consent-number-kind number) 'integer)
         (consent-make-canonical-integer
-         (abs (consent-number-value number))
+         (owned-numeric
+          'integer-abs (consent-number-value-field number))
          (consent-number-exactness number)
          (consent-number-radix number)))
        ((eq? (consent-number-kind number) 'rational)
-        (let ((value (consent-number-value number)))
+        (let ((value (consent-number-value-field number)))
           (consent-make-canonical-rational
-           (abs (car value))
+           (owned-numeric 'integer-abs (car value))
            (cdr value)
            (consent-number-exactness number)
            (consent-number-radix number))))
        ((eq? (consent-number-kind number) 'decimal)
         (consent-make-canonical-decimal
-         (abs (consent-number-value number))))
+         (if (owned-numeric
+              'binary64-negative? (consent-number-value-field number))
+             (owned-numeric
+              'binary64-negate (consent-number-value-field number))
+             (consent-number-value-field number))))
        ((eq? (consent-number-kind number) 'infnan)
         (if (string=? (consent-number-value number) "-inf.0")
             (consent-make-canonical-infnan "+inf.0")
@@ -1140,27 +1208,24 @@
             (number->string number)))
        ((eq? (consent-number-kind number) 'integer)
         (consent-integer->radix-string
-         (consent-number-value number)
+         (consent-number-value-field number)
          10))
        ((eq? (consent-number-kind number) 'rational)
-        (let ((value (consent-number-value number)))
+        (let ((value (consent-number-value-field number)))
           (string-append
            (consent-integer->radix-string (car value) 10)
            "/"
            (consent-integer->radix-string (cdr value) 10))))
        ((eq? (consent-number-kind number) 'decimal)
-        (let ((text (number->string (consent-number-value number))))
-          (cond
-           ((integer-decimal-text? text) (string-append text ".0"))
-           ((terminal-dot-decimal-text? text) (string-append text "0"))
-           (else text))))
+        (owned-numeric
+         'binary64->string (consent-number-value-field number)))
        ((eq? (consent-number-kind number) 'infnan)
         (cond
          ((string=? (consent-number-value number) "+inf.0") "+inf.0")
          ((string=? (consent-number-value number) "-inf.0") "-inf.0")
          (else "+nan.0")))
        ((eq? (consent-number-kind number) 'complex)
-        (let* ((value (consent-number-value number))
+        (let* ((value (consent-number-value-field number))
                (real (car value))
                (imaginary (cdr value)))
           (string-append
@@ -1180,14 +1245,7 @@
 
     (define (parse-unsigned-integer digits radix)
       "Parse DIGITS in RADIX into an exact integer or #f on invalid input."
-      (and (> (string-length digits) 0)
-           (let loop ((index 0) (value 0))
-             (if (= index (string-length digits))
-                 value
-                 (let ((digit (hex-digit-value (string-ref digits index))))
-                   (and digit
-                        (< digit radix)
-                        (loop (+ index 1) (+ (* value radix) digit))))))))
+      (owned-numeric 'integer-parse digits radix))
 
     (define (parse-signed-integer body radix)
       "Parse BODY as an optional-sign integer in RADIX."
@@ -1198,7 +1256,14 @@
                     (signed? (or negative? (char=? first #\+)))
                     (digits (if signed? (substring body 1 length) body))
                     (value (parse-unsigned-integer digits radix)))
-               (and value (if negative? (- value) value))))))
+               (and value
+                    (if negative?
+                        (owned-numeric 'integer-negate value)
+                        value))))))
+
+    (define (parse-decimal-exponent body)
+      "Parse signed decimal exponent BODY as an owned integer."
+      (owned-numeric 'integer-parse body 10))
 
     (define (number-prefix reader token)
       "Parse exactness and radix prefixes from a numeric TOKEN."
@@ -1295,10 +1360,9 @@
                        (char=? (string-ref body after-fraction) #\E))))
              (exponent
               (if saw-exponent?
-                  (parse-signed-integer
-                   (substring body (+ after-fraction 1) length)
-                   10)
-                  0))
+                  (parse-decimal-exponent
+                   (substring body (+ after-fraction 1) length))
+                  (owned-numeric 'integer-from-small 0)))
              (after-exponent (if saw-exponent? length after-fraction))
              (digit-count
               (+ (string-length whole-text)
@@ -1319,26 +1383,66 @@
                     (exponent (car (cdr (cdr (cdr components)))))
                     (digits (string-append whole fraction))
                     (integer (parse-unsigned-integer digits 10))
-                    (scale (- exponent (string-length fraction))))
+                    (scale
+                     (owned-numeric
+                      'integer-subtract
+                      exponent
+                      (owned-numeric
+                       'integer-from-small (string-length fraction)))))
                (and integer
-                    (if (>= scale 0)
-                        (cons (* sign integer (integer-power 10 scale)) 1)
-                        (cons (* sign integer)
-                              (integer-power 10 (- scale)))))))))
+                    (if (owned-numeric 'integer-zero? integer)
+                        (cons integer
+                              (owned-numeric 'integer-from-small 1))
+                        (if (not (owned-numeric 'integer-negative? scale))
+                            (cons
+                             (owned-numeric
+                              'integer-multiply
+                              (if (< sign 0)
+                                  (owned-numeric 'integer-negate integer)
+                                  integer)
+                              (integer-power 10 scale))
+                             (owned-numeric 'integer-from-small 1))
+                            (cons
+                             (if (< sign 0)
+                                 (owned-numeric 'integer-negate integer)
+                                 integer)
+                             (integer-power
+                              10
+                              (owned-numeric
+                               'integer-negate scale))))))))))
 
     (define (rational-pair->inexact pair)
-      "Convert a normalized rational pair to a host inexact approximation."
-      (/ (inexact (car pair)) (inexact (cdr pair))))
+      "Convert a normalized rational pair to an owned binary64 value."
+      (let ((numerator
+             (owned-numeric
+              'integer->small (car pair) 9007199254740991))
+            (denominator
+             (owned-numeric
+              'integer->small (cdr pair) 9007199254740991)))
+        (if (and numerator denominator)
+            (owned-numeric
+             'binary64-import-host
+             (/ (inexact numerator) (inexact denominator)))
+            (owned-numeric 'binary64-from-rational pair))))
 
     (define (number->reader-float number)
       "Convert a Consent number through the reader's temporary polar-math seam."
       (cond
        ((eq? (consent-number-kind number) 'integer)
-        (inexact (consent-number-value number)))
+        (owned-numeric
+         'binary64->host
+         (owned-numeric
+          'binary64-from-rational
+          (cons (consent-number-value-field number)
+                (owned-numeric 'integer-from-small 1)))))
        ((eq? (consent-number-kind number) 'rational)
-        (rational-pair->inexact (consent-number-value number)))
+        (owned-numeric
+         'binary64->host
+         (rational-pair->inexact
+          (consent-number-value-field number))))
        ((eq? (consent-number-kind number) 'decimal)
-        (consent-number-value number))
+        (owned-numeric
+         'binary64->host (consent-number-value-field number)))
        ((eq? (consent-number-kind number) 'infnan)
         (cond
          ((string=? (consent-number-value number) "+inf.0")
@@ -1369,7 +1473,10 @@
          ((parse-signed-integer body radix)
           => (lambda (value)
                (if (eq? exactness 'inexact)
-                   (consent-make-canonical-decimal (inexact value))
+                   (consent-make-canonical-decimal
+                    (rational-pair->inexact
+                     (cons value
+                           (owned-numeric 'integer-from-small 1))))
                    (consent-make-canonical-integer value 'exact radix))))
          ((string-index body #\/ 0)
           (let ((parts (split-on-char body #\/)))
@@ -1380,7 +1487,9 @@
                       (denominator
                        (parse-unsigned-integer (cadr parts) radix)))
                   (cond
-                   ((and numerator denominator (zero? denominator))
+                   ((and numerator
+                         denominator
+                         (owned-numeric 'integer-zero? denominator))
                     (reader-error reader "invalid rational number" token))
                    ((and numerator denominator)
                     (if (eq? exactness 'inexact)
