@@ -1934,7 +1934,7 @@ allocation that produced it."
       (consent-value->external datum)))))
 
 (defun consent--number->float (datum description)
-  "Return DATUM as a host float or signal an error naming DESCRIPTION."
+  "Convert DATUM through the temporary host inexact acceleration seam."
   (setq datum (consent--expect-number datum description))
   (pcase (consent-number-kind datum)
     ('integer (float (consent-number-value datum)))
@@ -2011,7 +2011,7 @@ allocation that produced it."
       (consent-value->external datum)))))
 
 (defun consent--exact-integer->host (datum description)
-  "Return DATUM's exact integer value or signal an error naming DESCRIPTION."
+  "Return DATUM through the staged exact-payload bootstrap seam."
   (unless (and (consent-number-p datum)
                (eq (consent-number-kind datum) 'integer)
                (eq (consent-number-exactness datum) 'exact))

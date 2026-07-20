@@ -15,8 +15,8 @@
     (path "tests/scheme/current-ports-test.scm")
     (tags (full direct compiled core registered)))
    (program
-   (path "tests/scheme/consent-fixture-test.scm")
-    (tags (full direct conformance self-host-gap registered)))
+    (path "tests/scheme/consent-fixture-test.scm")
+    (tags (full direct compiled conformance registered)))
    (program
    (path "tests/scheme/consent-native-cli-daemon-adapter-test.scm")
     (tags (full direct compiled integration registered)))
