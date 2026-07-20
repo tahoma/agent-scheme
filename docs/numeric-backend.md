@@ -8,9 +8,10 @@ dependencies, and defines the boundary later compiler and allocation work must
 consume.
 
 The R7RS-small numerical tower in [section 6.2](r7rs-small-report.md#62-numbers)
-is the language contract. This document chooses one deterministic realization
-of that contract; it does not add an optional numeric SRFI or make the current
-bootstrap record layout public API.
+is the language contract. This document chooses one deterministic semantic
+realization of that contract while allowing target-tuned physical integer
+profiles; it does not add an optional numeric SRFI or make the current bootstrap
+record layout public API.
 
 ## Staged ownership
 
@@ -45,19 +46,54 @@ cross-process exchange.
 
 | Scheme value | Self-hosted semantic representation | Canonical invariants |
 | --- | --- | --- |
-| Exact integer | Sign plus a little-endian sequence of base-2^14 limbs | Zero has no negative sign and no high zero limbs. Each limb is in `[0, 16383]`. |
+| Exact integer | Sign plus a little-endian sequence of backend-selected base-2^w limbs | Zero has no negative sign and no high zero limbs. Each limb is in `[0, 2^w - 1]`. |
 | Exact rational | Owned numerator integer plus owned denominator integer | Denominator is positive, numerator and denominator are coprime, and zero is `0/1`. A denominator of one is represented as an integer. |
 | Finite inexact real | Binary64 semantic tuple: class, sign, unbiased exponent, and 53-bit significand stored with owned integers | Round to nearest, ties to even. Subnormals are supported. Consent's baseline canonicalizes both zero signs to positive zero, which R7RS permits. |
 | Infinity | Inexact-real class `infinity` plus sign | Exactly two infinity values. |
 | NaN | Inexact-real class `nan` | One canonical quiet NaN. Input `-nan.0` normalizes to it; no payload or signaling distinction is exposed. |
 | Complex | Ordered pair of canonical real components | Components are never complex. The value is exact only when both components are exact. |
 
-Base 2^14 keeps a normalized schoolbook limb product, carry, and accumulator
-inside a signed 30-bit exact host integer. A bootstrap must reject its numeric
-accelerator at startup if it cannot represent that working range exactly. The
-self-hosted runtime and compiled ABI must provide at least that small-integer
-floor. A backend may use wider limbs privately when it proves identical
-results, but serialized values and language semantics do not expose limb width.
+### Exact-integer limb profiles
+
+`w` is the backend's positive `limb-bits` parameter. One running backend and
+compiled ABI select one fixed value of `w`; individual integers do not carry a
+limb-width tag and arithmetic never mixes widths. The derived limb base is
+`B = 2^w`, and the derived limb mask is `B - 1`. A backend may specialize these
+constants when its source is loaded, when it is built, or when a native target
+is selected. Limb width is not a language setting and changing it does not
+produce a different class of Scheme number.
+
+The default self-hosted profile targets 64-bit machines and uses `w = 30`. For
+the normalized schoolbook multiplication inner step
+`a[i] * b[j] + output[i + j] + carry`, where every term is bounded by `B - 1`,
+the maximum accumulator is `B^2 - 1`. The default profile therefore needs at
+most `2^60 - 1`. That fits exactly in a signed 64-bit working integer and in
+the immediate fixnum range of a 64-bit Emacs build with a `2^61 - 1` positive
+limit, so the bootstrap's hot inner loop does not allocate host bignums. A
+31-bit limb would raise the same bound to `2^62 - 1` and cross that Emacs
+fixnum limit.
+
+A different backend may select another width when it proves every intermediate
+bound used by its multiplication, division, parsing, and rendering algorithms.
+Useful profiles include `w = 14` for a constrained bootstrap with signed 30-bit
+exact working arithmetic and `w = 62` for native code with signed 128-bit
+accumulators. A backend with unsigned 128-bit multiply/add-with-carry operations
+may instead prove a full `w = 64` profile. Wider native targets may select wider
+limbs when they provide the corresponding double-width operations. The largest
+valid limb is not automatically the fastest choice, so a native backend may
+choose a narrower measured profile.
+
+A bootstrap must reject a configured profile at startup if its primitive
+working arithmetic cannot represent the profile's proven bounds exactly.
+Backend source must derive radix operations from `limb-bits`, `B`, and the limb
+mask rather than embedding a profile's numeric literals. Algorithm thresholds
+must be expressed in value bits or tuned per profile instead of assuming that a
+limb count has the same cost everywhere.
+
+Serialized values, hashing, external rendering, and language semantics do not
+expose `w`. Native code compiled for different limb profiles cannot exchange raw
+numeric object bytes; it must use canonical numeric structure or external form
+at that boundary.
 
 The current `integer`, `rational`, `decimal`, `infnan`, and `complex` record
 kinds are a transition shell. The self-hosted backend may preserve those tags
@@ -213,8 +249,10 @@ The compiler/runtime boundary must preserve these rules:
   structure or canonical external form, never host object bytes.
 
 This is the handoff to #120 and #333. The ABI may tune tags, headers, alignment,
-limb width, and allocation strategy after measuring them, but it must preserve
-these semantic and traversal invariants.
+the target's fixed limb profile, and allocation strategy after measuring them,
+but it must preserve these semantic and traversal invariants. The selected
+profile is part of a compiled target's private object ABI, not the Scheme
+language ABI.
 
 ## Conformance gates
 
@@ -235,6 +273,14 @@ hosts, the Emacs bootstrap, and both compiled self-host products. Its admission
 to the `compiled` test-plan partition is the concrete self-host closure exposed
 by [#659](https://github.com/tahoma/consent/issues/659). A future accelerator
 must pass the same corpus before it can replace an owned path.
+
+The owned exact-integer backend must additionally run white-box boundary tests
+parameterized by `limb-bits`. Those tests cover `B - 1`, `B`, `B + 1`,
+`B^2 - 1`, and `B^2`, plus sign normalization, carry propagation, quotient
+correction, and parsing and rendering across each boundary. Continuous
+integration for that backend must exercise the default 30-bit profile and at
+least one alternate profile so the parameter does not become a nominal,
+untested option.
 
 These fixtures prove the staged semantic contract and the current accelerator
 fences. They do not assert that stage 2's limb and software-binary64 algorithms
