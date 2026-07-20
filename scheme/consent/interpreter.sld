@@ -2117,7 +2117,7 @@ cursor across sessions."
            datum)))))
 
     (define (number->host-float datum description)
-      "Convert DATUM to a host inexact real for transcendental operations."
+      "Convert DATUM through the temporary host inexact acceleration seam."
       (let ((number (expect-number datum description)))
         (cond
          ((eq? (consent-number-kind number) 'integer)
@@ -2205,7 +2205,7 @@ cursor across sessions."
           (eval-error "exact cannot represent inexact special value" datum)))))
 
     (define (exact-integer->host datum description)
-      "Return DATUM as a host exact integer or raise a typed error."
+      "Return DATUM through the staged exact-payload bootstrap seam."
       (if (and (consent-number? datum)
                (eq? (consent-number-kind datum) 'integer)
                (eq? (consent-number-exactness datum) 'exact))
@@ -2921,8 +2921,7 @@ cursor across sessions."
                    (number->host-float power "expt"))))))
 
     (define (primitive-inexact-unary arguments function description)
-      "Implement the `inexact-unary` primitive with argument validation and"
-      "Consent Scheme values."
+      "Dispatch temporary host transcendental acceleration and canonicalize it."
       (consent-make-canonical-decimal
        (function (number->host-float (car arguments) description))))
 

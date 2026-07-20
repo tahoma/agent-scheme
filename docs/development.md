@@ -1004,13 +1004,13 @@ critical path, while the aggregate log still reports one complete host suite.
 The Racket bridge generates
 temporary `#lang r7rs` collection wrappers for checked-in `.sld` libraries
 because Racket's R7RS package resolves imports as Racket collection modules.
-The compiled self-host plan is the gold-standard product corpus: 41 programs
+The compiled self-host plan is the gold-standard product corpus: 46 programs
 cover reader behavior, runtime manifests, registered agent semantics, testing
 infrastructure, models, data structures, random/property facilities, generators,
-and the complete SRFI 180 reference corpus. The remaining 16 ordinary programs
-are explicitly tagged `self-host-gap` and assigned to implementation issues
-#346 (symbol identity and macro-introduced identifiers), #350 (inexact numeric
-closure), or #432 (compiled-rooted nested evaluation). The target is to drive
+the shared R7RS fixture corpus, and the complete SRFI 180 reference corpus. The
+remaining 16 ordinary programs are explicitly tagged `self-host-gap` and
+assigned to implementation issues #346 (symbol identity and macro-introduced
+identifiers) or #432 (compiled-rooted nested evaluation). The target is to drive
 that set to zero; it is not a permanent reduced suite.
 Local `test-portable-compiled` and `test-portable-gambit-native` targets compile
 before invoking the matching `*-run` consumer through `consent --host-run`. CI

@@ -146,7 +146,9 @@ the handle carried by its readers and evaluator."
 LEXEME preserves the source spelling.  EXACTNESS is `exact',
 `inexact', or nil when unspecified.  RADIX is 2, 8, 10, or 16.
 KIND names the parsed shape, such as `integer', `decimal',
-`rational', `complex', or `infnan'."
+`rational', `complex', or `infnan'.  VALUE may contain a temporary host
+numeric accelerator as inventoried in docs/numeric-backend.md; it is not the
+self-hosted representation contract."
   lexeme exactness radix kind value)
 
 (cl-defstruct (consent-bytevector
@@ -852,7 +854,8 @@ DEPTH is used when reading a datum comment's discarded datum."
 
 (defun consent--make-canonical-decimal (value &optional lexeme)
   "Return an inexact decimal number datum for VALUE."
-  (let ((special-kind (consent--host-inexact-special-kind value)))
+  (let* ((value (if (zerop value) 0.0 value))
+         (special-kind (consent--host-inexact-special-kind value)))
     (if special-kind
         (consent--make-canonical-infnan special-kind)
       (consent--make-number

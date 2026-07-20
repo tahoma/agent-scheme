@@ -165,11 +165,14 @@
         (effects state-read))
       consent-source-metadata-entry-count)
 
-    ;; Agent-owned numbers preserve lexical exactness, radix, and special
+    ;; Consent-owned numbers preserve lexical exactness, radix, and special
     ;; values instead of trusting the host Scheme's numeric tower to round-trip.
+    ;; Host payload pieces are the staged bootstrap accelerators inventoried in
+    ;; docs/numeric-backend.md, not the self-hosted representation contract.
     (define-record-type <consent-number>
       ;; Consent Scheme owns numeric syntax even in the portable implementation.
-      ;; Host numbers are used only as representation pieces inside this datum.
+      ;; Host numbers are used only as temporary representation pieces inside
+      ;; this datum and must not escape as language-visible numeric values.
       (make-consent-number lexeme exactness radix kind value)
       consent-number?
       (lexeme consent-number-lexeme)
@@ -864,7 +867,7 @@
              value))))
 
     (define (host-inexact-special-kind value)
-      "Classify host inexact special numbers as infinity, NaN, or ordinary."
+      "Classify a host-accelerated inexact value at the canonical ingress seam."
       (cond
        ((not (= value value)) "+nan.0")
        ((= value (/ 1.0 0.0)) "+inf.0")
@@ -900,17 +903,19 @@
         (effects allocation))
       (if (consent-number? value)
           value
-          (let ((special-kind (host-inexact-special-kind value)))
+          (let* ((normalized-value (if (zero? value) 0.0 value))
+                 (special-kind
+                  (host-inexact-special-kind normalized-value)))
             (if special-kind
                 (consent-make-canonical-infnan special-kind)
                 (make-consent-number
                  (if (null? maybe-lexeme)
-                     (number->string value)
+                     (number->string normalized-value)
                      (car maybe-lexeme))
                  'inexact
                  10
                  'decimal
-                 value)))))
+                 normalized-value)))))
 
     (define (consent-make-canonical-rational
              raw-numerator raw-denominator . rest)
@@ -1326,7 +1331,7 @@
       (/ (inexact (car pair)) (inexact (cdr pair))))
 
     (define (number->reader-float number)
-      "Convert an Consent Scheme number wrapper to a host float for polar parsing."
+      "Convert a Consent number through the reader's temporary polar-math seam."
       (cond
        ((eq? (consent-number-kind number) 'integer)
         (inexact (consent-number-value number)))

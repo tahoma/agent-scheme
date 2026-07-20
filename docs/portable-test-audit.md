@@ -172,17 +172,17 @@ Scheme-plan shards directly; the aggregate live targets run the Emacs-host
 checks beside them, never as their discovery or process-control parent.
 
 The same plan makes compiled self-host coverage auditable rather than an
-allowlist hidden in shell orchestration. All 60 ordinary `full` programs carry
-exactly one of `compiled` or `self-host-gap`; the compiled shard contains 44
-programs total. The 17 current gaps are acceptance inputs to #346, #350, #432,
-and #901. Their issue comments
+allowlist hidden in shell orchestration. All 61 ordinary `full` programs carry
+exactly one of `compiled` or `self-host-gap`; the compiled shard contains 46
+programs total. The 16 current gaps are acceptance inputs to #346 and #432.
+Their issue comments
 name the exact registered cases or first failing manual checks. As those runtime
 defects ship, their programs move into `compiled`; the plan test rejects an
 unclassified full-suite program or a program tagged both ways.
 
-The plan also partitions the 60 direct programs exactly once across seven
+The plan also partitions the 61 direct programs exactly once across seven
 behavior surfaces (`runtime`, `evaluator`, `integration`, `agent`, `library`,
-`random`, and `property`) and the 44 compiled programs exactly once across six
+`random`, and `property`) and the 46 compiled programs exactly once across six
 parallel counterparts. CI uses those names as first-class Guile, Gauche,
 Gambit-compiled, and Racket-compiled jobs; aggregate local and exhaustive-lane
 runs launch the same selectors through `tools/run-portable-test-set.sh` and
