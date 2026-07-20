@@ -34,9 +34,13 @@ Numeric ownership has three stages:
    traversal, roots, and collector behavior. Neither issue may redefine the
    numerical semantics fixed here.
 
-Stage 1 remains a valid bootstrap posture for Emacs, but the portable R7RS
-reader and evaluator are at stage 2. Their `consent-number` records contain
-opaque owned payloads rather than host bignums or flonums.
+Stage 1 remains a valid temporary bootstrap posture for Emacs because the Emacs
+path is not the representation consumed by the self-hosted compiler. It is not
+stage-2 representation parity: its `consent-number` payloads still contain host
+integers and floats, and it must pass the shared semantic corpus at that
+explicit adapter seam. The portable R7RS reader and evaluator are at stage 2;
+their `consent-number` records contain opaque owned payloads rather than host
+bignums or flonums.
 
 ## Semantic representation
 
@@ -52,6 +56,14 @@ cross-process exchange.
 | Infinity | Inexact-real class `infinity` plus sign | Exactly two infinity values. |
 | NaN | Inexact-real class `nan` | One canonical quiet NaN. Input `-nan.0` normalizes to it; no payload or signaling distinction is exposed. |
 | Complex | Ordered pair of canonical real components | Components are never complex. The value is exact only when both components are exact. |
+
+The current owned representation has no fixnum/bignum storage split. Even zero
+and one-limb exact integers use the sign-and-limb record above. In this
+document, `fixnum` therefore means only an immediate exact integer supplied by
+the implementation host and used behind a checked accelerator. It is not a
+Consent numeric type or a limit on language-visible integers. A later storage
+specialization may encode profile-bounded small integers directly and promote
+on overflow without changing these semantics.
 
 ### Exact-integer limb profiles
 
@@ -72,6 +84,11 @@ the immediate fixnum range of a 64-bit Emacs build with a `2^61 - 1` positive
 limit, so the bootstrap's hot inner loop does not allocate host bignums. A
 31-bit limb would raise the same bound to `2^62 - 1` and cross that Emacs
 fixnum limit.
+
+For this default profile, the owned backend's checked host-integer accelerator
+accepts magnitudes through `B^2 - 1 = 2^60 - 1`. That symmetric bound is a
+backend portability choice, not the maximum fixnum of every host: for example,
+the measured Emacs build has one additional positive fixnum bit.
 
 The Emacs bootstrap and representative 64-bit builds of every R7RS
 implementation wired into the development and oracle matrix use the same broad
@@ -321,6 +338,7 @@ vary across bootstrap hosts:
 - `numeric-exactness-conversion-boundary`;
 - `numeric-mixed-exact-inexact-ordering`;
 - `numeric-inexact-edge-arithmetic`;
+- `numeric-binary64-rounding-boundaries`;
 - `numeric-complex-division`;
 - `numeric-canonical-rendering`;
 - the existing rational, radix, square-root, complex, special-value, polar, and
@@ -332,13 +350,23 @@ to the `compiled` test-plan partition is the concrete self-host closure exposed
 by [#659](https://github.com/tahoma/consent/issues/659). A future accelerator
 must pass the same corpus before it can replace an owned path.
 
-The owned exact-integer backend additionally runs white-box boundary tests
-parameterized by `limb-bits`. Those tests cover `B - 1`, `B`, `B + 1`,
-`B^2 - 1`, and `B^2`, plus sign normalization, carry propagation, quotient
-correction, and parsing and rendering across each boundary. Continuous
-integration for that backend exercises the default 30-bit profile, the
-constrained-bootstrap 14-bit profile, and the signed-128-bit 62-bit profile so
-the parameter does not become a nominal, untested option.
+The owned backend additionally runs white-box tests parameterized by
+`limb-bits`. Boundary cases cover `B - 1`, `B`, `B + 1`, `B^2 - 1`, and
+`B^2`, plus sign normalization, carry propagation, quotient correction, and
+checked accelerator fallback. Deterministic multi-limb cases verify quotient
+reconstruction and remainder bounds under both division conventions, square
+root reconstruction, GCD, large-factor rational cancellation, rounding modes,
+and radix round trips. A fixed large-value corpus must also produce identical
+canonical results under every profile.
+
+The binary64 matrix covers exact-dyadic and shortest-decimal round trips,
+subnormal underflow, the subnormal/normal boundary, the `2^53` integer
+boundary, finite overflow, arithmetic halfway cases, special-value arithmetic,
+ordering, and canonical zero. Malformed decimal text, unsupported radices, and
+invalid special tuples are rejection cases rather than preconditions hidden
+from the tests. Continuous integration exercises the default 30-bit profile,
+the constrained-bootstrap 14-bit profile, and the signed-128-bit 62-bit
+profile so parameterization cannot become a nominal, untested option.
 
 These fixtures prove the portable stage-2 semantic contract and the remaining
 accelerator fences. The Emacs bootstrap continues to satisfy the same
