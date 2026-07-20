@@ -1214,15 +1214,16 @@ The return value is (BODY EXACTNESS RADIX), or nil."
        ('-inf.0 (/ -1.0 0.0))
        ('+nan.0 (/ 0.0 0.0))))))
 
-(defun consent--complex-split-index (body)
-  "Return the rectangular complex split index in BODY, or nil."
+(defun consent--complex-split-index (body radix)
+  "Return the rectangular complex split index in BODY under RADIX."
   (let ((index 1)
         split)
     (while (< index (length body))
       (let ((char (aref body index))
             (previous (aref body (1- index))))
         (when (and (memq char '(?+ ?-))
-                   (not (memq previous '(?e ?E))))
+                   (or (/= radix 10)
+                       (not (memq previous '(?e ?E)))))
           (setq split index)))
       (cl-incf index))
     split))
@@ -1232,9 +1233,9 @@ The return value is (BODY EXACTNESS RADIX), or nil."
   "Parse complex numeric BODY using TOKEN, EXACTNESS, and RADIX."
   (let ((lower (downcase body)))
     (cond
-     ((and (= radix 10) (string-suffix-p "i" lower))
+     ((string-suffix-p "i" lower)
       (let* ((rectangular (substring body 0 -1))
-             (split (consent--complex-split-index rectangular))
+             (split (consent--complex-split-index rectangular radix))
              (real-body (if split (substring rectangular 0 split) "0"))
              (imaginary-body
               (if split
@@ -1254,7 +1255,7 @@ The return value is (BODY EXACTNESS RADIX), or nil."
                   reader token imaginary-body exactness radix)))
             (when (and real imaginary)
               (consent--make-canonical-complex real imaginary))))))
-     ((and (= radix 10) (string-match-p "@" body))
+     ((string-match-p "@" body)
       (let* ((parts (split-string body "@"))
              (magnitude
               (and (= (length parts) 2)

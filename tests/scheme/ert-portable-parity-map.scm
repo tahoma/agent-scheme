@@ -123,10 +123,17 @@
     (portable-files ("tests/scheme/consent-module-boundary-test.scm"))
     (boundary-reason out-of-tree-chibi-process-check))
    (surface
-    (ert-file "tests/consent-scheme-module-ownership-test.el")
+   (ert-file "tests/consent-scheme-module-ownership-test.el")
     (ownership repository-policy)
     (portable-files ("tests/scheme/consent-module-boundary-test.scm"))
     (boundary-reason checked-in-module-source-policy))
+   (surface
+    (ert-file "tests/consent-scheme-numeric-test.el")
+    (ownership repository-policy)
+    (portable-files
+     ("tests/scheme/consent-numeric-generated-test.scm"
+      "tests/scheme/consent-fixture-test.scm"))
+    (boundary-reason checked-in-performance-sensitive-source-policy))
    (surface
     (ert-file "tests/consent-skill-test.el")
     (ownership emacs-host-adapter)

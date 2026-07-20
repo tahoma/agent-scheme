@@ -15,6 +15,9 @@
     (path "tests/scheme/consent-numeric-test.scm")
     (tags (full direct compiled core runtime registered)))
    (program
+    (path "tests/scheme/consent-numeric-generated-test.scm")
+    (tags (full direct compiled core runtime generated registered)))
+   (program
     (path "tests/scheme/current-ports-test.scm")
     (tags (full direct compiled core registered)))
    (program

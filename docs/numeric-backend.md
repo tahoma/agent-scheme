@@ -355,6 +355,11 @@ vary across bootstrap hosts:
 - `numeric-inexact-edge-arithmetic`;
 - `numeric-binary64-rounding-boundaries`;
 - `numeric-complex-division`;
+- `numeric-complex-operation-matrix`;
+- `numeric-complex-polar-geometry`;
+- `numeric-transcendental-accuracy-matrix`;
+- `numeric-transcendental-domain-boundaries`;
+- `numeric-compiled-hot-path-smoke`;
 - `numeric-canonical-rendering`;
 - the existing rational, radix, square-root, complex, special-value, polar, and
   transcendental cases.
@@ -375,15 +380,44 @@ verify quotient reconstruction and remainder bounds under both division
 conventions, square root reconstruction, GCD, large-factor rational
 cancellation, rounding modes, and radix round trips. A fixed large-value
 corpus must also produce identical canonical results under every profile.
+`tests/scheme/consent-numeric-generated-test.scm` supplements those fixed
+boundaries with reproducible seeded differential cases against each direct
+R7RS host's exact arithmetic, adversarial all-maximum and alternating limb
+patterns, long carry and borrow chains, near-power divisors, and an explicit
+dispatcher-operation inventory. Racket carries the higher-volume generated
+oracle over all three profiles. Other direct hosts and compiled host-run
+products execute a bounded default-profile slice; the fixed boundary suite
+still exercises all three profiles on every host.
 
 The binary64 matrix covers exact-dyadic and shortest-decimal round trips,
 subnormal underflow, the subnormal/normal boundary, the `2^53` integer
 boundary, finite overflow, arithmetic halfway cases, special-value arithmetic,
 ordering, and canonical zero. Malformed decimal text, unsupported radices, and
 invalid special tuples are rejection cases rather than preconditions hidden
-from the tests. Continuous integration exercises the default 30-bit profile,
-the constrained-bootstrap 14-bit profile, and the signed-128-bit 62-bit
-profile so parameterization cannot become a nominal, untested option.
+from the tests. A second deterministic corpus constructs finite binary64 values
+from stored significand/exponent patterns at the subnormal, minimum-normal,
+unit, and maximum-finite boundaries, adds seeded normal and subnormal patterns,
+and differentially checks software arithmetic against host IEEE results.
+Continuous integration exercises the default 30-bit profile, the
+constrained-bootstrap 14-bit profile, and the signed-128-bit 62-bit profile so
+parameterization cannot become a nominal, untested option.
+
+Performance-sensitive invariants have both behavioral and structural guards.
+The shared corpus executes a bounded tail-recursive loop that combines fixnum
+countdown with repeated arithmetic on a parsed binary64 constant. Source checks
+also forbid decimal parsing or rendering in the finite binary64 host seam,
+forbid its bounded significand decoder from falling through the general textual
+integer importer, and require combination dispatch to resolve a mixed symbol
+name once. These checks target regressions that can preserve answers while
+making compiled execution orders of magnitude slower; CI shard timing remains
+the broader signal for performance changes outside these named hot paths.
+
+The portable reader suite separately exercises both legal prefix orders, every
+radix, exact and inexact prefix combinations, exponent and implicit-imaginary
+forms, numeric-like peculiar identifiers, and a rejection matrix for malformed
+digits, duplicate prefixes, ratios, decimals, exponents, polar forms, and
+rectangular forms. Shared fixtures keep representative prefix, rejection, and
+numeric-like identifier cases in Emacs/portable parity.
 
 These fixtures prove the portable stage-2 semantic contract and the remaining
 accelerator fences. The Emacs bootstrap continues to satisfy the same

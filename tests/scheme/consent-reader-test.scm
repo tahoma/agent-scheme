@@ -6,6 +6,7 @@
 ;;; reader library without loading the Emacs host adapter.
 
 (import (scheme base)
+        (scheme cxr)
         (scheme write)
         (consent reader)
         (scheme process-context)
@@ -166,6 +167,72 @@
 (testing-registry-case
  'inexact-rational '(portable core)
 (check-external 'inexact-rational "#i3/2" "1.5"))
+
+;; Numeric-prefix and component forms selected from the R7RS lexical grammar.
+(define numeric-reader-valid-cases
+  '((binary-prefix "#b101010" "42")
+    (octal-prefix "#o52" "42")
+    (decimal-prefix "#d42" "42")
+    (hexadecimal-prefix-case-insensitive "#x2A" "42")
+    (exactness-before-radix "#e#x2a" "42")
+    (radix-before-exactness "#x#e2a" "42")
+    (inexactness-before-radix "#i#b10" "2.0")
+    (radix-before-inexactness "#b#i10" "2.0")
+    (exact-positive-exponent "#e1e3" "1000")
+    (exact-leading-dot "#e.125" "1/8")
+    (exact-trailing-dot "#e1." "1")
+    (exact-negative-exponent "#e1e-3" "1/1000")
+    (positive-unit-imaginary "+i" "0+1i")
+    (negative-unit-imaginary "-i" "0-1i")
+    (implicit-positive-imaginary "2+i" "2+1i")
+    (implicit-negative-imaginary "2-i" "2-1i")
+    (hexadecimal-rectangular "#xA+Bi" "10+11i")
+    (hexadecimal-e-digit-before-sign "#xE-1i" "14-1i")
+    (slash-led-numeric-like-identifier "/1" "/1")
+    (at-led-numeric-like-identifier "@1" "@1")
+    (dot-led-numeric-like-identifier ".e1" ".e1")
+    (sign-led-numeric-like-identifier "+e1" "+e1")))
+
+(testing-registry-case
+ 'numeric-reader-valid-grammar-matrix '(portable core numeric)
+(for-each
+ (lambda (entry)
+   (check-external (car entry) (cadr entry) (caddr entry)))
+ numeric-reader-valid-cases))
+
+;; Tokens that begin as numeric syntax must be rejected rather than truncated,
+;; accepted with duplicate prefixes, or silently reclassified as identifiers.
+(define numeric-reader-invalid-cases
+  '((binary-digit-out-of-range "#b2")
+    (octal-digit-out-of-range "#o8")
+    (hexadecimal-digit-out-of-range "#xg")
+    (duplicate-exactness "#e#i1")
+    (duplicate-radix "#x#b1")
+    (missing-exact-body "#e")
+    (missing-radix-body "#x")
+    (missing-ratio-denominator "1/")
+    (zero-ratio-denominator "1/0")
+    (missing-exponent-digits "1e")
+    (missing-positive-exponent-digits "1e+")
+    (duplicate-decimal-point "1..0")
+    (missing-polar-angle "1@")
+    (duplicate-polar-separator "1@2@3")
+    (misordered-imaginary-suffix "1+i2")
+    (missing-imaginary-unit "1+2")
+    (duplicate-imaginary-unit "1+2ii")
+    (nondecimal-fraction "#x1.0")
+    (nondecimal-exponent "#b1e2")))
+
+(testing-registry-case
+ 'numeric-reader-invalid-grammar-matrix '(portable core numeric)
+(for-each
+ (lambda (entry)
+   (test-equal
+    (car entry)
+    #t
+    (raises? (lambda () (consent-read (cadr entry))))))
+ numeric-reader-invalid-cases))
+
 (testing-registry-case
  'complex-rectangular '(portable core)
 (check-external 'complex-rectangular "3/4-5/6i" "3/4-5/6i"))
