@@ -31,7 +31,19 @@ does; retaining an ERT test does not make it the semantic source of truth.
   separate positive and negative fixnum limits, promotion, and demotion.
   Multi-limb division, GCD, square root, rational reduction, radix conversion,
   and uncached binary64-to-host reconstruction keep checked acceleration and
-  owned fallback in one cross-host boundary corpus.
+  owned fallback in one cross-host boundary corpus. Reproducible generated
+  differential tests add adversarial limb shapes, exact/rational host oracles,
+  finite binary64 significand/exponent patterns, software-versus-host IEEE
+  arithmetic, and direct dispatcher coverage. Structural ERT checks forbid
+  text conversion in binary64 host seams and repeated mixed-symbol resolution
+  in combination dispatch, while a shared compiled hot-loop fixture exercises
+  both paths behaviorally.
+- Portable reader numeric grammar coverage is canonical in
+  `tests/scheme/consent-reader-test.scm`: valid radix/exactness orderings,
+  decimal exponent and implicit-imaginary forms, numeric-like peculiar
+  identifiers, and malformed numeric rejection all run through the native
+  Scheme test plan. Representative cases remain in the shared R7RS corpus for
+  Emacs/portable reader parity.
 - `(data avl-tree)` semantics are canonical in
   `tests/scheme/data-avl-tree-test.scm`; its public smoke corpus also runs on
   compiled hosts. The direct-host suite alone imports the internal invariant

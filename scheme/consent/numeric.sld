@@ -1638,7 +1638,7 @@
                 (make-owned-binary64
                  'finite
                  sign
-                 (integer-import-host
+                 (integer-from-small
                   backend
                   (exact (truncate (* scaled host-two-to-52))))
                  (- exponent 52)
@@ -1647,7 +1647,7 @@
                 (make-owned-binary64
                  'finite
                  sign
-                 (integer-import-host
+                 (integer-from-small
                   backend
                   (exact
                    (truncate

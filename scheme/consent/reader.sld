@@ -1510,8 +1510,8 @@
                  body))))
          (else #f))))
 
-    (define (complex-split-index body)
-      "Find the real/imaginary split point in a rectangular complex token."
+    (define (complex-split-index body radix)
+      "Find a rectangular split in BODY under numeric RADIX."
       (let loop ((index 1) (split #f))
         (if (>= index (string-length body))
             split
@@ -1520,8 +1520,9 @@
               (loop (+ index 1)
                     (if (and (or (char=? char #\+)
                                  (char=? char #\-))
-                             (not (or (char=? previous #\e)
-                                      (char=? previous #\E))))
+                             (or (not (= radix 10))
+                                 (not (or (char=? previous #\e)
+                                          (char=? previous #\E)))))
                         index
                         split))))))
 
@@ -1529,9 +1530,9 @@
       "Parse a complex-number token into rectangular or polar numeric records."
       (let ((lower (string-foldcase body)))
         (cond
-         ((and (= radix 10) (string-suffix? "i" lower))
+         ((string-suffix? "i" lower)
           (let* ((rectangular (substring body 0 (- (string-length body) 1)))
-                 (split (complex-split-index rectangular))
+                 (split (complex-split-index rectangular radix))
                  (real-body
                   (if split
                       (substring rectangular 0 split)
@@ -1560,7 +1561,7 @@
                         (consent-make-canonical-complex
                          real
                          imaginary))))))
-         ((and (= radix 10) (string-index body #\@ 0))
+         ((string-index body #\@ 0)
           (let ((parts (split-on-char body #\@)))
             (and (= (length parts) 2)
                  (let ((magnitude
