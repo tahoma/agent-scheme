@@ -317,12 +317,13 @@ public.
 - Modify: `tests/consent-library-test.el`
 
 1. Add failing ERT tests for explicit symbol-table handles, context-before-read
-   plumbing, inherited-root identity, isolated insertion, and the unchanged
-   process-default behavior.
-2. Refactor the existing Emacs `consent-symbol` intern table into an explicit
-   handle carried by `consent--eval-context`; keep the current hash-backed host
-   adapter rather than duplicating the portable AVL implementation in Emacs
-   Lisp.
+   plumbing, inherited-root identity, isolated insertion, root installation
+   and rollback, and the unchanged process-default behavior.
+2. Refactor the existing Emacs `consent-symbol` intern table into a dedicated
+   handle carried by `consent--eval-context`. Represent roots as distinct
+   hash-index snapshots: fork and installation copy the index while sharing
+   inherited symbol records. Keep this hash-backed host adapter rather than
+   duplicating the portable AVL implementation in Emacs Lisp.
 3. Pass the handle through all Emacs reader entry points used by evaluation,
    recovery, source libraries, and interaction input. Preserve direct public
    reader calls by defaulting to the process table.

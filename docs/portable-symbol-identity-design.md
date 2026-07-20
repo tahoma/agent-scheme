@@ -286,6 +286,23 @@ representation.
 
 This issue exposes no public fork, commit, or abort procedures.
 
+### Emacs bootstrap realization
+
+The Emacs bootstrap must intern reader identifiers before it can evaluate the
+portable symbol library, so this irreducible bootstrap slice keeps a
+host-backed realization of the same table lifecycle. A dedicated mutable table
+handle owns an `equal` hash index, while a distinct root record owns a snapshot
+of that index. Producing, forking from, or installing a root shallow-copies the
+index and shares inherited owned-symbol records.
+
+The copy gives each handle branch-local insertion and rollback behavior;
+sharing values preserves inherited `eq?` identity. Root installation mutates
+the existing handle rather than replacing it, so readers and evaluators that
+already carry the handle observe the installed view. Emacs snapshots are
+linear in table size, which is acceptable bootstrap-adapter behavior and does
+not duplicate the portable AVL implementation. The portable transient/AVL
+realization remains the native-compiler destination.
+
 ### Equality
 
 Symbol equality follows the existing Consent behavior while becoming portable:

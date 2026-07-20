@@ -46,6 +46,38 @@
                  nil
                  options)))))
 
+(ert-deftest consent-eval-test-forked-symbol-table-root-identity ()
+  "Preserve inherited identity and isolate evaluated branch insertions."
+  (let* ((origin (consent--make-symbol-table))
+         (inherited (consent--intern-symbol "inherited" origin))
+         (root (consent--symbol-table-root origin))
+         (left (consent--symbol-table-from-root root))
+         (right (consent--symbol-table-from-root root))
+         (left-options (list :symbol-table left))
+         (right-options (list :symbol-table right))
+         (left-new
+          (consent-eval-source
+           "(string->symbol \"branch-new\")" nil left-options))
+         (right-new
+          (consent-eval-source
+           "(string->symbol \"branch-new\")" nil right-options)))
+    (should (eq inherited
+                (consent-eval-source "'inherited" nil left-options)))
+    (should (eq inherited
+                (consent-eval-source "'inherited" nil right-options)))
+    (should-not (eq left-new right-new))
+    (should-not
+     (gethash "branch-new"
+              (consent--symbol-table-root-entries root)))
+    (consent--symbol-table-root-set!
+     origin
+     (consent--symbol-table-root left))
+    (should (eq left-new
+                (consent-eval-source
+                 "'branch-new"
+                 nil
+                 (list :symbol-table origin))))))
+
 (ert-deftest consent-eval-test-isolated-symbol-tables-remain-name-equal ()
   "Keep R7RS symbol equality across symbols interned in isolated handles."
   (let* ((left-table (consent--make-symbol-table))

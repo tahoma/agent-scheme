@@ -113,6 +113,24 @@ nesting depth without re-deriving the reader's lexical state."
   "Scheme symbol datum."
   name)
 
+(cl-defstruct (consent--symbol-table-root
+               (:constructor consent--make-symbol-table-root-record (entries))
+               (:copier nil))
+  "Immutable snapshot root for an Emacs-backed Scheme symbol table.
+ENTRIES is a private hash index whose keys and symbol records are shared with
+tables forked from this root.  Root construction and installation copy the
+index itself, so later insertions remain local to their table handle."
+  entries)
+
+(cl-defstruct (consent--symbol-table
+               (:constructor consent--make-symbol-table-record (entries))
+               (:copier nil))
+  "Mutable Emacs-backed Scheme symbol-table handle.
+ENTRIES maps owned name strings to `consent-symbol' records.  The handle is
+distinct from snapshot roots so a context can install a root without replacing
+the handle carried by its readers and evaluator."
+  entries)
+
 (cl-defstruct (consent-character
                (:constructor consent--make-character (code))
                (:copier nil))
@@ -198,9 +216,6 @@ per-run resource limits."
   ;; can render nesting depth and the pending construct kind.
   (pending-stack nil))
 
-(defvar consent--symbol-table (make-hash-table :test #'equal)
-  "Default process intern table for Scheme symbol datums.")
-
 (defvar consent--active-symbol-table nil
   "Dynamically active explicit reader symbol table, or nil for the default.")
 
@@ -225,18 +240,55 @@ per-run resource limits."
 
 (defun consent--make-symbol-table ()
   "Return a fresh hash-backed Scheme symbol-table handle."
-  (make-hash-table :test #'equal))
+  (consent--make-symbol-table-record
+   (make-hash-table :test #'equal)))
+
+(defun consent--symbol-table-from-root (root)
+  "Return a Scheme symbol-table handle forked from snapshot ROOT.
+The new hash index shares inherited `consent-symbol' records with ROOT while
+later index mutations remain local to the returned handle."
+  (unless (consent--symbol-table-root-p root)
+    (signal 'wrong-type-argument
+            (list 'consent--symbol-table-root-p root)))
+  (consent--make-symbol-table-record
+   (copy-hash-table (consent--symbol-table-root-entries root))))
+
+(defun consent--symbol-table-root (table)
+  "Return an immutable snapshot root of Scheme symbol TABLE.
+The snapshot copies TABLE's hash index but deliberately shares its immutable
+owned names and symbol records, preserving inherited identity across forks."
+  (unless (consent--symbol-table-p table)
+    (signal 'wrong-type-argument (list 'consent--symbol-table-p table)))
+  (consent--make-symbol-table-root-record
+   (copy-hash-table (consent--symbol-table-entries table))))
+
+(defun consent--symbol-table-root-set! (table root)
+  "Install snapshot ROOT into Scheme symbol TABLE and return TABLE.
+Installing copies ROOT's hash index, so later insertions through TABLE cannot
+mutate ROOT or sibling handles forked from it."
+  (unless (consent--symbol-table-p table)
+    (signal 'wrong-type-argument (list 'consent--symbol-table-p table)))
+  (unless (consent--symbol-table-root-p root)
+    (signal 'wrong-type-argument
+            (list 'consent--symbol-table-root-p root)))
+  (setf (consent--symbol-table-entries table)
+        (copy-hash-table (consent--symbol-table-root-entries root)))
+  table)
+
+(defvar consent--symbol-table (consent--make-symbol-table)
+  "Default process symbol-table handle for Scheme symbol datums.")
 
 (defun consent--intern-symbol (name &optional table)
   "Return NAME's Scheme symbol from TABLE or the active/default table."
   (let ((table (or table consent--active-symbol-table consent--symbol-table)))
-    (unless (hash-table-p table)
-      (signal 'wrong-type-argument (list 'hash-table-p table)))
-    (or (gethash name table)
-        (let ((owned-name (copy-sequence name)))
-          (puthash owned-name
-                   (consent--make-symbol owned-name)
-                   table)))))
+    (unless (consent--symbol-table-p table)
+      (signal 'wrong-type-argument (list 'consent--symbol-table-p table)))
+    (let ((entries (consent--symbol-table-entries table)))
+      (or (gethash name entries)
+          (let* ((owned-name (copy-sequence name))
+                 (symbol (consent--make-symbol owned-name)))
+            (puthash owned-name symbol entries)
+            symbol)))))
 
 (defun consent--option (options key default)
   "Return OPTIONS value for KEY, falling back to DEFAULT."
