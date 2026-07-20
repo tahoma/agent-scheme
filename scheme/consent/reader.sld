@@ -183,6 +183,8 @@
     ;; One fixed profile backs the portable runtime. White-box tests instantiate
     ;; alternate profiles directly through `(consent numeric)'.
     (define numeric-backend consent-default-numeric-backend)
+    (define host-adapter-positive-integer-limit
+      (consent-numeric-backend-positive-fixnum-limit numeric-backend))
 
     (define (owned-numeric operation . arguments)
       "Apply owned numeric OPERATION to ARGUMENTS."
@@ -206,7 +208,7 @@
     (define (owned-integer->host value)
       "Convert small owned integer VALUE for a bootstrap adapter."
       (or (owned-numeric
-           'integer->small value 1152921504606846975)
+           'integer->small value host-adapter-positive-integer-limit)
           (error "canonical integer exceeds checked host adapter range"
                  (owned-numeric 'integer->string value 10))))
 

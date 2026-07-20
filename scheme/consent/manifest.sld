@@ -69,6 +69,7 @@
          (consent-make-numeric-backend
           consent-default-numeric-backend
           consent-numeric-backend-limb-bits
+          consent-numeric-backend-positive-fixnum-limit
           consent-numeric))
         (dependencies
          ((library (scheme base))

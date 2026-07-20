@@ -80,6 +80,8 @@
     ;; Portable number semantics use one fixed 30-bit owned backend. Host
     ;; flonums remain confined to the documented transcendental accelerator.
     (define numeric-backend consent-default-numeric-backend)
+    (define host-adapter-positive-integer-limit
+      (consent-numeric-backend-positive-fixnum-limit numeric-backend))
 
     (define (owned-numeric operation . arguments)
       "Apply owned numeric OPERATION to ARGUMENTS."
@@ -2325,7 +2327,7 @@ cursor across sessions."
       "Return bounded exact integer DATUM for a host adapter operation."
       (let ((owned (exact-integer-owned datum description)))
         (or (owned-numeric
-             'integer->small owned 1152921504606846975)
+             'integer->small owned host-adapter-positive-integer-limit)
             (eval-error
              (string-append description
                             " exact integer exceeds host adapter range")

@@ -141,12 +141,14 @@ Thirty bits is the largest profile whose multiplication accumulator is proven
 to remain an immediate integer across the common 64-bit bootstrap matrix.
 Wider profiles may allocate host bignums while tested on an existing R7RS host;
 a native implementation must reject them unless it provides the stronger exact
-accumulator operations. The portable implementation also caps direct integers
-at the common `2^60 - 1` fixnum limit independently of `w`, so a `w = 62`
-simulation promotes values above that limit rather than mistaking a host
-bignum for a fixnum. A native 128-bit target may specialize that separate
-fixnum bound after proving its tagged representation and ABI. The boundary
-corpus exercises `w = 62` as the representative signed-128-bit limb profile.
+accumulator operations. The portable policy declares 60 positive fixnum
+magnitude bits and derives the `2^60 - 1` comparison limit without constructing
+the one-past-limit `2^60` host integer. It caps direct integers at that limit
+independently of `w`, so a `w = 62` simulation promotes larger values rather
+than mistaking a host bignum for a fixnum. A native 128-bit target may
+specialize that separate fixnum magnitude width after proving its tagged
+representation and ABI. The boundary corpus exercises `w = 62` as the
+representative signed-128-bit limb profile.
 
 Serialized values, hashing, external rendering, and language semantics do not
 expose `w`. Native code compiled for different limb profiles cannot exchange raw
