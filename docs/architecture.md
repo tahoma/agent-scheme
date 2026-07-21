@@ -310,6 +310,21 @@ host-symbol representation or conversion participates. Foreign symbols exist
 only at actual FFI or bootstrap edges and are interned into the active Consent
 table before entering language-visible data.
 
+#### Portable character ownership
+
+Language-visible characters are Consent-owned Unicode scalar values. Reader,
+string, port, and borrowed-runtime boundaries wrap host characters immediately;
+character identity, scalar validity, ordering, classification, case mapping,
+folding, digit values, and UTF-8 validation use the portable owned model.
+Host strings remain bootstrap storage, but their element operations do not
+create a second language-visible character domain.
+
+The public `(scheme char)` library is one portable Scheme source loaded by both
+evaluator bootstraps. The supported bootstrap Unicode tables, behavior outside
+those tables, external forms, strict UTF-8 contract, and future accelerator
+requirements are recorded in
+[Portable Character Model and Unicode Profile](character-model.md).
+
 #### Portable numeric ownership
 
 Language-visible numbers are Consent-owned values. The portable R7RS runtime

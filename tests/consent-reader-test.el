@@ -204,6 +204,12 @@
    (= (consent-character-code (consent-read "#\\x03bb")) #x03bb))
   (should
    (= (consent-character-code (consent-read "#\\X03BB")) #x03bb))
+  (should
+   (= (consent-character-code (consent-read "#\\x10ffff")) #x10ffff))
+  (should-error (consent-read "#\\xd800")
+                :type 'consent-reader-error)
+  (should-error (consent-read "#\\x110000")
+                :type 'consent-reader-error)
   (should-error (consent-read "#\\Space")
                 :type 'consent-reader-error)
   (should

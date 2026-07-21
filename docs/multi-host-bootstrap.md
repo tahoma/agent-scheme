@@ -162,6 +162,14 @@ Emacs-specific facilities should appear through explicit libraries such as:
 Those imports must not pollute `(scheme base)` or redefine R7RS behavior. Code
 that only imports standard Scheme libraries should remain host-neutral.
 
+Character and Unicode behavior follows the
+[portable character model](character-model.md): borrowed hosts provide source
+text and string storage, while Consent Scheme owns scalar validity, ordering,
+classification, casing, folding, digit values, and strict UTF-8 behavior.
+Adapters must wrap host characters at entry and may unwrap them only for
+source-text, host-string, or textual-port storage. A host Unicode table cannot
+silently redefine the public `(scheme char)` library.
+
 ## Bootstrap Stance
 
 R7RS-small remains the contract even if an R6RS or Chez-based backend becomes

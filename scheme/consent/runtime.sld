@@ -356,6 +356,7 @@
           (only (scheme process-context)
                 get-environment-variable)
           (consent version)
+          (consent character)
           (consent reader)
           (consent symbol)
           (consent symbol-boundary)
@@ -2635,12 +2636,15 @@
               (lambda (value seen)
                 (cond
                  ((or (consent-number? value)
+                      (consent-character? value)
                       (consent-eof-object? value))
                   value)
                  ((number? value)
                   (host-number->consent-number value))
                  ((eof-object? value)
                   consent-eof-object)
+                 ((char? value)
+                  (consent-host-character->character value))
                  ((procedure? value)
                   (wrap-procedure value))
                  ((pair? value)
@@ -3588,7 +3592,7 @@
               (null? value)
               (runtime-symbol? value)
               (identifier? value)
-              (char? value)
+              (consent-character? value)
               ;; Raw host numbers reach here legitimately: public accessors such
               ;; as `consent-number-value' unwrap canonical numbers to host
               ;; integers/reals, and such a value can be an evaluation result.

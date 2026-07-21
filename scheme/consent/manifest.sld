@@ -383,7 +383,6 @@
         (api-version (compat 0))
         (source-version unknown)
         (realization portable-source)
-        (primitive-overlay-library (scheme char primitive))
         (exports
          (char-alphabetic?
           char-ci<=?
@@ -408,104 +407,10 @@
           string-foldcase
           string-upcase))
         (dependencies
-         ((library (scheme base))
-          (library (scheme char primitive))))
-        (provenance ((origin repo)))
-        (status implemented)
-        (canonical #t))
-       (manifest-entry
-        (schema-version 1)
-        (kind primitive-library)
-        (name (scheme char primitive))
-        (owner r7rs-small)
-        (provider consent-core)
-        (visibility internal-runtime)
-        (layer primitive)
-        (category standard)
-        (source-kind primitive-library)
-        (source (implementation-id scheme-char))
-        (implementation-resolver
-         (module consent-base)
-         (procedure consent-standard-primitive-implementation))
-        (api-version internal)
-        (source-version runtime)
-        (realization host-primitive)
-        (exports
-         (char-alphabetic?
-          char-downcase
-          char-foldcase
-          char-lower-case?
-          char-numeric?
-          char-upcase
-          char-upper-case?
-          char-whitespace?
-          digit-value
-          string-downcase
-          string-foldcase
-          string-upcase))
-        (primitive-exports
-         ((name char-alphabetic?)
-          (primitive primitive-char-alphabetic?)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name char-downcase)
-          (primitive primitive-char-downcase)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name char-foldcase)
-          (primitive primitive-char-foldcase)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name char-lower-case?)
-          (primitive primitive-char-lower-case?)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name char-numeric?)
-          (primitive primitive-char-numeric?)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name char-upcase)
-          (primitive primitive-char-upcase)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name char-upper-case?)
-          (primitive primitive-char-upper-case?)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name char-whitespace?)
-          (primitive primitive-char-whitespace?)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name digit-value)
-          (primitive primitive-digit-value)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name string-downcase)
-          (primitive primitive-string-downcase)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name string-foldcase)
-          (primitive primitive-string-foldcase)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ()))
-         ((name string-upcase)
-          (primitive primitive-string-upcase)
-          (arity 1 1)
-          (effects (pure))
-          (capabilities ())))
-        (dependencies ())
-        (provenance ((origin repo)))
+         ((library (scheme base))))
+        (provenance
+         ((origin repo)
+          (semantics consent-owned-bootstrap-unicode-profile)))
         (status implemented)
         (canonical #t))
        (manifest-entry
@@ -1441,6 +1346,39 @@
         (dependencies ())
         (provenance ((origin repo)))
         (status internal)
+       (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (consent character))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "character.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-character?
+          consent-character-code
+          consent-character-equivalent?
+          consent-scalar-value?
+          consent-make-character
+          consent-host-character->character
+          consent-character->host-character))
+        (dependencies
+         ((library (scheme base))))
+        (provenance
+         ((origin repo)
+          (representation owned-unicode-scalar-record)
+          (boundary host-character-source-and-string-adapter)))
+        (verification
+         ((test-status
+           (scalar-range host-boundary reader-writer portable-host-suite
+                         compiled-host-suite))))
+        (status internal)
         (canonical #t))
        (manifest-entry
         (schema-version 1)
@@ -1571,6 +1509,9 @@
           consent-number-abs
           consent-number->external
           consent-integer->radix-string
+          consent-character?
+          consent-character-code
+          consent-make-character
           consent-make-record-type
           consent-record-type?
           consent-record-type-name
@@ -1584,6 +1525,7 @@
           (library (scheme char))
           (library (scheme inexact))
           (library (scheme write))
+          (library (consent character))
           (library (consent numeric))
           (library (consent symbol))
           (library (consent symbol-boundary))))
@@ -1950,6 +1892,7 @@
           parse-formals))
         (dependencies
          ((library (scheme base))
+          (library (consent character))
           (library (consent reader))
           (library (consent symbol))
           (library (consent symbol-boundary))
@@ -2066,6 +2009,7 @@
          ((library (scheme base))
           (library (scheme char))
           (library (scheme file))
+          (library (consent character))
           (library (consent reader))
           (library (consent symbol))
           (library (consent symbol-boundary))
@@ -2233,6 +2177,7 @@
           (library (scheme process-context))
           (library (scheme read))
           (library (scheme write))
+          (library (consent character))
           (library (consent numeric))
           (library (consent reader))
           (library (consent symbol))

@@ -52,6 +52,9 @@
           consent-number-abs
           consent-number->external
           consent-integer->radix-string
+          consent-character?
+          consent-character-code
+          consent-make-character
           consent-make-record-type
           consent-record-type?
           consent-record-type-name
@@ -64,6 +67,7 @@
           (scheme char)
           (scheme inexact)
           (scheme write)
+          (consent character)
           (consent numeric)
           (consent symbol)
           (consent symbol-boundary))
@@ -1614,8 +1618,8 @@
                           (and (char>=? second #\0)
                                (char<=? second #\9)))))))))
 
-    (define (hex-scalar->char reader digits)
-      "Validate and convert a hexadecimal scalar value to a character."
+    (define (hex-scalar-value reader digits)
+      "Validate and return a hexadecimal Unicode scalar value."
       (if (= (string-length digits) 0)
           (reader-error reader "invalid hexadecimal scalar escape"))
       (let loop ((index 0) (value 0))
@@ -1626,7 +1630,7 @@
                   (reader-error reader
                                 "invalid Unicode scalar value"
                                 value))
-              (integer->char value))
+              value)
             (let ((digit (hex-digit-value (string-ref digits index))))
               (if digit
                   (loop (+ index 1) (+ (* value 16) digit))
@@ -1649,7 +1653,7 @@
                                         start
                                         (reader-position reader))))
           (advance! reader)
-          (hex-scalar->char reader digits))))
+          (integer->char (hex-scalar-value reader digits)))))
 
     (define (mnemonic-escape reader char)
       "Map a named string or symbol escape character to its value."
@@ -1851,7 +1855,9 @@
             ;; bracket/pipe characters like #\( #\) #\[ #\] #\| — is taken
             ;; literally per the R7RS grammar #\<any character>. read-token
             ;; would refuse these (delimiter or reserved), so take it directly.
-            (begin (advance! reader) first)
+            (begin
+              (advance! reader)
+              (consent-host-character->character first))
             (let* ((token (read-token reader))
                    (name (if (reader-fold-case reader)
                              (string-foldcase token)
@@ -1860,17 +1866,21 @@
                ((and (> (string-length token) 1)
                      (or (char=? (string-ref token 0) #\x)
                          (char=? (string-ref token 0) #\X)))
-                (hex-scalar->char reader (substring token 1 (string-length token))))
-               ((string=? name "alarm") (integer->char 7))
-               ((string=? name "backspace") (integer->char 8))
-               ((string=? name "delete") (integer->char 127))
-               ((string=? name "escape") (integer->char 27))
-               ((string=? name "newline") #\newline)
-               ((string=? name "null") (integer->char 0))
-               ((string=? name "return") #\return)
-               ((string=? name "space") #\space)
-               ((string=? name "tab") #\tab)
-               ((= (string-length token) 1) (string-ref token 0))
+                (consent-make-character
+                 (hex-scalar-value
+                  reader
+                  (substring token 1 (string-length token)))))
+               ((string=? name "alarm") (consent-make-character 7))
+               ((string=? name "backspace") (consent-make-character 8))
+               ((string=? name "delete") (consent-make-character 127))
+               ((string=? name "escape") (consent-make-character 27))
+               ((string=? name "newline") (consent-make-character 10))
+               ((string=? name "null") (consent-make-character 0))
+               ((string=? name "return") (consent-make-character 13))
+               ((string=? name "space") (consent-make-character 32))
+               ((string=? name "tab") (consent-make-character 9))
+               ((= (string-length token) 1)
+                (consent-host-character->character (string-ref token 0)))
                (else
                 (reader-error reader "unknown character literal" token)))))))
 
@@ -2347,7 +2357,8 @@
       (cond
        ((string? value) value)
        ((reader-datum-symbol? value) (reader-datum-symbol-name value))
-       ((char? value) (string value))
+       ((consent-character? value)
+        (string (consent-character->host-character value)))
        ((or (consent-number? value) (number? value))
         (consent-number->external value))
        (else "?")))
@@ -2612,7 +2623,7 @@
       (cond
        ((or (boolean? datum)
             (reader-datum-symbol? datum)
-            (char? datum)
+            (consent-character? datum)
             (consent-number? datum))
         (validation-note-node! validation))
        ((string? datum)
@@ -2760,22 +2771,25 @@
 
     (define (write-character-datum char)
       "Render a character in canonical R7RS external syntax."
-      (let ((code (char->integer char)))
+      (let ((code (consent-character-code char)))
         (cond
-         ((char=? char (integer->char 7)) "#\\alarm")
-         ((char=? char (integer->char 8)) "#\\backspace")
-         ((char=? char (integer->char 127)) "#\\delete")
-         ((char=? char (integer->char 27)) "#\\escape")
-         ((char=? char #\newline) "#\\newline")
-         ((char=? char (integer->char 0)) "#\\null")
-         ((char=? char #\return) "#\\return")
-         ((char=? char #\space) "#\\space")
-         ((char=? char #\tab) "#\\tab")
+         ((= code 7) "#\\alarm")
+         ((= code 8) "#\\backspace")
+         ((= code 127) "#\\delete")
+         ((= code 27) "#\\escape")
+         ((= code 10) "#\\newline")
+         ((= code 0) "#\\null")
+         ((= code 13) "#\\return")
+         ((= code 32) "#\\space")
+         ((= code 9) "#\\tab")
          ((or (< code 33) (= code 127))
           (string-append
            "#\\x"
            (consent-integer->radix-string code 16)))
-         (else (string-append "#\\" (string char))))))
+         (else
+          (string-append
+           "#\\"
+           (string (consent-character->host-character char)))))))
 
     (define (join strings separator)
       "Join string fragments with SEPARATOR for writer output."
@@ -2978,9 +2992,9 @@
             (if display?
                 (reader-datum-symbol-name value)
                 (write-symbol-name (reader-datum-symbol-name value))))
-           ((char? value)
+           ((consent-character? value)
             (if display?
-                (string value)
+                (string (consent-character->host-character value))
                 (write-character-datum value)))
            ((or (consent-number? value) (number? value))
             (consent-number->external value))
