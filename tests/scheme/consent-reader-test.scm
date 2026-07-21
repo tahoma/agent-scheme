@@ -77,6 +77,24 @@
 (testing-registry-case
  'character-hex '(portable core)
 (check-external 'character-hex "#\\X03BB" "#\\λ"))
+(testing-registry-case
+ 'character-owned-scalar '(portable core)
+(let ((character (consent-read "#\\x10ffff")))
+  (test-equal 'character-owned-scalar
+              (list #t #f #x10ffff)
+              (list (consent-character? character)
+                    (char? character)
+                    (consent-character-code character)))))
+(testing-registry-case
+ 'character-invalid-surrogate '(portable core)
+(test-equal 'character-invalid-surrogate
+            #t
+            (raises? (lambda () (consent-read "#\\xd800")))))
+(testing-registry-case
+ 'character-invalid-out-of-range '(portable core)
+(test-equal 'character-invalid-out-of-range
+            #t
+            (raises? (lambda () (consent-read "#\\x110000")))))
 
 ;; Character writer fixtures cover named, printable, Unicode, and control forms.
 (define character-writer-cases

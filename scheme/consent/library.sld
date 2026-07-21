@@ -55,6 +55,7 @@
   (import (scheme base)
           (scheme char)
           (scheme file)
+          (consent character)
           (consent reader)
           (consent symbol)
           (consent symbol-boundary)
@@ -3056,7 +3057,8 @@
 
     (define (native-callback-result value seen convert-symbols?)
       "Convert an interpreted callback's result for native consumption."
-      "Canonical number records become bounded host numbers -- a custom resync"
+      "Owned characters become host characters, and canonical number records"
+      "become bounded host numbers -- a custom resync"
       "strategy returns an offset the reader clamps with host arithmetic --"
       "while values outside the adapter range keep their owned representation."
       "The interpreter's end-of-file record becomes the host end-of-file"
@@ -3069,6 +3071,8 @@
       (cond
        ((and convert-symbols? (consent-symbol? value))
         (host-string->symbol (consent-symbol-name value)))
+       ((consent-character? value)
+        (consent-character->host-character value))
        ((consent-number? value)
         (native-number-or-owned value))
        ((consent-eof-object? value)
@@ -3131,6 +3135,8 @@
       (cond
        ((consent-symbol? value)
         (host-string->symbol (consent-symbol-name value)))
+       ((consent-character? value)
+        (consent-character->host-character value))
        ((consent-number? value)
         (native-number-or-owned value))
        ((consent-eof-object? value)
@@ -3193,8 +3199,8 @@
           (description "Runtime datum about to return to native code.")))
         (returns (type object)
          (description
-          ("VALUE with owned symbols, canonical numbers, and EOF records"
-            "converted to their ordinary host representations.")))
+          ("VALUE with owned symbols, characters, canonical numbers, and EOF"
+            "records converted to their ordinary host representations.")))
         (effects pure allocation))
       (native-runtime-datum-result value '()))
 
@@ -3263,12 +3269,17 @@
 
     ;; Some internal-library exports operate on reader-owned Consent datums whose
     ;; identity must survive the native call boundary intact: source-metadata
-    ;; accessors key off the original pair/vector/string object, and numeric
-    ;; predicates should inspect canonical number records instead of a
-    ;; host-unwrapped payload. Most other portable libraries still want the
-    ;; ordinary host-facing scalar conversion.
+    ;; accessors key off the original pair/vector/string object, character
+    ;; accessors inspect owned records, and numeric predicates inspect canonical
+    ;; number records instead of host-unwrapped payloads. Most other portable
+    ;; libraries still want ordinary host-facing scalar conversion.
     (define native-preserved-argument-bindings
-      '((((consent symbol)
+      '((((consent character)
+          consent-character?
+          consent-character-code
+          consent-character-equivalent?
+          consent-character->host-character))
+        (((consent symbol)
           consent-symbol?
           consent-symbol-name
           consent-symbol-equivalent?
@@ -3311,7 +3322,9 @@
           consent-number-zero?
           consent-number-negative?
           consent-number-abs
-          consent-number->external))))
+          consent-number->external
+          consent-character?
+          consent-character-code))))
 
     ;; Representation APIs return identity-bearing values whose exact symbol
     ;; table or container provenance is part of their contract. The general
@@ -3438,8 +3451,9 @@
       "reader resync strategy or a policy-confirmation-function inside an"
       "options alist -- so they become host callbacks native higher-order"
       "code can apply directly. Ordinary `(scheme base)' scalar data keep"
-      "their language-level surface here too: owned symbols, canonical number"
-      "records, and the interpreter's eof record become host Scheme values"
+      "their language-level surface here too: owned symbols and characters,"
+      "canonical number records, and the interpreter's eof record become host"
+      "Scheme values"
       "instead of leaking reader/runtime representation details into native"
       "consumers. Pairs and vectors are walked copy-on-write so untouched"
       "structure keeps its identity. SEEN guards against cyclic data, which"
@@ -3447,6 +3461,8 @@
       (cond
        ((consent-symbol? value)
         (host-string->symbol (consent-symbol-name value)))
+       ((consent-character? value)
+        (consent-character->host-character value))
        ((consent-number? value)
         (native-number-or-owned value))
        ((consent-eof-object? value)
@@ -3491,8 +3507,9 @@
       "procedure record, which native predicates, accessors, and the shared"
       "apply machinery already handle (consent-procedure? on a"
       "consent-eval-source result must see the record, not a wrapper)."
-      "Symbols, bounded numbers, and eof objects cross as plain host Scheme"
-      "values; larger numbers retain owned storage. Containers are walked so"
+      "Symbols, characters, bounded numbers, and eof objects cross as plain"
+      "host Scheme values; larger numbers retain owned storage. Containers are"
+      "walked so"
       "nested scalars and the options-alist callback convention both preserve"
       "the portable library surface."
       #((parameters
@@ -3506,13 +3523,14 @@
         (returns (type object)
          (description
           ("VALUE converted to the host-facing argument form: host symbols,"
-           "numbers, or eof objects for scalar runtime records; host callbacks"
-           "for nested callables; and copy-on-write container rewrites when"
-           "needed.")))
+           "characters, numbers, or eof objects for scalar runtime records;"
+           "host callbacks for nested callables; and copy-on-write container"
+           "rewrites when needed.")))
         (effects pure allocation))
       (if (or (pair? value)
               (vector? value)
               (consent-symbol? value)
+              (consent-character? value)
               (consent-number? value)
               (consent-eof-object? value))
           (native-nested-argument value context '())

@@ -1706,8 +1706,12 @@
   (check 'standard-source-library-char-exports
          (and char-spec
               (cadr (assq 'exports char-spec)))
-         '(char-ci<=? char-ci<? char-ci=? char-ci>=? char-ci>?
-           string-ci<=? string-ci<? string-ci=? string-ci>=? string-ci>?))
+         '(char-alphabetic?
+           char-ci<=? char-ci<? char-ci=? char-ci>=? char-ci>?
+           char-downcase char-foldcase char-lower-case? char-numeric?
+           char-upcase char-upper-case? char-whitespace? digit-value
+           string-ci<=? string-ci<? string-ci=? string-ci>=? string-ci>?
+           string-downcase string-foldcase string-upcase))
   (check 'standard-source-library-lazy-exports
          (and lazy-spec
               (cadr (assq 'exports lazy-spec)))

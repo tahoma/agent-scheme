@@ -558,10 +558,15 @@
                      "cddaar" "cddadr" "cdddar" "cddddr")
                     "scheme/consent/cxr.sld")
                    ("(scheme char)"
-                    ("char-ci<=?" "char-ci<?" "char-ci=?"
+                    ("char-alphabetic?"
+                     "char-ci<=?" "char-ci<?" "char-ci=?"
                      "char-ci>=?" "char-ci>?"
+                     "char-downcase" "char-foldcase" "char-lower-case?"
+                     "char-numeric?" "char-upcase" "char-upper-case?"
+                     "char-whitespace?" "digit-value"
                      "string-ci<=?" "string-ci<?" "string-ci=?"
-                     "string-ci>=?" "string-ci>?")
+                     "string-ci>=?" "string-ci>?"
+                     "string-downcase" "string-foldcase" "string-upcase")
                     "scheme/consent/char.sld")
                    ("(scheme lazy)"
                     ("delay" "delay-force" "force" "make-promise"
@@ -1041,12 +1046,9 @@
       "agent-progress"
       "agent-warn"
       "agent-request")))
-  (should
-   (member
-    "char-alphabetic?"
-    (plist-get (consent--library-collection-manifest-entry
-                "(scheme char primitive)")
-               :exports))))
+  (should-not
+   (consent--library-collection-manifest-entry
+    "(scheme char primitive)")))
 
 (ert-deftest consent-library-test-obsolete-library-dispatchers-are-retired ()
   "Keep repo-owned library surface routing out of hand-curated dispatchers."
@@ -1075,19 +1077,11 @@
     (should (eq (plist-get entry :kind) 'library))
     (should (eq (plist-get entry :source-kind) 'portable-source))
     (should (equal (plist-get entry :source-file) "consent/char.sld"))
-    (should (equal (plist-get entry :primitive-overlay-library)
-                   "(scheme char primitive)"))
+    (should-not (plist-get entry :primitive-overlay-library))
     (should-not (plist-get entry :primitive-exports)))
-  (let* ((entry (consent--library-collection-manifest-entry
-                 "(scheme char primitive)"))
-         (primitive-exports (plist-get entry :primitive-exports)))
-    (should (eq (plist-get entry :kind) 'primitive-library))
-    (should (eq (plist-get entry :source-kind) 'primitive))
-    (dolist (name '("char-ci<=?" "char-ci<?" "char-ci=?"
-                    "char-ci>=?" "char-ci>?"
-                    "string-ci<=?" "string-ci<?" "string-ci=?"
-                    "string-ci>=?" "string-ci>?"))
-      (should-not (assoc name primitive-exports)))))
+  (should-not
+   (consent--library-collection-manifest-entry
+    "(scheme char primitive)")))
 
 (ert-deftest consent-library-test-emacs-capability-keys-follow-manifest ()
   "Derive Emacs capability library keys instead of maintaining a twin list."

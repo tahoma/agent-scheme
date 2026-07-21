@@ -58,6 +58,7 @@
                   (get-environment-variables host-get-environment-variables))
           (scheme write)
           (data avl-tree)
+          (consent character)
           (consent numeric)
           (consent reader)
           (consent symbol)
@@ -327,7 +328,7 @@ cursor across sessions."
       "Report whether EXPRESSION evaluates to itself in core evaluation."
       (or (boolean? expression)
           (consent-number? expression)
-          (char? expression)
+          (consent-character? expression)
           (string? expression)
           (vector? expression)
           (bytevector? expression)))
@@ -952,7 +953,7 @@ cursor across sessions."
          ((contract-tag=? type 'exact-integer) (contract-exact-integer? value))
          ((or (contract-tag=? type 'char)
               (contract-tag=? type 'character))
-          (char? value))
+          (consent-character? value))
          ((contract-tag=? type 'pair) (pair? value))
          ((contract-tag=? type 'list) (list? value))
          ((contract-tag=? type 'null) (null? value))
@@ -1020,7 +1021,7 @@ cursor across sessions."
        ((interpreter-symbol? value) 'symbol)
        ((string? value) 'string)
        ((or (number? value) (consent-number? value)) 'number)
-       ((char? value) 'character)
+       ((consent-character? value) 'character)
        ((null? value) 'list)
        ((and (pair? value) (list? value)) 'list)
        ((pair? value) 'pair)
@@ -2360,12 +2361,21 @@ cursor across sessions."
           (eval-error (string-append description " must be a string") datum)))
 
     (define (expect-character datum description)
-      "Validate character input and raise an evaluator error on mismatch."
-      (if (char? datum)
+      "Return owned DATUM or raise an evaluator error naming DESCRIPTION."
+      (if (consent-character? datum)
           datum
           (eval-error
            (string-append description " must be a character")
            datum)))
+
+    (define (expect-character-code datum description)
+      "Return DATUM's scalar value or raise an evaluator error."
+      (consent-character-code (expect-character datum description)))
+
+    (define (expect-host-character datum description)
+      "Adapt owned DATUM to a host character for a host-string boundary."
+      (consent-character->host-character
+       (expect-character datum description)))
 
     (define (expect-vector datum description)
       "Validate vector input and raise an evaluator error on mismatch."
@@ -3607,6 +3617,107 @@ cursor across sessions."
                 datum
                 #f)))))
 
+    (define (utf8-continuation-byte? byte)
+      "Return #t when BYTE is a UTF-8 continuation byte."
+      (and (<= #x80 byte) (<= byte #xbf)))
+
+    (define (string-slice->utf8 string start end)
+      "Encode host STRING from START through END with Consent UTF-8 semantics."
+      (let loop ((index start) (bytes '()))
+        (if (= index end)
+            (apply bytevector (reverse bytes))
+            (let ((code (char->integer (string-ref string index))))
+              (cond
+               ((<= code #x7f)
+                (loop (+ index 1) (cons code bytes)))
+               ((<= code #x7ff)
+                (loop
+                 (+ index 1)
+                 (cons (+ #x80 (modulo code #x40))
+                       (cons (+ #xc0 (quotient code #x40)) bytes))))
+               ((<= code #xffff)
+                (if (not (consent-scalar-value? code))
+                    (eval-error
+                     "string->utf8 encountered a non-scalar character"))
+                (loop
+                 (+ index 1)
+                 (cons (+ #x80 (modulo code #x40))
+                       (cons (+ #x80 (modulo (quotient code #x40) #x40))
+                             (cons (+ #xe0 (quotient code #x1000))
+                                   bytes)))))
+               ((<= code #x10ffff)
+                (loop
+                 (+ index 1)
+                 (cons (+ #x80 (modulo code #x40))
+                       (cons (+ #x80 (modulo (quotient code #x40) #x40))
+                             (cons
+                              (+ #x80
+                                 (modulo (quotient code #x1000) #x40))
+                              (cons (+ #xf0 (quotient code #x40000))
+                                    bytes))))))
+               (else
+                (eval-error
+                 "string->utf8 encountered a non-scalar character")))))))
+
+    (define (utf8-slice->string bytes start end)
+      "Decode BYTES from START through END with strict Consent UTF-8 semantics."
+      (letrec
+          ((invalid
+            (lambda ()
+              (eval-error "utf8->string invalid UTF-8 byte sequence")))
+           (byte-at
+            (lambda (index)
+              (if (< index end)
+                  (bytevector-u8-ref bytes index)
+                  (invalid))))
+           (continuation
+            (lambda (index)
+              (let ((byte (byte-at index)))
+                (if (not (utf8-continuation-byte? byte))
+                    (invalid))
+                byte))))
+        (let loop ((index start) (characters '()))
+          (if (= index end)
+              (list->string (reverse characters))
+              (let ((first (byte-at index)))
+                (cond
+                 ((<= first #x7f)
+                  (loop (+ index 1)
+                        (cons (integer->char first) characters)))
+                 ((and (<= #xc2 first) (<= first #xdf))
+                  (let* ((second (continuation (+ index 1)))
+                         (code (+ (* (- first #xc0) #x40)
+                                  (- second #x80))))
+                    (loop (+ index 2)
+                          (cons (integer->char code) characters))))
+                 ((and (<= #xe0 first) (<= first #xef))
+                  (let ((second (continuation (+ index 1)))
+                        (third (continuation (+ index 2))))
+                    (if (or (and (= first #xe0) (< second #xa0))
+                            (and (= first #xed) (> second #x9f)))
+                        (invalid))
+                    (let ((code (+ (* (- first #xe0) #x1000)
+                                   (* (- second #x80) #x40)
+                                   (- third #x80))))
+                      (if (not (consent-scalar-value? code)) (invalid))
+                      (loop (+ index 3)
+                            (cons (integer->char code) characters)))))
+                 ((and (<= #xf0 first) (<= first #xf4))
+                  (let ((second (continuation (+ index 1)))
+                        (third (continuation (+ index 2)))
+                        (fourth (continuation (+ index 3))))
+                    (if (or (and (= first #xf0) (< second #x90))
+                            (and (= first #xf4) (> second #x8f)))
+                        (invalid))
+                    (let ((code (+ (* (- first #xf0) #x40000)
+                                   (* (- second #x80) #x1000)
+                                   (* (- third #x80) #x40)
+                                   (- fourth #x80))))
+                      (if (not (consent-scalar-value? code)) (invalid))
+                      (loop (+ index 4)
+                            (cons (integer->char code) characters)))))
+                 (else (invalid))))))))
+
     (define (primitive-string->utf8 arguments context)
       "Implement the `string->utf8` primitive with argument validation and"
       "Consent Scheme values."
@@ -3617,7 +3728,7 @@ cursor across sessions."
                      (string-length string)
                      "string->utf8")))
         (charge-bytevector-allocation!
-         (string->utf8 (substring string (car range) (cdr range)))
+         (string-slice->utf8 string (car range) (cdr range))
          context)))
 
     (define (primitive-utf8->string arguments context)
@@ -3630,7 +3741,7 @@ cursor across sessions."
                      (bytevector-length bytes)
                      "utf8->string")))
         (charge-string-allocation!
-         (utf8->string bytes (car range) (cdr range))
+         (utf8-slice->string bytes (car range) (cdr range))
          context)))
 
     (define (primitive-symbol? arguments context)
@@ -3674,20 +3785,21 @@ cursor across sessions."
     (define (primitive-char? arguments context)
       "Implement the `char?` primitive with argument validation and Consent"
       "Scheme values."
-      (char? (car arguments)))
+      (consent-character? (car arguments)))
 
     (define (primitive-char->integer arguments context)
       "Implement the `char->integer` primitive with argument validation and"
       "Consent Scheme values."
       (consent-make-canonical-integer
-       (char->integer
-        (expect-character (car arguments) "char->integer"))))
+       (expect-character-code (car arguments) "char->integer")))
 
     (define (primitive-integer->char arguments context)
       "Implement the `integer->char` primitive with argument validation and"
       "Consent Scheme values."
-      (integer->char
-       (exact-integer->host (car arguments) "integer->char")))
+      (let ((code (exact-integer->host (car arguments) "integer->char")))
+        (if (not (consent-scalar-value? code))
+            (eval-error "integer->char expected a Unicode scalar value" code))
+        (consent-make-character code)))
 
     (define (primitive-char-compare arguments predicate description)
       "Implement the `char-compare` primitive with argument validation and"
@@ -3696,106 +3808,34 @@ cursor across sessions."
         (cond
          ((or (null? rest) (null? (cdr rest))) #t)
          (else
-          (let ((left (expect-character (car rest) description))
-                (right (expect-character (second rest) description)))
+          (let ((left (expect-character-code (car rest) description))
+                (right (expect-character-code (second rest) description)))
             (and (predicate left right) (loop (cdr rest))))))))
 
     (define (primitive-char=? arguments context)
       "Implement the `char=?` primitive with argument validation and Consent"
       "Scheme values."
-      (primitive-char-compare arguments char=? "char=?"))
+      (primitive-char-compare arguments = "char=?"))
 
     (define (primitive-char<? arguments context)
       "Implement the `char<?` primitive with argument validation and Consent"
       "Scheme values."
-      (primitive-char-compare arguments char<? "char<?"))
+      (primitive-char-compare arguments < "char<?"))
 
     (define (primitive-char>? arguments context)
       "Implement the `char>?` primitive with argument validation and Consent"
       "Scheme values."
-      (primitive-char-compare arguments char>? "char>?"))
+      (primitive-char-compare arguments > "char>?"))
 
     (define (primitive-char<=? arguments context)
       "Implement the `char<=?` primitive with argument validation and Consent"
       "Scheme values."
-      (primitive-char-compare arguments char<=? "char<=?"))
+      (primitive-char-compare arguments <= "char<=?"))
 
     (define (primitive-char>=? arguments context)
       "Implement the `char>=?` primitive with argument validation and Consent"
       "Scheme values."
-      (primitive-char-compare arguments char>=? "char>=?"))
-
-    (define (primitive-char-upcase arguments context)
-      "Implement the `char-upcase` primitive with argument validation and"
-      "Consent Scheme values."
-      (char-upcase (expect-character (car arguments) "char-upcase")))
-
-    (define (primitive-char-downcase arguments context)
-      "Implement the `char-downcase` primitive with argument validation and"
-      "Consent Scheme values."
-      (char-downcase (expect-character (car arguments) "char-downcase")))
-
-    (define (primitive-char-foldcase arguments context)
-      "Implement the `char-foldcase` primitive with argument validation and"
-      "Consent Scheme values."
-      (char-foldcase (expect-character (car arguments) "char-foldcase")))
-
-    (define (primitive-char-alphabetic? arguments context)
-      "Implement the `char-alphabetic?` primitive with argument validation and"
-      "Consent Scheme values."
-      (char-alphabetic? (expect-character
-                         (car arguments)
-                         "char-alphabetic?")))
-
-    (define (primitive-char-numeric? arguments context)
-      "Implement the `char-numeric?` primitive with argument validation and"
-      "Consent Scheme values."
-      (char-numeric? (expect-character (car arguments) "char-numeric?")))
-
-    (define (primitive-char-whitespace? arguments context)
-      "Implement the `char-whitespace?` primitive with argument validation and"
-      "Consent Scheme values."
-      (char-whitespace? (expect-character
-                         (car arguments)
-                         "char-whitespace?")))
-
-    (define (primitive-char-upper-case? arguments context)
-      "Implement the `char-upper-case?` primitive with argument validation and"
-      "Consent Scheme values."
-      (char-upper-case? (expect-character
-                         (car arguments)
-                         "char-upper-case?")))
-
-    (define (primitive-char-lower-case? arguments context)
-      "Implement the `char-lower-case?` primitive with argument validation and"
-      "Consent Scheme values."
-      (char-lower-case? (expect-character
-                         (car arguments)
-                         "char-lower-case?")))
-
-    (define (primitive-digit-value arguments context)
-      "Implement the `digit-value` primitive with argument validation and"
-      "Consent Scheme values."
-      (let ((value (digit-value
-                    (expect-character (car arguments) "digit-value"))))
-        (if value
-            (consent-make-canonical-integer value)
-            #f)))
-
-    (define (primitive-string-upcase arguments context)
-      "Implement the `string-upcase` primitive with argument validation and"
-      "Consent Scheme values."
-      (string-upcase (expect-string (car arguments) "string-upcase")))
-
-    (define (primitive-string-downcase arguments context)
-      "Implement the `string-downcase` primitive with argument validation and"
-      "Consent Scheme values."
-      (string-downcase (expect-string (car arguments) "string-downcase")))
-
-    (define (primitive-string-foldcase arguments context)
-      "Implement the `string-foldcase` primitive with argument validation and"
-      "Consent Scheme values."
-      (string-foldcase (expect-string (car arguments) "string-foldcase")))
+      (primitive-char-compare arguments >= "char>=?"))
 
     (define (display-string value)
       "Render VALUE for display output rather than write output."
@@ -4430,7 +4470,7 @@ cursor across sessions."
                  'read
                  1
                  #f)
-                char)))))
+                (consent-host-character->character char))))))
 
     (define (primitive-read-char arguments context)
       "Implement the `read-char` primitive with argument validation and Consent"
@@ -4810,7 +4850,7 @@ cursor across sessions."
       "Implement the `write-char` primitive with argument validation and"
       "Consent Scheme values."
       (write-text-to-port
-       (string (expect-character (car arguments) "write-char"))
+       (string (expect-host-character (car arguments) "write-char"))
        (if (null? (cdr arguments))
            (current-output-port-or-deny context "write-char")
            (second arguments))
@@ -8679,7 +8719,7 @@ cursor across sessions."
       (let ((length (exact-integer->host (car arguments) "make-string"))
             (fill (if (null? (cdr arguments))
                       #\null
-                      (expect-character
+                      (expect-host-character
                        (second arguments)
                        "make-string fill"))))
         (if (< length 0)
@@ -8692,7 +8732,7 @@ cursor across sessions."
       (charge-string-allocation!
        (list->string
         (map (lambda (argument)
-               (expect-character argument "string"))
+               (expect-host-character argument "string"))
              arguments))
        context))
 
@@ -8711,7 +8751,7 @@ cursor across sessions."
                      (string-length string)
                      "string-ref"
                      #f)))
-        (string-ref string index)))
+        (consent-host-character->character (string-ref string index))))
 
     (define (primitive-string-set! arguments context)
       "Implement the `string-set!` primitive with argument validation and"
@@ -8722,7 +8762,9 @@ cursor across sessions."
                      (string-length string)
                      "string-set!"
                      #f))
-             (char (expect-character (third arguments) "string-set! value")))
+             (char (expect-host-character
+                    (third arguments)
+                    "string-set! value")))
         (string-set! string index char)
         consent-unspecified))
 
@@ -8767,7 +8809,9 @@ cursor across sessions."
           (if (= index (cdr range))
               (charge-list-allocation! (reverse result) context)
               (loop (+ index 1)
-                    (cons (string-ref string index) result))))))
+                    (cons (consent-host-character->character
+                           (string-ref string index))
+                          result))))))
 
     (define (primitive-list->string arguments context)
       "Implement the `list->string` primitive with argument validation and"
@@ -8775,7 +8819,7 @@ cursor across sessions."
       (charge-string-allocation!
        (list->string
         (map (lambda (argument)
-               (expect-character argument "list->string"))
+               (expect-host-character argument "list->string"))
              (proper-list-elements (car arguments) "list->string")))
        context))
 
@@ -8799,7 +8843,7 @@ cursor across sessions."
           (if (= index (cdr range))
               (charge-string-allocation! (list->string (reverse result)) context)
               (loop (+ index 1)
-                    (cons (expect-character
+                    (cons (expect-host-character
                            (vector-ref vector index)
                            "vector->string")
                           result))))))
@@ -8845,7 +8889,9 @@ cursor across sessions."
       "Implement the `string-fill!` primitive with argument validation and"
       "Consent Scheme values."
       (let* ((string (expect-string (car arguments) "string-fill!"))
-             (fill (expect-character (second arguments) "string-fill! value"))
+             (fill (expect-host-character
+                    (second arguments)
+                    "string-fill! value"))
              (range (optional-range
                      arguments
                      2
@@ -8858,7 +8904,24 @@ cursor across sessions."
                 (loop (+ index 1)))))
         consent-unspecified))
 
-    (define (primitive-string-compare arguments predicate description)
+    (define (string-scalar-compare left right)
+      "Compare host strings lexicographically by Unicode scalar value."
+      (let ((left-length (string-length left))
+            (right-length (string-length right)))
+        (let loop ((index 0))
+          (cond
+           ((and (= index left-length) (= index right-length)) 0)
+           ((= index left-length) -1)
+           ((= index right-length) 1)
+           (else
+            (let ((left-code (char->integer (string-ref left index)))
+                  (right-code (char->integer (string-ref right index))))
+              (cond
+               ((< left-code right-code) -1)
+               ((> left-code right-code) 1)
+               (else (loop (+ index 1))))))))))
+
+    (define (primitive-string-compare arguments relation description)
       "Implement the `string-compare` primitive with argument validation and"
       "Consent Scheme values."
       (let loop ((rest arguments))
@@ -8867,32 +8930,33 @@ cursor across sessions."
          (else
           (let ((left (expect-string (car rest) description))
                 (right (expect-string (second rest) description)))
-            (and (predicate left right) (loop (cdr rest))))))))
+            (and (relation (string-scalar-compare left right) 0)
+                 (loop (cdr rest))))))))
 
     (define (primitive-string=? arguments context)
       "Implement the `string=?` primitive with argument validation and Consent"
       "Scheme values."
-      (primitive-string-compare arguments string=? "string=?"))
+      (primitive-string-compare arguments = "string=?"))
 
     (define (primitive-string<? arguments context)
       "Implement the `string<?` primitive with argument validation and Consent"
       "Scheme values."
-      (primitive-string-compare arguments string<? "string<?"))
+      (primitive-string-compare arguments < "string<?"))
 
     (define (primitive-string>? arguments context)
       "Implement the `string>?` primitive with argument validation and Consent"
       "Scheme values."
-      (primitive-string-compare arguments string>? "string>?"))
+      (primitive-string-compare arguments > "string>?"))
 
     (define (primitive-string<=? arguments context)
       "Implement the `string<=?` primitive with argument validation and Consent"
       "Scheme values."
-      (primitive-string-compare arguments string<=? "string<=?"))
+      (primitive-string-compare arguments <= "string<=?"))
 
     (define (primitive-string>=? arguments context)
       "Implement the `string>=?` primitive with argument validation and Consent"
       "Scheme values."
-      (primitive-string-compare arguments string>=? "string>=?"))
+      (primitive-string-compare arguments >= "string>=?"))
 
     (define (map-over-lists procedure lists context keep-results?)
       "Apply PROCEDURE over LISTS, collecting results only when requested."
@@ -9583,6 +9647,8 @@ cursor across sessions."
         (and (consent-symbol? left)
              (consent-symbol? right)
              (consent-symbol-equivalent? left right)))
+       ((or (consent-character? left) (consent-character? right))
+        (consent-character-equivalent? left right))
        ((and (consent-number? left) (consent-number? right))
         (numeric-representation-eqv? left right))
        (else (eqv? left right))))
@@ -9593,6 +9659,7 @@ cursor across sessions."
           (and (consent-symbol? left)
                (consent-symbol? right)
                (consent-symbol-equivalent? left right))
+          (consent-character-equivalent? left right)
           (and (consent-number? left)
                (consent-number? right)
                (numeric-representation-eqv? left right))))
@@ -9714,18 +9781,6 @@ cursor across sessions."
     ;; Map library resolver implementation names to interpreter procedures.
     (define library-primitive-implementation-table
       (list
-       (cons 'primitive-char-alphabetic? primitive-char-alphabetic?)
-       (cons 'primitive-char-downcase primitive-char-downcase)
-       (cons 'primitive-char-foldcase primitive-char-foldcase)
-       (cons 'primitive-char-lower-case? primitive-char-lower-case?)
-       (cons 'primitive-char-numeric? primitive-char-numeric?)
-       (cons 'primitive-char-upcase primitive-char-upcase)
-       (cons 'primitive-char-upper-case? primitive-char-upper-case?)
-       (cons 'primitive-char-whitespace? primitive-char-whitespace?)
-       (cons 'primitive-digit-value primitive-digit-value)
-       (cons 'primitive-string-downcase primitive-string-downcase)
-       (cons 'primitive-string-foldcase primitive-string-foldcase)
-       (cons 'primitive-string-upcase primitive-string-upcase)
        (cons 'primitive-acos primitive-acos)
        (cons 'primitive-asin primitive-asin)
        (cons 'primitive-atan primitive-atan)

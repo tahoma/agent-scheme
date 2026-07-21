@@ -3756,74 +3756,6 @@ DESCRIPTION names the primitive for errors."
   "Primitive char>=? over ARGUMENTS."
   (consent--primitive-char-compare arguments #'>= "char>=?"))
 
-(defun consent--primitive-char-upcase (arguments _context)
-  "Primitive char-upcase over ARGUMENTS."
-  (let ((code (consent--expect-character
-               (car arguments) "char-upcase")))
-    (consent--make-character (upcase code))))
-
-(defun consent--primitive-char-downcase (arguments _context)
-  "Primitive char-downcase over ARGUMENTS."
-  (let ((code (consent--expect-character
-               (car arguments) "char-downcase")))
-    (consent--make-character (downcase code))))
-
-(defun consent--primitive-char-foldcase (arguments _context)
-  "Primitive char-foldcase over ARGUMENTS."
-  (let ((code (consent--expect-character
-               (car arguments) "char-foldcase")))
-    (consent--make-character (downcase (upcase code)))))
-
-(defun consent--character-matches-p (code regexp)
-  "Return non-nil if CODE's string representation matches REGEXP."
-  (string-match-p regexp (char-to-string code)))
-
-(defun consent--primitive-char-alphabetic? (arguments _context)
-  "Primitive char-alphabetic? over ARGUMENTS."
-  (consent--scheme-boolean
-   (consent--character-matches-p
-    (consent--expect-character (car arguments) "char-alphabetic?")
-    "\\`[[:alpha:]]\\'")))
-
-(defun consent--primitive-char-numeric? (arguments _context)
-  "Primitive char-numeric? over ARGUMENTS."
-  (consent--scheme-boolean
-   (consent--character-matches-p
-    (consent--expect-character (car arguments) "char-numeric?")
-    "\\`[[:digit:]]\\'")))
-
-(defun consent--primitive-char-whitespace? (arguments _context)
-  "Primitive char-whitespace? over ARGUMENTS."
-  (consent--scheme-boolean
-   (consent--character-matches-p
-    (consent--expect-character (car arguments) "char-whitespace?")
-    "\\`[[:space:]]\\'")))
-
-(defun consent--primitive-char-upper-case? (arguments _context)
-  "Primitive char-upper-case? over ARGUMENTS."
-  (let ((code (consent--expect-character
-               (car arguments) "char-upper-case?")))
-    (consent--scheme-boolean
-     (and (consent--character-matches-p code "\\`[[:alpha:]]\\'")
-          (= code (upcase code))
-          (/= code (downcase code))))))
-
-(defun consent--primitive-char-lower-case? (arguments _context)
-  "Primitive char-lower-case? over ARGUMENTS."
-  (let ((code (consent--expect-character
-               (car arguments) "char-lower-case?")))
-    (consent--scheme-boolean
-     (and (consent--character-matches-p code "\\`[[:alpha:]]\\'")
-          (= code (downcase code))
-          (/= code (upcase code))))))
-
-(defun consent--primitive-digit-value (arguments _context)
-  "Primitive digit-value over ARGUMENTS."
-  (let ((code (consent--expect-character (car arguments) "digit-value")))
-    (if (and (>= code ?0) (<= code ?9))
-        (consent--make-canonical-integer (- code ?0))
-      consent-false)))
-
 (defun consent--display-string (value)
   "Return a focused display representation for VALUE."
   (consent-datum->external value 'write t))
@@ -5777,13 +5709,31 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
   (let* ((string (consent--expect-string (car arguments) "string->utf8"))
          (range (consent--optional-range
                  arguments 1 (length string) "string->utf8"))
-         (bytes (encode-coding-string
-                 (substring string (car range) (cdr range))
-                 'utf-8
-                 t)))
+         bytes)
+    (cl-loop for index from (car range) below (cdr range)
+             for code = (aref string index)
+             do
+             (unless (consent--valid-scalar-value-p code)
+               (consent--eval-error
+                "string->utf8 encountered a non-scalar character"))
+             (cond
+              ((<= code #x7f)
+               (push code bytes))
+              ((<= code #x7ff)
+               (push (+ #xc0 (ash code -6)) bytes)
+               (push (+ #x80 (logand code #x3f)) bytes))
+              ((<= code #xffff)
+               (push (+ #xe0 (ash code -12)) bytes)
+               (push (+ #x80 (logand (ash code -6) #x3f)) bytes)
+               (push (+ #x80 (logand code #x3f)) bytes))
+              (t
+               (push (+ #xf0 (ash code -18)) bytes)
+               (push (+ #x80 (logand (ash code -12) #x3f)) bytes)
+               (push (+ #x80 (logand (ash code -6) #x3f)) bytes)
+               (push (+ #x80 (logand code #x3f)) bytes))))
     (consent--charge-bytevector-allocation
      (consent--make-bytevector
-      (vconcat (mapcar #'identity bytes)))
+      (vconcat (nreverse bytes)))
      context)))
 
 (defun consent--primitive-utf8->string (arguments context)
@@ -5793,12 +5743,63 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
          (bytes (consent-bytevector-bytes bytevector))
          (range (consent--optional-range
                  arguments 1 (length bytes) "utf8->string"))
-         (raw (apply #'unibyte-string
-                     (append
-                      (cl-subseq bytes (car range) (cdr range))
-                      nil))))
+         (index (car range))
+         characters)
+    (cl-labels
+        ((invalid ()
+           (consent--eval-error
+            "utf8->string invalid UTF-8 byte sequence"))
+         (byte-at (offset)
+           (if (< offset (cdr range))
+               (aref bytes offset)
+             (invalid)))
+         (continuation (offset)
+           (let ((byte (byte-at offset)))
+             (unless (<= #x80 byte #xbf)
+               (invalid))
+             byte)))
+      (while (< index (cdr range))
+        (let ((first (byte-at index))
+              code
+              width)
+          (cond
+           ((<= first #x7f)
+            (setq code first width 1))
+           ((<= #xc2 first #xdf)
+            (let ((second (continuation (1+ index))))
+              (setq code (+ (* (- first #xc0) #x40)
+                            (- second #x80))
+                    width 2)))
+           ((<= #xe0 first #xef)
+            (let ((second (continuation (1+ index)))
+                  (third (continuation (+ index 2))))
+              (when (or (and (= first #xe0) (< second #xa0))
+                        (and (= first #xed) (> second #x9f)))
+                (invalid))
+              (setq code (+ (* (- first #xe0) #x1000)
+                            (* (- second #x80) #x40)
+                            (- third #x80))
+                    width 3)))
+           ((<= #xf0 first #xf4)
+            (let ((second (continuation (1+ index)))
+                  (third (continuation (+ index 2)))
+                  (fourth (continuation (+ index 3))))
+              (when (or (and (= first #xf0) (< second #x90))
+                        (and (= first #xf4) (> second #x8f)))
+                (invalid))
+              (setq code (+ (* (- first #xf0) #x40000)
+                            (* (- second #x80) #x1000)
+                            (* (- third #x80) #x40)
+                            (- fourth #x80))
+                    width 4)))
+           (t (invalid)))
+          (unless (consent--valid-scalar-value-p code)
+            (invalid))
+          (push code characters)
+          (setq index (+ index width)))))
     (consent--charge-string-allocation
-     (decode-coding-string raw 'utf-8 t) context)))
+     (apply #'string (nreverse characters))
+     context)))
 
 (defun consent--primitive-string->vector (arguments context)
   "Primitive string->vector over ARGUMENTS."
@@ -5854,53 +5855,59 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
              do (aset string index fill))
     consent-unspecified))
 
-(defun consent--primitive-string-compare (arguments predicate description)
-  "Return Scheme boolean for pairwise string PREDICATE over ARGUMENTS."
+(defun consent--string-scalar-compare (left right)
+  "Compare LEFT and RIGHT lexicographically by Unicode scalar value."
+  (let ((index 0)
+        result)
+    (while (and (not result)
+                (< index (length left))
+                (< index (length right)))
+      (let ((left-code (aref left index))
+            (right-code (aref right index)))
+        (cond
+         ((< left-code right-code) (setq result -1))
+         ((> left-code right-code) (setq result 1))
+         (t (cl-incf index)))))
+    (or result
+        (cond
+         ((< (length left) (length right)) -1)
+         ((> (length left) (length right)) 1)
+         (t 0)))))
+
+(defun consent--primitive-string-compare (arguments relation description)
+  "Return Scheme boolean for pairwise string RELATION over ARGUMENTS."
   (let ((strings (mapcar
                   (lambda (argument)
                     (consent--expect-string argument description))
                   arguments))
         (ok t))
     (while (and ok (cdr strings))
-      (setq ok (funcall predicate (car strings) (cadr strings)))
+      (setq ok (funcall relation
+                        (consent--string-scalar-compare
+                         (car strings) (cadr strings))
+                        0))
       (setq strings (cdr strings)))
     (consent--scheme-boolean ok)))
 
 (defun consent--primitive-string=? (arguments _context)
   "Primitive string=? over ARGUMENTS."
-  (consent--primitive-string-compare arguments #'string= "string=?"))
+  (consent--primitive-string-compare arguments #'= "string=?"))
 
 (defun consent--primitive-string<? (arguments _context)
   "Primitive string<? over ARGUMENTS."
-  (consent--primitive-string-compare arguments #'string< "string<?"))
+  (consent--primitive-string-compare arguments #'< "string<?"))
 
 (defun consent--primitive-string>? (arguments _context)
   "Primitive string>? over ARGUMENTS."
-  (consent--primitive-string-compare
-   arguments (lambda (left right) (string< right left)) "string>?"))
+  (consent--primitive-string-compare arguments #'> "string>?"))
 
 (defun consent--primitive-string<=? (arguments _context)
   "Primitive string<=? over ARGUMENTS."
-  (consent--primitive-string-compare
-   arguments (lambda (left right) (not (string< right left))) "string<=?"))
+  (consent--primitive-string-compare arguments #'<= "string<=?"))
 
 (defun consent--primitive-string>=? (arguments _context)
   "Primitive string>=? over ARGUMENTS."
-  (consent--primitive-string-compare
-   arguments (lambda (left right) (not (string< left right))) "string>=?"))
-
-(defun consent--primitive-string-upcase (arguments _context)
-  "Primitive string-upcase over ARGUMENTS."
-  (upcase (consent--expect-string (car arguments) "string-upcase")))
-
-(defun consent--primitive-string-downcase (arguments _context)
-  "Primitive string-downcase over ARGUMENTS."
-  (downcase (consent--expect-string (car arguments) "string-downcase")))
-
-(defun consent--primitive-string-foldcase (arguments _context)
-  "Primitive string-foldcase over ARGUMENTS."
-  (downcase (upcase (consent--expect-string
-                     (car arguments) "string-foldcase"))))
+  (consent--primitive-string-compare arguments #'>= "string>=?"))
 
 (defun consent--map-over-lists (procedure lists context keep-results)
   "Map PROCEDURE over LISTS in CONTEXT.
