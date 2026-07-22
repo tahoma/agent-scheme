@@ -4,10 +4,7 @@
 
 (import (scheme base)
         (scheme process-context)
-        (consent character)
         (consent reader)
-        (only (consent runtime)
-              consent-host-datum->consent-datum)
         (consent symbol)
         (only (consent library)
               consent-native-argument-value
@@ -130,33 +127,6 @@
   (test-assert
    'native-result-cyclic-spine-keeps-identity
    (eq? cycle (consent-runtime-datum->native-datum cycle)))))
-
-(testing-registry-case
- 'owned-character-native-boundary-roundtrip
- '(portable runtime character boundary)
-(let* ((owned (consent-make-character #x3bb))
-       (runtime-datum (list owned (vector owned)))
-       (native-argument
-        (consent-native-argument-value runtime-datum #f))
-       (native-result
-        (consent-runtime-datum->native-datum runtime-datum))
-       (roundtrip
-        (consent-host-datum->consent-datum native-result)))
-  (test-assert
-   'owned-character-native-argument-is-host-character
-   (and (char? (car native-argument))
-        (= (char->integer (car native-argument)) #x3bb)
-        (char? (vector-ref (cadr native-argument) 0))))
-  (test-assert
-   'owned-character-native-result-is-host-character
-   (and (char? (car native-result))
-        (= (char->integer (car native-result)) #x3bb)))
-  (test-assert
-   'owned-character-native-result-roundtrips
-   (and (consent-character? (car roundtrip))
-        (= (consent-character-code (car roundtrip)) #x3bb)
-        (consent-character?
-         (vector-ref (cadr roundtrip) 0))))))
 
 (testing-registry-case
  'mutable-input-name-is-not-retained '(portable runtime symbol)

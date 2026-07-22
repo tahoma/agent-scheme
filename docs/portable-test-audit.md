@@ -68,6 +68,13 @@ does; retaining an ERT test does not make it the semantic source of truth.
   escaped-symbol writer round trips on both bootstraps. ERT retains the Emacs
   adapter checks for explicit hash-table handle plumbing, input-name ownership,
   isolated handles, bulk identity, recovery, and incremental reads.
+- `(consent character)` owned-record construction, the complete Unicode scalar
+  boundary, host/native adapter contracts, and NUL-through-maximum nested datum
+  round trips are canonical in `tests/scheme/consent-character-test.scm`.
+  Exhaustive finite bootstrap classification, digit, whitespace, mapping, and
+  comparison tables live in the shared fixture corpus so they execute through
+  both evaluator bootstraps; direct portable and ERT reader suites retain their
+  respective reader-object and bootstrap-diagnostic boundaries.
 
 ## Actual case ownership
 
