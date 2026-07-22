@@ -140,9 +140,19 @@ before it can replace an owned path.
 
 ## Verification contract
 
-The shared conformance corpus covers ASCII requirements, representative Greek
-and Latin mappings, non-ASCII decimal digits and whitespace, scalar conversion
-and ordering, reader/writer external forms, supplementary-plane UTF-8, and
-invalid scalar and UTF-8 rejection. The same fixtures run through the Emacs
-bootstrap and portable R7RS evaluator, while direct portable reader tests check
-that parsed characters are owned records rather than host characters.
+The shared conformance corpus exhausts every finite classification, decimal
+digit, whitespace, and simple/full case table in the bootstrap profile, with
+excluded-neighbor checks. It exercises every base and case-insensitive
+character/string comparison in true, false, equality, prefix, and variadic
+forms; the complete scalar validity boundary; BMP, supplementary, and maximum
+scalar crossings through strings, vectors, ports, and native adapters; and
+canonical reader/writer external forms.
+
+UTF-8 fixtures cover every one- through four-byte branch boundary, both sides
+of the surrogate gap, multibyte and empty range slices, malformed continuation
+bytes, truncation, every overlong width, encoded surrogates, invalid leads, and
+values above `U+10FFFF`. The same conformance fixtures run through the Emacs
+bootstrap and portable R7RS evaluator. Direct portable tests additionally
+check the owned record contracts and native adapter boundaries, while direct
+portable and Emacs reader suites retain bootstrap-specific diagnostics and
+round trips.

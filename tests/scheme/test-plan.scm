@@ -12,6 +12,9 @@
     (path "tests/scheme/consent-reader-test.scm")
     (tags (full direct compiled core registered)))
    (program
+    (path "tests/scheme/consent-character-test.scm")
+    (tags (full direct compiled core runtime registered)))
+   (program
     (path "tests/scheme/consent-numeric-test.scm")
     (tags (full direct compiled core runtime registered)))
    (program

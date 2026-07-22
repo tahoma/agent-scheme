@@ -90,10 +90,28 @@
             #t
             (raises? (lambda () (consent-read "#\\xd800")))))
 (testing-registry-case
+ 'character-invalid-surrogate-end '(portable core)
+(test-equal 'character-invalid-surrogate-end
+            #t
+            (raises? (lambda () (consent-read "#\\xdfff")))))
+(testing-registry-case
  'character-invalid-out-of-range '(portable core)
 (test-equal 'character-invalid-out-of-range
             #t
             (raises? (lambda () (consent-read "#\\x110000")))))
+(testing-registry-case
+ 'character-malformed-hex '(portable core)
+(test-equal 'character-malformed-hex
+            #t
+            (raises? (lambda () (consent-read "#\\xzz")))))
+(testing-registry-case
+ 'character-name-case '(portable core)
+(let ((folded (consent-read "#!fold-case #\\Space")))
+  (test-assert 'character-name-default-case-sensitive
+               (raises? (lambda () (consent-read "#\\Space"))))
+  (test-equal 'character-name-fold-case
+              #x20
+              (consent-character-code folded))))
 
 ;; Character writer fixtures cover named, printable, Unicode, and control forms.
 (define character-writer-cases
@@ -127,6 +145,21 @@
              (consent-datum->external
              (consent-read external)))))
  character-writer-cases))
+
+(testing-registry-case
+ 'supplementary-character-writer '(portable core)
+(for-each
+ (lambda (code)
+   (let* ((source (string-append "#\\x" (number->string code 16)))
+          (expected (string-append "#\\" (string (integer->char code))))
+          (external (consent-datum->external (consent-read source))))
+     (test-equal (list 'supplementary-character-writer code)
+                 expected
+                 external)
+     (test-equal (list 'supplementary-character-writer-roundtrip code)
+                 expected
+                 (consent-datum->external (consent-read external)))))
+ '(#x1f642 #x10ffff)))
 
 (testing-registry-case
  'integer '(portable core)
