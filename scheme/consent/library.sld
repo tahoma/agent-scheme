@@ -3308,6 +3308,15 @@
           primitive-procedure-documentation
           set-primitive-procedure-documentation!))
         (((consent macro) consent-syntax-source))
+        (((consent eval)
+          consent-result->external
+          consent-value->external))
+        (((consent interpreter)
+          consent-result->external
+          consent-value->external))
+        (((consent result)
+          consent-result->external
+          consent-value->external))
         (((consent reader)
           consent-datum-source
           consent-datum-source-set!
