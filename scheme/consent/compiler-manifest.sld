@@ -46,6 +46,7 @@
            (stdlib mapping)
            (stdlib json)
            (data mapping avl)
+           (consent character)
            (consent symbol)
            (consent symbol-boundary)
            (consent base)
@@ -67,15 +68,15 @@
          ;; realizations of the same portable source libraries. The compiler
          ;; plan validates that each name is reachable and resolves its source
          ;; unit; backends must not maintain parallel implementation or
-         ;; registration inventories. In particular, `(consent symbol)' is the
-         ;; semantic symbol-table owner, never an adapter over a host table.
-         ;; The symbol owner and its public AVL root type are also registered
-         ;; in borrowed-host images so interpreted imports share the compiled
-         ;; core's record types and single symbol table. The transient overlay
+         ;; registration inventories. In particular, `(consent character)' and
+         ;; `(consent symbol)' are semantic value owners, never adapters over
+         ;; host values. They are registered in borrowed-host images so
+         ;; interpreted imports share the compiled core's character and symbol
+         ;; record types and its single symbol table. The transient overlay
          ;; remains an ordinary compiled dependency; interpreted imports can
-         ;; evaluate it from source because its private records never cross
-         ;; the core interface. These wrappers are bootstrap ABI only; a
-         ;; native Consent image links callers and callees directly.
+         ;; evaluate it from source because its private records never cross the
+         ;; core interface. These wrappers are bootstrap ABI only; a native
+         ;; Consent image links callers and callees directly.
          (native-libraries
           ((data avl-tree)
            (agent task)
@@ -94,6 +95,7 @@
            (agent plan)
            (agent redaction)
            (agent session)
+           (consent character)
            (consent symbol)
            (consent symbol-boundary)
            (consent base)

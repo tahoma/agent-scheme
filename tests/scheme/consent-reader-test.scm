@@ -81,9 +81,8 @@
  'character-owned-scalar '(portable core)
 (let ((character (consent-read "#\\x10ffff")))
   (test-equal 'character-owned-scalar
-              (list #t #f #x10ffff)
+              (list #t #x10ffff)
               (list (consent-character? character)
-                    (char? character)
                     (consent-character-code character)))))
 (testing-registry-case
  'character-invalid-surrogate '(portable core)
@@ -637,6 +636,11 @@
 (test-equal 'bounded-size-string
              "..."
              (consent-datum->external-bounded "abcdefghijklmnop" '((size . 6)))))
+;; Owned character atoms cross the compiled renderer boundary without host
+;; conversion, just like the unbounded writer.
+(testing-registry-case
+ 'bounded-character '(portable core)
+(check-bounded 'bounded-character "#\\A" '() "#\\A"))
 ;; With no ceilings, bounded output equals the canonical writer for acyclic data.
 (testing-registry-case
  'bounded-no-limit-matches '(portable core)

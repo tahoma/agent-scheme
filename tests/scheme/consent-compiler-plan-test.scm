@@ -118,6 +118,10 @@
       (member '(consent symbol) native-libraries)
       (member '(consent symbol-boundary) native-libraries))))
   (test-assert
+   'borrowed-host-shares-compiled-character-storage
+   (member '(consent character)
+           (consent-compiler-plan-native-libraries plan)))
+  (test-assert
    'symbol-storage-remains-in-compiler-graph
    (let ((names (unit-names units)))
      (and (member '(data avl-tree) names)

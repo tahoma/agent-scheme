@@ -3109,13 +3109,20 @@
           "Render atomic VALUE through the unbounded writer for identical atom"
           "text, pre-capping a long string by source prefix so a huge atom does"
           "not force the writer to build a huge intermediate before the size"
-          "backstop in `emit!' can apply."
-          (let ((value
-                 (if (and size-limit
-                          (string? value)
-                          (> (string-length value) (- size-limit used)))
-                     (substring value 0 (max 0 (- size-limit used)))
-                     value)))
+          "backstop in `emit!' can apply. A borrowed-host binding converts"
+          "owned characters in its datum argument to host characters while it"
+          "also converts the limits alist, so normalize that adapter value back"
+          "to the owned representation before calling the canonical writer."
+          (let* ((value
+                 (if (and (char? value) (not (consent-character? value)))
+                     (consent-host-character->character value)
+                     value))
+                 (value
+                  (if (and size-limit
+                           (string? value)
+                           (> (string-length value) (- size-limit used)))
+                      (substring value 0 (max 0 (- size-limit used)))
+                      value)))
             (consent-datum->external value mode displayp)))
 
         (define (render value depth)
