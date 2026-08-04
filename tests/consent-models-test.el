@@ -1,4 +1,4 @@
-;;; consent-models-test.el --- Model provider routing tests  -*- lexical-binding: t; -*-
+;;; consent-models-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -25,13 +25,16 @@
 (defun consent-models-test--transport
     (provider model role prompt options)
   "Return a fake completion for PROVIDER, MODEL, ROLE, PROMPT, and OPTIONS."
-  (push (list provider model role prompt options) consent-models-test--requests)
+  (push (list provider model role prompt options)
+    consent-models-test--requests)
   "mock completion")
 
 (defun consent-models-test--tool-call-transport
     (provider model role prompt options)
-  "Return a fake tool-calling completion for PROVIDER, MODEL, ROLE, and PROMPT."
-  (push (list provider model role prompt options) consent-models-test--requests)
+  "Return a fake tool-calling completion for PROVIDER, MODEL, ROLE, and\
+ PROMPT."
+  (push (list provider model role prompt options)
+    consent-models-test--requests)
   (consent-read
    "(model-message
       (text \"Need the local echo tool.\")
@@ -291,7 +294,10 @@ the local tests passed. Use only ASCII text.")
                               \"Write a Scheme helper.\"
                               '((temperature 0)))
               (model-route 'scheme-scripter '()))")
-      "(\"mock completion\" (model-routing-decision (status selected) (role scheme-scripter) (provider local-llama) (model qwen-coder) (kind local) (transport openai-compatible-http) (endpoint \"http://127.0.0.1:11434/v1\")))"))
+      "(\"mock completion\" (model-routing-decision (status selected) (role\
+ scheme-scripter) (provider local-llama) (model qwen-coder) (kind local)\
+ (transport openai-compatible-http) (endpoint\
+ \"http://127.0.0.1:11434/v1\")))"))
     (should (= (length consent-models-test--requests) 1))
     (let* ((request (car consent-models-test--requests))
            (provider (car request))
@@ -417,7 +423,11 @@ the local tests passed. Use only ASCII text.")
      (consent--source-library-call
       "(agent models openai)"
       "model-openai-parse-response"
-      "{\"choices\":[{\"message\":{\"content\":\"Use a tool.\",\"tool_calls\":[{\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"local-echo\",\"arguments\":\"{\\\"text\\\":\\\"hello\\\"}\"}}]}}]}"))
+      (concat
+       "{\"choices\":[{\"message\":{\"content\":\"Use a tool.\","
+       "\"tool_calls\":[{\"id\":\"call-1\",\"type\":\"function\","
+       "\"function\":{\"name\":\"local-echo\",\"arguments\":"
+       "\"{\\\"text\\\":\\\"hello\\\"}\"}}]}}]}")))
     (concat
      "(model-message (text \"Use a tool.\") "
      "(tool-calls ((tool-call (id \"call-1\") "
@@ -489,14 +499,16 @@ the local tests passed. Use only ASCII text.")
       (should (equal role (consent-models--symbol "scheme-scripter")))
       (should (equal prompt "source prompt"))
       (should (equal options
-                     (consent-read "((timeout-seconds 7) (retry-count 0))"))))))
+                     (consent-read
+                       "((timeout-seconds 7) (retry-count 0))"))))))
 
 (ert-deftest consent-models-test-no-native-emacs-openai-transport-surface ()
   "Keep OpenAI-compatible transport implementation out of Emacs Lisp."
   (should-not (boundp 'consent-models-transport-function))
   (should-not (fboundp 'consent-models-openai-compatible-http)))
 
-(ert-deftest consent-models-test-source-transport-retries-through-process-host ()
+(ert-deftest consent-models-test-source-transport-retries-through-process-host
+  ()
   "Retry local transport failures in the source-backed Scheme transport."
   (consent-models-test--reset)
   (consent-models-test--register-local-provider)
@@ -523,7 +535,8 @@ the local tests passed. Use only ASCII text.")
         "ok"))
       (should (= calls 2)))))
 
-(ert-deftest consent-models-test-source-transport-budget-covers-large-planner-response ()
+(ert-deftest
+  consent-models-test-source-transport-budget-covers-large-planner-response ()
   "Source-backed transport budget covers a large local planner completion."
   (consent-models-test--reset)
   (let ((callbacks 0))
@@ -537,7 +550,8 @@ the local tests passed. Use only ASCII text.")
                  (list (consent--scheme-integer 0)
                        (consent-models-test--cli-captured-output
                         (consent-models-test--openai-curl-output
-                         "{\"choices\":[{\"message\":{\"content\":\"1. inspect\\n2. plan\\n3. draft\\n4. test\\n5. review\"}}]}"
+                         "{\"choices\":[{\"message\":{\"content\":\"1.\
+ inspect\\n2. plan\\n3. draft\\n4. test\\n5. review\"}}]}"
                          200)
                         0)
                        ""))))
@@ -616,7 +630,8 @@ the local tests passed. Use only ASCII text.")
         "prompt text must not leak"
         external)))))
 
-(ert-deftest consent-models-test-openai-http-error-keeps-status-and-body-excerpt ()
+(ert-deftest
+  consent-models-test-openai-http-error-keeps-status-and-body-excerpt ()
   "HTTP failures keep status, bounded body detail, and safe request metadata."
   (consent-models-test--reset)
   (consent-models-test--register-local-provider)
@@ -661,7 +676,8 @@ the local tests passed. Use only ASCII text.")
         "transport prompt must stay hidden"
         external)))))
 
-(ert-deftest consent-models-test-openai-http-error-honors-detail-budget-override ()
+(ert-deftest
+  consent-models-test-openai-http-error-honors-detail-budget-override ()
   "Per-call detail budgets can raise the excerpt cap without removing it."
   (consent-models-test--reset)
   (consent-models-test--register-local-provider)
@@ -817,7 +833,9 @@ the local tests passed. Use only ASCII text.")
             (roles (scheme-scripter))
             (privacy local))))))
       (model-route 'scheme-scripter '())")
-    "(model-routing-decision (status selected) (role scheme-scripter) (provider local-stack) (model warm-model) (kind local) (transport openai-compatible-http) (endpoint \"http://127.0.0.1:11434/v1\"))")))
+    "(model-routing-decision (status selected) (role scheme-scripter)\
+ (provider local-stack) (model warm-model) (kind local) (transport\
+ openai-compatible-http) (endpoint \"http://127.0.0.1:11434/v1\"))")))
 
 (ert-deftest consent-models-test-remote-local-only-denied-before-transport ()
   "Deny local-only context before a remote provider can run transport."

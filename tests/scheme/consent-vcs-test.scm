@@ -40,7 +40,8 @@
            "# branch.upstream origin/main" nul
            "# branch.ab +2 -1" nul
            "1 M. N... 100644 100644 100644 aaaaaaa bbbbbbb src/main.scm" nul
-           "2 R. N... 100644 100644 100644 ccccccc ddddddd R100 src/new.scm" nul
+           "2 R. N... 100644 100644 100644 ccccccc ddddddd R100 src/new.scm"
+             nul
            "src/old.scm" nul
            "? scratch.scm" nul
            "! build/" nul

@@ -75,7 +75,8 @@ if [[ $runner == */* && ! -x $runner ]]; then
 fi
 
 if [[ $host == racket ]]; then
-  racket_collections=$(mktemp -d "${TMPDIR:-/tmp}/consent-racket-collections.XXXXXX")
+  racket_collections=$(mktemp -d \
+    "${TMPDIR:-/tmp}/consent-racket-collections.XXXXXX")
   while IFS= read -r source; do
     relative=${source#"$library_root/"}
     target=$racket_collections/${relative%.sld}.rkt

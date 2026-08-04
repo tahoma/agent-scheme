@@ -1,11 +1,12 @@
-;;; consent-scheme-eval-test.el --- Portable evaluator source checks  -*- lexical-binding: t; -*-
+;;; consent-scheme-eval-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
 ;; Host-independent source checks for the portable R7RS evaluator.  The
-;; portable evaluator test file itself runs through the Scheme-native test plan,
+;; portable evaluator test file itself runs through the Scheme-native test
+;; plan,
 ;; not a per-file ERT bridge.
 
 ;;; Code:

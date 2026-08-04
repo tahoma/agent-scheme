@@ -303,4 +303,5 @@
     (test-equal 'accepted-apply-result 'applied (field application 'result))
     (test-equal 'accepted-apply-called 1 (length applied)))))
 
-(testing-runner-main "Consent Agent Generated Source portable tests" (command-line))
+(testing-runner-main "Consent Agent Generated Source portable tests"
+  (command-line))

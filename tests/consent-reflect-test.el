@@ -1,4 +1,4 @@
-;;; consent-reflect-test.el --- Runtime reflection tests  -*- lexical-binding: t; -*-
+;;; consent-reflect-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -79,7 +79,8 @@
           '(:docstring-retention full))))
     (should
      (equal external
-            "(5 (binding documented) (x) \"Return X plus one.\" (procedure) (x) \"Return X plus one.\")"))))
+            "(5 (binding documented) (x) \"Return X plus one.\" (procedure)\
+ (x) \"Return X plus one.\")"))))
 
 (ert-deftest consent-reflect-test-documentation-arguments-metadata ()
   "Reflect procedure arguments as symbolic documentation metadata."
@@ -139,7 +140,12 @@
             (field (documentation 'current-second) 'source)
             (field (documentation 'current-second) 'origin)
             (metadata-field 'current-second 'documentation))")
-    "((binding +) (scheme base) kernel (primitive-manifest metadata) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (procedure) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (scheme time) host-capability (primitive-manifest string) \"Return the current time as a real number of seconds since the Unix epoch, subject to the clock capability policy.\")")))
+    "((binding +) (scheme base) kernel (primitive-manifest metadata)\
+ \"Return the sum of all numeric arguments, or 0 when called with no\
+ arguments.\" (procedure) \"Return the sum of all numeric arguments, or 0\
+ when called with no arguments.\" (scheme time) host-capability\
+ (primitive-manifest string) \"Return the current time as a real number of\
+ seconds since the Unix epoch, subject to the clock capability policy.\")")))
 
 (ert-deftest consent-reflect-test-primitive-manifest-rich-metadata ()
   "Reflect primitive manifest parameter and return type metadata."
@@ -173,7 +179,9 @@
             (parameter-type 'bytevector-u8-set! 'byte)
             (return-type 'bytevector-u8-set!)
             (metadata-field 'bytevector-u8-set! 'effects))")
-    "((list-of number) number (pure) exact-non-negative-integer (values integer integer) textual-input-port (or char eof-object) byte unspecified (mutation))")))
+    "((list-of number) number (pure) exact-non-negative-integer (values\
+ integer integer) textual-input-port (or char eof-object) byte unspecified\
+ (mutation))")))
 
 (ert-deftest consent-reflect-test-doc-and-describe-procedures ()
   "Expose scriptable doc and describe records without REPL sigils."
@@ -221,7 +229,12 @@
               (metadata-field doc 'documentation)
               (consent-describe 'missing)))"
      '(:docstring-retention full))
-    "((binding +) value primitive-procedure (scheme base) kernel \"#<primitive +>\" \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (binding documented) value procedure #f #f \"#<procedure>\" (((source . \"(documented 4)\") (result . 5))) value \"42\" #f (binding documented) \"Return X plus one.\" #f)")))
+    "((binding +) value primitive-procedure (scheme base) kernel \"#<primitive\
+ +>\" \"Return the sum of all numeric arguments, or 0 when called with no\
+ arguments.\" (binding documented) value procedure #f #f \"#<procedure>\"\
+ (((source\
+ . \"(documented 4)\") (result . 5))) value \"42\" #f (binding documented)\
+ \"Return X plus one.\" #f)")))
 
 (ert-deftest consent-reflect-test-docstring-edge-cases ()
   "Reflect adjacent docstrings and preserve final-string body semantics."
@@ -263,7 +276,8 @@
             (arguments (documentation 'no-doc))
             (doc-string (documentation 'missing)))"
      '(:docstring-retention full))
-    "(\"First line. Second line.\" (x) 5 \"Use the local definition.\" (x) \"result\" #f () #f (x) #f)")))
+    "(\"First line. Second line.\" (x) 5 \"Use the local definition.\" (x)\
+ \"result\" #f () #f (x) #f)")))
 
 (ert-deftest consent-reflect-test-rich-documentation-metadata ()
   "Reflect rich documentation records and malformed metadata behavior."
@@ -363,7 +377,19 @@
             (final-rich)
             (metadata-fields 'final-rich))"
      '(:docstring-retention full))
-    "((session cfg) \"Create an Consent Scheme session from CONFIG. The session is represented as a datum.\" (config) \"Open an Consent Scheme session.\" ((config (type any) (description \"Session configuration datum.\"))) ((type any) (description \"A session record.\")) (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (consent-version 0 15 4) #f experimental \"local only\" \"Line one. Line two. Line three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" ((type any) (description \"First result.\")) #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head (type any) (description \"Required argument.\")) (tail (type any) (description \"Rest arguments.\"))) #((returns . \"ordinary result\")) ((arguments ())))")))
+    "((session cfg) \"Create an Consent Scheme session from CONFIG. The\
+ session is represented as a datum.\" (config) \"Open an Consent Scheme\
+ session.\" ((config (type any) (description \"Session configuration\
+ datum.\"))) ((type any)\
+ (description \"A session record.\")) (pure) (((source . \"(rich cfg)\")\
+ (result session cfg))) (current-context session-snapshot) (consent-version\
+ 0 15 4) #f experimental \"local only\" \"Line one. Line two. Line three.\"\
+ (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag .\
+ kept)) \"Valid documentation.\" ((type any) (description \"First\
+ result.\")) #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head\
+ (type any) (description \"Required argument.\")) (tail (type any)\
+ (description \"Rest arguments.\"))) #((returns . \"ordinary result\"))\
+ ((arguments ())))")))
 
 (ert-deftest consent-reflect-test-typed-rich-documentation-metadata ()
   "Normalize typed parameter and return documentation descriptors."
@@ -430,7 +456,16 @@
             (metadata-field 'multi-values 'parameters)
             (metadata-field 'multi-values 'returns))"
      '(:docstring-retention full))
-    "(\"Create a session from CONFIG.\" ((config (type session-config) (description \"Session configuration datum.\"))) ((type session-record) (description \"A session record.\")) (pure) ((x (type any) (description \"Input value.\"))) ((type any) (description \"Output value.\")) ((y (type any) (description \"Fragment input.\"))) ((type any) (description \"Fragment output.\")) ((x (type any) (description \"Wrapped input.\"))) ((type any) (description \"Wrapped output.\")) () ((type (values string any)) (description \"String result and opaque payload.\")))")))
+    "(\"Create a session from CONFIG.\" ((config (type session-config)\
+ (description \"Session configuration datum.\"))) ((type session-record)\
+ (description \"A session record.\")) (pure) ((x (type any) (description\
+ \"Input value.\")))\
+ ((type any) (description \"Output value.\")) ((y (type any) (description\
+ \"Fragment input.\"))) ((type any) (description \"Fragment output.\")) ((x\
+ (type any) (description \"Wrapped input.\"))) ((type any) (description\
+ \"Wrapped output.\")) () ((type (values string any)) (description \"String\
+ result and opaque\
+ payload.\")))")))
 
 (ert-deftest consent-reflect-test-docstring-retention-options ()
   "Allow callers to step down or disable procedure body doc retention."
@@ -462,7 +497,10 @@
       (consent-reflect-test--eval-value-string
        source
        '(:docstring-retention simple))
-      "(5 \"Return X plus one.\" (x) #f #f (documentation-metadata (subject (procedure)) (kind procedure) (library #f) (source #f) (origin (body-literal string)) (fields ((arguments (x)) (documentation \"Return X plus one.\")))) primitive-kept)"))
+      "(5 \"Return X plus one.\" (x) #f #f (documentation-metadata (subject\
+ (procedure)) (kind procedure) (library #f) (source #f) (origin\
+ (body-literal string)) (fields ((arguments (x)) (documentation \"Return X\
+ plus one.\")))) primitive-kept)"))
     (should
      (equal
       (consent-reflect-test--eval-value-string
@@ -554,10 +592,28 @@
             (metadata-field 'make-network-request 'parameters)
             (metadata-field 'make-network-request 'returns))"
      '(:docstring-retention full))
-    "(\"Return the number of pairs in LIST.\" \"Return PROMISE's value, evaluating and memoizing delayed thunks once.\" \"Render DIFF to deterministic unified-diff text for humans.\" \"Return a host-adapter request datum for one network operation.\" \"Return a fail-closed authorization decision for REQUEST.\" \"Generate a shared fixture case from EVENT when replay permits it.\" ((promise (type any) (description \"Promise record or ordinary value to force.\"))) ((type any) (description \"PROMISE's memoized value, or PROMISE unchanged when it is not a promise.\")) ((diff (type diff) (description \"Canonical diff datum.\"))) ((type string) (description \"Unified-diff text, or the empty string when DIFF has no changes.\")) ((id (type (or symbol string)) (description \"Stable request id assigned by the caller or host adapter.\")) (operation (type symbol) (description \"Network operation symbol such as request or stream.\")) (resource (type list) (description \"Association list describing scheme, host, port, method, headers, payload, response, redirect, timeout, and stream limits.\"))) ((type network-capability-request) (description \"A `network-capability-request` datum ready for policy evaluation.\")))")))
+    "(\"Return the number of pairs in LIST.\" \"Return PROMISE's value,\
+ evaluating and memoizing delayed thunks once.\" \"Render DIFF to\
+ deterministic unified-diff text for humans.\" \"Return a host-adapter\
+ request datum for one network operation.\" \"Return a fail-closed\
+ authorization decision for REQUEST.\" \"Generate a shared fixture case from\
+ EVENT when replay permits it.\" ((promise (type any) (description \"Promise\
+ record or ordinary value to force.\"))) ((type any) (description\
+ \"PROMISE's memoized value, or PROMISE unchanged when it is not a\
+ promise.\")) ((diff (type diff) (description \"Canonical diff datum.\")))\
+ ((type string) (description \"Unified-diff text, or the empty string when\
+ DIFF has no changes.\")) ((id (type (or symbol string)) (description\
+ \"Stable request id assigned by the caller or host adapter.\")) (operation\
+ (type symbol) (description \"Network operation symbol such as request or\
+ stream.\")) (resource (type list) (description \"Association list\
+ describing scheme, host, port, method, headers, payload, response,\
+ redirect, timeout, and stream limits.\"))) ((type\
+ network-capability-request) (description \"A `network-capability-request`\
+ datum ready for policy evaluation.\")))")))
 
 (ert-deftest consent-reflect-test-capability-budget-and-imports ()
-  "Inspect capability metadata, active budget limits, imports, and session ids."
+  "Inspect capability metadata, active budget limits, imports, and session\
+ ids."
   (consent-reflect-test--reset)
   (let ((external
          (consent-reflect-test--eval-value-string
@@ -573,9 +629,11 @@
             :max-source-metadata 1234567
             :session-id "reflect-run"))))
     (should (string-match-p "(host-capability" external))
-    (should (string-match-p (regexp-quote "(library (emacs buffer))") external))
+    (should (string-match-p (regexp-quote "(library (emacs buffer))")
+      external))
     (should (string-match-p (regexp-quote "(name buffer-text)") external))
-    (should (string-match-p (regexp-quote "(policy-category emacs-read-only)") external))
+    (should (string-match-p (regexp-quote "(policy-category emacs-read-only)")
+      external))
     (should (string-match-p (regexp-quote "(max-steps 1234)") external))
     (should (string-match-p (regexp-quote "(max-host-calls 77)") external))
     (should (string-match-p (regexp-quote "(max-events 9)") external))
@@ -818,7 +876,10 @@
             (documentation-field (documentation '+) 'missing 'default)
             (docstring '+)
             (docstring 'missing 'default))")
-    "(#f default default \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" default \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" default)")))
+    "(#f default default \"Return the sum of all numeric arguments, or 0\
+ when called with no arguments.\" default \"Return the sum of all numeric\
+ arguments,\
+ or 0 when called with no arguments.\" default)")))
 
 (ert-deftest consent-reflect-test-binding-libraries-crosswalk-stress ()
   "Find cataloged libraries that export a binding without importing them."
@@ -941,11 +1002,13 @@
              external))
     (should (string-match-p
              (regexp-quote
-              "\"Generated project library.\" ((project generated)) #t #t removed")
+              "\"Generated project library.\" ((project generated)) #t #t\
+ removed")
              external))
     (should (string-match-p
              (regexp-quote
-              "manifest-root \"reflect-test-root\" ((project rooted)) #t #t root-removed)")
+              "manifest-root \"reflect-test-root\" ((project rooted)) #t #t\
+ root-removed)")
              external))))
 
 (ert-deftest consent-reflect-test-library-resolution-api ()
@@ -1114,25 +1177,31 @@
                         (field vendored-missing 'status)
                         (field vendored-missing 'reason))))")))
         (dolist (needle
-                 '("((base resolved (scheme base) (scheme base) builtin base-snapshot public)"
-                   "(alias resolved (srfi 16) (scheme case-lambda) (scheme case-lambda) alias)"
+                 '("((base resolved (scheme base) (scheme base) builtin\
+ base-snapshot public)"
+                   "(alias resolved (srfi 16) (scheme case-lambda) (scheme\
+ case-lambda) alias)"
                    "(missing missing missing-library)"
                    "(denied denied internal-library)"
-                   "(unavailable unavailable availability-condition (host missing-host))"
+                   "(unavailable unavailable availability-condition (host\
+ missing-host))"
                    "(conflict conflict (project duplicated) 2)"
                    "(loaded resolved #t)"
                    "(dependencies resolved #t)"
-                   "(dependency-failure unsatisfied-dependency missing-dependency #t)"
+                   "(dependency-failure unsatisfied-dependency\
+ missing-dependency #t)"
                    "(paths #t ad-hoc-manifest)"
                    "(snapshot resolved (srfi 16) #t)"
                    "(srfi-name (srfi 16))"
-                   "(srfi-aliases ((srfi 16) (srfi srfi-16) (srfi :16) (srfi :16 case-lambda)))"
+                   "(srfi-aliases ((srfi 16) (srfi srfi-16) (srfi :16) (srfi\
+ :16 case-lambda)))"
                    "(vendored shim (srfi 16) (scheme case-lambda))"
                    "(vendored-missing missing missing-srfi)"))
           (should (string-match-p (regexp-quote needle) external))))
     (consent--library-catalog-remove-manifest 'reflect-resolution-fixture)))
 
-(ert-deftest consent-reflect-test-current-capabilities-lists-host-capabilities ()
+(ert-deftest consent-reflect-test-current-capabilities-lists-host-capabilities
+  ()
   "List importable host capabilities as Scheme-readable metadata records."
   (consent-reflect-test--reset)
   (let ((external
@@ -1140,7 +1209,8 @@
           "(import (scheme base) (agent reflect))
            (current-capabilities)")))
     (should (string-match-p "(host-capability" external))
-    (should (string-match-p (regexp-quote "(name emacs-current-buffer)") external))
+    (should (string-match-p (regexp-quote "(name emacs-current-buffer)")
+      external))
     (should (string-match-p (regexp-quote "(name file-exists?)") external))
     (should-not (string-match-p "consent--primitive" external))
     (should-not (string-match-p "emacs-hook" external))))
@@ -1155,7 +1225,8 @@
     (should (string-match-p (regexp-quote "(library (scheme time))") external))
     (should (string-match-p (regexp-quote "(name current-second)") external))
     (should (string-match-p (regexp-quote "(effect host-time)") external))
-    (should (string-match-p (regexp-quote "(required-capability clock)") external))
+    (should (string-match-p (regexp-quote "(required-capability clock)")
+      external))
     (should (string-match-p
              (regexp-quote "(backend-effect-path shared-capability-request)")
              external))
@@ -1191,9 +1262,11 @@
          (consent-reflect-test--eval-value-string
           "(import (scheme base) (agent reflect))
            (list (recent-errors) (recent-policy-decisions))")))
-    (should (string-match-p (regexp-quote "(event session-evaluation)") external))
+    (should (string-match-p (regexp-quote "(event session-evaluation)")
+      external))
     (should (string-match-p (regexp-quote "(event policy-decision)") external))
-    (should (string-match-p (regexp-quote "(operation \"reflect-policy\")") external))
+    (should (string-match-p (regexp-quote "(operation \"reflect-policy\")")
+      external))
     (should-not (string-match-p "sk-errorsecret" external))))
 
 ;;; consent-reflect-test.el ends here

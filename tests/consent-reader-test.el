@@ -1,4 +1,4 @@
-;;; consent-reader-test.el --- R7RS reader tests  -*- lexical-binding: t; -*-
+;;; consent-reader-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -221,7 +221,8 @@
        (consent-read "#!fold-case #\\Space"))
       32))
   ;; Delimiter and reserved characters are valid single-character literals: the
-  ;; reader must take the character after #\ literally even when it is ( ) [ ] |.
+  ;; reader must take the character after #\ literally even when it is ( ) [ ]
+  ;; |.
   (should (= (consent-character-code (consent-read "#\\(")) 40))
   (should (= (consent-character-code (consent-read "#\\)")) 41))
   (should (= (consent-character-code (consent-read "#\\[")) 91))
@@ -355,33 +356,43 @@
   (consent-datum->external-bounded (consent-read source) limits))
 
 (ert-deftest consent-reader-test-bounded-rendering ()
-  "Bound rendering by depth/length/size with the `...' truncation marker (#508).
+  "Bound rendering by depth/length/size with the `...' truncation marker\
+ (#508).
 These mirror the portable reader tests so both cores render identically."
   ;; A length ceiling shows the first L elements then the marker.
-  (should (equal (consent-reader-test--bounded "(1 2 3 4 5 6 7 8)" '((length . 4)))
+  (should (equal (consent-reader-test--bounded "(1 2 3 4 5 6 7 8)" '((length .
+    4)))
                  "(1 2 3 4 ...)"))
   ;; A depth ceiling elides over-deep nesting with the marker.
-  (should (equal (consent-reader-test--bounded "(1 (2 (3 (4 5))))" '((depth . 2)))
+  (should (equal (consent-reader-test--bounded "(1 (2 (3 (4 5))))" '((depth .
+    2)))
                  "(1 (2 ...))"))
   ;; Vectors and bytevectors honor the length ceiling.
-  (should (equal (consent-reader-test--bounded "#(10 20 30 40)" '((length . 2)))
+  (should (equal (consent-reader-test--bounded "#(10 20 30 40)" '((length .
+    2)))
                  "#(10 20 ...)"))
-  (should (equal (consent-reader-test--bounded "#u8(1 2 3 4 5)" '((length . 3)))
+  (should (equal (consent-reader-test--bounded "#u8(1 2 3 4 5)" '((length .
+    3)))
                  "#u8(1 2 3 ...)"))
   ;; The total-size ceiling is a hard backstop that stops mid-structure.
-  (should (equal (consent-reader-test--bounded "(100 200 300 400 500)" '((size . 14)))
+  (should (equal (consent-reader-test--bounded "(100 200 300 400 500)" '((size
+    . 14)))
                  "(100 200 300 ..."))
   ;; A long string atom is pre-capped so a huge atom cannot escape the bound.
-  (should (equal (consent-datum->external-bounded "abcdefghijklmnop" '((size . 6)))
+  (should (equal (consent-datum->external-bounded "abcdefghijklmnop" '((size .
+    6)))
                  "...")))
 
 (ert-deftest consent-reader-test-bounded-rendering-breaks-cycles ()
-  "Always terminate on shared and circular structure, regardless of LIMITS (#508)."
+  "Always terminate on shared and circular structure, regardless of LIMITS\
+ (#508)."
   ;; A real datum-label cycle terminates: the back-edge renders as the marker.
-  (should (equal (consent-reader-test--bounded "#0=(1 2 3 . #0#)" '((depth . 8)))
+  (should (equal (consent-reader-test--bounded "#0=(1 2 3 . #0#)" '((depth .
+    8)))
                  "(1 2 3 . ...)"))
   ;; A cycle cut by the length ceiling before the back-edge also terminates.
-  (should (equal (consent-reader-test--bounded "#0=(1 2 3 . #0#)" '((length . 2)))
+  (should (equal (consent-reader-test--bounded "#0=(1 2 3 . #0#)" '((length .
+    2)))
                  "(1 2 ...)"))
   ;; A self-referential vector terminates via the ancestor check.
   (should (equal (consent-reader-test--bounded "#0=#(1 #0#)" '((depth . 8)))
@@ -392,17 +403,20 @@ These mirror the portable reader tests so both cores render identically."
   ;; Shared (non-cyclic) structure renders in full when within the ceilings.
   (should (equal (consent-reader-test--bounded "(#0=(a b) #0#)" '())
                  "((a b) (a b))"))
-  ;; With no ceilings, bounded output equals the canonical writer for acyclic data.
+  ;; With no ceilings, bounded output equals the canonical writer for acyclic
+  ;; data.
   (should (equal (consent-datum->external-bounded
                   (consent-read "(1 (2 3) #(4 5) \"s\")") '())
-                 (consent-datum->external (consent-read "(1 (2 3) #(4 5) \"s\")")))))
+                 (consent-datum->external (consent-read
+                   "(1 (2 3) #(4 5) \"s\")")))))
 
 (ert-deftest consent-reader-test-comments-and-read-all ()
   "Skip line, block, datum comments, and read multiple datums."
   (should
    (equal (mapcar #'consent-datum->external
                   (consent-read-all
-                   "; ignore\n#| nested #| comment |# done |#\n1 #;(skip me) 2"))
+                   "; ignore\n#| nested #| comment |# done |#\n1 #;(skip me)\
+ 2"))
           '("1" "2")))
   (should
    (equal (mapcar #'consent-datum->external
@@ -494,7 +508,8 @@ These mirror the portable reader tests so both cores render identically."
                       (consent-reader-test--field span "kind"))
                      "invalid"))
       ;; The skipped bytes are preserved in the span, never silently dropped.
-      (should (equal (consent-reader-test--field span "text") "(broken ]\n")))))
+      (should (equal (consent-reader-test--field span "text")
+        "(broken ]\n")))))
 
 (ert-deftest consent-reader-test-recovery-incomplete-vs-invalid ()
   "Surface an incomplete trailing prefix distinctly from a syntax error."
@@ -585,6 +600,7 @@ it; complete, invalid, and eof steps carry no stack."
 (ert-deftest consent-reader-test-recovery-default-path-unchanged ()
   "Keep the default raise-on-error behavior for existing callers."
   (should-error (consent-read "(a") :type 'consent-reader-error)
-  (should-error (consent-read-all "(good) (bad ]") :type 'consent-reader-error))
+  (should-error (consent-read-all "(good) (bad ]") :type
+    'consent-reader-error))
 
 ;;; consent-reader-test.el ends here

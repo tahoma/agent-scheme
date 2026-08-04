@@ -787,18 +787,22 @@ than being skipped silently. Like the portable host shards, the gate *skips*
 (rather than fails) when Guile is unavailable, so it is a no-op on a Guile-free
 machine; CI installs Guile so it always runs there.
 
-The default set also runs `lint-line-length`, the Scheme source and portable
-Scheme test line-length gate. It fails checked-in `.sld` and `.scm` files under
-`scheme/` and `tests/scheme/` when a line exceeds
-`CONSENT_LINE_LENGTH_LIMIT` (default 120), keeping generated-looking expected
-datums and source snippets readable in review. Fixture corpora under
-`fixtures/` are intentionally outside this first pass because their dense
-Scheme-readable records need a separate format-aware cleanup. Run it on its own
+The default set also runs `lint-readability`, the repository-wide narrow-width
+gate. It applies an 80-column soft limit and a 100-column hard limit to
+first-party Scheme, Emacs Lisp, tests, fixtures, shell tooling, Make recipes,
+and workflows. Soft-limit exceptions require a local category and rationale;
+hard-limit exceptions are not supported. Run it and its format-class self-test
 with:
 
 ```sh
-make lint-line-length
+make lint-readability
+tools/lint-readability.sh --self-test
 ```
+
+The compatibility target `lint-line-length` delegates to the same gate. See
+[`docs/readability.md`](readability.md) for wrapping examples, exception
+categories, generated-source policy, provenance exclusions, and migration
+metrics.
 
 The default set also runs `lint-branding`, the assistant/tool/vendor branding
 gate. It enforces the AGENTS.md rule that no assistant, tool, vendor, or

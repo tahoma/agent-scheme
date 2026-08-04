@@ -1,4 +1,4 @@
-;;; consent-repl-agent-quickstart-doc-test.el --- REPL quick-start doc checks  -*- lexical-binding: t; -*-
+;;; consent-repl-agent-quickstart-doc-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -91,7 +91,8 @@
            "(define code")))
     (dolist (needle
              '("Return only executable R7RS Scheme source."
-               "Do not include Markdown fences, prose, math notation, or explanations."
+               "Do not include Markdown fences, prose, math notation, or\
+ explanations."
                "Define deriv"
                "Define differentiator-tests"))
       (should (string-match-p (regexp-quote needle) code-block)))))
@@ -113,15 +114,18 @@
                "(list 'max-retries 1)"
                "(generated-source-apply"
                "(interaction-environment)"
-               "Only an accepted run is allowed to mutate the live REPL session."
-               "Do not continue to the reviewer or memory prompts until the generated-source run is accepted"))
+               "Only an accepted run is allowed to mutate the live REPL\
+ session."
+               "Do not continue to the reviewer or memory prompts until the\
+ generated-source run is accepted"))
       (should (string-match-p (regexp-quote needle) flat-doc)))
     (should-not
      (string-match-p
       (regexp-quote "Displaying `code` prints the model's string")
       flat-doc))))
 
-(ert-deftest consent-repl-agent-quickstart-doc-test-tutorial-imports-write-once ()
+(ert-deftest consent-repl-agent-quickstart-doc-test-tutorial-imports-write-once
+  ()
   "The tutorial avoids duplicate import prompts during the same REPL session."
   (let* ((doc
           (consent-repl-agent-quickstart-doc-test--read
@@ -136,7 +140,8 @@
          "(scheme write)"
          tutorial)))))
 
-(ert-deftest consent-repl-agent-quickstart-doc-test-primary-repl-uses-default-chrome ()
+(ert-deftest
+  consent-repl-agent-quickstart-doc-test-primary-repl-uses-default-chrome ()
   "The primary tutorial launch path introduces the default chrome first."
   (let* ((doc
           (consent-repl-agent-quickstart-doc-test--read
@@ -159,7 +164,8 @@
       (regexp-quote "default `comment` chrome")
       start))))
 
-(ert-deftest consent-repl-agent-quickstart-doc-test-main-path-has-no-canned-answer ()
+(ert-deftest
+  consent-repl-agent-quickstart-doc-test-main-path-has-no-canned-answer ()
   "The main tutorial path does not embed a completed differentiator answer."
   (let* ((doc
           (consent-repl-agent-quickstart-doc-test--read
@@ -176,7 +182,8 @@
                "(define (deriv expression variable)"))
       (should-not (string-match-p (regexp-quote forbidden) tutorial)))))
 
-(ert-deftest consent-repl-agent-quickstart-doc-test-local-profiles-are-paste-ready ()
+(ert-deftest
+  consent-repl-agent-quickstart-doc-test-local-profiles-are-paste-ready ()
   "Each supported local model profile has a complete registration form."
   (let ((doc
          (consent-repl-agent-quickstart-doc-test--read
@@ -231,7 +238,8 @@
                "(display session-note)"))
       (should (string-match-p (regexp-quote needle) doc)))))
 
-(ert-deftest consent-repl-agent-quickstart-doc-test-code-prompt-stays-plan-led ()
+(ert-deftest consent-repl-agent-quickstart-doc-test-code-prompt-stays-plan-led
+  ()
   "The scripter step reuses the planner output without a canned outline."
   (let* ((doc
           (consent-repl-agent-quickstart-doc-test--read
@@ -264,7 +272,8 @@
                "(equal? (deriv 'y 'x) 0)"))
       (should-not (string-match-p (regexp-quote forbidden) code-block)))))
 
-(ert-deftest consent-repl-agent-quickstart-doc-test-model-routing-is-real-api ()
+(ert-deftest consent-repl-agent-quickstart-doc-test-model-routing-is-real-api
+  ()
   "The documented model role shape routes through the real API."
   (unwind-protect
       (cl-letf (((symbol-function
@@ -309,7 +318,8 @@
                      "(model qwen2.5-coder:14b)"
                      "(role memory-curator)"
                      "(model gemma3:12b)"
-                     "\"quick-start deterministic completion: deterministic quick-start check\""))
+                     "\"quick-start deterministic completion: deterministic\
+ quick-start check\""))
             (should (string-match-p (regexp-quote needle) external)))
           (should (= (length consent-repl-agent-quickstart-doc-test--requests)
                      1))))

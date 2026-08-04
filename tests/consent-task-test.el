@@ -1,4 +1,4 @@
-;;; consent-task-test.el --- Task lifecycle record tests  -*- lexical-binding: t; -*-
+;;; consent-task-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -194,7 +194,8 @@
       ("invalid-state-transition"
        (let ((transition
               (consent-task-test--scenario-field scenario "transition")))
-         (consent-task-validate-transition (car transition) (cadr transition))))
+         (consent-task-validate-transition (car transition) (cadr
+           transition))))
       ("malformed-pause-receipt"
        (consent-task-validate-record
         (consent-task-test--scenario-field scenario "datum")))
@@ -220,7 +221,8 @@
   (should (equal consent-task-states
                  '(created observing planning acting
                            waiting-for-approval waiting-for-model
-                           waiting-for-host blocked cancelled failed complete)))
+                           waiting-for-host blocked cancelled failed
+                             complete)))
   (dolist (state consent-task-states)
     (should (consent-task-state-p state)))
   (dolist (transition '((created observing)
@@ -427,23 +429,26 @@
   "Control-loop fixtures cover runner outcomes and reusable expected records."
   (let* ((fixture (consent-task-test--fixture))
          (scenarios
-          (consent-task-test--fixture-section fixture "control-loop-scenarios")))
+          (consent-task-test--fixture-section fixture
+            "control-loop-scenarios")))
     (dolist (required '(successful-completion user-input-wait approval-wait
                                               approval-denial
-                                              authority-unavailable stale-handle
+                                              authority-unavailable
+                              stale-handle
                                               provider-unavailable host-timeout
                                               budget-exhaustion
                                               repeated-action-failure
                                               cancellation
                                               resumed-task-completion
                                               policy-bypass-quarantine
-                                              mid-code-action-budget-exhaustion))
+                                             mid-code-action-budget-exhaustion))
       (consent-task-test--scenario-by-id scenarios required))
     (dolist (scenario scenarios)
       (consent-task-test--validate-control-loop-scenario scenario))))
 
 (ert-deftest consent-task-test-control-loop-invalid-fixtures-are-rejected ()
-  "Fixture validation rejects malformed records, ordering, budgets, and policy bypasses."
+  "Fixture validation rejects malformed records, ordering, budgets, and policy\
+ bypasses."
   (let* ((fixture (consent-task-test--fixture))
          (invalid-scenarios
           (consent-task-test--fixture-section

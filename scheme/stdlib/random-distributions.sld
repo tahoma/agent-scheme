@@ -42,10 +42,12 @@
           (error "distribution parameter must be positive real" name value)))
 
     (define (%random-distributions-check-non-negative-real name value)
-      "Validate VALUE as a non-negative real distribution parameter named NAME."
+      "Validate VALUE as a non-negative real distribution parameter named NAME\
+."
       (if (and (real? value) (not (negative? value)))
           value
-          (error "distribution parameter must be non-negative real" name value)))
+          (error "distribution parameter must be non-negative real" name
+            value)))
 
     (define (random-source-make-permutations source)
       "Return a generator of random permutations backed by SOURCE."
@@ -53,7 +55,8 @@
          (source (type random-source)
           (description "Random source backing the generated procedure.")))
         (returns (type procedure)
-         (description "Procedure accepting a degree and returning a permutation vector."))
+         (description
+           "Procedure accepting a degree and returning a permutation vector."))
         (effects allocation state-write))
       (let ((rand (random-source-make-integers source)))
         (lambda (n)
@@ -81,7 +84,8 @@
          (n (type exact-non-negative-integer)
           (description "Permutation degree.")))
         (returns (type vector)
-         (description "Vector containing each integer in `[0, n)' exactly once."))
+         (description
+           "Vector containing each integer in `[0, n)' exactly once."))
         (effects state-write))
       (%default-random-permutation n))
 
@@ -91,9 +95,13 @@
          (source (type random-source)
           (description "Random source backing the generated procedure."))
          (unit (type real)
-          (description "Optional precision unit forwarded to `random-source-make-reals'.")))
+          (description
+            "Optional precision unit forwarded to \
+`random-source-make-reals'.")))
         (returns (type procedure)
-         (description "Procedure accepting a positive mean and returning an exponential deviate."))
+         (description
+           "Procedure accepting a positive mean and returning an \
+exponential deviate."))
         (effects allocation state-write))
       (let ((rand (apply random-source-make-reals source unit)))
         (lambda (mu)
@@ -120,9 +128,13 @@
          (source (type random-source)
           (description "Random source backing the generated procedure."))
          (unit (type real)
-          (description "Optional precision unit forwarded to `random-source-make-reals'.")))
+          (description
+            "Optional precision unit forwarded to \
+`random-source-make-reals'.")))
         (returns (type procedure)
-         (description "Procedure accepting a mean and standard deviation and returning a normal deviate."))
+         (description
+           "Procedure accepting a mean and standard deviation and returning a \
+normal deviate."))
         (effects allocation state-write))
       (let ((rand (apply random-source-make-reals source unit))
             (next #f))
@@ -159,6 +171,7 @@
          (sigma (type non-negative-real)
           (description "Distribution standard deviation.")))
         (returns (type real)
-         (description "Normal deviate with mean MU and standard deviation SIGMA."))
+         (description
+           "Normal deviate with mean MU and standard deviation SIGMA."))
         (effects state-write))
       (%default-random-normal mu sigma))))

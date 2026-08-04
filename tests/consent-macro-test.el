@@ -1,4 +1,4 @@
-;;; consent-macro-test.el --- R7RS syntax-rules tests  -*- lexical-binding: t; -*-
+;;; consent-macro-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -25,7 +25,8 @@
     (should
      (equal
       (consent-value->external source)
-      "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))"))
+      "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3)\
+ (span 10) (phase read))"))
     (should
      (equal
       (consent-value->external
@@ -75,7 +76,8 @@
             (m))))")
     "outer")))
 
-(ert-deftest consent-macro-test-free-template-identifiers-do-not-capture-use-site ()
+(ert-deftest
+  consent-macro-test-free-template-identifiers-do-not-capture-use-site ()
   "Reject use-site capture for free identifiers introduced by a transformer."
   (should-error
    (consent-eval-source
@@ -323,7 +325,8 @@
             (syntax-source (list 'twice 21))
             (equal? '(twice 21) (list 'twice 21)))"
      '(:source-metadata t))
-    "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f (source read) #f #t)"))
+    "((macro-binding (identifier twice) (status bound) (kind syntax-rules)\
+ (library #f)) #f (source read) #f #t)"))
   (should
    (equal
     (consent-macro-test--external
@@ -337,7 +340,8 @@
             (syntax-source (list 'twice 21))
             (equal? '(twice 21) (list 'twice 21)))"
      '(:source-metadata nil))
-    "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f #f #f #t)")))
+    "((macro-binding (identifier twice) (status bound) (kind syntax-rules)\
+ (library #f)) #f #f #f #t)")))
 
 (ert-deftest consent-macro-test-macroexpand-library-lists-syntax-exports ()
   "Inspect library macro exports without evaluating a macro use."

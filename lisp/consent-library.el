@@ -1,4 +1,4 @@
-;;; consent-library.el --- R7RS library resolver support  -*- lexical-binding: t; -*-
+;;; consent-library.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -375,7 +375,8 @@
             (consent--symbol-named-p (car parts) name))))
    (consent--collection-manifest-fields entry "manifest entry")))
 
-(defun consent--collection-manifest-symbol (value description &optional default)
+(defun consent--collection-manifest-symbol (value description &optional
+  default)
   "Return VALUE as an Emacs Lisp symbol, or DEFAULT when absent."
   (cond
    ((or (null value) (eq value consent-false)) default)
@@ -581,7 +582,8 @@
 (defconst consent--manifest-schema-version 1
   "Current shared manifest schema version.")
 
-(defun consent--manifest-nonnegative-integer (value description &optional default)
+(defun consent--manifest-nonnegative-integer (value description &optional
+  default)
   "Return VALUE as an exact non-negative integer, or DEFAULT when absent."
   (cond
    ((or (null value) (eq value consent-false)) default)
@@ -669,7 +671,8 @@
           source))
     source))
 
-(defun consent--manifest-source-default (source source-file target implementation-id)
+(defun consent--manifest-source-default (source source-file target
+  implementation-id)
   "Return normalized source metadata.
 Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
   (cond
@@ -1671,7 +1674,8 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
      (consent--library-catalog-entries))))
 
 (defun consent--library-catalog-search (query)
-  "Return catalog entries whose name, alias, export, or category matches QUERY."
+  "Return catalog entries whose name, alias, export, or category matches\
+ QUERY."
   (let ((needle (downcase query)))
     (seq-filter
      (lambda (entry)
@@ -1817,7 +1821,8 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
     (name &key entry status reason loaded candidates)
   "Return a Scheme-readable resolution record for NAME."
   (let* ((key (if (stringp name) name (consent--library-name-key name)))
-         (resolved-key (and entry (consent--library-entry-resolved-name entry)))
+         (resolved-key (and entry (consent--library-entry-resolved-name
+           entry)))
          (root (and entry (consent--library-record-root entry)))
          (trust (and root (consent--library-record-trust root)))
          (availability-condition
@@ -2344,7 +2349,8 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
           (consent--manifest-exported-primitive-specs overlay-entry)
           context)))
       (when (consent--manifest-entry-exports-declared-p entry)
-        (let ((library (gethash key (consent--eval-context-libraries context))))
+        (let ((library (gethash key (consent--eval-context-libraries
+          context))))
           (unless library
             (consent--eval-error
              "manifest source library registered a different name: %s"
@@ -2428,7 +2434,8 @@ only carry `:exports', so absence of the marker preserves that legacy signal."
      (plist-get declaration :name)))
   (unless (eq (plist-get declaration :source-kind) 'primitive)
     (consent--eval-error
-     "primitive-library declaration must have source-kind primitive-library: %s"
+     "primitive-library declaration must have source-kind primitive-library:\
+ %s"
      (plist-get declaration :name)))
   (dolist (property '(:name :owner :provider :visibility :layer
                       :implementation-id :implementation-resolver
@@ -2501,7 +2508,8 @@ only carry `:exports', so absence of the marker preserves that legacy signal."
 (defun consent--primitive-library-register-declaration
     (declaration &optional replace)
   "Register provider-owned primitive-library DECLARATION.
-When REPLACE is non-nil, replace an existing declaration from the same provider."
+When REPLACE is non-nil, replace an existing declaration from the same\
+ provider."
   (let* ((validated
           (consent--primitive-library-validate-declaration declaration))
          (name (plist-get validated :name))
@@ -3537,7 +3545,8 @@ When FOLD-CASE is non-nil, read as if the file began with
                  (consent--expand-library-declaration
                   raw-declaration context environment))
           ;; `cond-expand' and include-library-declarations are flattened
-          ;; before this dispatch so only core R7RS library declarations remain.
+          ;; before this dispatch so only core R7RS library declarations
+          ;; remain.
           (let* ((declaration-parts
                   (consent--proper-list-elements
                    declaration "library declaration"))

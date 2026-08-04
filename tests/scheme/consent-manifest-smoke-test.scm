@@ -221,7 +221,8 @@
  'manifest-smoke-consent-json-inherits-write '(portable core)
 (test-equal 'manifest-smoke-consent-json-inherits-write
              #t
-             (let ((decoded (json-read (open-input-string (get-output-string json-output)))))
+             (let ((decoded (json-read (open-input-string (get-output-string
+               json-output)))))
          (cdr (assq 'ok decoded)))))
 
 (testing-registry-case

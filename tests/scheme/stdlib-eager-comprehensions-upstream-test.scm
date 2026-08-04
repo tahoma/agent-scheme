@@ -182,7 +182,8 @@
                                        (>= i 5))
                                i)
                       (list-ec (:until (:parallel (:range i 1 10)
-                                                  (:list j '(1 2 3 4 5 6 7 8 9)))
+                                                  (:list j '(1 2 3 4 5 6 7 8
+                              9)))
                                        (>= i 5))
                                (list i j))
                       (let ((n 0))
@@ -431,4 +432,5 @@
                   0
                   (f2 4 (f2 3 (f2 2 (f2 1 (f1 0))))))))
 
-(testing-runner-main "Stdlib Eager Comprehensions Upstream portable tests" (command-line))
+(testing-runner-main "Stdlib Eager Comprehensions Upstream portable tests"
+  (command-line))

@@ -28,7 +28,8 @@ esac
 
 for command_name in pandoc mdformat; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
-    echo "convert-srfi-reference: required command not found: $command_name" >&2
+    echo "convert-srfi-reference: required command not found: $command_name" \
+      >&2
     exit 1
   fi
 done
@@ -74,13 +75,16 @@ convert_one() {
     "$spdx_copyright" \
     'Permission is hereby granted'; do
     if ! grep -F "$required_text" "$converted_path" >/dev/null; then
-      echo "convert-srfi-reference: missing required text in $output_path: $required_text" >&2
+      printf '%s%s%s\n' \
+        'convert-srfi-reference: missing required text in ' \
+        "$output_path: " "$required_text" >&2
       return 1
     fi
   done
 
   if $check; then
-    if ! test -f "$output_path" || ! cmp -s "$converted_path" "$output_path"; then
+    if ! test -f "$output_path" || ! cmp -s "$converted_path" "$output_path"; \
+      then
       echo "out of date: $output_path" >&2
       return 1
     fi

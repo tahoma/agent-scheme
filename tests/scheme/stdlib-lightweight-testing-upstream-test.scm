@@ -6,7 +6,8 @@
 ;;; Adapted from the official SRFI 78 examples at
 ;;; <https://srfi.schemers.org/srfi-78/examples.scm>, source snapshot
 ;;; SHA-256 8058de61b647dca9431852b091fe0e439ea8297f12f5dcd5c257294cee405fc9.
-;;; The upstream file is an executable example script with intentional failures,
+;;; The upstream file is an executable example script with intentional
+;;; failures,
 ;;; not a pass/fail unit suite. This file preserves the examples as targeted
 ;;; checks and avoids implementation-dependent fixnum/inexact-width failures.
 
@@ -142,4 +143,5 @@
                     (check (fib 1) => 1)
                     (check-report)))))
 
-(testing-runner-main "Stdlib Lightweight Testing Upstream portable tests" (command-line))
+(testing-runner-main "Stdlib Lightweight Testing Upstream portable tests"
+  (command-line))

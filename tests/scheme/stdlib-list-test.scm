@@ -72,7 +72,8 @@
  'selectors '(portable stdlib)
 (test-equal 'selectors
              '(one two three four five six seven eight nine ten)
-             (let ((values '(one two three four five six seven eight nine ten)))
+             (let ((values '(one two three four five six seven eight nine
+               ten)))
          (list (first values)
                (second values)
                (third values)

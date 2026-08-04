@@ -1,4 +1,4 @@
-;;; consent-agent-runner-test.el --- Minimal task runner control-loop tests  -*- lexical-binding: t; -*-
+;;; consent-agent-runner-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -102,7 +102,8 @@
            (list (consent-agent-runner-test--field expect "state")
                  (consent-agent-runner-test--field expect "receipt")
                  (consent-agent-runner-test--field expect "reason")
-                 (consent-agent-runner-test--field budget "used-host-calls")))))
+                 (consent-agent-runner-test--field budget
+                   "used-host-calls")))))
     (should
      (equal
       (consent-agent-runner-test--external
@@ -142,7 +143,8 @@
     "(complete #t completed-goal #t 1)")))
 
 (ert-deftest consent-agent-runner-test-finish-needs-verifier ()
-  "A proposed finish without a verifier pass blocks instead of completing (D3)."
+  "A proposed finish without a verifier pass blocks instead of completing\
+ (D3)."
   (should
    (equal
     (consent-agent-runner-test--external
@@ -182,7 +184,8 @@ stays within the interpreter's host-callback budget."
     operation policy)))
 
 (ert-deftest consent-agent-runner-test-capability-outcomes ()
-  "Approval, user-input, host, missing, and denied authority pick the right state."
+  "Approval, user-input, host, missing, and denied authority pick the right\
+ state."
   (should (equal (consent-agent-runner-test--capability-outcome
                   "((file-write needs-approval))" "(file-write \"o\" p)")
                  "(waiting-for-approval approval-required)"))
@@ -207,7 +210,8 @@ stays within the interpreter's host-callback budget."
      "(import (scheme base) (agent runner) (agent task))
       (define run
         (run-task 'plan
-                  (list (list 'provider '((model-unavailable \"no response\"))))))
+                  (list (list 'provider '((model-unavailable \"no\
+ response\"))))))
       (list (task-run-state run)
             (task-pause? (task-run-receipt run))
             (task-field-value (task-run-receipt run) 'pause-reason))")
@@ -245,7 +249,8 @@ stays within the interpreter's host-callback budget."
       (define run
         (run-task 'escalate
                   (list (list 'provider
-                              '((code-action (grant-capability! token authority))))
+                              '((code-action (grant-capability! token\
+ authority))))
                         (list 'operations ops))))
       (list (task-run-state run)
             (task-stop? (task-run-receipt run))

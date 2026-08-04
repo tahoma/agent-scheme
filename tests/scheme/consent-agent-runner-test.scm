@@ -63,7 +63,8 @@
   (test-equal 'success-state 'complete (task-run-state run))
   (test-assert 'success-receipt-is-stop (task-stop? (task-run-receipt run)))
   (test-equal 'success-stop-reason 'completed-goal (stop-reason run))
-  (test-assert 'success-completion (agent-completion? (task-run-completion run)))
+  (test-assert 'success-completion (agent-completion? (task-run-completion
+    run)))
   (test-equal 'success-host-calls 1 (used run 'used-host-calls))
   (test-assert 'success-transcript (pair? (task-run-transcript run)))
   (test-assert 'success-final-task (agent-task? (task-run-task run)))))
@@ -80,8 +81,10 @@
                            (list 'verifier 'insufficient)))))
   (test-equal 'finish-unverified-state 'blocked (task-run-state run))
   (test-assert 'finish-unverified-pause (task-pause? (task-run-receipt run)))
-  (test-equal 'finish-unverified-reason 'insufficient-evidence (pause-reason run))
-  (test-equal 'finish-unverified-no-completion 'none (task-run-completion run))))
+  (test-equal 'finish-unverified-reason 'insufficient-evidence (pause-reason
+    run))
+  (test-equal 'finish-unverified-no-completion 'none (task-run-completion
+    run))))
 
 ;; The same finish with a verifier pass DOES complete.
 (testing-registry-case
@@ -134,7 +137,8 @@
  'model-state '(portable agent)
 (let ((run (run-task 'plan-it
                      (list (list 'provider
-                                 '((model-unavailable "endpoint did not respond")))))))
+                                 '((model-unavailable
+                              "endpoint did not respond")))))))
   (test-equal 'model-state 'waiting-for-model (task-run-state run))
   (test-assert 'model-pause (task-pause? (task-run-receipt run)))
   (test-equal 'model-reason 'model-provider-unavailable (pause-reason run))))
@@ -200,7 +204,8 @@
  'quarantine-state '(portable agent)
 (let ((run (run-task 'escalate
                      (list (list 'provider
-                                 '((code-action (grant-capability! token authority))))
+                                 '((code-action (grant-capability! token
+                              authority))))
                            (list 'operations ops)))))
   (test-equal 'quarantine-state 'failed (task-run-state run))
   (test-assert 'quarantine-stop (task-stop? (task-run-receipt run)))
@@ -272,8 +277,10 @@
  'runner-deterministic '(portable agent)
 (test-equal 'runner-deterministic
              (run-task 'replay
-                 (list (list 'provider '((finish done))) (list 'verifier 'passed)))
+                 (list (list 'provider '((finish done))) (list 'verifier
+                   'passed)))
              (run-task 'replay
-                 (list (list 'provider '((finish done))) (list 'verifier 'passed)))))
+                 (list (list 'provider '((finish done))) (list 'verifier
+                   'passed)))))
 
 (testing-runner-main "Consent Agent Runner portable tests" (command-line))

@@ -1,4 +1,4 @@
-;;; consent-vcs-doc-test.el --- VCS contract doc checks  -*- lexical-binding: t; -*-
+;;; consent-vcs-doc-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -98,7 +98,8 @@
     (should
      (string-match-p
       (regexp-quote
-       "Repository mutation, including stage, commit, branch creation, fetch, pull, and")
+       "Repository mutation, including stage, commit, branch creation,\
+ fetch, pull, and")
       readme))))
 
 (ert-deftest consent-vcs-doc-test-covers-emacs-mutation-adapter ()

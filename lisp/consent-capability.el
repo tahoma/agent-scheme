@@ -1,4 +1,4 @@
-;;; consent-capability.el --- Emacs capability primitives  -*- lexical-binding: t; -*-
+;;; consent-capability.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -195,7 +195,8 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
 
 (defcustom consent-time-jiffies-per-second-function
   #'consent--default-time-jiffies-per-second
-  "Function called after clock authorization to implement `jiffies-per-second'."
+  "Function called after clock authorization to implement\
+ `jiffies-per-second'."
   :type 'function
   :group 'consent)
 
@@ -874,21 +875,31 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
     (("(emacs buffer)" . "buffer-name")
      . "Return the display name for a buffer handle.")
     (("(emacs buffer)" . "buffer-file-name")
-     . "Return the visited file path for a buffer handle, or #f for non-file buffers.")
+     .
+       "Return the visited file path for a buffer handle, or #f for non-file\
+ buffers.")
     (("(emacs buffer)" . "buffer-major-mode")
      . "Return the major-mode symbol for a buffer handle.")
     (("(emacs buffer)" . "buffer-text")
      . "Return text from a buffer handle between start and end positions.")
     (("(emacs buffer edit)" . "buffer-insert!")
-     . "Insert text into a buffer handle at a position, subject to buffer edit policy.")
+     .
+       "Insert text into a buffer handle at a position, subject to buffer edit\
+ policy.")
     (("(emacs buffer edit)" . "buffer-delete!")
-     . "Delete text from a buffer handle between start and end positions, subject to buffer edit policy.")
+     .
+       "Delete text from a buffer handle between start and end positions,\
+ subject to buffer edit policy.")
     (("(emacs buffer edit)" . "buffer-replace!")
-     . "Replace text in a buffer handle between start and end positions, subject to buffer edit policy.")
+     .
+       "Replace text in a buffer handle between start and end positions,\
+ subject to buffer edit policy.")
     (("(emacs buffer edit)" . "buffer-save!")
      . "Save a file-backed buffer handle, subject to buffer edit policy.")
     (("(emacs buffer)" . "buffer-switch!")
-     . "Select a buffer in the current window, subject to window-session policy.")
+     .
+       "Select a buffer in the current window, subject to window-session\
+ policy.")
     (("(emacs buffer)" . "buffer-point")
      . "Return the current point position for a buffer handle.")
     (("(emacs buffer)" . "emacs-buffer-list")
@@ -910,13 +921,19 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
     (("(emacs frame)" . "frame-name")
      . "Return the display name for a frame handle.")
     (("(emacs project)" . "emacs-current-project")
-     . "Return a handle for the current project, or #f when no project is active.")
+     .
+       "Return a handle for the current project, or #f when no project is\
+ active.")
     (("(emacs project)" . "project-root")
-     . "Return the root directory for a project handle or the current project.")
+     .
+       "Return the root directory for a project handle or the current\
+ project.")
     (("(emacs project)" . "project-compile!")
      . "Start the project compile command, subject to command-process policy.")
     (("(emacs project)" . "project-recompile!")
-     . "Restart the previous project compilation, subject to command-process policy.")
+     .
+       "Restart the previous project compilation, subject to command-process\
+ policy.")
     (("(emacs search)" . "buffer-search")
      . "Search a buffer handle and return bounded match locations.")
     (("(emacs search)" . "project-search")
@@ -924,7 +941,9 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
     (("(emacs search)" . "project-files")
      . "Return project file paths visible to the current project capability.")
     (("(emacs diff)" . "buffer-diff")
-     . "Return a structured diff for one buffer against its file or saved baseline.")
+     .
+       "Return a structured diff for one buffer against its file or saved\
+ baseline.")
     (("(emacs diff)" . "file-diff")
      . "Return a structured diff for one file path.")
     (("(emacs diff)" . "project-diff")
@@ -950,13 +969,17 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
     (("(emacs vcs mutation)" . "vcs-branch-create!")
      . "Create a version-control branch, subject to VCS mutation policy.")
     (("(emacs vcs mutation)" . "vcs-switch!")
-     . "Switch the version-control worktree to a branch, subject to VCS mutation policy.")
+     .
+       "Switch the version-control worktree to a branch, subject to VCS\
+ mutation policy.")
     (("(emacs vcs mutation)" . "vcs-fetch!")
      . "Fetch version-control remote updates, subject to VCS mutation policy.")
     (("(emacs vcs mutation)" . "vcs-pull!")
      . "Pull version-control remote updates, subject to VCS mutation policy.")
     (("(emacs vcs mutation)" . "vcs-push!")
-     . "Push version-control commits to a remote, subject to VCS mutation policy.")
+     .
+       "Push version-control commits to a remote, subject to VCS mutation\
+ policy.")
     (("(emacs diagnostics)" . "buffer-diagnostics")
      . "Return diagnostics for one buffer handle.")
     (("(emacs diagnostics)" . "project-diagnostics")
@@ -976,19 +999,29 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
     (("(emacs process)" . "process-buffer")
      . "Return the output buffer handle associated with a process handle.")
     (("(emacs process)" . "process-output-port")
-     . "Return a textual input port for reading a process handle's standard output.")
+     .
+       "Return a textual input port for reading a process handle's standard\
+ output.")
     (("(emacs process)" . "process-error-port")
-     . "Return a textual input port for reading a process handle's standard error.")
+     .
+       "Return a textual input port for reading a process handle's standard\
+ error.")
     (("(emacs process)" . "process-input-port")
-     . "Return a textual output port for writing to a process handle's standard input, subject to process policy.")
+     .
+       "Return a textual output port for writing to a process handle's\
+ standard input, subject to process policy.")
     (("(emacs process)" . "process-interrupt!")
      . "Interrupt a process handle, subject to command-process policy.")
     (("(emacs process)" . "process-kill!")
      . "Kill a process handle, subject to command-process policy.")
     (("(emacs compile)" . "compile-run!")
-     . "Start a compile command in a project directory, subject to command-process policy.")
+     .
+       "Start a compile command in a project directory, subject to\
+ command-process policy.")
     (("(emacs compile)" . "project-compile!")
-     . "Start the project compile workflow, subject to command-process policy.")
+     .
+       "Start the project compile workflow, subject to command-process\
+ policy.")
     (("(emacs compile)" . "recompile!")
      . "Restart a compile job, subject to command-process policy.")
     (("(emacs compile)" . "compile-status")
@@ -1000,15 +1033,21 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
     (("(emacs network)" . "network-http-request")
      . "Submit an HTTP request through the network capability policy.")
     (("(emacs network)" . "network-open-sse-stream")
-     . "Open a server-sent event stream through the network capability policy.")
+     .
+       "Open a server-sent event stream through the network capability\
+ policy.")
     (("(emacs command)" . "command-doc")
      . "Return public documentation for an Emacs command symbol.")
     (("(emacs command)" . "command-call!")
-     . "Invoke an allowlisted Emacs command with optional arguments, subject to command policy.")
+     .
+       "Invoke an allowlisted Emacs command with optional arguments, subject\
+ to command policy.")
     (("(emacs command)" . "function-doc")
      . "Return public documentation for an Emacs function symbol.")
     (("(emacs command)" . "variable-info")
-     . "Return safe metadata about an Emacs variable without exposing its value."))
+     .
+       "Return safe metadata about an Emacs variable without exposing its\
+ value."))
   "User-facing documentation for Emacs capability primitives.")
 
 (defun consent--emacs-capability-documentation (library name)
@@ -1201,7 +1240,9 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
     (unless (or (and library effect)
                 (and domain operations))
       (signal 'consent-capability-grant-error
-              (list "capability grant requires either library/effect or domain/operations fields")))
+              (list
+                "capability grant requires either library/effect or\
+ domain/operations fields")))
     (setq normalized
           (consent--capability-grant-replace-field
            normalized "id" (list (consent--capability-grant-symbol id))))
@@ -1966,7 +2007,8 @@ AUTHORIZATION is the approved file authorization that created PORT."
       (consent-capability-audit-port-result
        port operation "stale network stream handle" t)
       (signal 'consent-capability-grant-error
-              (list "stale port capability handle: network stream is not live")))
+              (list
+                "stale port capability handle: network stream is not live")))
      ((and (eq (consent--port-backing-domain port) 'network)
            (eq operation 'close))
       (consent--port-capability-check-limit! port operation))
@@ -2253,7 +2295,8 @@ OPERATION defaults to BINDING and may be a symbol or string."
          'standard-host-effect
          (consent--clock-capability-operation-name binding)
          `((domain . clock)
-           (operation . ,(consent--clock-capability-operation-symbol operation))
+           (operation . ,(consent--clock-capability-operation-symbol
+             operation))
            (grant . ,(consent--capability-grant-id grant)))
          context)
         (consent--capability-grant-use! grant context)
@@ -2520,7 +2563,8 @@ OPERATION defaults to BINDING and may be a symbol or string."
   `((primitive-cli-host-available?
      . ,#'consent--primitive-cli-host-available?)
     (primitive-cli-host-run . ,#'consent--primitive-cli-host-run))
-  "Provider-owned primitive implementations for `(cli process-host primitive)'.")
+  "Provider-owned primitive implementations for `(cli process-host\
+ primitive)'.")
 
 (defun consent-cli-process-host-primitive-implementation (primitive)
   "Return `(cli process-host primitive)' implementation for PRIMITIVE."
@@ -2624,7 +2668,8 @@ OPERATION defaults to BINDING and may be a symbol or string."
               :reason "arguments are outside approved process grant scope"))
        ((and scope-cwd cwd (not (equal scope-cwd cwd)))
         (list :denied grant
-              :reason "working directory is outside approved process grant scope"))
+              :reason
+                "working directory is outside approved process grant scope"))
        ((and environment (not scope-environment))
         (list :denied grant
               :reason "environment is outside approved process grant scope"))
@@ -2796,7 +2841,8 @@ OPERATION defaults to BINDING and may be a symbol or string."
    ((and (consp object) (plist-member object :status))
     (or (plist-get object :retain-after-exit)
         (not (memq (plist-get object :status)
-                   '(closed deleted exit failed killed signal stale stopped)))))
+                   '(closed deleted exit failed killed signal stale
+                     stopped)))))
    (t object)))
 
 (defun consent--process-object-status (object)
@@ -3157,7 +3203,8 @@ OPERATION defaults to BINDING and may be a symbol or string."
   "Return HEADER's disclosure class."
   (let ((name (downcase (car header))))
     (if (string-match-p
-         "\\(authorization\\|cookie\\|token\\|api[-_]?key\\|secret\\|credential\\)"
+         (concat "\\(authorization\\|cookie\\|token\\|api[-_]?key\\|"
+                 "secret\\|credential\\)")
          name)
         "credential"
       "metadata")))
@@ -4322,7 +4369,8 @@ synthetic file grant so existing callers share the capability vocabulary."
     (primitive-handle-kind . ,#'consent--primitive-handle-kind)
     (primitive-handle-revalidate . ,#'consent--primitive-handle-revalidate)
     (primitive-handle-release! . ,#'consent--primitive-handle-release!))
-  "Provider-owned primitive implementations for `(consent capability primitive)'.")
+  "Provider-owned primitive implementations for `(consent capability\
+ primitive)'.")
 
 (defun consent-capability-primitive-implementation (primitive)
   "Return `(consent capability primitive)' implementation for PRIMITIVE."
@@ -6477,7 +6525,8 @@ creates undo boundaries around the atomic change group."
       (consent--eval-error "recompile! expected compile job handle"))
     (let ((default-directory
             (or (plist-get object :cwd)
-                (file-name-as-directory (expand-file-name default-directory)))))
+                (file-name-as-directory (expand-file-name
+                  default-directory)))))
       (consent--compile-start!
        "recompile!"
        (or (consent--process-object-command object)

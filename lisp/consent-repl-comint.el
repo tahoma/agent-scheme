@@ -1,37 +1,46 @@
-;;; consent-repl-comint.el --- Live comint REPL buffer for Consent Scheme  -*- lexical-binding: t; -*-
+;;; consent-repl-comint.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
 ;; A `comint-mode' surface onto a durable Consent Scheme session: a live,
-;; editable prompt where you type a form, press RET, and see the chrome-rendered
-;; result inline, with line editing, input history (`M-p'/`M-n'), kill/yank, and
-;; a read-only prompt -- the terminal REPL's interactive feel brought to an Emacs
+;; editable prompt where you type a form, press RET, and see the
+;; chrome-rendered
+;; result inline, with line editing, input history (`M-p'/`M-n'), kill/yank,
+;; and
+;; a read-only prompt -- the terminal REPL's interactive feel brought to an
+;; Emacs
 ;; buffer.  It is the in-editor peer of the portable terminal REPL shell and of
-;; the batch/scripted incremental entry `consent-repl-stream', not a replacement
+;; the batch/scripted incremental entry `consent-repl-stream', not a
+;; replacement
 ;; for either, and it leaves every existing eval surface (`consent-repl-eval',
 ;; the read-only transcript/status/events buffers, the batch stream entry)
 ;; untouched.
 ;;
 ;; This buffer is *not* an island.  It evaluates over the same durable session
 ;; the other Emacs eval paths see: `consent-session-interaction-context'
-;; (consent-eval.el) shares the session's live value and syntax environments, so
+;; (consent-eval.el) shares the session's live value and syntax environments,
+;; so
 ;; a `(define x 1)' typed here is visible to a later `C-c C-c'
 ;; (`consent-repl-eval') in the same session, and a definition or macro made
 ;; there is visible here.  Evaluation runs in-process through the shipped
 ;; substrate -- not a subprocess against the `consent' binary, which would
-;; evaluate in a separate Scheme process -- so the buffer is a peer of the other
+;; evaluate in a separate Scheme process -- so the buffer is a peer of the
+;; other
 ;; eval paths.
 ;;
 ;; The interaction is the cross-host REPL interaction contract
 ;; (docs/repl-interaction-contract.md), reusing the engine helpers in
-;; `consent-repl-stream.el': one complete form is read at a time over the shared
-;; recovery-aware reader, evaluated through `consent-interaction-eval-form', and
+;; `consent-repl-stream.el': one complete form is read at a time over the
+;; shared
+;; recovery-aware reader, evaluated through `consent-interaction-eval-form',
+;; and
 ;; rendered as the contract's record vocabulary (`repl-prompt',
 ;; `repl-submission', `repl-result', `repl-condition', `repl-exit') through the
-;; shared chrome model (`consent-repl-chrome.el', realized as Emacs faces).  The
-;; default chrome is `comment', consistent with the portable terminal default and
+;; shared chrome model (`consent-repl-chrome.el', realized as Emacs faces). The
+;; default chrome is `comment', consistent with the portable terminal default
+;; and
 ;; with `consent-repl-stream'; the canonical `datum' chrome is always reachable
 ;; (`consent-repl-comint-set-chrome').  Because comint already echoes the typed
 ;; form, the chrome's input-echo signal (`consent-repl-chrome-input-echoed') is
@@ -40,13 +49,17 @@
 ;; anticipates.
 ;;
 ;; Incomplete forms are continued in place: when the typed input does not yet
-;; parse to a complete form the buffer inserts a newline and shows the contract's
-;; continuation gutter as a non-editable line prefix, keeping the form pending in
+;; parse to a complete form the buffer inserts a newline and shows the
+;; contract's
+;; continuation gutter as a non-editable line prefix, keeping the form pending
+;; in
 ;; the editable input region; completing it then submits the whole form.
 ;;
-;; The comint front end has no inferior Scheme process; following the IELM idiom,
+;; The comint front end has no inferior Scheme process; following the IELM
+;; idiom,
 ;; a dummy `cat' process exists only to satisfy comint's process-buffer
-;; machinery (markers, history, the read-only prompt) and never receives input or
+;; machinery (markers, history, the read-only prompt) and never receives input
+;; or
 ;; evaluates anything.  All evaluation happens in this Emacs process over the
 ;; durable interaction context.
 
@@ -126,7 +139,8 @@ minibuffer prompt.")
 
 (defvar consent-repl-comint--input nil
   "Input string captured by `consent-repl-comint--input-sender'.
-Dynamically bound by `consent-repl-comint-send-input' around `comint-send-input'
+Dynamically bound by `consent-repl-comint-send-input' around\
+ `comint-send-input'
 the same way IELM threads its input out of the comint sender.")
 
 (defconst consent-repl-comint--prompt-regexp "^#| .*? |# "
@@ -181,7 +195,8 @@ read-only prompt per `comint-output-filter'."
 
 (defun consent-repl-comint--prompt-string (state &optional pending stack)
   "Return the painted prompt for STATE (\"ready\" or \"continuation\").
-PENDING is the prompt's `pending' flag and STACK the reader open-construct stack
+PENDING is the prompt's `pending' flag and STACK the reader open-construct\
+ stack
 for a continuation prompt."
   (consent-repl-comint--render-record
    (consent-repl-stream--prompt-record
@@ -191,12 +206,15 @@ for a continuation prompt."
 ;;;; The per-submission driver (reuses the engine's record/reader helpers)
 
 (defun consent-repl-comint--drive (buffer)
-  "Process complete-form BUFFER one form at a time and return the rendered text.
-BUFFER is interaction input terminated by a newline.  Each complete form emits a
+  "Process complete-form BUFFER one form at a time and return the rendered\
+ text.
+BUFFER is interaction input terminated by a newline.  Each complete form emits\
+ a
 `repl-submission' (echo-suppressed under `comment'), is evaluated through the
 durable interaction context -- so definitions, imports, and macros persist and
 are shared with the session -- and emits a `repl-result' or `repl-condition'.
-An exit form emits a `repl-exit' and closes the session.  Program output written
+An exit form emits a `repl-exit' and closes the session.  Program output\
+ written
 during evaluation is interleaved before the form's result -- formatted through
 the active chrome's output formatter, so `comment' renders it as the aligned
 `;;   :: ' gutter and every other chrome leaves it raw -- and the shared
@@ -221,7 +239,8 @@ Advances the ordinal/count as it goes."
                            consent-repl-comint--session-id
                            consent-repl-comint--ordinal source t nil))))
            (if (consent-repl-stream--exit-form-p datum)
-               (let ((disposition (consent-repl-stream--exit-disposition datum)))
+               (let ((disposition (consent-repl-stream--exit-disposition
+                 datum)))
                  (setq output
                        (concat output
                                (consent-repl-comint--render-record
@@ -342,7 +361,8 @@ Return the line with a trailing newline, or nil on `keyboard-quit' (EOF)."
 (defun consent-repl-comint--program-input-reader (buffer)
   "Return a program-input reader thunk bound to live REPL BUFFER.
 The thunk drains any pre-seeded `consent-repl-comint--input-queue' first, then
-falls back to `consent-repl-comint-program-input-function' for a blocking read."
+falls back to `consent-repl-comint-program-input-function' for a blocking\
+ read."
   (lambda ()
     (with-current-buffer buffer
       (if consent-repl-comint--input-queue
@@ -369,7 +389,8 @@ INPUT is the submitted form text without its terminating newline."
 (defun consent-repl-comint-send-input ()
   "Submit the current input and evaluate it, forcing a send.
 Unlike `consent-repl-comint-return', this submits even an incomplete form: the
-driver reports a recoverable unterminated-form read condition and resyncs rather
+driver reports a recoverable unterminated-form read condition and resyncs\
+ rather
 than waiting for the rest, mirroring a forced terminal send."
   (interactive)
   (if consent-repl-comint--closed
@@ -378,11 +399,13 @@ than waiting for the rest, mirroring a forced terminal send."
     (let ((consent-repl-comint--input nil))
       (goto-char (point-max))
       ;; The continuation gutter rides on `line-prefix'/`wrap-prefix' display
-      ;; properties of the editable region; strip them before `comint-send-input'
+      ;; properties of the editable region; strip them before
+      ;; `comint-send-input'
       ;; so they do not enter the input ring or the submission `source' text.
       (let ((inhibit-read-only t))
         (remove-text-properties
-         (max (process-mark (consent-repl-comint--proc)) (point-min)) (point-max)
+         (max (process-mark (consent-repl-comint--proc)) (point-min))
+           (point-max)
          '(line-prefix nil wrap-prefix nil)))
       (comint-send-input)
       (consent-repl-comint--evaluate (or consent-repl-comint--input "")))))
@@ -397,7 +420,8 @@ non-editable `line-prefix' so it never enters the submitted form text."
       (insert "\n")
       (when (> (length gutter) 0)
         (add-text-properties start (point)
-                             (list 'line-prefix gutter 'wrap-prefix gutter))))))
+                             (list 'line-prefix gutter 'wrap-prefix
+                              gutter))))))
 
 (defun consent-repl-comint-return ()
   "Evaluate the input form, or continue it when it is not yet complete.
@@ -430,8 +454,10 @@ pending in the editable input region."
      consent-repl-comint--count nil))))
 
 (defun consent-repl-comint--close-eof-unterminated (source)
-  "Emit the EOF-mid-form close: an unterminated read condition and closed-error.
-SOURCE is the buffered partial form's text.  Mirrors the engine's EOF-incomplete
+  "Emit the EOF-mid-form close: an unterminated read condition and\
+ closed-error.
+SOURCE is the buffered partial form's text.  Mirrors the engine's\
+ EOF-incomplete
 branch (`consent-repl-stream--engine'): a `(complete #f)(eof #t)' submission, a
 non-recoverable `read'-phase condition, and a `closed-error' exit."
   (setq consent-repl-comint--closed t)
@@ -455,7 +481,8 @@ non-recoverable `read'-phase condition, and a `closed-error' exit."
   "Close the session with an EOF close status without retiring it.
 A clean EOF between forms closes `closed-ok'.  Any complete form still in the
 input region is evaluated first; an unterminated partial form closes
-`closed-error' with an unterminated-form read condition, matching the documented
+`closed-error' with an unterminated-form read condition, matching the\
+ documented
 EOF status and the engine twin.  The durable session persists for the other
 Emacs eval paths; this buffer stops accepting submissions."
   (interactive)
@@ -478,7 +505,8 @@ Emacs eval paths; this buffer stops accepting submissions."
           (let* ((input (or consent-repl-comint--input ""))
                  (buffer (concat input "\n")))
             (if (eq (car (consent-repl-comint--scan buffer)) 'incomplete)
-                (consent-repl-comint--close-eof-unterminated (string-trim input))
+                (consent-repl-comint--close-eof-unterminated (string-trim
+                  input))
               (let ((output (consent-repl-comint--drive buffer)))
                 (unless consent-repl-comint--closed
                   (setq output
@@ -486,10 +514,12 @@ Emacs eval paths; this buffer stops accepting submissions."
                                 (consent-repl-comint--render-record
                                  (consent-repl-stream--exit-record
                                   consent-repl-comint--session-id "eof"
-                                  "closed-ok" consent-repl-comint--count nil))))
+                                  "closed-ok" consent-repl-comint--count
+                              nil))))
                   (setq consent-repl-comint--closed t))
                 (consent-repl-comint--insert output)))))))
-    (message "Consent REPL session %s closed" consent-repl-comint--session-id)))
+    (message "Consent REPL session %s closed"
+      consent-repl-comint--session-id)))
 
 (defun consent-repl-comint-set-chrome (name)
   "Set the active chrome to NAME for records rendered from now on.
@@ -526,7 +556,8 @@ complete.
 Definitions, imports, and macros persist across submissions and are shared with
 the session the other Emacs eval paths (`consent-repl-eval') see.
 
-\\[consent-repl-comint-send-input] forces a submission even when the form is incomplete.
+\\[consent-repl-comint-send-input] forces a submission even when the form is\
+ incomplete.
 \\[consent-repl-comint-send-eof] closes the session.
 \\[consent-repl-comint-set-chrome] switches the rendering chrome (`datum'
 recovers the raw records).
@@ -536,11 +567,13 @@ recovers the raw records).
   (setq-local comint-input-sender #'consent-repl-comint--input-sender)
   (setq-local comint-prompt-read-only consent-repl-comint-prompt-read-only)
   (setq-local comint-process-echoes nil)
-  ;; Scheme program output may contain raw control characters; do not let comint
+  ;; Scheme program output may contain raw control characters; do not let
+  ;; comint
   ;; reinterpret them as carriage motion.
   (setq-local comint-inhibit-carriage-motion t)
   ;; Old-input recovery (history yank, mouse-2) uses comint's field-based
-  ;; default, which works for any chrome since input/output regions carry comint
+  ;; default, which works for any chrome since input/output regions carry
+  ;; comint
   ;; `field' properties -- no prompt-regexp coupling.
   (setq-local consent-repl-comint--chrome consent-repl-comint-default-chrome)
   (setq-local consent-repl-comint--ordinal 1)
@@ -551,7 +584,7 @@ recovers the raw records).
               '(:eval (if consent-repl-comint--closed " closed" " live")))
   ;; A dummy process keeps comint's markers, history, and read-only prompt
   ;; working; it never receives input and never evaluates anything (the IELM
-  ;; idiom).  All evaluation is in-process over the durable interaction context.
+  ;; idiom). All evaluation is in-process over the durable interaction context.
   (unless (comint-check-proc (current-buffer))
     (start-process "consent-repl-comint" (current-buffer) "cat")
     (set-process-query-on-exit-flag (consent-repl-comint--proc) nil)
@@ -568,7 +601,8 @@ recovers the raw records).
 On a fresh buffer this builds the durable interaction context and draws the
 first prompt.  On a live buffer it is a no-op.  On a buffer whose session was
 closed (`consent-repl-comint-send-eof' or an exit form), it reopens the session
-over the same context and draws a fresh prompt, so reissuing the command revives
+over the same context and draws a fresh prompt, so reissuing the command\
+ revives
 it."
   (consent-repl-comint--ensure-session id)
   (setq-local consent-repl-comint--session-id id)
@@ -585,7 +619,8 @@ it."
     (consent-repl-comint--insert (consent-repl-comint--prompt-string "ready")))
    (consent-repl-comint--closed
     (setq consent-repl-comint--closed nil)
-    (consent-repl-comint--insert (consent-repl-comint--prompt-string "ready")))))
+    (consent-repl-comint--insert (consent-repl-comint--prompt-string
+      "ready")))))
 
 (defun consent-repl-comint--buffer-name (id)
   "Return the live REPL buffer name for session ID."
@@ -594,13 +629,16 @@ it."
 ;;;###autoload
 (defun consent-repl-comint (&optional session-id)
   "Open a live, interactive Consent Scheme REPL buffer for SESSION-ID.
-The buffer presents an editable prompt bound to a durable session; typing a form
+The buffer presents an editable prompt bound to a durable session; typing a\
+ form
 and pressing RET evaluates it in that session and renders the result inline,
-with line editing, input history, and a read-only prompt from comint.  It shares
+with line editing, input history, and a read-only prompt from comint.  It\
+ shares
 the session's definitions, imports, and macros with `consent-repl-eval' and the
 other Emacs eval paths.
 
-SESSION-ID defaults to the current native session (`consent-current-session-id')
+SESSION-ID defaults to the current native session\
+ (`consent-current-session-id')
 when one is active, otherwise `consent-repl-comint-default-session-id'; the
 session is created if it does not exist.  Interactively, a prefix argument
 prompts for the session id.  Selecting a session also makes it the current

@@ -3,7 +3,8 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; This library owns the host-neutral parts of the local OpenAI-compatible
-;;; transport: canonical model/tool datums to JSON, loopback endpoint validation,
+;;; transport: canonical model/tool datums to JSON, loopback endpoint
+;;; validation,
 ;;; and JSON response parsing.  The only host effect is delegated to
 ;;; `(cli process-host)', whose per-host implementations are the small process
 ;;; boundary needed to run `curl'.
@@ -750,7 +751,8 @@
       "Return completion data from OpenAI-compatible response BODY."
       #((parameters
          (body (type string)
-          (description "JSON response body from an OpenAI-compatible chat endpoint.")))
+          (description
+            "JSON response body from an OpenAI-compatible chat endpoint.")))
         (returns (type (or string model-message))
          (description
           ("Completion text or a canonical `model-message` datum when"
@@ -786,7 +788,8 @@
     (define (model-openai-split-curl-output stdout)
       "Return `(BODY HTTP-STATUS ELAPSED-MS)' parsed from curl STDOUT."
       (let ((marker-index
-             (model-openai-last-index-of stdout model-openai-curl-meta-marker)))
+             (model-openai-last-index-of stdout
+               model-openai-curl-meta-marker)))
         (if (not marker-index)
             (list stdout 0 #f)
             (let* ((body (substring stdout 0 marker-index))
@@ -821,7 +824,8 @@
               (list body status elapsed-ms)))))
 
     (define (model-openai-curl-attempt url request-json timeout)
-      "POST REQUEST-JSON to URL with curl and return `(STATUS STDOUT STDERR)'."
+      "POST REQUEST-JSON to URL with curl and return `(STATUS STDOUT STDERR)'.\
+"
       (cli-host:cli-host-run
        "curl"
        (list "-sS"
@@ -869,7 +873,8 @@
       "Complete PROMPT through local OpenAI-compatible PROVIDER and MODEL."
       #((parameters
          (provider (type list)
-          (description "Normalized provider entry selected by the model router."))
+          (description
+            "Normalized provider entry selected by the model router."))
          (model (type list)
           (description "Normalized model entry selected by the model router."))
          (role (type symbol)
@@ -967,7 +972,8 @@
       "Return a result datum for an OpenAI-compatible completion attempt."
       #((parameters
          (provider (type list)
-          (description "Normalized provider entry selected by the model router."))
+          (description
+            "Normalized provider entry selected by the model router."))
          (model (type list)
           (description "Normalized model entry selected by the model router."))
          (role (type symbol)
@@ -998,7 +1004,8 @@
                      (list 'model-completion-result
                            (list 'status 'error)
                            (list 'message
-                                 (model-openai-condition-message condition)))))))
+                                 (model-openai-condition-message
+                              condition)))))))
         (list 'model-completion-result
               (list 'status 'ok)
               (list 'value

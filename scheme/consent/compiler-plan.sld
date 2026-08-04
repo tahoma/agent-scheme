@@ -109,7 +109,8 @@
       #((parameters
          (maybe-image (type list)
           (description
-           "Optional singleton compiler-image name; defaults to consent-runtime.")))
+           "Optional singleton compiler-image name; defaults to consent-runtim\
+e.")))
         (returns (type list)
          (description "Canonical compiler-plan record."))
         (effects allocation error))
@@ -175,7 +176,8 @@
                           ;; Standard and host-provided libraries are leaves.
                           (if (compiler-project-library-name? name)
                               (error
-                               "consent-compiler-plan: unknown project library"
+                               "consent-compiler-plan: unknown project library\
+"
                                name)
                               #t))))))))
           (for-each (lambda (root) (visit root '())) roots)
@@ -241,7 +243,8 @@
       "Return compiler UNIT's canonical source path."
       #((parameters
          (unit (type list) (description "Compiler-unit record.")))
-        (returns (type string) (description "Repository-relative source path."))
+        (returns (type string) (description
+          "Repository-relative source path."))
         (effects pure))
       (compiler-record-field unit 'source #f))
 

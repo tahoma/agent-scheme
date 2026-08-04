@@ -35,7 +35,8 @@
             default)))
 
     (define (diff-string-line-generator text)
-      "Return a generator over TEXT's logical lines without newline characters."
+      "Return a generator over TEXT's logical lines without newline characters\
+."
       (let ((characters (gen:string->generator text)))
         (gen:make-coroutine-generator
          (lambda (yield)
@@ -52,7 +53,8 @@
                  (loop (cons char current))))))))))
 
     (define (diff-string-lines text)
-      "Return TEXT split into logical lines without keeping newline characters."
+      "Return TEXT split into logical lines without keeping newline characters\
+."
       (gen:generator->list (diff-string-line-generator text)))
 
     (define (diff-string-line-count text)
@@ -102,7 +104,8 @@
       "Return a canonical diff datum from SOURCE labels and HUNKS."
       #((parameters
          (source (type (or symbol string pair))
-          (description ("Symbol, path, handle, or other datum naming what changed.")))
+          (description
+            ("Symbol, path, handle, or other datum naming what changed.")))
          (old-label (type string)
           (description "Display label for the original side."))
          (new-label (type string)
@@ -267,10 +270,11 @@
          (description
           ("Unified-diff text, or the empty string when DIFF has no"
             "changes.")))
-	        (effects pure)
-	        (examples
-	         ((source . "(diff-render-unified (no-change-diff 'buffer \"same\"))")
-	          (result . ""))))
+                (effects pure)
+                (examples
+                 ((source . "(diff-render-unified (no-change-diff 'buffer \"sa\
+me\"))")
+                  (result . ""))))
       (if (diff-changed? diff)
           (string-append
            "--- "

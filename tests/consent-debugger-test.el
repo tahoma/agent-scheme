@@ -1,4 +1,4 @@
-;;; consent-debugger-test.el --- Debugger condition tests  -*- lexical-binding: t; -*-
+;;; consent-debugger-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -97,7 +97,8 @@
       external))
     (should-not (string-match-p "sk-debugger-secret" external))))
 
-(ert-deftest consent-debugger-test-private-procedure-docstring-in-environment ()
+(ert-deftest consent-debugger-test-private-procedure-docstring-in-environment
+  ()
   "Debugger environment records expose reachable procedure-value docs."
   (let ((result
          (consent-debugger-test--result-external
@@ -121,7 +122,8 @@
     (should
      (string-match-p
       (regexp-quote
-       "(documentation \"Explain the private helper for debugger inspection.\")")
+       "(documentation \"Explain the private helper for debugger\
+ inspection.\")")
       result))))
 
 (ert-deftest consent-debugger-test-current-error-exposes-restarts ()
@@ -137,7 +139,8 @@
     (should (string-match-p (regexp-quote "(status ok)") result))
     (should (string-match-p (regexp-quote "(restart (id abort)")
                             result))
-    (should (string-match-p (regexp-quote "(restart (id continue-with-warning)")
+    (should (string-match-p (regexp-quote
+      "(restart (id continue-with-warning)")
                             result))))
 
 (ert-deftest consent-debugger-test-debugger-yield-records-event ()
@@ -155,7 +158,8 @@
     (should
      (string-match-p
       (regexp-quote
-       "(events ((debugger (condition (type synthetic) (message \"example\")))))")
+       "(events ((debugger (condition (type synthetic) (message\
+ \"example\")))))")
       result))))
 
 (ert-deftest consent-debugger-test-restart-invoke-uses-policy-hook ()
@@ -219,7 +223,8 @@
       (should-not (string-match-p "sk-debugger-secret" external))
       (should (string-match-p (regexp-quote "(events ((debugger")
                               external))
-      (should (string-match-p (regexp-quote "(yield (message \"recent yield\"))")
+      (should (string-match-p (regexp-quote
+        "(yield (message \"recent yield\"))")
                               external))
       (should (string-match-p (regexp-quote "(restarts ((restart (id abort)")
                               external)))))

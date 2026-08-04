@@ -1,4 +1,4 @@
-;;; consent-runtime.el --- R7RS runtime values and context  -*- lexical-binding: t; -*-
+;;; consent-runtime.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -22,7 +22,8 @@
 (defcustom consent-eval-maximum-value-nodes 10000000
   "Maximum cumulative value nodes a single evaluation run may allocate.
 Value budgets are charged at allocation, so this bounds the total nodes a run
-constructs rather than the size of any single result; it is sized well above the
+constructs rather than the size of any single result; it is sized well above\
+ the
 comprehensive self-hosted suite's per-run peak while still tripping a runaway
 bulk allocation."
   :type 'integer
@@ -70,7 +71,8 @@ separate concern tracked alongside the portable symbol-identity work."
 
 (defcustom consent-eval-maximum-output-bytes 10485760
   "Maximum printed-output bytes a single evaluation run may emit.
-Output is charged at each port write, so this bounds the cumulative characters a
+Output is charged at each port write, so this bounds the cumulative characters\
+ a
 run may display or write while a runaway printing loop still trips it."
   :type 'integer
   :group 'consent)
@@ -85,7 +87,8 @@ deterministic; a caller opts in by supplying `:max-wall-time-ms'."
 (defconst consent--version-source-file
   (expand-file-name
    "../scheme/consent/version.sld"
-   (file-name-directory (or load-file-name buffer-file-name default-directory)))
+   (file-name-directory (or load-file-name buffer-file-name
+     default-directory)))
   "Canonical Scheme-readable Consent Scheme version source file.")
 
 (defun consent--version-symbol-named-p (value name)
@@ -181,7 +184,8 @@ unquoted.  A non-Consent host condition falls back to `error-message-string'.
 
 Budget stop receipts are byte-identical across both hosts: every budget message
 is the bare dimension wording (no host-formatted counts), so this prefixed form
-matches the portable twin exactly for both the inner condition `message' and the
+matches the portable twin exactly for both the inner condition `message' and\
+ the
 result `message'.  The remaining cross-host gap is the inner detail wording of
 non-budget evaluation errors (for example the offending identifier or arity),
 which is not yet unified."
@@ -429,7 +433,8 @@ base syntax prelude has already been installed."
   wall-start
   ;; The dimension symbol that exhausted this run's budget, or nil.
   exhaustion-reason
-  ;; Script invocation metadata supplied by a batch runner for `(command-line)'.
+  ;; Script invocation metadata supplied by a batch runner for
+  ;; `(command-line)'.
   command-line
   boundary-contract-checking
   ;; Appended to preserve the positional layout used by existing compiled
@@ -522,7 +527,8 @@ unchanged and uncatchable."
      ":boundary-contract-checking must be `shallow', `none', t, or nil"))))
 
 (defun consent--eval-context-boundary-contract-checking-mode (context)
-  "Return CONTEXT boundary contract checking mode, defaulting old contexts off."
+  "Return CONTEXT boundary contract checking mode, defaulting old contexts\
+ off."
   (let ((value
          (and context
               (condition-case nil
@@ -883,7 +889,8 @@ proper list."
         (setq rest (consent--identifier-key cursor)))
        (t
         (consent--eval-error
-         "lambda formals must be an identifier, a proper list, or a dotted list")))
+         "lambda formals must be an identifier, a proper list, or a dotted\
+ list")))
       (setq required (nreverse required))
       (consent--ensure-distinct-names
        (if rest (append required (list rest)) required)
@@ -1607,10 +1614,12 @@ SEEN prevents infinite recursion over cyclic host structures."
 
 (defun consent--note-value-allocation (context count)
   "Charge COUNT freshly allocated value nodes against CONTEXT's budget.
-Constructors charge what they allocate as they allocate it, so the budget bounds
+Constructors charge what they allocate as they allocate it, so the budget\
+ bounds
 cumulative result growth in O(1) per operation rather than re-walking the
 reachable structure of every primitive result.  Enforcement fails closed with
-the unchanged \"value node budget exceeded\" diagnostic so an interpreted `guard'
+the unchanged \"value node budget exceeded\" diagnostic so an interpreted\
+ `guard'
 cannot catch it."
   (cl-incf (consent--eval-context-value-nodes context) count)
   (when (> (consent--eval-context-value-nodes context)
@@ -1641,7 +1650,8 @@ cannot catch it."
   value)
 
 (defun consent--charge-list-allocation (value context)
-  "Charge a freshly consed proper list VALUE's pairs (its length) and return it.
+  "Charge a freshly consed proper list VALUE's pairs (its length) and return\
+ it.
 The shared empty-list tail and the already-charged elements are not recounted."
   (consent--note-value-allocation context (length value))
   value)
@@ -1688,7 +1698,8 @@ field-name symbols that target the dimension."
          #'consent--eval-context-steps)
    (list '(host-callbacks)
          #'consent--eval-context-maximum-host-callbacks
-         (lambda (c v) (setf (consent--eval-context-maximum-host-callbacks c) v))
+         (lambda (c v) (setf (consent--eval-context-maximum-host-callbacks c)
+           v))
          #'consent--eval-context-host-callbacks)
    (list '(yields events)
          #'consent--eval-context-maximum-events

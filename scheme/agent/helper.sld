@@ -46,7 +46,8 @@
       (make-helper-store '() '() 0))
 
     (define (copy-datum datum)
-      "Return a copy of DATUM so public records do not share nested list cells."
+      "Return a copy of DATUM so public records do not share nested list cells\
+."
       (cond
        ((pair? datum)
         (cons (copy-datum (car datum))

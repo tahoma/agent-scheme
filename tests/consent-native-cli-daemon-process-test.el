@@ -1,10 +1,11 @@
-;;; consent-native-cli-daemon-process-test.el --- Native CLI process-boundary tests  -*- lexical-binding: t; -*-
+;;; consent-native-cli-daemon-process-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
-;; ERT process-boundary lane for the native CLI and daemon host adapter contract
+;; ERT process-boundary lane for the native CLI and daemon host adapter
+;; contract
 ;; (docs/native-cli-daemon-adapter.md, fixture
 ;; fixtures/host-adapters/native-cli-daemon.scm).
 ;;
@@ -12,9 +13,12 @@
 ;; native-cli)' lane.  The canonical portable lane is
 ;; tests/scheme/consent-native-cli-daemon-process-test.scm, which runs the same
 ;; record contract under every R7RS host shard.  This twin runs the Emacs
-;; entrypoint (tools/consent-native-cli.el via the wrapper) as a child OS process
-;; and asserts on the Scheme-readable records the adapter emits after it spawns,
-;; streams, waits for, signals, and reaps a real child process, so the Emacs and
+;; entrypoint (tools/consent-native-cli.el via the wrapper) as a child OS
+;; process
+;; and asserts on the Scheme-readable records the adapter emits after it
+;; spawns,
+;; streams, waits for, signals, and reaps a real child process, so the Emacs
+;; and
 ;; portable bootstrap hosts stay at parity.
 ;;
 ;; The deftests are named `consent-native-cli-daemon-process-...' so the
@@ -28,7 +32,8 @@
 ;; - a host-backed stdin port reaches a child while the approval prompt is
 ;;   written only to the adapter's stderr, so the prompt never consumes the
 ;;   stdin stream;
-;; - noninteractive confirmation, stale job handles, and denied stdin ports fail
+;; - noninteractive confirmation, stale job handles, and denied stdin ports
+;; fail
 ;;   closed with Scheme-readable audit and error records before any host
 ;;   operation runs;
 ;; - interpreted and future compiled execution share one record shape.
@@ -78,7 +83,9 @@ stdout datum stream), `:stdout', and `:stderr'."
                               (consent-read-all stdout)
                             (error
                              (ert-fail
-                              (format "unreadable record stream: %S\nstdout:\n%s\nstderr:\n%s"
+                              (format
+                              "unreadable record stream:\
+ %S\nstdout:\n%s\nstderr:\n%s"
                                       err stdout stderr))))))
             (list :exit exit :records records :stdout stdout :stderr stderr)))
       (ignore-errors (delete-file stderr-file)))))
@@ -112,7 +119,8 @@ stdout datum stream), `:stdout', and `:stderr'."
   (cadr (consent-native-cli-daemon-process--field record name)))
 
 (defun consent-native-cli-daemon-process--integer (value)
-  "Return VALUE as an Emacs integer, unwrapping a `consent-number' reader datum."
+  "Return VALUE as an Emacs integer, unwrapping a `consent-number' reader\
+ datum."
   (if (consent-number-p value) (consent-number-value value) value))
 
 (defun consent-native-cli-daemon-process--records-of (records kind)
@@ -198,8 +206,10 @@ stdout datum stream), `:stdout', and `:stderr'."
                      "exit-status"))
                    0))
     ;; The adapter recorded a result and an audit for the performed host op.
-    (should (consent-native-cli-daemon-process--record-of records "adapter-result"))
-    (should (consent-native-cli-daemon-process--record-of records "adapter-audit"))))
+    (should (consent-native-cli-daemon-process--record-of records
+      "adapter-result"))
+    (should (consent-native-cli-daemon-process--record-of records
+      "adapter-audit"))))
 
 (ert-deftest consent-native-cli-daemon-process-test-stderr-stream ()
   "Child stderr is streamed as a Scheme-readable stderr event."
@@ -217,7 +227,8 @@ stdout datum stream), `:stdout', and `:stderr'."
               stderr-event "payload")))
     ;; The child's stderr is captured into the record stream, not echoed onto
     ;; the adapter's own stderr (the approval prompt channel).
-    (should-not (string-match-p "harness-stderr" (plist-get outcome :stderr)))))
+    (should-not (string-match-p "harness-stderr" (plist-get outcome
+      :stderr)))))
 
 (ert-deftest consent-native-cli-daemon-process-test-nonzero-exit-status ()
   "The adapter waits for and records a nonzero child exit status."
@@ -235,8 +246,10 @@ stdout datum stream), `:stdout', and `:stderr'."
                      "exit-status"))
                    7))))
 
-(ert-deftest consent-native-cli-daemon-process-test-stdin-port-does-not-consume-prompt ()
-  "A host-backed stdin port reaches the child while the prompt stays on stderr."
+(ert-deftest
+  consent-native-cli-daemon-process-test-stdin-port-does-not-consume-prompt ()
+  "A host-backed stdin port reaches the child while the prompt stays on\
+ stderr."
   (let* ((payload "stdin-port-payload")
          (stdin-file (make-temp-file "consent-native-cli-process-stdin")))
     (unwind-protect
@@ -247,7 +260,8 @@ stdout datum stream), `:stdout', and `:stderr'."
                                  "--command" "cat" "--stdin-file" stdin-file)
                            stdin-file))
                  (records (plist-get outcome :records))
-                 (stdout-event (consent-native-cli-daemon-process--event-of-kind
+                 (stdout-event
+                   (consent-native-cli-daemon-process--event-of-kind
                                 records "stdout")))
             ;; The child saw the entire stdin port payload...
             (should stdout-event)
@@ -258,7 +272,8 @@ stdout datum stream), `:stdout', and `:stderr'."
             ;; ...while the approval prompt was rendered only on the adapter's
             ;; stderr, so the prompt never consumed the stdin stream.
             (should (string-match-p "approval" (plist-get outcome :stderr)))
-            ;; The stdin payload reaches the child only; it never appears on the
+            ;; The stdin payload reaches the child only; it never appears on
+            ;; the
             ;; adapter's prompt channel.
             (should-not (string-match-p payload (plist-get outcome :stderr)))))
       (ignore-errors (delete-file stdin-file)))))
@@ -267,7 +282,8 @@ stdout datum stream), `:stdout', and `:stderr'."
 
 (ert-deftest consent-native-cli-daemon-process-test-cwd-grant-in-child ()
   "A granted cwd is observed by a real child process."
-  (let ((dir (file-name-as-directory (make-temp-file "consent-native-cli-cwd" t))))
+  (let ((dir (file-name-as-directory (make-temp-file "consent-native-cli-cwd"
+    t))))
     (unwind-protect
         (let* ((outcome (consent-native-cli-daemon-process--run
                          (list "process-run" "--mode" "batch" "--approval"
@@ -278,8 +294,10 @@ stdout datum stream), `:stdout', and `:stderr'."
                (observed (string-trim
                           (consent-native-cli-daemon-process--field-value
                            stdout-event "payload"))))
-          ;; The child's working directory is the granted directory (compared by
-          ;; true name so macOS /var symlinks do not cause spurious mismatches).
+          ;; The child's working directory is the granted directory (compared
+          ;; by
+          ;; true name so macOS /var symlinks do not cause spurious
+          ;; mismatches).
           (should (equal (file-truename (file-name-as-directory observed))
                          (file-truename dir)))
           ;; The grant is recorded in the request resource.
@@ -291,7 +309,8 @@ stdout datum stream), `:stdout', and `:stderr'."
                    "cwd")))
       (ignore-errors (delete-directory dir t)))))
 
-(ert-deftest consent-native-cli-daemon-process-test-environment-grant-in-child ()
+(ert-deftest consent-native-cli-daemon-process-test-environment-grant-in-child
+  ()
   "A granted environment variable is observed by a real child process."
   (let* ((outcome (consent-native-cli-daemon-process--run
                    '("process-run" "--mode" "batch" "--approval"
@@ -330,11 +349,13 @@ stdout datum stream), `:stdout', and `:stderr'."
                       exit-event "payload")
                      "signal"))
                    "TERM"))
-    (should (consent-native-cli-daemon-process--record-of records "adapter-result"))))
+    (should (consent-native-cli-daemon-process--record-of records
+      "adapter-result"))))
 
 ;;;; Tests: denials fail closed before any host operation
 
-(ert-deftest consent-native-cli-daemon-process-test-batch-noninteractive-denial ()
+(ert-deftest consent-native-cli-daemon-process-test-batch-noninteractive-denial
+  ()
   "Batch confirmation fails closed with audit and error, and runs no host op."
   (let* ((outcome (consent-native-cli-daemon-process--run
                    '("process-run" "--mode" "batch"
@@ -355,7 +376,8 @@ stdout datum stream), `:stdout', and `:stderr'."
                    "noninteractive-confirmation-unavailable"))
     ;; The denial is audited and no host operation ran: no result record and no
     ;; child-output event mean the child never spawned.
-    (should (consent-native-cli-daemon-process--record-of records "adapter-audit"))
+    (should (consent-native-cli-daemon-process--record-of records
+      "adapter-audit"))
     (should-not (consent-native-cli-daemon-process--record-of
                  records "adapter-result"))
     (should-not (consent-native-cli-daemon-process--event-of-kind
@@ -406,7 +428,9 @@ stdout datum stream), `:stdout', and `:stderr'."
 
 ;;;; Tests: vocabulary and record shape
 
-(ert-deftest consent-native-cli-daemon-process-test-records-scheme-readable-and-in-vocabulary ()
+(ert-deftest
+;; readability-allow: external-identifier -- Existing test name stays intact.
+    consent-native-cli-daemon-process-test-records-scheme-readable-and-in-vocabulary ()
   "Emitted records reparse and stay within the fixture's declared vocabulary."
   (let* ((approval (consent-native-cli-daemon-process--run
                     '("process-run" "--mode" "cli" "--terminal"
@@ -414,17 +438,21 @@ stdout datum stream), `:stdout', and `:stderr'."
          (denial (consent-native-cli-daemon-process--run
                   '("process-run" "--mode" "batch"
                     "--command" "/bin/echo" "--arg" "vocab")))
-         (event-kinds (consent-native-cli-daemon-process--vocabulary "event-kinds"))
-         (error-kinds (consent-native-cli-daemon-process--vocabulary "error-kinds")))
+         (event-kinds (consent-native-cli-daemon-process--vocabulary
+           "event-kinds"))
+         (error-kinds (consent-native-cli-daemon-process--vocabulary
+           "error-kinds")))
     ;; The stream parsed through `consent-read-all', so each record is a datum
-    ;; the Consent reader accepted; the run additionally produced records at all.
+    ;; the Consent reader accepted; the run additionally produced records at
+    ;; all.
     (should (plist-get approval :records))
     (dolist (record (plist-get approval :records))
       (should (consp record)))
     (dolist (event (consent-native-cli-daemon-process--records-of
                     (plist-get approval :records) "adapter-event"))
       (should (member (consent-native-cli-daemon-process--name
-                       (consent-native-cli-daemon-process--field-value event "kind"))
+                       (consent-native-cli-daemon-process--field-value event
+                         "kind"))
                       event-kinds)))
     (should (member
              (consent-native-cli-daemon-process--name
@@ -448,7 +476,8 @@ stdout datum stream), `:stdout', and `:stderr'."
                (consent-native-cli-daemon-process--field-value
                 (consent-native-cli-daemon-process--adapter) "authority"))))))
 
-(ert-deftest consent-native-cli-daemon-process-test-grant-covers-confirmation ()
+(ert-deftest consent-native-cli-daemon-process-test-grant-covers-confirmation
+  ()
   "A covering grant approves a confirmation-gated spawn without a prompt."
   (let* ((outcome (consent-native-cli-daemon-process--run
                    '("process-run" "--mode" "batch" "--grant" "g-run-tests"
@@ -468,7 +497,8 @@ stdout datum stream), `:stdout', and `:stderr'."
     ;; A covering grant approves without rendering an interactive prompt.
     (should-not (string-match-p "approval" (plist-get outcome :stderr)))))
 
-(ert-deftest consent-native-cli-daemon-process-test-interpreted-compiled-shapes-align ()
+(ert-deftest
+  consent-native-cli-daemon-process-test-interpreted-compiled-shapes-align ()
   "Interpreted and compiled runs differ only in the result execution field."
   (let* ((interp (consent-native-cli-daemon-process--run
                   '("process-run" "--mode" "batch" "--approval"
@@ -490,7 +520,8 @@ stdout datum stream), `:stdout', and `:stderr'."
                     (consent-native-cli-daemon-process--field-value
                      compiled-result "execution"))
                    "compiled"))
-    ;; Every record except the result execution field is identical across paths.
+    ;; Every record except the result execution field is identical across
+    ;; paths.
     (should (equal (plist-get interp :stdout)
                    (replace-regexp-in-string
                     "(execution compiled)" "(execution interpreted)"

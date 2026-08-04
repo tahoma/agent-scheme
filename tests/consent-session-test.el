@@ -1,4 +1,4 @@
-;;; consent-session-test.el --- Session lifecycle tests  -*- lexical-binding: t; -*-
+;;; consent-session-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -139,7 +139,8 @@
          (consent-session-test--external
           (consent-session-fork! "work-main" '(:id "work-copy")))))
     (should (string-match-p "(session-snapshot" snapshot))
-    (should (string-match-p (regexp-quote "(source-session work-main)") snapshot))
+    (should (string-match-p (regexp-quote "(source-session work-main)")
+      snapshot))
     (should (string-match-p (regexp-quote "(definitions (answer))") snapshot))
     (should (string-match-p "(never-restore" snapshot))
     (should
@@ -182,7 +183,8 @@
           (let ((snapshot
                  (consent-session-test--external
                   (consent-session-snapshot! "handle-main"))))
-            (should (string-match-p "(stale-handles ((handle buffer h-" snapshot))
+            (should (string-match-p "(stale-handles ((handle buffer h-"
+              snapshot))
             (should-not
              (consent-capability-handle-known-p stale-handle))))
       (when (buffer-live-p buffer)
@@ -210,8 +212,10 @@
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
-(ert-deftest consent-session-test-scheme-verbs-policy-shared-pointer-and-audit ()
-  "Gate the `(agent session)' REPL verbs, share the default pointer, and audit."
+(ert-deftest consent-session-test-scheme-verbs-policy-shared-pointer-and-audit
+  ()
+  "Gate the `(agent session)' REPL verbs, share the default pointer, and\
+ audit."
   (consent-session-test--reset)
   (setq consent-session-current-id nil)
   ;; Without a window-session grant the mutating verbs fail closed.
@@ -225,7 +229,8 @@
              'no-error)
          (consent-policy-error 'consent-policy-error))))
   (should-not (consent-session-ref "denied-a"))
-  ;; With the grant, create-session returns a session datum without changing the
+  ;; With the grant, create-session returns a session datum without changing
+  ;; the
   ;; default session, and emits Scheme-readable audit entries.
   (let ((created
          (consent-session-test--value-external
@@ -279,7 +284,8 @@
       "(import (agent session)) (list-sessions)"
       nil
       '(:policy-actions ((window-session . allow)))))))
-  ;; close-session retires the session and clears the default when it was current.
+  ;; close-session retires the session and clears the default when it was
+  ;; current.
   (let ((closed
          (consent-session-test--value-external
           (consent-eval-source

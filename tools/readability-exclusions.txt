@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+#
+# path prefix | classification | provenance | rationale
+#
+# Only byte-exact or verbatim upstream material belongs here.  First-party
+# generated output remains in the ordinary readability scope.
+fixtures/srfi-180/files/|vendored-byte-exact|fixtures/srfi-180/README.md|The JSON corpus must preserve upstream bytes, including malformed UTF-8.
+fixtures/srfi-27/reference/|vendored-verbatim|fixtures/srfi-27/README.md|The confidence-test source is retained byte-for-byte with recorded hashes.
+fixtures/srfi-194/reference/|vendored-verbatim|scheme/stdlib/manifest.sld|The upstream reference tests are provenance material, not maintained source.

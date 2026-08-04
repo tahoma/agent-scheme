@@ -1,4 +1,4 @@
-;;; consent-native-cli-daemon-mock-test.el --- Native CLI/daemon mock adapter tests  -*- lexical-binding: t; -*-
+;;; consent-native-cli-daemon-mock-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -148,7 +148,8 @@ marks a headless record whose first field is its `car'."
     (consent-native-cli-daemon-mock--adapter) "event-kinds")))
 
 (defun consent-native-cli-daemon-mock--capability-environment-effects ()
-  "Return the distinct host effect names used by the Emacs capability environment."
+  "Return the distinct host effect names used by the Emacs capability\
+ environment."
   (delete-dups
    (mapcar (lambda (spec) (symbol-name (plist-get spec :effect)))
            (consent-emacs-capability-binding-specs))))
@@ -421,12 +422,15 @@ its host-operation counter."
          (handle-status
           (and handle
                (cdr (assq handle
-                          (consent-native-cli-daemon-mock--host-handles host)))))
+                          (consent-native-cli-daemon-mock--host-handles
+                            host)))))
          (grant-status
           (and grant
                (cdr (assq grant
-                          (consent-native-cli-daemon-mock--host-grants host)))))
-         (request-datum (consent-native-cli-daemon-mock--request-datum request)))
+                          (consent-native-cli-daemon-mock--host-grants
+                            host)))))
+         (request-datum (consent-native-cli-daemon-mock--request-datum
+           request)))
     (cond
      ((and handle (not (eq handle-status 'live)))
       (consent-native-cli-daemon-mock--deny
@@ -465,7 +469,8 @@ its host-operation counter."
 
 ;;;; Mock request shapes
 
-(defun consent-native-cli-daemon-mock--spawn-request (id session &optional grant)
+(defun consent-native-cli-daemon-mock--spawn-request (id session &optional
+  grant)
   "Return a confirmation-gated process-spawn REQUEST plist."
   (list :id id :session session
         :library '(cli process) :binding 'cli-process-start!
@@ -520,7 +525,8 @@ its host-operation counter."
     (should (memq (plist-get outcome :audit)
                   (consent-native-cli-daemon-mock--host-audit-log host)))))
 
-(ert-deftest consent-native-cli-daemon-mock-test-daemon-noninteractive-denial ()
+(ert-deftest consent-native-cli-daemon-mock-test-daemon-noninteractive-denial
+  ()
   "Daemon mode without an approval channel fails closed and audits the denial."
   (let* ((host (consent-native-cli-daemon-mock--host-create :mode 'daemon))
          (outcome (consent-native-cli-daemon-mock--evaluate
@@ -546,7 +552,8 @@ its host-operation counter."
     (should (= (consent-native-cli-daemon-mock--host-operations host) 0))))
 
 (ert-deftest consent-native-cli-daemon-mock-test-terminal-prompt-approval ()
-  "Terminal mode with a controlling terminal approves and emits a decision event."
+  "Terminal mode with a controlling terminal approves and emits a decision\
+ event."
   (let* ((host (consent-native-cli-daemon-mock--host-create
                 :mode 'cli :terminal t))
          (outcome (consent-native-cli-daemon-mock--evaluate
@@ -563,7 +570,8 @@ its host-operation counter."
                      "approval-decision")))))
 
 (ert-deftest consent-native-cli-daemon-mock-test-daemon-channel-approval ()
-  "Daemon mode with a suspendable channel emits an approval-request and approves."
+  "Daemon mode with a suspendable channel emits an approval-request and\
+ approves."
   (let* ((host (consent-native-cli-daemon-mock--host-create
                 :mode 'daemon :channel t :suspendable t))
          (outcome (consent-native-cli-daemon-mock--evaluate
@@ -598,7 +606,8 @@ its host-operation counter."
 
 ;;;; Tests: liveness and grant validity fail before host operations
 
-(ert-deftest consent-native-cli-daemon-mock-test-stale-handle-denial-before-host-op ()
+(ert-deftest
+  consent-native-cli-daemon-mock-test-stale-handle-denial-before-host-op ()
   "A stale handle denies with a nested condition before any host op runs.
 The mock host carries an approval channel so only the liveness gate, not the
 prompt posture, can be responsible for the denial."
@@ -624,9 +633,11 @@ prompt posture, can be responsible for the denial."
                       (consent-native-cli-daemon-mock--field-value
                        condition "kind"))
                      "stale-handle"))
-      (should (consent-native-cli-daemon-mock--scheme-readable-p error-datum)))))
+      (should (consent-native-cli-daemon-mock--scheme-readable-p
+        error-datum)))))
 
-(ert-deftest consent-native-cli-daemon-mock-test-revoked-grant-denial-before-host-op ()
+(ert-deftest
+  consent-native-cli-daemon-mock-test-revoked-grant-denial-before-host-op ()
   "A revoked grant denies before any host op even when a channel is present."
   (let* ((host (consent-native-cli-daemon-mock--host-create
                 :mode 'daemon :channel t :suspendable t
@@ -639,7 +650,8 @@ prompt posture, can be responsible for the denial."
     (should (eq (plist-get outcome :reason) 'grant-revoked))
     (should (= (consent-native-cli-daemon-mock--host-operations host) 0))))
 
-(ert-deftest consent-native-cli-daemon-mock-test-expired-grant-denial-before-host-op ()
+(ert-deftest
+  consent-native-cli-daemon-mock-test-expired-grant-denial-before-host-op ()
   "An expired grant denies before any host op even when a channel is present."
   (let* ((host (consent-native-cli-daemon-mock--host-create
                 :mode 'daemon :channel t :suspendable t
@@ -652,12 +664,14 @@ prompt posture, can be responsible for the denial."
     (should (eq (plist-get outcome :reason) 'grant-expired))
     (should (= (consent-native-cli-daemon-mock--host-operations host) 0))))
 
-(ert-deftest consent-native-cli-daemon-mock-test-denial-does-not-advance-counter ()
+(ert-deftest
+  consent-native-cli-daemon-mock-test-denial-does-not-advance-counter ()
   "A denial leaves the host-operation counter where the last approval left it."
   (let ((host (consent-native-cli-daemon-mock--host-create
                :mode 'cli :terminal t)))
     (consent-native-cli-daemon-mock--evaluate
-     host (consent-native-cli-daemon-mock--spawn-request 'req-ok 'project-main))
+     host (consent-native-cli-daemon-mock--spawn-request 'req-ok
+       'project-main))
     (should (= (consent-native-cli-daemon-mock--host-operations host) 1))
     (setf (consent-native-cli-daemon-mock--host-handles host)
           '((h-job-9 . stale)))
@@ -668,7 +682,8 @@ prompt posture, can be responsible for the denial."
 
 ;;;; Tests: interpreted and compiled comparison
 
-(ert-deftest consent-native-cli-daemon-mock-test-interpreted-compiled-records-match ()
+(ert-deftest
+  consent-native-cli-daemon-mock-test-interpreted-compiled-records-match ()
   "Interpreted and compiled runs differ only in the result execution field."
   (let* ((interp (consent-native-cli-daemon-mock--host-create
                   :mode 'cli :terminal t :execution 'interpreted))
@@ -700,8 +715,10 @@ prompt posture, can be responsible for the denial."
 
 ;;;; Tests: capability environment vocabulary
 
-(ert-deftest consent-native-cli-daemon-mock-test-records-comparable-with-vocabulary ()
-  "Mock boundary datums stay within the declared and capability-env vocabulary."
+(ert-deftest
+  consent-native-cli-daemon-mock-test-records-comparable-with-vocabulary ()
+  "Mock boundary datums stay within the declared and capability-env\
+ vocabulary."
   (let* ((approval (consent-native-cli-daemon-mock--evaluate
                     (consent-native-cli-daemon-mock--host-create
                      :mode 'cli :terminal t)
@@ -728,7 +745,8 @@ prompt posture, can be responsible for the denial."
                       '("approved" "denied"))))
     (dolist (event (plist-get approval :events))
       (should (member (consent-native-cli-daemon-mock--name
-                       (consent-native-cli-daemon-mock--field-value event "kind"))
+                       (consent-native-cli-daemon-mock--field-value event
+                         "kind"))
                       (consent-native-cli-daemon-mock--event-kinds))))
     (should (member (consent-native-cli-daemon-mock--name
                      (consent-native-cli-daemon-mock--field-value
@@ -741,7 +759,8 @@ prompt posture, can be responsible for the denial."
                          (plist-get denial :error)))
       (should (consent-native-cli-daemon-mock--scheme-readable-p datum)))))
 
-(ert-deftest consent-native-cli-daemon-mock-test-effects-subset-of-capability-env ()
+(ert-deftest
+  consent-native-cli-daemon-mock-test-effects-subset-of-capability-env ()
   "Every adapter authority effect is recognized by the capability environment."
   (let ((adapter-effects
          (delete-dups
@@ -758,7 +777,8 @@ prompt posture, can be responsible for the denial."
 
 ;;;; Tests: redaction precedes export
 
-(ert-deftest consent-native-cli-daemon-mock-test-redaction-before-event-export ()
+(ert-deftest consent-native-cli-daemon-mock-test-redaction-before-event-export
+  ()
   "An event carrying a secret is unsafe until export redaction removes it."
   (let ((event (consent-native-cli-daemon-mock--event
                 'event-99 'project-main 'stdout
@@ -771,8 +791,10 @@ prompt posture, can be responsible for the denial."
                                   (prin1-to-string exported)))
       (should (consent-native-cli-daemon-mock--scheme-readable-p exported)))))
 
-(ert-deftest consent-native-cli-daemon-mock-test-redaction-before-audit-export ()
-  "Audit secrets are redacted and local-only context is withheld before export."
+(ert-deftest consent-native-cli-daemon-mock-test-redaction-before-audit-export
+  ()
+  "Audit secrets are redacted and local-only context is withheld before\
+ export."
   (let ((audit (consent-native-cli-daemon-mock--audit
                 'audit-99 'project-main 'req-99 'dec-99
                 '(ok (output "exported gho_ABCDEFGHIJKLMNOP token"))

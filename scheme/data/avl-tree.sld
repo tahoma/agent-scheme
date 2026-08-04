@@ -425,7 +425,8 @@
       (if (find-node tree key) #t #f))
 
     (define (avl-tree-ref tree key . handlers)
-      "Return KEY's value in TREE using optional failure and success handlers."
+      "Return KEY's value in TREE using optional failure and success handlers.\
+"
       #((parameters
          (tree (type avl-tree) (description "Tree to search."))
          (key (type any) (description "Key to locate."))

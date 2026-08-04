@@ -15,8 +15,10 @@ case "$build_dir" in
 esac
 scheme_dir="$repo_root/scheme"
 version_file="$scheme_dir/consent/version.sld"
-# Install datadir baked into the binary as a runtime library search directory so
-# an installed library tree is resolved ahead of the embedded floor. Empty for a
+# Install datadir baked into the binary as a runtime library search directory
+# so
+# an installed library tree is resolved ahead of the embedded floor. Empty for
+# a
 # plain `make compile' (then only CONSENT_LIBRARY_PATH and the embedded floor
 # apply); the Makefile passes the configured $(consentlibdir).
 install_datadir=${CONSENT_INSTALL_DATADIR:-}
@@ -74,9 +76,13 @@ version_datum() {
 assert_product_main_gated() {
   main_file=$1
   grep -q 'cli-script-run-file' "$main_file" \
-    || die "product main does not route --script through the gated cli-script-run-file: $main_file"
+    || die \
+      "product main does not route --script through the gated" \
+      "cli-script-run-file: $main_file"
   if grep -Eq '\(load[[:space:]]' "$main_file"; then
-    die "product main contains a host (load ...) call; --script must not host-load user input: $main_file"
+    die \
+      "product main contains a host (load ...) call; --script must not" \
+      "host-load user input: $main_file"
   fi
 }
 
@@ -99,27 +105,34 @@ write_manifest() {
 EOF
 }
 
-# Enumerate the runtime-provided source files (canonical relative paths) by asking
-# the runtime itself, via the compile host's interpreter, so the embed and install
+# Enumerate the runtime-provided source files (canonical relative paths) by
+# asking
+# the runtime itself, via the compile host's interpreter, so the embed and
+# install
 # manifest is single-sourced from the interpreter's library declarations
-# (base.sld prelude/syntax paths + library.sld source-library tables) rather than
-# hand-maintained. gsi reads the source tree directly; racket reads the generated
+# (base.sld prelude/syntax paths + library.sld source-library tables) rather
+# than
+# hand-maintained. gsi reads the source tree directly; racket reads the
+# generated
 # collections, so the Racket call must run after generate_racket_collections.
 enumerate_runtime_source_files() {
-  enum_prog='(import (scheme base) (scheme write) (consent library)) (for-each (lambda (p) (display p) (newline)) (consent-runtime-source-files))'
+  enum_source="$repo_root/tools/scheme/enumerate-runtime-source-files.scm"
   enum_library_path="$scheme_dir${CONSENT_LIBRARY_PATH:+:$CONSENT_LIBRARY_PATH}"
   case "$compile_host" in
     gambit)
       CONSENT_LIBRARY_PATH="$enum_library_path" \
-        "$gsi" -:r7rs,search="$scheme_dir" -e "$enum_prog" \
+        "$gsi" -:r7rs,search="$scheme_dir" "$enum_source" \
         || die "could not enumerate runtime source files via gsi"
       ;;
     racket)
       enum_file="$build_dir/consent-runtime-source-files.rkt"
-      { printf '%s\n' '#lang r7rs'; printf '%s\n' "$enum_prog"; } > "$enum_file"
+      { printf '%s\n' '#lang r7rs'; cat "$enum_source"; } > \
+        "$enum_file"
       CONSENT_LIBRARY_PATH="$enum_library_path" \
-        PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" "$racket" "$enum_file" \
-        || { rm -f "$enum_file"; die "could not enumerate runtime source files via racket"; }
+        PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" "$racket" \
+          "$enum_file" \
+        || { rm -f "$enum_file"; die \
+          "could not enumerate runtime source files via racket"; }
       rm -f "$enum_file"
       ;;
     *)
@@ -129,7 +142,8 @@ enumerate_runtime_source_files() {
 }
 
 # Write the runtime-source manifest (one canonical relative path per line) into
-# the host build root, so `make install'/`make dist' consume the same enumeration
+# the host build root, so `make install'/`make dist' consume the same
+# enumeration
 # as the embedded floor rather than a hand-maintained list.
 write_runtime_source_manifest() {
   manifest_root=$1
@@ -141,20 +155,23 @@ write_runtime_source_manifest() {
 # borrowed host backends consume the same dependency-ordered source list; a
 # future native backend consumes this artifact before lowering its own IR.
 evaluate_compiler_plan_program() {
-  enum_prog=$1
+  enum_source=$1
   enum_library_path="$scheme_dir${CONSENT_LIBRARY_PATH:+:$CONSENT_LIBRARY_PATH}"
   case "$compile_host" in
     gambit)
       CONSENT_LIBRARY_PATH="$enum_library_path" \
-        "$gsi" -:r7rs,search="$scheme_dir" -e "$enum_prog" \
+        "$gsi" -:r7rs,search="$scheme_dir" "$enum_source" \
         || die "could not resolve compiler plan via gsi"
       ;;
     racket)
       enum_file="$build_dir/consent-compiler-plan.rkt"
-      { printf '%s\n' '#lang r7rs'; printf '%s\n' "$enum_prog"; } > "$enum_file"
+      { printf '%s\n' '#lang r7rs'; cat "$enum_source"; } > \
+        "$enum_file"
       CONSENT_LIBRARY_PATH="$enum_library_path" \
-        PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" "$racket" "$enum_file" \
-        || { rm -f "$enum_file"; die "could not resolve compiler plan via racket"; }
+        PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" "$racket" \
+          "$enum_file" \
+        || { rm -f "$enum_file"; die \
+          "could not resolve compiler plan via racket"; }
       rm -f "$enum_file"
       ;;
     *)
@@ -165,17 +182,17 @@ evaluate_compiler_plan_program() {
 
 enumerate_compiler_plan_files() {
   evaluate_compiler_plan_program \
-    '(import (scheme base) (scheme write) (consent compiler-plan)) (for-each (lambda (u) (display (consent-compiler-unit-source u)) (newline)) (consent-compiler-plan-units (consent-compiler-plan)))'
+    "$repo_root/tools/scheme/enumerate-compiler-plan-files.scm"
 }
 
 enumerate_compiler_plan_roots() {
   evaluate_compiler_plan_program \
-    '(import (scheme base) (scheme write) (consent compiler-plan)) (for-each (lambda (name) (write name) (newline)) (consent-compiler-plan-roots (consent-compiler-plan)))'
+    "$repo_root/tools/scheme/enumerate-compiler-plan-roots.scm"
 }
 
 enumerate_compiler_plan_native_libraries() {
   evaluate_compiler_plan_program \
-    '(import (scheme base) (scheme write) (consent compiler-plan)) (let* ((plan (consent-compiler-plan)) (units (consent-compiler-plan-units plan))) (define (unit-ref name) (let loop ((rest units)) (cond ((null? rest) (error "native library has no source unit" name)) ((equal? name (consent-compiler-unit-name (car rest))) (car rest)) (else (loop (cdr rest)))))) (for-each (lambda (name) (write name) (write-char #\tab) (display (consent-compiler-unit-source (unit-ref name))) (newline)) (consent-compiler-plan-native-libraries plan)))'
+    "$repo_root/tools/scheme/enumerate-native-libraries.scm"
 }
 
 write_compiler_plan_manifest() {
@@ -186,7 +203,8 @@ write_compiler_plan_manifest() {
 
 compiler_library_prefix() {
   key=$1
-  words=$(printf '%s\n' "$key" | sed -e 's/^(//' -e 's/)$//' -e 's/[ ][ ]*/-/g')
+  words=$(printf '%s\n' "$key" | sed -e 's/^(//' -e 's/)$//' -e \
+    's/[ ][ ]*/-/g')
   case "$words" in
     consent-embedded-source) printf '%s\n' 'consent-main:embedded:' ;;
     consent-*) printf 'consent-main:%s:\n' "${words#consent-}" ;;
@@ -209,7 +227,9 @@ load_compiler_plan_link_metadata() {
   done <<EOF
 $compiler_roots
 EOF
-  compiler_root_imports="$compiler_root_imports        (prefix (consent embedded-source) consent-main:embedded:)
+  embedded_import='        (prefix (consent embedded-source)'
+  embedded_import="${embedded_import} consent-main:embedded:)"
+  compiler_root_imports="${compiler_root_imports}${embedded_import}
 "
 
   compiler_native_libraries=
@@ -232,7 +252,8 @@ native_library_table() {
   printf '%s' "$compiler_native_libraries"
 }
 
-# Generate the native-library registration forms the generated main evaluates at
+# Generate the native-library registration forms the generated main evaluates
+# at
 # startup. Export lists and procedure documentation are extracted from each
 # library's define-library form by the compile host's own reader (handling
 # (rename internal external) clauses), so the registry is single-sourced from
@@ -242,8 +263,9 @@ write_native_library_registrations() {
 
   extract_file="$build_dir/native-library-exports-extract.scm"
   {
-    printf '%s\n' \
-      '(import (scheme base) (scheme cxr) (scheme file) (scheme read) (scheme write))'
+    printf '%s%s\n' \
+      '(import (scheme base) (scheme cxr) (scheme file) ' \
+      '(scheme read) (scheme write))'
     printf '%s\n' '(define library-files'
     printf '%s\n' '  (list'
     native_library_table | while IFS='|' read -r key path prefix; do
@@ -339,7 +361,8 @@ EOF
       extract_rkt="$build_dir/native-library-exports-extract.rkt"
       { printf '%s\n' '#lang r7rs'; cat "$extract_file"; } > "$extract_rkt"
       exports=$("$racket" "$extract_rkt") \
-        || { rm -f "$extract_rkt"; die "could not extract native library exports via racket"; }
+        || { rm -f "$extract_rkt"; die \
+          "could not extract native library exports via racket"; }
       rm -f "$extract_rkt"
       ;;
     *)
@@ -347,18 +370,26 @@ EOF
       ;;
   esac
 
-  [ -n "$exports" ] || die "native library export extraction produced no entries"
+  [ -n "$exports" ] || die \
+    "native library export extraction produced no entries"
 
   {
-    printf '\n%s\n' ';; Register the compiled internal libraries in the native-library registry'
-    printf '%s\n' ';; so imports made under the internal-libraries grant bind to the modules'
-    printf '%s\n' ';; linked into this executable (the product serving as its own host runner).'
+    printf '\n%s%s\n' \
+      ';; Register the compiled internal libraries in the ' \
+      'native-library registry'
+    printf '%s%s\n' \
+      ';; so imports made under the internal-libraries grant ' \
+      'bind to the modules'
+    printf '%s%s\n' \
+      ';; linked into this executable ' \
+      '(the product serving as its own host runner).'
     native_library_table | while IFS='|' read -r key path prefix; do
       [ -n "$key" ] || continue
       printf '(consent-main:runtime:consent-register-native-library!\n'
       printf " '%s\n" "$key"
       printf ' (list\n'
-      printf '%s\n' "$exports" | awk -F'\t' -v p="$scheme_dir/$path" -v prefix="$prefix" '
+      printf '%s\n' "$exports" | awk -F'\t' -v p="$scheme_dir/$path" -v \
+        prefix="$prefix" '
         $1 == p && !seen[$2]++ {
           printf "  (cons (quote %s) %s%s)\n", $2, prefix, $2
         }'
@@ -373,11 +404,13 @@ EOF
   } > "$registrations_file"
 }
 
-# Write a `(consent embedded-source)' library whose exported installer registers
+# Write a `(consent embedded-source)' library whose exported installer
+# registers
 # each embedded source string with the runtime. SOURCE_LIST is the newline-
 # separated set of canonical relative paths from enumerate_runtime_source_files
 # (the zero-dependency bootstrap floor). The source text is emitted as a Scheme
-# string literal by escaping only backslash and double-quote (R7RS string literals
+# string literal by escaping only backslash and double-quote (R7RS string
+# literals
 # admit literal newlines), so the embedded text round-trips byte-for-byte back
 # through the reader. LANG_HEADER is `#lang r7rs' for Racket, empty for Gambit.
 write_embedded_source_module() {
@@ -389,7 +422,8 @@ write_embedded_source_module() {
       printf '%s\n' "$lang_header"
     fi
     printf '%s\n' '(define-library (consent embedded-source)'
-    printf '%s\n' '  (export consent-install-embedded-source! consent-embedded-datadir)'
+    printf '%s\n' \
+      '  (export consent-install-embedded-source! consent-embedded-datadir)'
     printf '%s\n' '  (import (scheme base) (consent runtime))'
     printf '%s\n' '  (begin'
     printf '    (define consent-embedded-datadir "%s")\n' "$install_datadir"
@@ -452,25 +486,34 @@ EOF
      (number->string tertiary))))
 
 (define (consent-main-help)
-  (display "Usage: consent [--help] [--version] [--repl] [--eval SOURCE] [--script FILE | FILE]\n")
+  (display
+   (string-append
+    "Usage: consent [--help] [--version] [--repl] [--eval SOURCE] "
+    "[--script FILE | FILE]\n"))
   (display "\n")
   (display "Commands:\n")
   (display "  --help          Show this help.\n")
   (display "  --version       Print the Consent Scheme runtime version.\n")
   (display "  --eval SOURCE   Evaluate a Consent Scheme expression.\n")
   (display "  --script FILE [ARG ...]\n")
-  (display "                  Run a Consent Scheme script file (capability-gated).\n")
+  (display
+   "                  Run a Consent Scheme script file (capability-gated).\n")
   (display "  --repl          Start the portable terminal REPL shell.\n")
   (display "  FILE            Run FILE as a script (same as --script FILE),\n")
-  (display "                  so a #!/usr/bin/env consent shebang runs directly.\n")
+  (display
+   "                  so a #!/usr/bin/env consent shebang runs directly.\n")
   (display "\n")
   (display "REPL options (with --repl):\n")
   (display "  --session NAME  Name the REPL session id.\n")
-  (display "  --chrome NAME   Presentation chrome: comment (default), datum,\n")
+  (display
+   "  --chrome NAME   Presentation chrome: comment (default), datum,\n")
   (display "                  classic, quiet, or silent.\n")
-  (display "  --color=WHEN    Colorize chrome: auto (default), always, never.\n")
-  (display "  --replay FILE   Replay a captured transcript, exiting non-zero if\n")
-  (display "                  the replay diverged from the captured outcomes.\n"))
+  (display
+   "  --color=WHEN    Colorize chrome: auto (default), always, never.\n")
+  (display
+   "  --replay FILE   Replay a captured transcript, exiting non-zero if\n")
+  (display
+   "                  the replay diverged from the captured outcomes.\n"))
 
 (define (consent-main-error message)
   (display "consent: " (current-error-port))
@@ -479,12 +522,15 @@ EOF
   (exit 2))
 
 (define (consent-main-stdio-options options)
-  ;; Attach the process standard streams to OPTIONS so an evaluated --eval/--script
+  ;; Attach the process standard streams to OPTIONS so an evaluated
+  ;; --eval/--script
   ;; program reads stdin and writes stdout/stderr.  The standard streams are
-  ;; consented by invocation -- what the shell handed this process -- so the host
-  ;; supplies a stdin reader, stdout/stderr writers, and one port grant per stream,
+  ;; consented by invocation -- what the shell handed this process -- so the
+  ;; host supplies a stdin reader, stdout/stderr writers, and one port grant
+  ;; per stream,
   ;; and the runtime connects current-input/output/error from them.  Ambient
-  ;; effects (files, processes, network, ...) still fail closed without a grant,
+  ;; effects (files, processes, network, ...) still fail closed without a
+  ;; grant,
   ;; and no raw host port is exposed to Scheme.
   (append
    (list
@@ -499,13 +545,19 @@ EOF
             (display text (current-error-port))
             (flush-output-port (current-error-port))))
     (list 'capability-grants
-          (list 'capability-grant (list 'id 'program-input) (list 'domain 'port)
+          (list 'capability-grant
+                (list 'id 'program-input)
+                (list 'domain 'port)
                 (cons 'operations '(read close))
                 (list 'scope (list 'backing 'stdin)) (list 'expires 'never))
-          (list 'capability-grant (list 'id 'program-output) (list 'domain 'port)
+          (list 'capability-grant
+                (list 'id 'program-output)
+                (list 'domain 'port)
                 (cons 'operations '(write flush close))
                 (list 'scope (list 'backing 'stdout)) (list 'expires 'never))
-          (list 'capability-grant (list 'id 'program-error) (list 'domain 'port)
+          (list 'capability-grant
+                (list 'id 'program-error)
+                (list 'domain 'port)
                 (cons 'operations '(write flush close))
                 (list 'scope (list 'backing 'stderr)) (list 'expires 'never))))
    options))
@@ -586,9 +638,9 @@ EOF
            (newline (current-error-port))
            (exit 1)))
     ;; Run the script through the Consent interpreter with the standard streams
-    ;; connected by invocation (capability-gated; ambient effects still fail closed;
-    ;; no raw host objects exposed) -- the same gated path as --eval and the Emacs
-    ;; `consent-script-run-file' twin.
+    ;; connected by invocation (capability-gated; ambient effects still fail
+    ;; closed; no raw host objects exposed) -- the same gated path as --eval
+    ;; and the Emacs `consent-script-run-file' twin.
     (consent-main:cli-script:cli-script-run-file
      path
      #f
@@ -599,7 +651,8 @@ EOF
   ;; Run a Consent-Scheme host-runner test file on THIS runtime: every form is
   ;; evaluated through the runtime's own interpreter under the host-run
   ;; capability bundle, program output is streamed to real stdout, and the exit
-  ;; code is non-zero exactly when a captured test assertion raised. This is the
+  ;; code is non-zero exactly when a captured test assertion raised. This is
+  ;; the
   ;; product serving as its own host runner -- no separate host-load binary.
   (guard (condition
           (else
@@ -612,8 +665,9 @@ EOF
     (let ((outcome
            (consent-main:cli-script:cli-script-host-run-file
             path
-            ;; Scope file access and includes to the invoking working directory.
-            ;; PWD is the shell-provided absolute cwd; fall back to "." so a run
+            ;; Scope file access and includes to the invoking working
+            ;; directory. PWD is the shell-provided absolute cwd; fall back
+            ;; to "." so a run
             ;; that performs no file I/O (e.g. the reader suite) still works.
             (let ((pwd (get-environment-variable "PWD")))
               (if (and pwd (> (string-length pwd) 0)) pwd "."))
@@ -668,7 +722,8 @@ EOF
      (else
       ;; A bare path is a script file: consent FILE == consent --script FILE.
       ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
-      ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
+      ;; avoiding the kernel single-argument rule that breaks a flagged
+      ;; shebang.
       (consent-main-script (car args) (cdr args) options)))))
 
 (define (consent-main--split-search-path value)
@@ -689,7 +744,8 @@ EOF
 
 (define (consent-main--library-search-directories)
   ;; Host-injected system manifest roots, highest precedence first:
-  ;; CONSENT_LIBRARY_PATH (explicit override), then the install datadir baked at
+  ;; CONSENT_LIBRARY_PATH (explicit override), then the install datadir baked
+  ;; at
   ;; compile time. The compatibility setter installs these as the system root
   ;; list; user roots are layered separately by the runtime when configured.
   (let ((env (get-environment-variable "CONSENT_LIBRARY_PATH"))
@@ -717,7 +773,8 @@ write_racket_main() {
 (consent-main:embedded:consent-install-embedded-source!)
 
 ;; Inject the host's system manifest roots (CONSENT_LIBRARY_PATH and the baked
-;; install datadir) so an installed or overridden library tree is resolved ahead
+;; install datadir) so an installed or overridden library tree is resolved
+;; ahead
 ;; of the embedded floor.
 (consent-main:runtime:consent-set-library-search-directories!
  (consent-main--library-search-directories))
@@ -772,25 +829,34 @@ EOF
      (number->string tertiary))))
 
 (define (consent-main-help)
-  (display "Usage: consent [--help] [--version] [--repl] [--eval SOURCE] [--script FILE | FILE]\n")
+  (display
+   (string-append
+    "Usage: consent [--help] [--version] [--repl] [--eval SOURCE] "
+    "[--script FILE | FILE]\n"))
   (display "\n")
   (display "Commands:\n")
   (display "  --help          Show this help.\n")
   (display "  --version       Print the Consent Scheme runtime version.\n")
   (display "  --eval SOURCE   Evaluate a Consent Scheme expression.\n")
   (display "  --script FILE [ARG ...]\n")
-  (display "                  Run a Consent Scheme script file (capability-gated).\n")
+  (display
+   "                  Run a Consent Scheme script file (capability-gated).\n")
   (display "  --repl          Start the portable terminal REPL shell.\n")
   (display "  FILE            Run FILE as a script (same as --script FILE),\n")
-  (display "                  so a #!/usr/bin/env consent shebang runs directly.\n")
+  (display
+   "                  so a #!/usr/bin/env consent shebang runs directly.\n")
   (display "\n")
   (display "REPL options (with --repl):\n")
   (display "  --session NAME  Name the REPL session id.\n")
-  (display "  --chrome NAME   Presentation chrome: comment (default), datum,\n")
+  (display
+   "  --chrome NAME   Presentation chrome: comment (default), datum,\n")
   (display "                  classic, quiet, or silent.\n")
-  (display "  --color=WHEN    Colorize chrome: auto (default), always, never.\n")
-  (display "  --replay FILE   Replay a captured transcript, exiting non-zero if\n")
-  (display "                  the replay diverged from the captured outcomes.\n"))
+  (display
+   "  --color=WHEN    Colorize chrome: auto (default), always, never.\n")
+  (display
+   "  --replay FILE   Replay a captured transcript, exiting non-zero if\n")
+  (display
+   "                  the replay diverged from the captured outcomes.\n"))
 
 (define (consent-main-error message)
   (display "consent: " (current-error-port))
@@ -799,12 +865,15 @@ EOF
   (exit 2))
 
 (define (consent-main-stdio-options options)
-  ;; Attach the process standard streams to OPTIONS so an evaluated --eval/--script
+  ;; Attach the process standard streams to OPTIONS so an evaluated
+  ;; --eval/--script
   ;; program reads stdin and writes stdout/stderr.  The standard streams are
-  ;; consented by invocation -- what the shell handed this process -- so the host
-  ;; supplies a stdin reader, stdout/stderr writers, and one port grant per stream,
+  ;; consented by invocation -- what the shell handed this process -- so the
+  ;; host supplies a stdin reader, stdout/stderr writers, and one port grant
+  ;; per stream,
   ;; and the runtime connects current-input/output/error from them.  Ambient
-  ;; effects (files, processes, network, ...) still fail closed without a grant,
+  ;; effects (files, processes, network, ...) still fail closed without a
+  ;; grant,
   ;; and no raw host port is exposed to Scheme.
   (append
    (list
@@ -819,13 +888,19 @@ EOF
             (display text (current-error-port))
             (flush-output-port (current-error-port))))
     (list 'capability-grants
-          (list 'capability-grant (list 'id 'program-input) (list 'domain 'port)
+          (list 'capability-grant
+                (list 'id 'program-input)
+                (list 'domain 'port)
                 (cons 'operations '(read close))
                 (list 'scope (list 'backing 'stdin)) (list 'expires 'never))
-          (list 'capability-grant (list 'id 'program-output) (list 'domain 'port)
+          (list 'capability-grant
+                (list 'id 'program-output)
+                (list 'domain 'port)
                 (cons 'operations '(write flush close))
                 (list 'scope (list 'backing 'stdout)) (list 'expires 'never))
-          (list 'capability-grant (list 'id 'program-error) (list 'domain 'port)
+          (list 'capability-grant
+                (list 'id 'program-error)
+                (list 'domain 'port)
                 (cons 'operations '(write flush close))
                 (list 'scope (list 'backing 'stderr)) (list 'expires 'never))))
    options))
@@ -906,9 +981,9 @@ EOF
            (newline (current-error-port))
            (exit 1)))
     ;; Run the script through the Consent interpreter with the standard streams
-    ;; connected by invocation (capability-gated; ambient effects still fail closed;
-    ;; no raw host objects exposed) -- the same gated path as --eval and the Emacs
-    ;; `consent-script-run-file' twin.
+    ;; connected by invocation (capability-gated; ambient effects still fail
+    ;; closed; no raw host objects exposed) -- the same gated path as --eval
+    ;; and the Emacs `consent-script-run-file' twin.
     (consent-main:cli-script:cli-script-run-file
      path
      #f
@@ -919,7 +994,8 @@ EOF
   ;; Run a Consent-Scheme host-runner test file on THIS runtime: every form is
   ;; evaluated through the runtime's own interpreter under the host-run
   ;; capability bundle, program output is streamed to real stdout, and the exit
-  ;; code is non-zero exactly when a captured test assertion raised. This is the
+  ;; code is non-zero exactly when a captured test assertion raised. This is
+  ;; the
   ;; product serving as its own host runner -- no separate host-load binary.
   (guard (condition
           (else
@@ -932,8 +1008,9 @@ EOF
     (let ((outcome
            (consent-main:cli-script:cli-script-host-run-file
             path
-            ;; Scope file access and includes to the invoking working directory.
-            ;; PWD is the shell-provided absolute cwd; fall back to "." so a run
+            ;; Scope file access and includes to the invoking working
+            ;; directory. PWD is the shell-provided absolute cwd; fall back
+            ;; to "." so a run
             ;; that performs no file I/O (e.g. the reader suite) still works.
             (let ((pwd (get-environment-variable "PWD")))
               (if (and pwd (> (string-length pwd) 0)) pwd "."))
@@ -988,7 +1065,8 @@ EOF
      (else
       ;; A bare path is a script file: consent FILE == consent --script FILE.
       ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
-      ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
+      ;; avoiding the kernel single-argument rule that breaks a flagged
+      ;; shebang.
       (consent-main-script (car args) (cdr args) options)))))
 
 (define (consent-main--split-search-path value)
@@ -1009,7 +1087,8 @@ EOF
 
 (define (consent-main--library-search-directories)
   ;; Host-injected system manifest roots, highest precedence first:
-  ;; CONSENT_LIBRARY_PATH (explicit override), then the install datadir baked at
+  ;; CONSENT_LIBRARY_PATH (explicit override), then the install datadir baked
+  ;; at
   ;; compile time. The compatibility setter installs these as the system root
   ;; list; user roots are layered separately by the runtime when configured.
   (let ((env (get-environment-variable "CONSENT_LIBRARY_PATH"))
@@ -1041,7 +1120,8 @@ write_gambit_main() {
 (consent-main:embedded:consent-install-embedded-source!)
 
 ;; Inject the host's system manifest roots (CONSENT_LIBRARY_PATH and the baked
-;; install datadir) so an installed or overridden library tree is resolved ahead
+;; install datadir) so an installed or overridden library tree is resolved
+;; ahead
 ;; of the embedded floor.
 (consent-main:runtime:consent-set-library-search-directories!
  (consent-main--library-search-directories))
@@ -1053,9 +1133,11 @@ EOF
   } >> "$main_file"
 }
 
-# Replace $1 with stdin only when the bytes differ, leaving an unchanged target's
+# Replace $1 with stdin only when the bytes differ, leaving an unchanged
+# target's
 # mtime intact. The Racket compilation manager keys cached bytecode on source
-# timestamps, so unconditionally rewriting every generated file would invalidate
+# timestamps, so unconditionally rewriting every generated file would
+# invalidate
 # every `.zo' each run; this keeps untouched generated sources stable so `raco
 # make' reuses their bytecode across runs.
 write_if_changed() {
@@ -1076,7 +1158,8 @@ generate_racket_collections() {
   find "$scheme_dir" -type f -name '*.sld' | sort | while IFS= read -r source
   do
     relative=${source#"$scheme_dir/"}
-    target="$collections_dir/$(printf '%s\n' "$relative" | sed 's/\.sld$/.rkt/')"
+    racket_target=$(printf '%s\n' "$relative" | sed 's/\.sld$/.rkt/')
+    target="$collections_dir/$racket_target"
     mkdir -p "$(dirname -- "$target")"
     {
       printf '%s\n' '#lang r7rs'
@@ -1097,14 +1180,17 @@ run_smoke() {
     || die "compiled runner failed --eval; see $log_file.eval.err"
 
   if [ "$version_output" != "Consent Scheme $expected_version" ]; then
-    die "compiled runner --version returned '$version_output', expected 'Consent Scheme $expected_version'"
+    die \
+      "compiled runner --version returned '$version_output', expected" \
+      "'Consent Scheme $expected_version'"
   fi
 
   if [ "$eval_output" != "3" ]; then
     die "compiled runner --eval returned '$eval_output', expected '3'"
   fi
 
-  # --script and --eval must run through the Consent interpreter, NOT host load.
+  # --script and --eval must run through the Consent interpreter, NOT host
+  # load.
   # Discriminator: the script posture allows program output but denies an
   # ungranted, confirm-gated host capability. Under host execution the write
   # would succeed; under the interpreter it is denied and leaves no file. These
@@ -1122,8 +1208,11 @@ run_smoke() {
 (if (not (= (smoke-sq 6) 36))
     (error "consent --script smoke computed the wrong value"))
 EOF
-  "$runner" --script "$ok_script" >"$log_file.script.out" 2>"$log_file.script.err" \
-    || die "compiled runner failed --script interpreter smoke; see $log_file.script.err"
+  "$runner" --script "$ok_script" >"$log_file.script.out" \
+    2>"$log_file.script.err" \
+    || die \
+      "compiled runner failed --script interpreter smoke;" \
+      "see $log_file.script.err"
   script_output=ok
 
   deny_marker="$smoke_dir/denied-file"
@@ -1133,18 +1222,31 @@ EOF
 (call-with-output-file "$deny_marker"
   (lambda (port) (write-char #\\x port)))
 EOF
-  if "$runner" --script "$deny_script" >"$log_file.script-deny.out" 2>"$log_file.script-deny.err"; then
-    die "compiled runner --script allowed an ungranted file write (host execution leaked); see $log_file.script-deny.err"
+  if "$runner" --script "$deny_script" >"$log_file.script-deny.out" \
+    2>"$log_file.script-deny.err"; then
+    die \
+      "compiled runner --script allowed an ungranted file write; host" \
+      "execution leaked (see $log_file.script-deny.err)"
   fi
   if [ -e "$deny_marker" ]; then
-    die "compiled runner --script created a denied file at $deny_marker (host execution leaked)"
+    die \
+      "compiled runner --script created a denied file at $deny_marker" \
+      "(host execution leaked)"
   fi
-  if "$runner" --eval "(begin (import (scheme file)) (call-with-output-file \"$deny_marker\" (lambda (port) (write-char #\\x port))))" \
+  deny_eval=$(printf '%s%s%s' \
+    '(begin (import (scheme file)) (call-with-output-file "' \
+    "$deny_marker" \
+    '" (lambda (port) (write-char #\x port))))')
+  if "$runner" --eval "$deny_eval" \
        >"$log_file.eval-deny.out" 2>"$log_file.eval-deny.err"; then
-    die "compiled runner --eval allowed an ungranted file write (host execution leaked); see $log_file.eval-deny.err"
+    die \
+      "compiled runner --eval allowed an ungranted file write; host" \
+      "execution leaked (see $log_file.eval-deny.err)"
   fi
   if [ -e "$deny_marker" ]; then
-    die "compiled runner --eval created a denied file at $deny_marker (host execution leaked)"
+    die \
+      "compiled runner --eval created a denied file at $deny_marker" \
+      "(host execution leaked)"
   fi
   rm -rf "$smoke_dir"
 
@@ -1164,7 +1266,8 @@ EOF
     (error "bare-path shebang smoke failed"))
 EOF
   "$runner" "$bare_script" >"$log_file.bare.out" 2>"$log_file.bare.err" \
-    || die "compiled runner failed bare-path shebang smoke; see $log_file.bare.err"
+    || die \
+      "compiled runner failed bare-path shebang smoke; see $log_file.bare.err"
   bare_output=ok
 
   # sh-polyglot form: kernel runs /bin/sh, whose `exec` re-launches the runner
@@ -1182,10 +1285,13 @@ exec "$runner" --script "\$0" "\$@"
 EOF
   chmod +x "$polyglot_script"
   "$polyglot_script" >"$log_file.polyglot.out" 2>"$log_file.polyglot.err" \
-    || die "compiled runner failed sh-polyglot shebang smoke; see $log_file.polyglot.err"
+    || die \
+      "compiled runner failed sh-polyglot shebang smoke;" \
+      "see $log_file.polyglot.err"
   polyglot_output=ok
 
-  # Bare-path deny discriminator: a bare-path script (consent FILE) attempting an
+  # Bare-path deny discriminator: a bare-path script (consent FILE) attempting
+  # an
   # ungranted file write must be denied and leave no file -- proving the bare /
   # shebang dispatch also lands in the gated interpreter, not host execution.
   bare_deny_marker="$shebang_dir/bare-denied-file"
@@ -1196,11 +1302,16 @@ EOF
 (call-with-output-file "$bare_deny_marker"
   (lambda (port) (write-char #\\x port)))
 EOF
-  if "$runner" "$bare_deny_script" >"$log_file.bare-deny.out" 2>"$log_file.bare-deny.err"; then
-    die "bare-path script allowed an ungranted file write (host execution leaked); see $log_file.bare-deny.err"
+  if "$runner" "$bare_deny_script" >"$log_file.bare-deny.out" \
+    2>"$log_file.bare-deny.err"; then
+    die \
+      "bare-path script allowed an ungranted file write; host execution" \
+      "leaked (see $log_file.bare-deny.err)"
   fi
   if [ -e "$bare_deny_marker" ]; then
-    die "bare-path script created a denied file at $bare_deny_marker (host execution leaked)"
+    die \
+      "bare-path script created a denied file at $bare_deny_marker" \
+      "(host execution leaked)"
   fi
   rm -rf "$shebang_dir"
   smoke_finished=$(date +%s)
@@ -1217,7 +1328,8 @@ EOF
 }
 
 # Resolve the parallel-compile width. CONSENT_COMPILE_JOBS overrides; otherwise
-# the online CPU count, falling back to 4 when it cannot be probed and clamping a
+# the online CPU count, falling back to 4 when it cannot be probed and clamping
+# a
 # probed 0 up to 1.
 consent_compile_jobs() {
   if [ -n "${CONSENT_COMPILE_JOBS:-}" ]; then
@@ -1237,9 +1349,11 @@ consent_compile_jobs() {
   esac
 }
 
-# Content-hash command resolved once into consent_hash_command. It reads stdin and
+# Content-hash command resolved once into consent_hash_command. It reads stdin
+# and
 # prints a digest as its first whitespace-delimited field. Left empty when no
-# hasher is available, which disables the incremental skip (every module is then
+# hasher is available, which disables the incremental skip (every module is
+# then
 # recompiled) rather than risking a stale object.
 consent_hash_command=
 detect_hash_command() {
@@ -1257,12 +1371,17 @@ hash_stdin() {
   $consent_hash_command | awk '{print $1; exit}'
 }
 
-# Run worker function $1 once per newline-delimited task read on stdin, at most $2
-# concurrently, using a FIFO token semaphore (POSIX mkfifo/exec/read; no `wait -n`
-# dependency, so it works under dash on the CI runners). The worker receives its
-# task as "$1" and records a failure by creating a file under a stamp directory it
+# Run worker function $1 once per newline-delimited task read on stdin, at most
+# $2
+# concurrently, using a FIFO token semaphore (POSIX mkfifo/exec/read; no `wait
+# -n`
+# dependency, so it works under dash on the CI runners). The worker receives
+# its
+# task as "$1" and records a failure by creating a file under a stamp directory
+# it
 # shares with the caller, which treats a non-empty stamp directory as a build
-# failure. Each child releases its token from an EXIT trap, so a worker fault can
+# failure. Each child releases its token from an EXIT trap, so a worker fault
+# can
 # never deadlock the pool.
 run_compile_pool() {
   pool_worker=$1
@@ -1271,8 +1390,10 @@ run_compile_pool() {
   pool_dir=$(mktemp -d "${TMPDIR:-/tmp}/consent-pool.XXXXXX") \
     || die "could not create the compile worker pool directory"
   mkfifo "$pool_dir/tokens" \
-    || { rm -rf "$pool_dir"; die "could not create the compile worker pool semaphore"; }
-  # Open the token FIFO read/write on fd 8 so seeding does not block on a reader.
+    || { rm -rf "$pool_dir"; die \
+      "could not create the compile worker pool semaphore"; }
+  # Open the token FIFO read/write on fd 8 so seeding does not block on a
+  # reader.
   exec 8<>"$pool_dir/tokens"
   pool_i=0
   while [ "$pool_i" -lt "$pool_max" ]; do
@@ -1295,14 +1416,20 @@ run_compile_pool() {
 }
 
 # Emit the Scheme program that prints, for every compile unit, its transitive
-# project-import closure as a `label<TAB>path ...` line. The closure is the set of
-# project source files the unit's compiled object can depend on: its own source,
-# every project library it imports (transitively, unwrapping only/except/prefix/
+# project-import closure as a `label<TAB>path ...` line. The closure is the set
+# of
+# project source files the unit's compiled object can depend on: its own
+# source,
+# every project library it imports (transitively, unwrapping
+# only/except/prefix/
 # rename and descending into every cond-expand branch and include), and the
-# single-sourced standard libraries. (consent version) is a structurally-guarded
+# single-sourced standard libraries. (consent version) is a
+# structurally-guarded
 # leaf: it is emitted as a fixed sentinel for every dependent, so the
-# every-branch version bump changes only the version unit's own hash (forcing the
-# version module to recompile and the executable to relink) without invalidating
+# every-branch version bump changes only the version unit's own hash (forcing
+# the
+# version module to recompile and the executable to relink) without
+# invalidating
 # any dependent. The runtime reads the version datum at run time through the
 # separately compiled version module, so no dependent bakes the value in.
 write_gambit_closure_program() {
@@ -1312,7 +1439,8 @@ write_gambit_closure_program() {
   version_source=$4
 
   {
-    printf '%s\n' '(import (scheme base) (scheme file) (scheme read) (scheme write))'
+    printf '%s\n' \
+      '(import (scheme base) (scheme file) (scheme read) (scheme write))'
     printf '(define all-sld-file "%s")\n' "$all_sld_file"
     printf '(define units-file "%s")\n' "$units_file"
     printf '(define version-path "%s")\n' "$version_source"
@@ -1415,7 +1543,9 @@ write_gambit_closure_program() {
         (for-each
          (lambda (branch)
            (when (pair? branch)
-             (for-each (lambda (c) (collect-deps c base-dir add!)) (cdr branch))))
+             (for-each
+              (lambda (c) (collect-deps c base-dir add!))
+              (cdr branch))))
          (cdr clause)))
        (else #f)))))
 
@@ -1430,7 +1560,9 @@ write_gambit_closure_program() {
         ((and (pair? form) (eq? (car form) 'define-library))
          (for-each
           (lambda (clause)
-            (collect-deps clause base-dir (lambda (d) (set! deps (cons d deps)))))
+            (collect-deps
+             clause base-dir
+             (lambda (d) (set! deps (cons d deps)))))
           (cddr form)))
         (else #f)))
      (forms-of path))
@@ -1470,9 +1602,13 @@ SCHEME
 
 compile_racket() {
   racket=$(find_command CONSENT_RACKET racket) \
-    || die "Racket compile prerequisites are missing; set CONSENT_RACKET to a runnable racket executable."
+    || die \
+      "Racket compile prerequisites are missing; set CONSENT_RACKET to" \
+      "a runnable racket executable."
   raco=$(find_command CONSENT_RACO raco) \
-    || die "Racket compile prerequisites are missing; set CONSENT_RACO to a runnable raco executable."
+    || die \
+      "Racket compile prerequisites are missing; set CONSENT_RACO" \
+      "to a runnable raco executable."
 
   host_root="$build_dir/racket"
   src_dir="$host_root/src"
@@ -1484,12 +1620,14 @@ compile_racket() {
   smoke_log="$logs_dir/smoke.log"
   version=$(version_components)
 
-  [ -n "$version" ] || die "could not read Consent Scheme version from $version_file"
+  [ -n "$version" ] || die \
+    "could not read Consent Scheme version from $version_file"
 
   racket_jobs=$(consent_compile_jobs)
   mkdir -p "$src_dir" "$collections_dir" "$bin_dir" "$logs_dir"
 
-  # Generate the collection tree write-if-changed so unchanged generated sources
+  # Generate the collection tree write-if-changed so unchanged generated
+  # sources
   # keep their mtime and Racket's compilation manager reuses their bytecode.
   generate_racket_collections "$collections_dir"
 
@@ -1500,7 +1638,8 @@ compile_racket() {
   while IFS= read -r source; do
     [ -n "$source" ] || continue
     [ "$source" = "consent/embedded-source.sld" ] && continue
-    racket_plan_sources="$racket_plan_sources $collections_dir/${source%.sld}.rkt"
+    racket_source="$collections_dir/${source%.sld}.rkt"
+    racket_plan_sources="$racket_plan_sources $racket_source"
   done <<EOF
 $compiler_source_list
 EOF
@@ -1512,7 +1651,9 @@ EOF
   PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
     "$raco" make -j "$racket_jobs" $racket_plan_sources \
     >"$logs_dir/raco-make-library.log" 2>&1 \
-    || die "raco make of the compiler plan failed; see $logs_dir/raco-make-library.log"
+    || die \
+      "raco make of the compiler plan failed;" \
+      "see $logs_dir/raco-make-library.log"
 
   runtime_source_list=$(enumerate_runtime_source_files)
   mkdir -p "$collections_dir/consent"
@@ -1525,14 +1666,16 @@ EOF
   assert_product_main_gated "$main_file"
   write_manifest "$host_root" racket "$version"
 
-  # Build the full product closure to bytecode once; raco exe then links from the
+  # Build the full product closure to bytecode once; raco exe then links from
+  # the
   # bytecode rather than expanding the library stack a second time. On a warm
   # cache only the changed modules (for example the every-branch version bump)
   # recompile, since write-if-changed preserved the other sources' timestamps.
   PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
     "$raco" make -j "$racket_jobs" "$main_file" \
     >"$logs_dir/raco-make-main.log" 2>&1 \
-    || die "raco make of the product main failed; see $logs_dir/raco-make-main.log"
+    || die \
+      "raco make of the product main failed; see $logs_dir/raco-make-main.log"
 
   PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
     "$raco" exe --cs ++lang r7rs -o "$runner" "$main_file" \
@@ -1549,9 +1692,13 @@ EOF
 
 compile_gambit() {
   gsi=$(find_command CONSENT_GAMBIT gsi) \
-    || die "Gambit compile prerequisites are missing; set CONSENT_GAMBIT to a runnable gsi executable."
+    || die \
+      "Gambit compile prerequisites are missing; set CONSENT_GAMBIT" \
+      "to a runnable gsi executable."
   gsc=$(find_command CONSENT_GAMBIT_COMPILER gsc) \
-    || die "Gambit compile prerequisites are missing; set CONSENT_GAMBIT_COMPILER to a runnable gsc executable."
+    || die \
+      "Gambit compile prerequisites are missing; set" \
+      "CONSENT_GAMBIT_COMPILER to a runnable gsc executable."
 
   host_root="$build_dir/gambit"
   src_dir="$host_root/src"
@@ -1563,7 +1710,8 @@ compile_gambit() {
   smoke_log="$logs_dir/smoke.log"
   version=$(version_components)
 
-  [ -n "$version" ] || die "could not read Consent Scheme version from $version_file"
+  [ -n "$version" ] || die \
+    "could not read Consent Scheme version from $version_file"
 
   mkdir -p "$src_dir" "$bin_dir" "$logs_dir"
 
@@ -1578,7 +1726,9 @@ compile_gambit() {
   "$gsi" -:r7rs,search="$scheme_dir" \
     -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)' \
     >"$logs_dir/gsi-r7rs-probe.log" 2>&1 \
-    || die "Gambit gsi does not accept R7RS mode with the Consent Scheme library search path; see $logs_dir/gsi-r7rs-probe.log"
+    || die \
+      "Gambit gsi does not accept R7RS mode with the Consent Scheme" \
+      "library search path (see $logs_dir/gsi-r7rs-probe.log)"
 
   compiler_source_list=$(enumerate_compiler_plan_files)
   write_compiler_plan_manifest "$host_root" "$compiler_source_list"
@@ -1598,7 +1748,8 @@ EOF
   write_manifest "$host_root" gambit "$version"
   runtime_source_list=$(enumerate_runtime_source_files)
   write_runtime_source_manifest "$host_root" "$runtime_source_list"
-  write_embedded_source_module '' "$runtime_source_list" > "$src_dir/consent/embedded-source.sld"
+  write_embedded_source_module '' "$runtime_source_list" > \
+    "$src_dir/consent/embedded-source.sld"
   detect_hash_command
   compile_jobs=$(consent_compile_jobs)
   tab=$(printf '\t')
@@ -1617,13 +1768,15 @@ EOF
 
   gambit_module_source() {
     case "$1" in
-      consent/embedded-source) printf '%s\n' "$src_dir/consent/embedded-source.sld" ;;
+      consent/embedded-source) printf '%s\n' \
+        "$src_dir/consent/embedded-source.sld" ;;
       *) printf '%s\n' "$scheme_dir/$1.sld" ;;
     esac
   }
 
   # Compute the per-unit content hashes that drive the incremental skip. The
-  # closure analysis runs the interpreter's own reader, so a future reader-level
+  # closure analysis runs the interpreter's own reader, so a future
+  # reader-level
   # construct it cannot parse degrades to a full recompile (the program exits
   # non-zero) rather than silently under-approximating a dependency.
   incremental_dir="$host_root/incremental"
@@ -1645,19 +1798,26 @@ EOF
     } | sort > "$all_sld_file"
     : > "$units_file"
     for ref in $gambit_module_order; do
-      printf '%s\t%s\n' "$ref" "$(gambit_module_source "$ref")" >> "$units_file"
+      printf '%s\t%s\n' "$ref" "$(gambit_module_source "$ref")" >> \
+        "$units_file"
     done
     printf '%s\t%s\n' main "$main_file" >> "$units_file"
 
     write_gambit_closure_program \
-      "$closure_program" "$all_sld_file" "$units_file" "$scheme_dir/consent/version.sld"
-    if "$gsi" -:r7rs "$closure_program" > "$closures_file" 2>"$logs_dir/gambit-closure.log"; then
-      script_hash=$(hash_stdin < "$script_dir/$(basename -- "$0")" 2>/dev/null || true)
+      "$closure_program" "$all_sld_file" "$units_file" \
+        "$scheme_dir/consent/version.sld"
+    if "$gsi" -:r7rs "$closure_program" > "$closures_file" \
+      2>"$logs_dir/gambit-closure.log"; then
+      script_hash=$(hash_stdin < "$script_dir/$(basename -- "$0")" \
+        2>/dev/null || true)
       gsc_identity=$("$gsc" -v 2>/dev/null | head -n 1)
       : > "$modulehash_file"
-      # Per unit, fold every closure source file's content hash (the version leaf
-      # as a fixed token), the compiler identity, and this script's text into one
-      # digest. Sorting makes the digest independent of closure traversal order.
+      # Per unit, fold every closure source file's content hash (the version
+      # leaf
+      # as a fixed token), the compiler identity, and this script's text into
+      # one
+      # digest. Sorting makes the digest independent of closure traversal
+      # order.
       while IFS="$tab" read -r unit_label unit_paths; do
         unit_digest=$(
           {
@@ -1676,14 +1836,19 @@ EOF
       done < "$closures_file"
       use_incremental=true
     else
-      printf '%s\n' "consent compile: Gambit closure analysis failed; recompiling every module (see $logs_dir/gambit-closure.log)" >&2
+      closure_message='consent compile: Gambit closure analysis failed; '
+      closure_message="${closure_message}recompiling every module"
+      printf '%s\n' \
+        "$closure_message (see $logs_dir/gambit-closure.log)" >&2
     fi
   fi
 
   # Compile one unit: skip when its stored hash still matches, else run the
-  # Scheme->C (gsc -c) and C->object (gsc -obj) passes and persist the new hash.
+  # Scheme->C (gsc -c) and C->object (gsc -obj) passes and persist the new
+  # hash.
   # Failures are recorded as stamp files; the parent aggregates them after the
-  # pool drains so one module's error does not abort sibling workers mid-flight.
+  # pool drains so one module's error does not abort sibling workers
+  # mid-flight.
   compile_gambit_unit() {
     cgu_ref=${1%%|*}
     cgu_rest=${1#*|}
@@ -1699,11 +1864,13 @@ EOF
 
     cgu_expected=
     if $use_incremental; then
-      cgu_expected=$(awk -F"$tab" -v l="$cgu_ref" '$1 == l { print $2; exit }' "$modulehash_file")
+      cgu_expected=$(awk -F"$tab" -v l="$cgu_ref" \
+        '$1 == l { print $2; exit }' "$modulehash_file")
     fi
 
     if [ -n "$cgu_expected" ] && [ -f "$cgu_cout" ] && [ -f "$cgu_oout" ] \
-      && [ -f "$cgu_hashfile" ] && [ "$(cat "$cgu_hashfile")" = "$cgu_expected" ]; then
+      && [ -f "$cgu_hashfile" ] && [ "$(cat "$cgu_hashfile")" = \
+        "$cgu_expected" ]; then
       return 0
     fi
 
@@ -1719,7 +1886,8 @@ EOF
       cgu_moduleflag="-module-ref $cgu_ref"
     fi
     # Record each pass's real exit status (128+signal when the kernel kills a
-    # compiler, e.g. 137 for an out-of-memory SIGKILL) into the per-unit log, so
+    # compiler, e.g. 137 for an out-of-memory SIGKILL) into the per-unit log,
+    # so
     # a failure that emits no compiler diagnostics is still diagnosable instead
     # of leaving an empty log behind.
     cgu_rc=0
@@ -1727,7 +1895,8 @@ EOF
     "$gsc" -:r7rs,"$cgu_search" -c $cgu_moduleflag -o "$cgu_cout" "$cgu_src" \
       >>"$cgu_log" 2>&1 || cgu_rc=$?
     if [ "$cgu_rc" -ne 0 ]; then
-      printf 'consent compile: gsc -c exited %s for %s\n' "$cgu_rc" "$cgu_ref" >>"$cgu_log"
+      printf 'consent compile: gsc -c exited %s for %s\n' "$cgu_rc" \
+        "$cgu_ref" >>"$cgu_log"
       rm -f "$cgu_cout" "$cgu_oout"
       printf '%s\n' "$cgu_ref" > "$stamp_dir/$cgu_safe.fail"
       return 0
@@ -1735,7 +1904,8 @@ EOF
     cgu_rc=0
     "$gsc" -obj -o "$cgu_oout" "$cgu_cout" >>"$cgu_log" 2>&1 || cgu_rc=$?
     if [ "$cgu_rc" -ne 0 ]; then
-      printf 'consent compile: gsc -obj exited %s for %s\n' "$cgu_rc" "$cgu_ref" >>"$cgu_log"
+      printf 'consent compile: gsc -obj exited %s for %s\n' "$cgu_rc" \
+        "$cgu_ref" >>"$cgu_log"
       rm -f "$cgu_cout" "$cgu_oout"
       printf '%s\n' "$cgu_ref" > "$stamp_dir/$cgu_safe.fail"
       return 0
@@ -1749,8 +1919,10 @@ EOF
   search_default="search=$scheme_dir"
   search_main="search=$scheme_dir,search=$src_dir"
 
-  # Emit the `ref|src|search|c-out|o-out` compile-unit tuple for one module ref,
-  # shared by the parallel dispatch and the serial retry below so both build the
+  # Emit the `ref|src|search|c-out|o-out` compile-unit tuple for one module
+  # ref,
+  # shared by the parallel dispatch and the serial retry below so both build
+  # the
   # exact same task.
   gambit_module_task() {
     if [ "$1" = "main" ]; then
@@ -1771,13 +1943,17 @@ EOF
     gambit_module_task main
   } | run_compile_pool compile_gambit_unit "$compile_jobs"
 
-  # A module can fail under the parallel pool from transient resource contention
+  # A module can fail under the parallel pool from transient resource
+  # contention
   # rather than a real translation error: the largest single-host C units (the
-  # runtime and interpreter objects) each peak at several GB of compiler memory,
-  # so a wide pool can drive a transient kill on exactly those units while every
+  # runtime and interpreter objects) each peak at several GB of compiler
+  # memory,
+  # so a wide pool can drive a transient kill on exactly those units while
+  # every
   # other module succeeds. Retry any failed modules once, serially, before
   # giving up. A genuine error fails again in the aggregation below with its
-  # captured diagnostics; a contention casualty compiles cleanly on its own. The
+  # captured diagnostics; a contention casualty compiles cleanly on its own.
+  # The
   # retry is announced so flakiness stays visible instead of silently absorbed,
   # and it is skipped entirely (no extra cost) on a clean parallel pass.
   if [ -n "$(ls -A "$stamp_dir" 2>/dev/null)" ]; then
@@ -1799,13 +1975,18 @@ EOF
       [ -f "$stamp" ] || continue
       failed_ref=$(cat "$stamp")
       failed_safe=$(printf '%s' "$failed_ref" | tr '/' '-')
-      printf 'consent compile: gsc failed while compiling %s:\n' "$failed_ref" >&2
-      [ -f "$logs_dir/gsc-$failed_safe.log" ] && cat "$logs_dir/gsc-$failed_safe.log" >&2
+      printf 'consent compile: gsc failed while compiling %s:\n' \
+        "$failed_ref" >&2
+      [ -f "$logs_dir/gsc-$failed_safe.log" ] && cat \
+        "$logs_dir/gsc-$failed_safe.log" >&2
     done
-    die "gsc failed while compiling one or more Gambit modules; see $logs_dir/gsc-*.log"
+    die \
+      "gsc failed while compiling one or more Gambit modules;" \
+      "see $logs_dir/gsc-*.log"
   fi
 
-  # Link the executable once from the shared objects. The link file is generated
+  # Link the executable once from the shared objects. The link file is
+  # generated
   # and compiled every build (cheap; it is non-deterministic so it is never
   # cached), then the final link reuses every pre-built object instead of
   # recompiling the generated C, which is the bulk of the build.
@@ -1819,7 +2000,8 @@ EOF
   link_o="$src_dir/consent-main_.o"
 
   # shellcheck disable=SC2086
-  "$gsc" -:r7rs,search="$scheme_dir" -link -o "$link_c" -nopreload $gambit_c_files "$main_c" \
+  "$gsc" -:r7rs,search="$scheme_dir" -link -o "$link_c" -nopreload \
+    $gambit_c_files "$main_c" \
     >"$logs_dir/gsc-link.log" 2>&1 \
     || die "gsc -link failed; see $logs_dir/gsc-link.log"
   "$gsc" -obj -o "$link_o" "$link_c" \

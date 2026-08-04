@@ -1,4 +1,4 @@
-;;; consent-models.el --- Model provider routing primitives  -*- lexical-binding: t; -*-
+;;; consent-models.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -628,7 +628,9 @@
         (unless (or (stringp completion)
                     (consent-models--model-message-p completion))
           (signal 'consent-models-error
-                  (list "model transport must return completion text or model-message")))
+                  (list
+                    "model transport must return completion text or\
+ model-message")))
         (consent-audit-record
          'model-completion
          `((provider . ,(plist-get provider :id))

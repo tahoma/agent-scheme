@@ -239,7 +239,8 @@
      (integer-text backend base-plus-one))
     (test-equal
      (string->symbol
-      (string-append "profile-" (number->string limb-bits) "-square-minus-one"))
+      (string-append "profile-" (number->string limb-bits)
+        "-square-minus-one"))
      (cond
       ((= limb-bits 14) "268435455")
       ((= limb-bits 30) "1152921504606846975")
@@ -469,7 +470,8 @@
          (left
           (integer
            backend
-           "115792089237316195423570985008687907853269984665640564039457584007913129639936"))
+           "115792089237316195423570985008687907853269984665640564039457584007\
+913129639936"))
          (right
           (integer backend "123456789012345678901234567890123456789"))
          (divisor
@@ -964,7 +966,8 @@
                   (integer backend "9")))))
   (test-equal
    'two-to-256
-   "115792089237316195423570985008687907853269984665640564039457584007913129639936"
+   "11579208923731619542357098500868790785326998466564056403945758400791312963\
+9936"
    (integer-text backend power))
   (test-equal 'large-square-root
               (integer-text backend power)

@@ -48,7 +48,8 @@
          (values (type list)
           (description "Zero or more Scheme-readable field values.")))
         (returns (type pair)
-         (description ("A field pair whose car is NAME and whose cdr is VALUES.")))
+         (description
+           ("A field pair whose car is NAME and whose cdr is VALUES.")))
         (effects pure))
       (cons name values))
 
@@ -82,11 +83,13 @@
          (line (type exact-integer)
           (description "One-based start line, or host-provided line datum."))
          (column (type exact-integer)
-          (description ("One-based start column, or host-provided column datum.")))
+          (description
+            ("One-based start column, or host-provided column datum.")))
          (end-line (type exact-integer)
           (description "One-based end line, or host-provided line datum."))
          (end-column (type exact-integer)
-          (description ("One-based end column, or host-provided column datum."))))
+          (description
+            ("One-based end column, or host-provided column datum."))))
         (returns (type diagnostic-range)
          (description "A `diagnostic-range` datum."))
         (effects pure))
@@ -127,11 +130,13 @@
         (effects pure))
       (diagnostics-field-value range 'end #f))
 
-    (define (make-diagnostic severity message source file buffer range metadata)
+    (define (make-diagnostic severity message source file buffer range
+      metadata)
       "Return one diagnostic record in the shared adapter-neutral shape."
       #((parameters
          (severity (type symbol)
-          (description ("Severity symbol from the shared diagnostic vocabulary.")))
+          (description
+            ("Severity symbol from the shared diagnostic vocabulary.")))
          (message (type string)
           (description "Human-readable diagnostic message."))
          (source . "Backend, tool, or protocol source datum.")
@@ -141,7 +146,8 @@
          (range (type (or diagnostic-range boolean))
           (description "Diagnostic range datum, or #f."))
          (metadata (type list)
-          (description "Additional backend metadata as Scheme-readable data.")))
+          (description
+            "Additional backend metadata as Scheme-readable data.")))
         (returns (type diagnostic)
          (description "A `diagnostic` datum."))
         (effects pure))
@@ -232,7 +238,8 @@
         (effects pure))
       (diagnostics-field-value diagnostic 'metadata '()))
 
-    (define (make-diagnostics-snapshot status scope buffer file diagnostics metadata)
+    (define (make-diagnostics-snapshot status scope buffer file diagnostics
+      metadata)
       "Return a stable diagnostic snapshot for one adapter observation."
       #((parameters
          (status (type symbol)
@@ -288,7 +295,8 @@
         (effects pure))
       (diagnostics-field-value snapshot 'diagnostics '()))
 
-    (define (make-diagnostics-capability-request id operation authority arguments)
+    (define (make-diagnostics-capability-request id operation authority
+      arguments)
       "Return a host-adapter request datum for a diagnostics operation."
       #((parameters
          (id . "Stable request id.")
@@ -340,7 +348,8 @@
          (status (type symbol)
           (description "Result status symbol."))
          (value (type (or diagnostics-snapshot diagnostics-outcome))
-          (description ("Result payload, usually a snapshot or outcome datum."))))
+          (description
+            ("Result payload, usually a snapshot or outcome datum."))))
         (returns (type diagnostics-capability-result)
          (description "A `diagnostics-capability-result` datum."))
         (effects pure))
@@ -350,7 +359,8 @@
             (diagnostics-field 'value value)))
 
     (define (make-diagnostics-outcome status message)
-      "Return an explicit diagnostics outcome record for adapter availability."
+      "Return an explicit diagnostics outcome record for adapter availability.\
+"
       #((parameters
          (status (type symbol)
           (description "Outcome status symbol."))

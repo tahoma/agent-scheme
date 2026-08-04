@@ -2,9 +2,11 @@
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; This file is intentionally kept out of the default portable suite and run by
+;;; This file is intentionally kept out of the default portable suite and run
+;;; by
 ;;; the opt-in Scheme-native live model shard.  It reaches a real local
-;;; OpenAI-compatible endpoint through `(model-complete)' so the portable Scheme
+;;; OpenAI-compatible endpoint through `(model-complete)' so the portable
+;;; Scheme
 ;;; backend cannot satisfy the check with a fake transport.
 
 (import (scheme base)
@@ -77,7 +79,8 @@
            (response
             (model-complete
              'scheme-scripter
-             \"Call the local-echo tool with text exactly portable-ci-tool-call.\"
+             \"Call the local-echo tool with text exactly portable-ci-tool-cal\
+l.\"
              (list (list 'tools (list tool))
                    (list 'tool-choice tool))))
            (tool-calls (field response 'tool-calls))
@@ -93,7 +96,8 @@
             (string? text)))"))
 
 (define (run-live-tool-call-check)
-  "Run the live portable model tool-call check against the configured endpoint."
+  "Run the live portable model tool-call check against the configured endpoint\
+."
   (let* ((endpoint
          (env-or-default "CONSENT_LIVE_MODEL_ENDPOINT"
                           "http://127.0.0.1:11434/v1"))

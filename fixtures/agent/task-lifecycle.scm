@@ -6,7 +6,8 @@
  (version 1)
  (scenarios
   ((id normal-completion)
-   (description "A task moves through action and stops with completion evidence.")
+   (description
+     "A task moves through action and stops with completion evidence.")
    (task
     (agent-task
      (id task-complete)
@@ -236,7 +237,8 @@
       (verifier-result not-run)
       (pause-reason host-effect-timeout)))))
   ((id cancellation)
-   (description "A user cancellation stops the task with a cancellation receipt.")
+   (description
+     "A user cancellation stops the task with a cancellation receipt.")
    (task
     (agent-task
      (id task-cancelled)
@@ -403,7 +405,8 @@
       (verifier-result insufficient-evidence)
       (pause-reason waiting-for-user-input)))))
   ((id stop-receipt)
-   (description "A terminal receipt preserves the evidence that no more work ran.")
+   (description
+     "A terminal receipt preserves the evidence that no more work ran.")
    (task
     (agent-task
      (id task-stopped)
@@ -442,7 +445,9 @@
  (control-loop-scenarios
   ((id successful-completion)
    (status implemented)
-   (description "The minimal runner performs one gated action and verifier-stamped finish.")
+   (description
+     "The minimal runner performs one gated action and verifier-stamped finish\
+.")
    (runner
     ((goal replace-helper)
      (options
@@ -484,7 +489,8 @@
       (stop-reason completed-goal)))))
   ((id user-input-wait)
    (status implemented)
-   (description "User input waits are blocked with pause-reason waiting-for-user-input.")
+   (description
+     "User input waits are blocked with pause-reason waiting-for-user-input.")
    (runner
     ((goal summarize)
      (options
@@ -641,7 +647,8 @@
       (stop-reason condition-failed)))))
   ((id misapplied-tool)
    (status implemented)
-   (description "A real tool with malformed arguments is denied before effects.")
+   (description
+     "A real tool with malformed arguments is denied before effects.")
    (runner
     ((goal call-tool)
      (options
@@ -724,7 +731,8 @@
       (stop-reason approval-denied)))))
   ((id authority-unavailable)
    (status implemented)
-   (description "Missing authority blocks without performing the proposed effect.")
+   (description
+     "Missing authority blocks without performing the proposed effect.")
    (runner
     ((goal edit-file)
      (options
@@ -761,7 +769,8 @@
       (pause-reason authority-unavailable)))))
   ((id stale-handle)
    (status implemented)
-   (description "A stale handle is treated as unavailable authority before effects run.")
+   (description
+     "A stale handle is treated as unavailable authority before effects run.")
    (runner
     ((goal edit-file)
      (options
@@ -798,7 +807,8 @@
       (pause-reason authority-unavailable)))))
   ((id provider-unavailable)
    (status implemented)
-   (description "An unavailable provider pauses with model-provider-unavailable.")
+   (description
+     "An unavailable provider pauses with model-provider-unavailable.")
    (runner
     ((goal plan-next)
      (options
@@ -833,7 +843,8 @@
       (pause-reason model-provider-unavailable)))))
   ((id host-timeout)
    (status unavailable)
-   (description "A host capability timeout pauses until the host boundary resolves.")
+   (description
+     "A host capability timeout pauses until the host boundary resolves.")
    (runner
     ((goal observe-diagnostics)
      (options
@@ -870,7 +881,8 @@
       (pause-reason host-effect-timeout)))))
   ((id budget-exhaustion)
    (status implemented)
-   (description "A step budget exhaustion stops with budget-exhausted and a ledger.")
+   (description
+     "A step budget exhaustion stops with budget-exhausted and a ledger.")
    (runner
     ((goal bounded-work)
      (options
@@ -973,7 +985,8 @@
       (stop-reason cancelled-by-user)))))
   ((id resumed-task-completion)
    (status pending)
-   (description "A resumed task keeps its prior pause link and then completes.")
+   (description
+     "A resumed task keeps its prior pause link and then completes.")
    (runner
     ((goal resume-blocked-task)
      (options
@@ -1008,7 +1021,8 @@
       (stop-reason completed-goal)))))
   ((id policy-bypass-quarantine)
    (status implemented)
-   (description "A control-plane proposal is denied and performs no host effect.")
+   (description
+     "A control-plane proposal is denied and performs no host effect.")
    (runner
     ((goal escalate-authority)
      (options
@@ -1046,7 +1060,8 @@
       (stop-reason condition-failed)))))
   ((id mid-code-action-budget-exhaustion)
    (status implemented)
-   (description "An unbounded model-emitted code-action is halted by pure-cost budget.")
+   (description
+     "An unbounded model-emitted code-action is halted by pure-cost budget.")
    (runner
     ((goal run-untrusted-loop)
      (options

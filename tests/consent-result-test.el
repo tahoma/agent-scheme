@@ -1,4 +1,4 @@
-;;; consent-result-test.el --- Result rendering module tests  -*- lexical-binding: t; -*-
+;;; consent-result-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

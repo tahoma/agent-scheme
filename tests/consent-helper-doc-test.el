@@ -1,4 +1,4 @@
-;;; consent-helper-doc-test.el --- Helper artifact documentation checks  -*- lexical-binding: t; -*-
+;;; consent-helper-doc-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

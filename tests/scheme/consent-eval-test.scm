@@ -409,7 +409,8 @@
        (consent-datum->external
         (consent-syntax-source
          (consent-read "\n  (twice 21)\n")))
-       "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))"))
+       "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) \
+(span 10) (phase read))"))
 
 (testing-registry-case
  'reader-source-metadata-explicit-disabled '(portable core)
@@ -427,7 +428,8 @@
         (consent-syntax-source
          (consent-read "\n  (twice 21)\n"
                             '((source-metadata . #t)))))
-       "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))"))
+       "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) \
+(span 10) (phase read))"))
 
 (testing-registry-case
  'reader-native-number-predicate-preserves-canonical-record '(portable core)
@@ -461,7 +463,8 @@
          (if source
              (consent-datum->external source)
              "#f"))
-       "(source (origin source) (source-id #f) (line 1) (column 2) (offset 1) (span 7) (phase read))"))
+       "(source (origin source) (source-id #f) (line 1) (column 2) (offset 1) \
+(span 7) (phase read))"))
 
 (testing-registry-case
  'reader-source-metadata-limit-can-be-raised '(portable core)
@@ -481,7 +484,8 @@
                                    (max-source-metadata . 10000000))))
                   (source-note (consent-syntax-source (car datum))))
              (if source-note source-note 'missing-source)))))
-       "(limited (source (origin source) (source-id #f) (line 1) (column 2) (offset 1) (span 7) (phase read)))"))
+       "(limited (source (origin source) (source-id #f) (line 1) (column 2) (o\
+ffset 1) (span 7) (phase read)))"))
 
 (testing-registry-case
  'simple-string-docstring-reflection '(portable core)
@@ -507,7 +511,8 @@
                        (arguments (documentation documented))
                        (doc-string (documentation documented)))"
                 '((docstring-retention . full))
-                "(5 (binding documented) (x) \"Return X plus one.\" (procedure) (x) \"Return X plus one.\")"))
+                "(5 (binding documented) (x) \"Return X plus one.\" (procedure\
+) (x) \"Return X plus one.\")"))
 
 (testing-registry-case
  'documentation-arguments-metadata '(portable core)
@@ -566,13 +571,16 @@
                    (scheme base)
                    kernel
                    (primitive-manifest metadata)
-                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
+                   \"Return the sum of all numeric arguments, or 0 when called \
+with no arguments.\"
                    (procedure)
-                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
+                   \"Return the sum of all numeric arguments, or 0 when called \
+with no arguments.\"
                    (scheme time)
                    host-capability
                    (primitive-manifest string)
-                   \"Return the current time as a real number of seconds since the "
+                   \"Return the current time as a real number of seconds since \
+the "
                  "Unix epoch, subject to the clock capability policy.\")")))
 
 (testing-registry-case
@@ -662,11 +670,14 @@
                          (consent-describe 'missing)))"
                 '((docstring-retention . full))
                 (expected-datum-external
-                 "((binding +) value primitive-procedure (scheme base) kernel "
+                 "((binding +) value primitive-procedure (scheme base) kernel \
+"
                  "\"#<primitive +>\" "
-                 "\"Return the sum of all numeric arguments, or 0 when called "
+                 "\"Return the sum of all numeric arguments, or 0 when called \
+"
                  "with no arguments.\" "
-                 "(binding documented) value procedure #f #f \"#<procedure>\" "
+                 "(binding documented) value procedure #f #f \"#<procedure>\" \
+"
                  "(((source . \"(documented 4)\") (result . 5))) "
                  "value \"42\" #f "
                  "(binding documented) \"Return X plus one.\" #f)")))
@@ -678,7 +689,8 @@
                  (define (field datum name)
                    (cadr (assq name (cdr datum))))
                  (define (metadata-field datum name)
-                   (let ((entry (and datum (assq name (field datum 'fields)))))
+                   (let ((entry (and datum (assq name (field datum 'fields))))\
+)
                      (if entry (cadr entry) #f)))
                  (define (doc-string datum)
                    (metadata-field datum 'documentation))
@@ -708,7 +720,8 @@
                        (arguments (documentation 'no-doc))
                        (doc-string (documentation 'missing)))"
                 '((docstring-retention . full))
-                "(\"First line. Second line.\" (x) 5 \"Use the local definition.\" (x) \"result\" #f () #f (x) #f)"))
+                "(\"First line. Second line.\" (x) 5 \"Use the local definitio\
+n.\" (x) \"result\" #f () #f (x) #f)"))
 
 (testing-registry-case
  'rich-documentation-metadata '(portable core)
@@ -731,7 +744,8 @@
                    \"Create an Consent Scheme session from CONFIG.\"
                    \"The session is represented as a datum.\"
                    #((summary . \"Open an Consent Scheme session.\")
-                     (parameters . ((config . \"Session configuration datum.\")))
+                     (parameters . ((config . \"Session configuration datum.\"\
+)))
                      (returns . \"A session record.\")
                      (effects . (pure))
                      (examples . (((source . \"(rich cfg)\")
@@ -847,7 +861,8 @@
                  (define (metadata-field name field-name)
                    (let ((datum (documentation name)))
                      (if datum
-                         (let ((entry (assq field-name (field datum 'fields))))
+                         (let ((entry (assq field-name (field datum 'fields)))\
+)
                            (if entry (cadr entry) #f))
                        #f)))
                  (define (typed config)
@@ -953,7 +968,8 @@
                        (metadata-field 'documented 'arguments)
                        (metadata-field 'documented 'summary)
                        (metadata-field 'documented 'returns)
-                       (if (documentation '+) 'primitive-kept 'primitive-missing))"
+                       (if (documentation '+) 'primitive-kept 'primitive-missi\
+ng))"
                 '((docstring-retention . simple))
                 "(5 \"Return X plus one.\" (x) #f #f primitive-kept)"))
 
@@ -969,7 +985,8 @@
                  (list (documented 4)
                        (documentation 'documented)
                        (documentation documented)
-                       (if (documentation '+) 'primitive-kept 'primitive-missing))"
+                       (if (documentation '+) 'primitive-kept 'primitive-missi\
+ng))"
                 '((docstring-retention . #f))
                 "(5 #f #f primitive-kept)"))
 
@@ -1031,7 +1048,8 @@
                  (define (metadata-field name field-name)
                    (let ((datum (documentation name)))
                      (if datum
-                         (let ((entry (assq field-name (field datum 'fields))))
+                         (let ((entry (assq field-name (field datum 'fields)))\
+)
                            (if entry (cadr entry) #f))
                        #f)))
                  (list (doc-string 'length)
@@ -1051,15 +1069,20 @@
                  "(\"Return the number of pairs in LIST.\"
                    \"Return PROMISE's value, evaluating and memoizing "
                  "delayed thunks once.\"
-                   \"Render DIFF to deterministic unified-diff text for humans.\"
-                   \"Return a host-adapter request datum for one network operation.\"
+                   \"Render DIFF to deterministic unified-diff text for humans\
+.\"
+                   \"Return a host-adapter request datum for one network opera\
+tion.\"
                    \"Return a fail-closed authorization decision for REQUEST.\"
-                   \"Generate a shared fixture case from EVENT when replay permits it.\"
+                   \"Generate a shared fixture case from EVENT when replay per\
+mits it.\"
                    ((promise
                      (type any)
-                     (description \"Promise record or ordinary value to force.\")))
+                     (description \"Promise record or ordinary value to force.\
+\")))
                    ((type any)
-                    (description \"PROMISE's memoized value, or PROMISE unchanged "
+                    (description \"PROMISE's memoized value, or PROMISE unchan\
+ged "
                  "when it is not a promise.\"))
                    ((diff
                      (type diff)
@@ -1074,14 +1097,18 @@
                     (operation
                      (type symbol)
                      (description
-                      \"Network operation symbol such as request or stream.\"))
+                      \"Network operation symbol such as request or stream.\")\
+)
                     (resource
                      (type list)
-                     (description \"Association list describing scheme, host, "
-                 "port, method, headers, payload, response, redirect, timeout, "
+                     (description \"Association list describing scheme, host, \
+"
+                 "port, method, headers, payload, response, redirect, timeout, \
+"
                  "and stream limits.\")))
                    ((type network-capability-request)
-                    (description \"A `network-capability-request` datum ready "
+                    (description \"A `network-capability-request` datum ready \
+"
                  "for policy evaluation.\")))")))
 
 ;; Report whether TEXT starts with PREFIX.
@@ -2465,7 +2492,8 @@
                           even
                           odd
                           (lset-union = '(1 2) '(2 3 4)))))"
-                "((0 1 2 3) (0 1 4) ((a b) (c d)) (2 4) (11 22 33) 10 (4 6) #t #t 2 (\"bee\") (2 4) (1 3 5) (4 3 1 2))")
+                "((0 1 2 3) (0 1 4) ((a b) (c d)) (2 4) (11 22 33) 10 (4 6) #t \
+#t 2 (\"bee\") (2 4) (1 3 5) (4 3 1 2))")
 )
 
 (testing-registry-case
@@ -2541,9 +2569,9 @@
                         (gappend (generator 'a 'b)
                                  (list->generator '(c d))))
                        (let ((acc (list-accumulator)))
-	                         (acc 'x)
-	                         (acc 'y)
-	                         (acc (eof-object))))"
+                                 (acc 'x)
+                                 (acc 'y)
+                                 (acc (eof-object))))"
                 "((0 -1 -2) (a b c d) (x y))"))
 
 (testing-registry-case
@@ -2623,7 +2651,8 @@
                  (let* ((datum
                          (json-read
                           (open-input-string
-                           \"{\\\"name\\\":\\\"Ada\\\",\\\"scores\\\":[1,true,null],"
+                           \"{\\\"name\\\":\\\"Ada\\\",\\\"scores\\\":[1,true,\
+null],"
                  "\\\"nested\\\":{\\\"ok\\\":false}}\")))
                         (scores (cdr (assq 'scores datum)))
                         (nested (cdr (assq 'nested datum))))
@@ -2819,13 +2848,15 @@
  'srfi-128-comparator-behavior '(portable core)
 (check-external 'srfi-128-comparator-behavior
                 "(import (scheme base) (stdlib comparator))
-                 (let* ((number-comparator (make-comparator real? = < number-hash))
+                 (let* ((number-comparator (make-comparator real? = < number-h\
+ash))
                         (list-comparator
                          (make-list-comparator
                           number-comparator list? null? car cdr))
                         (vector-comparator
                          (make-vector-comparator
-                          number-comparator vector? vector-length vector-ref)))
+                          number-comparator vector? vector-length vector-ref))\
+)
                    (list (comparator? number-comparator)
                          (comparator-ordered? number-comparator)
                          (comparator-hashable? number-comparator)
@@ -2851,7 +2882,8 @@
 (check-external 'srfi-128-alias-import
                 "(import (scheme base) (srfi 128))
                  (let ((string-comparator
-                        (make-comparator string? string=? string<? string-hash)))
+                        (make-comparator string? string=? string<? string-hash\
+)))
                    (list (<? string-comparator \"ant\" \"bee\")
                          (=? string-comparator \"same\" \"same\")))"
                 "(#t #t)"))
@@ -2861,7 +2893,8 @@
 (check-external 'srfi-128-portable-alias-import
                 "(import (scheme base) (srfi srfi-128))
                  (let ((string-comparator
-                        (make-comparator string? string=? string<? string-hash)))
+                        (make-comparator string? string=? string<? string-hash\
+)))
                    (list (<? string-comparator \"ant\" \"bee\")
                          (=? string-comparator \"same\" \"same\")))"
                 "(#t #t)"))
@@ -3208,13 +3241,16 @@
  'debugger-private-procedure-docstring-result '(portable core)
 (check-result-contains 'debugger-private-procedure-docstring-result
                        "(define (private-helper x)
-                          \"Explain the private helper for debugger inspection.\"
+                          \"Explain the private helper for debugger inspection\
+.\"
                           x)
                         missing"
-                       '("(binding (name private-helper) (procedure-documentation"
+                       '("(binding (name private-helper) (procedure-documentat\
+ion"
                          "(subject (procedure))"
                          "(origin (body-literal string))"
-                         "(documentation \"Explain the private helper for debugger inspection.\")")
+                         "(documentation \"Explain the private helper for debu\
+gger inspection.\")")
                        '((docstring-retention . full))))
 
 (testing-registry-case
@@ -3240,7 +3276,8 @@
     (list (symbol? id)
           (eq? id (string->symbol \"continue-with-warning\"))
           result))"
- "(#t #t (restart-result (id continue-with-warning) (status continued) (options ())))"))
+ "(#t #t (restart-result (id continue-with-warning) (status continued) (option\
+s ())))"))
 
 (testing-registry-case
  'debugger-yield-event '(portable core)
@@ -3253,7 +3290,8 @@
                         'done"
                        '("(status ok)"
                          "(value done)"
-                         "(events ((debugger (condition (type synthetic) (message \"example\")))))")))
+                         "(events ((debugger (condition (type synthetic) (mess\
+age \"example\")))))")))
 
 (testing-registry-case
  'multiple-values-binding-forms '(portable core)
@@ -3308,7 +3346,8 @@
                            bytes
                            (utf8->string bytes)
                            (utf8->string bytes 1 4))))"
-                "(#t #t #t outer inner outer #u8(97 103 101 110 116) \"agent\" \"gen\")"))
+                "(#t #t #t outer inner outer #u8(97 103 101 110 116) \"agent\" \
+\"gen\")"))
 
 (testing-registry-case
  'call/cc-escape '(portable core)
@@ -3599,7 +3638,8 @@
 (check-external 'char-literal-hex-scalar    "(char->integer #\\x41)" "65"))
 (testing-registry-case
  'char->integer-yields-number '(portable core)
-(check-external 'char->integer-yields-number "(+ 1 (char->integer #\\a))" "98"))
+(check-external 'char->integer-yields-number "(+ 1 (char->integer #\\a))"
+  "98"))
 
 (testing-registry-case
  'cond-arrow-respects-literal-binding '(portable core)
@@ -3669,7 +3709,8 @@
                                  (quasiquote
                                   (inner (unquote (+ 1 2))))
                                  (unquote (+ 2 3)))))"
-                "((a 3 b c) #(1 3) (outer (quasiquote (inner (unquote (+ 1 2)))) 5))"))
+                "((a 3 b c) #(1 3) (outer (quasiquote (inner (unquote (+ 1 2))\
+)) 5))"))
 
 (testing-registry-case
  'cond-expand-selects-base-feature '(portable core)
@@ -3742,7 +3783,8 @@
 (testing-registry-case
  'budget-ledger-shape '(portable core)
 (check-result-contains 'budget-ledger-shape
-                       "(import (scheme base) (agent reflect)) (current-budget)"
+                       "(import (scheme base) (agent reflect)) (current-budget\
+)"
                        (list "(steps-used " "(max-steps 100000)"
                              "(host-calls " "(max-host-calls 10000)"
                              "(events-used " "(max-events 1000)"
@@ -3756,12 +3798,14 @@
                               ")")
                              "(interned-symbols-used "
                              "(max-interned-symbols 1000000)"
-                             "(output-bytes-used " "(max-output-bytes 10485760)"
+                             "(output-bytes-used "
+                              "(max-output-bytes 10485760)"
                              "(max-wall-time-ms #f)" "(reason #f)")))
 
 ;; A string->symbol flood halts on the interned-symbols dimension rather than
 ;; growing the intern table without limit; with a generous step budget the
-;; interned-symbol budget is the binding constraint and is named in the receipt.
+;; interned-symbol budget is the binding constraint and is named in the
+;; receipt.
 (testing-registry-case
  'budget-interned-symbol-flood-reason '(portable core)
 (check-result-contains 'budget-interned-symbol-flood-reason
@@ -3885,7 +3929,8 @@
                 "(import (scheme base) (agent reflect))
                  (budget-exhausted?
                    '(evaluation-result (status error)
-                      (error (condition (condition (type budget-exhausted))))))"
+                      (error (condition (condition (type budget-exhausted)))))\
+)"
                 "#t"))
 
 ;; budget-yield emits the current ledger as an observable yield event.
@@ -3953,7 +3998,8 @@
                        (syntax-source (list 'twice 21))
                        (equal? '(twice 21) (list 'twice 21)))"
                 '((source-metadata . #f))
-                "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f #f #f #t)"))
+                "((macro-binding (identifier twice) (status bound) (kind synta\
+x-rules) (library #f)) #f #f #f #t)"))
 
 (testing-registry-case
  'import-scheme-base-into-empty-environment '(portable core)
@@ -4142,16 +4188,23 @@
 (define port-test-input-path "tests/scheme/scratch/consent-port-input.scm")
 ;; Host-side temporary file path used for portable open-output-file coverage.
 (define port-test-output-path "tests/scheme/scratch/consent-port-output.scm")
-;; Host-side temporary file path used for portable call-with-output-file coverage.
-(define port-test-call-output-path "tests/scheme/scratch/consent-port-call-output.scm")
-;; Host-side temporary file path used for portable with-output-to-file coverage.
-(define port-test-with-output-path "tests/scheme/scratch/consent-port-with-output.scm")
+;; Host-side temporary file path used for portable call-with-output-file
+;; coverage.
+(define port-test-call-output-path
+  "tests/scheme/scratch/consent-port-call-output.scm")
+;; Host-side temporary file path used for portable with-output-to-file
+;; coverage.
+(define port-test-with-output-path
+  "tests/scheme/scratch/consent-port-with-output.scm")
 ;; Host-side temporary file path used for portable close-limit coverage.
-(define port-test-close-output-path "tests/scheme/scratch/consent-port-close-output.scm")
+(define port-test-close-output-path
+  "tests/scheme/scratch/consent-port-close-output.scm")
 ;; Host-side temporary input file path used for portable binary port coverage.
-(define port-test-binary-input-path "tests/scheme/scratch/consent-port-input.bin")
+(define port-test-binary-input-path
+  "tests/scheme/scratch/consent-port-input.bin")
 ;; Host-side temporary output file path used for portable binary port coverage.
-(define port-test-binary-output-path "tests/scheme/scratch/consent-port-output.bin")
+(define port-test-binary-output-path
+  "tests/scheme/scratch/consent-port-output.bin")
 
 ;; First-class file grant that allows the portable evaluator to delete only
 ;; the host-side temporary file above, plus metadata checks after deletion.
@@ -4173,7 +4226,8 @@
 (define repl-session-options
   '((session-id . portable-repl)))
 
-;; Session context alone is not enough when policy denies standard host effects.
+;; Session context alone is not enough when policy denies standard host
+;; effects.
 (define repl-session-denied-options
   '((session-id . portable-repl-denied)
     (policy-actions
@@ -4237,7 +4291,8 @@
 
 ;; First-class network grants are host-neutral request/decision vocabulary.
 ;; Host adapters decide whether to connect the authorization to real transport;
-;; the portable runtime owns the datum shape, grant matching, and audit records.
+;; the portable runtime owns the datum shape, grant matching, and audit
+;; records.
 (define network-grant-options
   '((policy-actions
      (network-access . allow))
@@ -4350,7 +4405,8 @@
                         "(define-library
                            (consent fixture included-declarations)
                            (include-library-declarations
-                            \"fixtures/r7rs/include-library-declarations.scm\"))
+                            \"fixtures/r7rs/include-library-declarations.scm\"\
+))
                          (import
                           (consent fixture included-declarations))
                          answer"
@@ -5641,7 +5697,8 @@
                      \"# branch.head main\" nul
                      \"# branch.upstream origin/main\" nul
                      \"# branch.ab +2 -1\" nul
-                     \"1 M. N... 100644 100644 100644 aaaaaaa bbbbbbb src/main.scm\" nul
+                     \"1 M. N... 100644 100644 100644 aaaaaaa bbbbbbb src/main\
+.scm\" nul
                      \"? scratch.scm\" nul)))
                  (define branch (vcs-status-branch status))
                  (define entries (vcs-status-entries status))
@@ -5692,7 +5749,8 @@
                     \"/repo\"
                     #f))
                  (define allowed
-                   (vcs-authorize-capability-request request (list grant) '()))
+                   (vcs-authorize-capability-request request (list grant) '())\
+)
                  (define result
                    (make-vcs-capability-result
                     'req-stage
@@ -5738,7 +5796,8 @@
                     'req-push
                     'push
                     'remote-mutation
-                    '((repository \"/repo\") (remote \"origin\") (branch \"main\"))))
+                    '((repository \"/repo\") (remote \"origin\") (branch \"mai\
+n\"))))
                  (define local-grant
                    (make-vcs-capability-grant
                     'grant-local
@@ -5747,7 +5806,8 @@
                     \"/repo\"
                     #f))
                  (define denied
-                   (vcs-authorize-capability-request request (list local-grant) '()))
+                   (vcs-authorize-capability-request request (list local-grant\
+) '()))
                  (define approval
                    (make-vcs-approval-decision
                     'approve-push
@@ -5755,7 +5815,8 @@
                     'approved
                     \"User approved push.\"))
                  (define allowed
-                   (vcs-authorize-capability-request request '() (list approval)))
+                   (vcs-authorize-capability-request request '() (list approva\
+l)))
                  (define result
                    (make-vcs-capability-result
                     'req-push
@@ -5776,7 +5837,8 @@
                   (vcs-field-value audit 'outcome #f)
                   (vcs-known-outcome? 'remote-authentication-failed)
                   (vcs-known-outcome? 'remote-unavailable))"
-                "(#t remote-mutation denied approved approve-push #t #t remote-authentication-failed #t #t)"))
+                "(#t remote-mutation denied approved approve-push #t #t remote\
+-authentication-failed #t #t)"))
 
 (testing-registry-case
  'agent-approval-request-status '(portable core)
@@ -5848,7 +5910,8 @@
   (check 'agent-approval-self-approval-denied
          (and (equal? (field-value result 'status) 'error)
               (string=? (field-value error-field 'message)
-                        "consent eval error: approval resolution is host-side only")
+                        "consent eval error: approval resolution is host-side \
+only")
          #t)
          #t)))
 
@@ -5958,7 +6021,8 @@
             \"{\\\"choices\\\":[{\\\"message\\\":{\\\"content\\\":\"
             \"\\\"Use a tool.\\\",\\\"tool_calls\\\":[{\\\"id\\\":\"
             \"\\\"call-1\\\",\\\"type\\\":\\\"function\\\",\\\"function\\\":{\"
-            \"\\\"name\\\":\\\"local-echo\\\",\\\"arguments\\\":\\\"{}\\\"}}]}}]}\")))
+            \"\\\"name\\\":\\\"local-echo\\\",\\\"arguments\\\":\\\"{}\\\"}}]}\
+}]}\")))
          (call (car (cadr (car (cddr response)))))
          (name (cadr (assq 'name (cdr call)))))
     (list (string-contains? request \"local-echo\")
@@ -6447,7 +6511,8 @@
               (consent-host-symbol-eq? (car value) 'agent-test-group)
               (string-contains?
                (consent-value->external value)
-               "(summary (total 3) (pass 2) (fail 1) (error 0) (skipped 0) (budget-exhausted 0))")
+               "(summary (total 3) (pass 2) (fail 1) (error 0) (skipped 0) (bu\
+dget-exhausted 0))")
               #t)
          #t)))
 
@@ -6493,7 +6558,8 @@
                "(kind skill)")
               (string-contains?
                (consent-value->external value)
-               "(summary (total 2) (pass 2) (fail 0) (error 0) (skipped 0) (budget-exhausted 0))")
+               "(summary (total 2) (pass 2) (fail 0) (error 0) (skipped 0) (bu\
+dget-exhausted 0))")
               #t)
          #t)))
 
@@ -6517,7 +6583,8 @@
                "(status budget-exhausted)")
               (string-contains?
                (consent-value->external value)
-               "(summary (total 1) (pass 0) (fail 0) (error 0) (skipped 0) (budget-exhausted 1))")
+               "(summary (total 1) (pass 0) (fail 0) (error 0) (skipped 0) (bu\
+dget-exhausted 1))")
               #t)
          #t)))
 
@@ -6600,10 +6667,12 @@
          (and (equal? (field-value result 'status) 'ok)
               (string-contains?
                (consent-value->external value)
-               "(request-context (request-id portable-req) (request \"portable context request\"))")
+               "(request-context (request-id portable-req) (request \"portable \
+context request\"))")
               (string-contains?
                (consent-value->external value)
-               "(conversation-summary (summary \"portable conversation summary\"))")
+               "(conversation-summary (summary \"portable conversation summary\
+\"))")
               (string-contains?
                (consent-value->external value)
                "(focus-context")
@@ -6668,7 +6737,8 @@
  'process-environment-read-allowed-under-grant '(portable core)
 (check-external/options 'process-environment-read-allowed-under-grant
                         "(import (scheme base) (scheme process-context))
-                         (get-environment-variable \"CONSENT_UNSET_ENV_PROBE\")"
+                         (get-environment-variable \"CONSENT_UNSET_ENV_PROBE\"\
+)"
                         '((capability-grants
                            (capability-grant
                             (id host-environment)
@@ -6694,7 +6764,8 @@
 ;; libraries from source and the imported binding is usable -- the metacircular
 ;; self-hosting mechanism (resolve -> register-source-library! -> bind). A tiny
 ;; library keeps this cheap on every portable host; the heavy proof that a full
-;; library (the reader) self-hosts lives in the compiled `--host-run' path, where
+;; library (the reader) self-hosts lives in the compiled `--host-run' path,
+;; where
 ;; the native interpreter loads it quickly rather than being re-interpreted.
 (testing-registry-case
  'internal-library-self-hosts-from-source '(portable core)
@@ -6709,7 +6780,8 @@
 ;; their portable store helpers while attaching host effects.
 (testing-registry-case
  'internal-agent-primitive-library-self-hosts-from-source '(portable core)
-(check-external/options 'internal-agent-primitive-library-self-hosts-from-source
+(check-external/options
+  'internal-agent-primitive-library-self-hosts-from-source
                         "(import (agent approval))
                          (consent-approval-store?
                           (consent-make-approval-store))"
@@ -6842,14 +6914,16 @@
               (error-field (assq 'error (cdr result)))
               (message-field (assq 'message (cdr error-field))))
          (cadr message-field))
-       "consent eval error: syntax-error while expanding (bad-use 123): \"bad macro\" 123"))
+       "consent eval error: syntax-error while expanding (bad-use 123): \"bad \
+macro\" 123"))
 
 (testing-registry-case
  'result-rendering '(portable core)
 (check 'result-rendering
        (consent-result->external
         (consent-eval-source-result "(+ 1 2)"))
-       "(evaluation-result (status ok) (value 3) (events ()) (budget (steps-used 5) (host-calls 1)))"))
+       "(evaluation-result (status ok) (value 3) (events ()) (budget (steps-us\
+ed 5) (host-calls 1)))"))
 
 (testing-registry-case
  'closure '(portable core)
@@ -7003,7 +7077,8 @@
        #t))
 
 ;; Program-input stream (docs/repl-interaction-contract.md, "Stream
-;; Separation"): a non-interactive evaluation connects `(current-input-port)' to
+;; Separation"): a non-interactive evaluation connects `(current-input-port)'
+;; to
 ;; the buffered process input only under an active `port'/`read' grant whose
 ;; scope is backed by `stdin'.  Without the grant -- or with no program input
 ;; offered at all -- the read fails closed exactly as an unconnected current
@@ -7028,7 +7103,8 @@
                         "(list (read-line) (read-line) (read-char)
                                (eof-object? (read-line)))"
                         (list (cons 'program-input-reader
-                                    (consent-program-input-from-string "a\nb\nc"))
+                                    (consent-program-input-from-string
+                              "a\nb\nc"))
                               (list 'capability-grants program-input-grant))
                         "(\"a\" \"b\" #\\c #t)"))
 (testing-registry-case
@@ -7058,7 +7134,8 @@
 ;; as it needs and an unbounded stream never drains up front.  Parity twin of
 ;; the Emacs `consent-eval-test-program-input-streaming'.
 (define (program-input-list-reader chunks)
-  "Return a reader thunk yielding each of CHUNKS once, then #f at end of stream."
+  "Return a reader thunk yielding each of CHUNKS once, then #f at end of strea\
+m."
   (lambda ()
     (if (null? chunks)
         #f
@@ -7066,10 +7143,12 @@
           (set! chunks (cdr chunks))
           chunk))))
 
-;; Counts reader pulls so a check can assert a read consumed only what it needed.
+;; Counts reader pulls so a check can assert a read consumed only what it
+;; needed.
 (define program-input-stream-pulls 0)
 (define (program-input-counting-reader chunks)
-  "Like `program-input-list-reader' but counts pulls in `program-input-stream-pulls'."
+  "Like `program-input-list-reader' but counts pulls in `program-input-stream-\
+pulls'."
   (let ((inner (program-input-list-reader chunks)))
     (lambda ()
       (set! program-input-stream-pulls (+ program-input-stream-pulls 1))
@@ -7112,10 +7191,12 @@
                               (list 'capability-grants program-input-grant))
                         "(1 2 3 4)"))
 
-;; Program output / error streams (docs/repl-interaction-contract.md): a granted
+;; Program output / error streams (docs/repl-interaction-contract.md): a
+;; granted
 ;; writer receives each write flushed through immediately (write-through, not
 ;; buffered to end of program), an ungranted one fails closed, and an unbounded
-;; write loop stays bounded by the host-callback budget.  Parity twin of the Emacs
+;; write loop stays bounded by the host-callback budget. Parity twin of the
+;; Emacs
 ;; program-output/error tests.
 (define program-output-grant
   '(capability-grant (id program-output) (domain port)
@@ -7168,7 +7249,8 @@
         (lambda ()
           (consent-eval-source
            "(import (scheme base) (scheme write))
-            (let loop ((i 0)) (if (< i 50) (begin (display \"y\") (loop (+ i 1)))))"
+            (let loop ((i 0)) (if (< i 50) (begin (display \"y\") (loop (+ i 1\
+)))))"
            #f
            (list (cons 'program-output-writer (lambda (chunk) chunk))
                  (cons 'max-host-callbacks 5)
@@ -7193,7 +7275,8 @@
 ;; stream.  A `program-input-byte-reader' plus an active `port'/`read' grant
 ;; scoped to `stdin' connects `(current-input-port)' to a `stdio'-backed binary
 ;; input port that refills *bytes* on demand for `read-u8'/`peek-u8'/
-;; `read-bytevector'; without the grant -- or with no byte reader offered -- the
+;; `read-bytevector'; without the grant -- or with no byte reader offered --
+;; the
 ;; read fails closed exactly as an unconnected current input port does.  Parity
 ;; twin of the Emacs `consent-eval-test-program-binary-input-stream'.
 (testing-registry-case
@@ -7212,7 +7295,8 @@
  'program-binary-input-peek-u8 '(portable core)
 (check-external/options 'program-binary-input-peek-u8
                         "(let ((port (current-input-port)))
-                           (list (peek-u8 port) (read-u8 port) (read-u8 port)))"
+                           (list (peek-u8 port) (read-u8 port) (read-u8 port))\
+)"
                         (list (cons 'program-input-byte-reader
                                     (consent-program-input-from-bytevector
                                      (bytevector 7 8)))
@@ -7252,12 +7336,15 @@
        #t))
 
 ;; Streaming binary program input: a host `program-input-byte-reader' thunk
-;; yields the next bytevector chunk on demand (or #f at end of stream), so a read
-;; pulls only as many bytes as it needs and an unbounded byte stream never drains
+;; yields the next bytevector chunk on demand (or #f at end of stream), so a
+;; read
+;; pulls only as many bytes as it needs and an unbounded byte stream never
+;; drains
 ;; up front.  Parity twin of the Emacs
 ;; `consent-eval-test-program-binary-input-streaming'.
 (define (program-input-byte-list-reader chunks)
-  "Return a reader thunk yielding each of CHUNKS once, then #f at end of stream."
+  "Return a reader thunk yielding each of CHUNKS once, then #f at end of strea\
+m."
   (lambda ()
     (if (null? chunks)
         #f
@@ -7265,10 +7352,12 @@
           (set! chunks (cdr chunks))
           chunk))))
 
-;; Counts byte-reader pulls so a check can assert a read consumed only what it needed.
+;; Counts byte-reader pulls so a check can assert a read consumed only what it
+;; needed.
 (define program-input-byte-pulls 0)
 (define (program-input-byte-counting-reader chunks)
-  "Like `program-input-byte-list-reader' but counts pulls in `program-input-byte-pulls'."
+  "Like `program-input-byte-list-reader' but counts pulls in `program-input-by\
+te-pulls'."
   (let ((inner (program-input-byte-list-reader chunks)))
     (lambda ()
       (set! program-input-byte-pulls (+ program-input-byte-pulls 1))
@@ -7292,13 +7381,16 @@
 (testing-registry-case
  'program-binary-input-stream-incremental '(portable core)
 (check 'program-binary-input-stream-incremental program-input-byte-pulls 1))
-;; An unbounded byte reader would hang here if the port drained eagerly; reading
-;; a bounded number of bytes completes because refills stop once a byte is buffered.
+;; An unbounded byte reader would hang here if the port drained eagerly;
+;; reading
+;; a bounded number of bytes completes because refills stop once a byte is
+;; buffered.
 (testing-registry-case
  'program-binary-input-stream-unbounded '(portable core)
 (check-external/options 'program-binary-input-stream-unbounded
                         "(let ((port (current-input-port)))
-                           (list (read-u8 port) (read-u8 port) (read-u8 port)))"
+                           (list (read-u8 port) (read-u8 port) (read-u8 port))\
+)"
                         (list (cons 'program-input-byte-reader
                                     (lambda () (bytevector 120)))
                               (list 'capability-grants program-input-grant))
@@ -7322,8 +7414,10 @@
 ;; bounded by the host-callback budget.  Parity twin of the Emacs binary
 ;; program-output/error tests.
 
-;; Evaluate SOURCE with a capturing byte writer under GRANT bound to OPTION-KEY,
-;; returning (captured-bytes . flush-count) so a check can assert write-through.
+;; Evaluate SOURCE with a capturing byte writer under GRANT bound to
+;; OPTION-KEY,
+;; returning (captured-bytes . flush-count) so a check can assert
+;; write-through.
 (define (run-with-byte-writer source option-key grant)
   (let ((flushes 0) (bytes '()))
     (consent-eval-source-result
@@ -7365,7 +7459,8 @@
           (consent-eval-source
            "(let loop ((i 0))
               (if (< i 50)
-                  (begin (write-u8 121 (current-output-port)) (loop (+ i 1)))))"
+                  (begin (write-u8 121 (current-output-port)) (loop (+ i 1))))\
+)"
            #f
            (list (cons 'program-output-byte-writer (lambda (chunk) chunk))
                  (cons 'max-host-callbacks 5)

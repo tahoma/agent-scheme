@@ -1,4 +1,4 @@
-;;; consent-repl-stream.el --- Incremental stdin REPL over the interaction contract  -*- lexical-binding: t; -*-
+;;; consent-repl-stream.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -10,7 +10,8 @@
 ;; host-neutral obligations of the cross-host REPL interaction contract
 ;; (docs/repl-interaction-contract.md) on the Emacs host -- incremental
 ;; one-form-at-a-time reading, evaluation in a durable session interaction
-;; environment, and emission of the contract's Scheme-readable record vocabulary
+;; environment, and emission of the contract's Scheme-readable record
+;; vocabulary
 ;; (`repl-prompt', `repl-submission', `repl-result', `repl-condition',
 ;; `repl-exit').
 ;;
@@ -19,25 +20,30 @@
 ;; `consent-make-interaction-context' (consent-eval.el), the Emacs twin of the
 ;; portable `(consent eval)' interaction context; values, results, and
 ;; conditions are the existing `(consent result)' datums; reading is the shared
-;; recovery-aware reader `consent-read-recover-from-string-at' (consent-reader.el).
+;; recovery-aware reader `consent-read-recover-from-string-at'
+;; (consent-reader.el).
 ;; The driver consumes only interaction input; evaluated forms write their own
 ;; output to a captured program-output port, so a scripted consumer of program
 ;; output is never corrupted by prompts, results, or diagnostics.
 ;;
-;; `consent-repl-stream-drive' is a pure function from an interaction-input chunk
+;; `consent-repl-stream-drive' is a pure function from an interaction-input
+;; chunk
 ;; source to the list of contract records, so the cross-host conformance corpus
-;; (#392) and the Emacs smoke tests can assert the emitted record stream without
-;; a terminal.  `consent-repl-stream-main' wires that driver to batch stdin (the
+;; (#392) and the Emacs smoke tests can assert the emitted record stream
+;; without
+;; a terminal. `consent-repl-stream-main' wires that driver to batch stdin (the
 ;; error stream carries records, stdout carries program output) for a scripted
 ;; session, and `consent-repl-stream' is an interactive command that drives a
 ;; submitted source string and renders the records in a transcript buffer.
 ;;
 ;; The interactive command renders its transcript buffer through the shared
-;; chrome model (`consent-repl-chrome.el', the Emacs parity twin of the portable
+;; chrome model (`consent-repl-chrome.el', the Emacs parity twin of the
+;; portable
 ;; `(cli repl-chrome)' layer): the same named chromes and the same
 ;; record-to-role mapping, realized as Emacs faces.  The default is `comment',
-;; consistent with the portable terminal default; `datum' recovers the canonical
-;; raw record stream in the buffer and is always reachable.  The batch entry and
+;; consistent with the portable terminal default; `datum' recovers the
+;; canonical
+;; raw record stream in the buffer and is always reachable. The batch entry and
 ;; the pure `consent-repl-stream-drive' driver keep emitting that raw record
 ;; stream untouched -- it is the canonical surface the parity corpus asserts
 ;; against both hosts.
@@ -137,7 +143,8 @@ datum prefix is pending with no construct open."
                    (consent-repl-stream--sym
                     (symbol-name (if stack (car stack) 'datum)))))))))
 
-(defun consent-repl-stream--submission-record (session ordinal source complete eof)
+(defun consent-repl-stream--submission-record (session ordinal source complete
+  eof)
   "Build a `repl-submission' record for SOURCE read at ORDINAL in SESSION."
   (list (consent-repl-stream--sym "repl-submission")
         (list (consent-repl-stream--sym "id")
@@ -152,10 +159,13 @@ datum prefix is pending with no construct open."
         (list (consent-repl-stream--sym "eof")
               (consent-repl-stream--bool eof))))
 
-(defun consent-repl-stream--result-record (session ordinal evaluation-result display)
-  "Build a `repl-result' record wrapping EVALUATION-RESULT and DISPLAY at ORDINAL.
+(defun consent-repl-stream--result-record (session ordinal evaluation-result
+  display)
+  "Build a `repl-result' record wrapping EVALUATION-RESULT and DISPLAY at\
+ ORDINAL.
 The `ordinal' field mirrors `repl-prompt' so a pure chrome can right-align the
-result marker to the prompt-gutter width without coupling to the `submission' id
+result marker to the prompt-gutter width without coupling to the\
+ `submission' id
 format."
   (list (consent-repl-stream--sym "repl-result")
         (list (consent-repl-stream--sym "id")
@@ -191,7 +201,8 @@ condition marker to the prompt-gutter width."
         (list (consent-repl-stream--sym "display") display)))
 
 (defun consent-repl-stream--exit-record (session reason status count detail)
-  "Build a `repl-exit' record closing SESSION with REASON, STATUS, COUNT, DETAIL."
+  "Build a `repl-exit' record closing SESSION with REASON, STATUS, COUNT,\
+ DETAIL."
   (list (consent-repl-stream--sym "repl-exit")
         (list (consent-repl-stream--sym "session")
               (consent-repl-stream--session-field session))
@@ -262,7 +273,8 @@ reach inside it; this returns the sub-field list for
         "evaluation error")))
 
 (defun consent-repl-stream--read-condition (message)
-  "Build a condition datum for a reader-error MESSAGE shaped like an evaluator one."
+  "Build a condition datum for a reader-error MESSAGE shaped like an evaluator\
+ one."
   (list (consent-repl-stream--sym "condition")
         (list (consent-repl-stream--sym "type")
               (consent-repl-stream--sym "reader-error"))
@@ -273,7 +285,8 @@ reach inside it; this returns the sub-field list for
 ;;;; Explicit-exit recognition
 
 (defun consent-repl-stream--exit-form-p (datum)
-  "Return non-nil when reader DATUM is a process-context exit/emergency-exit call."
+  "Return non-nil when reader DATUM is a process-context exit/emergency-exit\
+ call."
   (let ((stripped (consent--strip-identifiers datum)))
     (and (consp stripped)
          (consent-symbol-p (car stripped))
@@ -389,8 +402,10 @@ evaluated read."
          (t (setq result next)))))
     (or result next)))
 
-;; A REPL session is consented by invocation -- the caller handed it this stdin --
-;; so program input is authorized by default with this `port'/`read' grant backed
+;; A REPL session is consented by invocation -- the caller handed it this stdin
+;; --
+;; so program input is authorized by default with this `port'/`read' grant
+;; backed
 ;; by `stdin'.  Ambient effects still gate separately.
 (defconst consent-repl-stream--program-input-grant
   '(capability-grant (id program-input) (domain port)
@@ -416,7 +431,8 @@ Grants already in OPTIONS are preserved by merging into the leading
 
 ;;;; The interaction loop
 
-(defun consent-repl-stream--engine (read-chunk emit-record emit-output session options)
+(defun consent-repl-stream--engine (read-chunk emit-record emit-output session
+  options)
   "Run the host-neutral REPL loop and return the close-status exit code.
 Read interaction input from READ-CHUNK (each call returns a chunk string or the
 EOF sentinel), send contract records to EMIT-RECORD and program output to
@@ -431,7 +447,8 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
            session-id read-chunk options))
          ;; The initial session keeps its own transient context (unchanged
          ;; behavior); once a `switch-session'/`create-session' verb sets
-         ;; `consent-session-current-id' to a durable registry session, the loop
+         ;; `consent-session-current-id' to a durable registry session, the
+         ;; loop
          ;; resolves that session's live environment per form, sharing this one
          ;; stdin cursor so neither session steals the other's input.
          (interaction
@@ -467,7 +484,8 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                          1 0))))
            (funcall emit-record record))
          (drain-output! (turn-interaction)
-           (let ((output (consent-interaction-program-output turn-interaction)))
+           (let ((output (consent-interaction-program-output
+             turn-interaction)))
              (when (> (length output) 0)
                (funcall emit-output output))))
          (next-chunk () (funcall read-chunk))
@@ -485,7 +503,8 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                       (list 'eof nil buffer)
                     (let ((next-buffer (concat buffer chunk)))
                       (if (and (consent-repl-stream--blank-p next-buffer)
-                               (consent-repl-stream--ends-with-newline-p chunk))
+                               (consent-repl-stream--ends-with-newline-p
+                              chunk))
                           (list 'blank nil "")
                         (acquire next-buffer ordinal))))))
                (_                       ; incomplete
@@ -493,7 +512,8 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                 ;; request for more input: emit (and flush) it *before* the
                 ;; blocking read that supplies the continued line.  On a live
                 ;; TTY the prompt must front the input the user is about to
-                ;; type; emitting it after the read glues the gutter to the next
+                ;; type; emitting it after the read glues the gutter to the
+                ;; next
                 ;; result line instead (#448).  Reaching this branch always
                 ;; means a partial form is buffered, so the prompt is always
                 ;; warranted -- including before an EOF-mid-form, where the
@@ -508,7 +528,8 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                     (acquire (concat buffer chunk) ordinal))))))))
       (let ((buffer "") (ordinal 1) (count 0) (closed nil))
         (while (not closed)
-          (emit (consent-repl-stream--prompt-record session ordinal "ready" nil))
+          (emit (consent-repl-stream--prompt-record session ordinal "ready"
+            nil))
           (pcase-let ((`(,kind ,payload ,current) (acquire buffer ordinal)))
             (pcase kind
               ('eof
@@ -545,8 +566,10 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                       (source (string-trim (substring current 0 next)))
                       (boundary
                        (consent-repl-stream--submission-boundary current next))
-                      ;; Everything after the submission's terminating newline is
-                      ;; this turn's program input, shared on the one stdin cursor.
+                      ;; Everything after the submission's terminating newline
+                      ;; is
+                      ;; this turn's program input, shared on the one stdin
+                      ;; cursor.
                       (program-input (substring current boundary)))
                  (cond
                   ((consent-repl-stream--exit-form-p datum)
@@ -561,13 +584,17 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                   (t
                    (emit (consent-repl-stream--submission-record
                           session ordinal source t nil))
-                   ;; Resolve the session this form runs in *now*: a prior form's
-                   ;; `switch-session'/`create-session' verb may have changed the
+                   ;; Resolve the session this form runs in *now*: a prior
+                   ;; form's
+                   ;; `switch-session'/`create-session' verb may have changed
+                   ;; the
                    ;; default, redirecting this turn to another sandbox
                    ;; environment.  All sessions share one stdin cursor.
                    (let ((turn-interaction (current-interaction)))
-                     ;; Seed the shared cursor so an evaluated read consumes the
-                     ;; input after this form; whatever it leaves unread threads
+                     ;; Seed the shared cursor so an evaluated read consumes
+                     ;; the
+                     ;; input after this form; whatever it leaves unread
+                     ;; threads
                      ;; back as the next form-reading buffer, so neither reader
                      ;; steals the other's characters.
                      (consent-interaction-seed-program-input! turn-interaction
@@ -604,7 +631,8 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                                           &optional options)
   "Run a REPL session, streaming records to WRITE-RECORD and program output to
 WRITE-OUTPUT on separate streams, and return the close-status exit code.
-READ-CHUNK returns a chunk string or the EOF sentinel each call.  SESSION is the
+READ-CHUNK returns a chunk string or the EOF sentinel each call.  SESSION is\
+ the
 session id and OPTIONS are evaluator options (`:policy-actions',
 `:capability-grants')."
   (consent-repl-stream--engine read-chunk write-record write-output
@@ -612,7 +640,8 @@ session id and OPTIONS are evaluator options (`:policy-actions',
 
 ;;;###autoload
 (defun consent-repl-stream-drive (read-chunk session &optional options)
-  "Drive a REPL session over READ-CHUNK and return the ordered contract records.
+  "Drive a REPL session over READ-CHUNK and return the ordered contract\
+ records.
 Program output is discarded.  This is the pure, terminal-free hook the
 conformance corpus and smoke tests assert the record stream against."
   (let ((records nil))
@@ -624,7 +653,8 @@ conformance corpus and smoke tests assert the record stream against."
     (nreverse records)))
 
 ;;;###autoload
-(defun consent-repl-stream-records-from-string (input session &optional options)
+(defun consent-repl-stream-records-from-string (input session &optional
+  options)
   "Drive a REPL session over INPUT split into newline chunks.
 Return the ordered contract records for SESSION under evaluator OPTIONS."
   (consent-repl-stream-drive
@@ -636,10 +666,13 @@ Return the ordered contract records for SESSION under evaluator OPTIONS."
 
 ;; The canonical capture format is the `datum' chrome's record stream: one
 ;; contract record datum per line, written by the consent writer
-;; (`consent-result->external').  Reload reads those datums back with the consent
-;; reader, so a reloaded record carries the same consent-data representation the
+;; (`consent-result->external'). Reload reads those datums back with the
+;; consent
+;; reader, so a reloaded record carries the same consent-data representation
+;; the
 ;; live loop emits and the extraction below works on either.  Replay
-;; reconstructs the interaction input from the complete submissions and re-drives
+;; reconstructs the interaction input from the complete submissions and
+;; re-drives
 ;; a FRESH session, so a transcript doubles as a reproducible bug report and a
 ;; fixture capture.  Live host effects are NOT reproduced: a replay session
 ;; carries only the authority it is granted, so an effect that succeeded under
@@ -699,9 +732,11 @@ reproducing the recorded value (compare `consent-repl-stream-replay-report')."
    (consent-repl-stream-replay-input records) session options))
 
 ;; A submission outcome is the list (SOURCE KIND DISPLAY), where KIND is
-;; `result', `condition', or `none' (an exit form has no outcome) and DISPLAY is
+;; `result', `condition', or `none' (an exit form has no outcome) and DISPLAY
+;; is
 ;; the outcome's human-readable rendering.  KIND and DISPLAY are the
-;; contract-meaningful, representation-stable fields the replay report compares,
+;; contract-meaningful, representation-stable fields the replay report
+;; compares,
 ;; so the comparison holds whether a stream came from the live loop or a
 ;; reloaded datum-stream text.
 (defun consent-repl-stream--outcome-for (records submission-id)
@@ -714,10 +749,12 @@ SUBMISSION-ID in RECORDS, or (none) when neither is present."
                        (member (consent-repl-stream--sym-name (car record))
                                '("repl-result" "repl-condition"))
                        (equal (consent-repl-stream--sym-name
-                               (consent-repl-stream--field record "submission"))
+                               (consent-repl-stream--field record
+                              "submission"))
                               target))
               (throw 'done
-                     (cons (if (equal (consent-repl-stream--sym-name (car record))
+                     (cons (if (equal (consent-repl-stream--sym-name (car
+                       record))
                                       "repl-result")
                                'result 'condition)
                            (consent-repl-stream--field record "display")))))
@@ -795,10 +832,13 @@ rendering, correlated by submission id and compared by position.  The report is
 `reproduced' when every compared submission matches in kind and display;
 otherwise `diverged', with one `repl-replay-divergence' per mismatched or
 unpaired submission.  A captured `result' that replays as a `condition' is the
-documented fail-closed signal for a live host effect the replay posture does not
+documented fail-closed signal for a live host effect the replay posture does\
+ not
 grant."
-  (let* ((captured-outcomes (consent-repl-stream--submission-outcomes captured))
-         (replayed-outcomes (consent-repl-stream--submission-outcomes replayed))
+  (let* ((captured-outcomes (consent-repl-stream--submission-outcomes
+    captured))
+         (replayed-outcomes (consent-repl-stream--submission-outcomes
+           replayed))
          (divergences (consent-repl-stream--outcome-divergences
                        captured-outcomes replayed-outcomes 1 nil)))
     (list (consent-repl-stream--sym "repl-replay-report")
@@ -868,7 +908,8 @@ Emacs twin of the portable `cli-repl-rendered-from-string'."
 ;;;; Terminal/batch entry
 
 (defun consent-repl-stream--batch-read-chunk ()
-  "Read one line from batch stdin, returning it with a newline or the EOF sentinel."
+  "Read one line from batch stdin, returning it with a newline or the EOF\
+ sentinel."
   (condition-case nil
       (concat (read-from-minibuffer "") "\n")
     (error consent-repl-stream--eof)))
@@ -878,8 +919,10 @@ Emacs twin of the portable `cli-repl-rendered-from-string'."
   "Batch entry point for the incremental Consent Scheme REPL.
 Read forms incrementally from stdin, write each contract record to the error
 stream and program output to stdout on separate channels, then exit Emacs with
-the close-status code (0 for `closed-ok', 1 for `closed-error').  Intended to be
-run under `emacs -Q --batch -l consent-repl-stream -f consent-repl-stream-main'."
+the close-status code (0 for `closed-ok', 1 for `closed-error').  Intended\
+ to be
+run under `emacs -Q --batch -l consent-repl-stream -f\
+ consent-repl-stream-main'."
   (let* ((session consent-repl-stream-default-session)
          (write-record
           (lambda (record)
@@ -934,7 +977,8 @@ shell's `--replay FILE' mode.  Intended to be run under
 
 ;;;###autoload
 (defun consent-repl-stream (source &optional session chrome-name)
-  "Read and incrementally evaluate SOURCE in an incremental Consent Scheme REPL.
+  "Read and incrementally evaluate SOURCE in an incremental Consent Scheme\
+ REPL.
 SOURCE may hold several forms; each is read and evaluated one at a time in the
 durable SESSION (default `consent-repl-stream-default-session').  The emitted
 contract records are rendered through the CHROME-NAME chrome (default
@@ -958,7 +1002,8 @@ prompt for SOURCE."
       (goto-char (point-max))
       (let ((inhibit-read-only t))
         (dolist (record records)
-          (let ((painted (consent-repl-chrome-paint (funcall chrome record) t)))
+          (let ((painted (consent-repl-chrome-paint (funcall chrome record)
+            t)))
             (when painted (insert painted)))))
       (special-mode))
     (when (called-interactively-p 'interactive)

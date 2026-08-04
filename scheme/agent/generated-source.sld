@@ -3,9 +3,10 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; This library owns deterministic generated-source candidate handling for
-;;; agentic coding loops.  Model transport, sandbox evaluation, and live-session
+;;; agentic coding loops. Model transport, sandbox evaluation, and live-session
 ;;; mutation remain injected boundaries; the library normalizes untrusted text,
-;;; reads Scheme datums, records diagnostics, validates caller contracts, drives
+;;; reads Scheme datums, records diagnostics, validates caller contracts,
+;;; drives
 ;;; bounded repair attempts, and gates explicit application as Scheme-readable
 ;;; data.
 
@@ -33,7 +34,8 @@
           (scheme read))
   (begin
     ;; Sentinel for option and record lookups where a present #f is meaningful.
-    (define generated-source-missing-field (list 'generated-source-missing-field))
+    (define generated-source-missing-field (list
+      'generated-source-missing-field))
 
     (define (generated-source-record-field record field)
       "Return FIELD's tagged field record from RECORD, or #f when absent."
@@ -302,7 +304,8 @@
                        ((not (blank-string? trailer))
                         (normalization-rejected
                          'mixed-markdown-output
-                         "generated output has prose after the Markdown fence"))
+                         "generated output has prose after the Markdown \
+fence"))
                        (else
                         (normalization-result
                          'ok
@@ -332,7 +335,8 @@
           (normalize-plain-source text)))
 
     (define (read-source-forms source)
-      "Read all datums from SOURCE, returning `(ok forms)' or `(error diagnostic)'."
+      "Read all datums from SOURCE, returning `(ok forms)' or `(error \
+diagnostic)'."
       (guard (condition
               (else
                (list 'error
@@ -346,7 +350,8 @@
                                       (list 'message
                                             (error-object-message condition))
                                       (list 'irritants
-                                            (error-object-irritants condition)))
+                                            (error-object-irritants condition)
+                    ))
                                 condition))))))
         (let ((port (open-input-string source)))
           (let loop ((forms '()))
@@ -396,7 +401,8 @@
             (make-candidate 'rejected kind text source '() diagnostics)
             (let ((read-result (read-source-forms source)))
               (if (eq? (car read-result) 'ok)
-                  (make-candidate 'ready kind text source (cadr read-result) '())
+                  (make-candidate 'ready kind text source (cadr read-result) '
+                    ())
                   (make-candidate
                    'read-error
                    kind
@@ -637,7 +643,8 @@
             'eval
             'unbound-variable
             (evaluation-message evaluation)
-            (list 'binding (condition-symbol (evaluation-condition evaluation)))
+            (list 'binding (condition-symbol (evaluation-condition evaluation)
+              ))
             (list 'condition (evaluation-condition evaluation)))))
          (else
           (list
@@ -720,7 +727,8 @@
       "Run a bounded generated-source candidate workflow over TEXT."
       #((parameters
          (text (type string)
-          (description "Initial generated source text to normalize and test."))
+          (description "Initial generated source text to normalize and test.")
+            )
          (options (type list)
           (description
            ("Association list. `evaluate' is a sandbox evaluator"
@@ -759,7 +767,8 @@
                         "no sandbox evaluator was supplied"))
                       (attempt-diagnostics candidate evaluation options)))
                  (attempt
-                  (make-attempt attempt-index candidate evaluation diagnostics))
+                  (make-attempt attempt-index candidate evaluation diagnostics
+                    ))
                  (all-attempts (cons attempt attempts)))
             (cond
              ((null? diagnostics)
@@ -825,7 +834,8 @@
          (run (type generated-source-run)
           (description "Run record to inspect.")))
         (returns (type (or generated-source-candidate boolean))
-         (description "Accepted candidate for successful runs, otherwise #f."))
+         (description "Accepted candidate for successful runs, otherwise #f.")
+           )
         (effects pure))
       (generated-source-record-field-value run 'candidate #f))
 

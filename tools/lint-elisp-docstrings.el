@@ -1,4 +1,4 @@
-;;; lint-elisp-docstrings.el --- Source docstring width lint  -*- lexical-binding: t; -*-
+;;; lint-elisp-docstrings.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -137,12 +137,16 @@ ROOT defaults to `default-directory'.  MAX-COLUMN defaults to
             (princ violation)
             (princ "\n"))
           (princ
-           (format "lint-elisp-docstrings: found docstrings wider than %d characters.\n"
+           (format
+             "lint-elisp-docstrings: found docstrings wider than %d\
+ characters.\n"
                    max-column)
            #'external-debugging-output)
           (kill-emacs 1))
       (princ
-       (format "lint-elisp-docstrings: checked-in Elisp docstrings fit within %d characters.\n"
+       (format
+         "lint-elisp-docstrings: checked-in Elisp docstrings fit within %d\
+ characters.\n"
                max-column)))))
 
 (provide 'consent-lint-elisp-docstrings)

@@ -1,10 +1,11 @@
-;;; consent-eval.el --- Public R7RS evaluator entry points  -*- lexical-binding: t; -*-
+;;; consent-eval.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
-;; Public orchestration functions for Consent Scheme evaluation.  The interpreter
+;; Public orchestration functions for Consent Scheme evaluation. The
+;; interpreter
 ;; backend lives in `consent-interpreter'.
 
 ;;; Code:
@@ -149,12 +150,14 @@ Mirrors the portable `(consent eval)' `consent-program-input-from-string'."
 
 ;;;###autoload
 (defun consent-program-input-from-bytevector (content)
-  "Return a one-shot binary program-input reader yielding CONTENT once, then ends.
+  "Return a one-shot binary program-input reader yielding CONTENT once, then\
+ ends.
 CONTENT is a vector of bytes -- Emacs's host byte-vector container, the
 representation a binary input port buffers -- whose whole finite contents are
 available immediately and then at end of stream.  Binary peer of
 `consent-program-input-from-string'; use it for fixtures and captured byte
-streams, never to model a live byte pipe.  Mirrors the portable `(consent eval)'
+streams, never to model a live byte pipe.  Mirrors the portable `(consent\
+ eval)'
 `consent-program-input-from-bytevector'."
   (let ((pending content))
     (lambda ()
@@ -301,10 +304,12 @@ agent events, and handle references across calls."
 ;; reuses across submissions: the evaluator options (carrying `:session-id',
 ;; policy actions, and capability grants), the mutable value environment, the
 ;; syntax environment, and the program-output port.  Each submission still runs
-;; in a fresh evaluation context with its own step/host-callback/event budget --
+;; in a fresh evaluation context with its own step/host-callback/event budget
+;; --
 ;; exactly as `consent-eval-source-result' does -- but that context reuses the
 ;; persisted value and syntax environments.  Value definitions and imports
-;; persist because they mutate the shared value environment; macros and imported
+;; persist because they mutate the shared value environment; macros and
+;; imported
 ;; syntax persist because the shared syntax environment is threaded through
 ;; instead of being rebuilt per call.  This is the Emacs peer of the portable
 ;; `(consent eval)' interaction context that drives the portable terminal REPL
@@ -345,7 +350,8 @@ stdin cursor.  Mirrors the portable `(consent eval)'
          (environment (consent-make-base-environment))
          (reader (consent--program-input-reader-from-options options))
          (grant (and reader
-                     (consent--find-standard-stream-grant context 'stdin 'read)))
+                     (consent--find-standard-stream-grant context 'stdin
+                       'read)))
          (input-port (and reader grant
                           (consent--make-program-input-port grant reader))))
     (setf (consent--eval-context-interaction-environment context)
@@ -364,8 +370,10 @@ stdin cursor.  Mirrors the portable `(consent eval)'
 Unlike `consent-make-interaction-context', which owns a private base
 environment, the returned context shares session SESSION-ID's live value and
 syntax environments, so definitions, imports, and macros introduced through
-`consent-interaction-eval-form' are visible to -- and see those introduced by --
-`consent-session-eval-source' and the other session-bound Emacs eval paths.  The
+`consent-interaction-eval-form' are visible to -- and see those introduced\
+ by --
+`consent-session-eval-source' and the other session-bound Emacs eval paths. \
+ The
 session's capability grants are merged into the evaluation options so a REPL
 surface inherits the authority the session already holds.  OPTIONS may carry
 `:program-input-reader' (and the matching active `port'/`read'/`stdin' grant in
@@ -380,7 +388,8 @@ session the rest of Emacs evaluates against, rather than an island."
     ;; the same way `consent-session-eval-source' does lazily on first eval, so
     ;; the first REPL submission can already use derived syntax.  Mirroring its
     ;; baseline-syntax capture keeps `consent-session--session-macros' honest
-    ;; whether the bridge or an ordinary session eval touches the session first.
+    ;; whether the bridge or an ordinary session eval touches the session
+    ;; first.
     (let ((base-syntax-installed
            (consent--eval-context-base-syntax-installed context)))
       (consent--ensure-base-syntax context environment)
@@ -388,9 +397,11 @@ session the rest of Emacs evaluates against, rather than an island."
         (setf (consent-session-baseline-syntax session)
               (consent-session--syntax-current-names
                (consent--eval-context-syntax-environment context)))))
-    (let* ((syntax-environment (consent--eval-context-syntax-environment context))
+    (let* ((syntax-environment (consent--eval-context-syntax-environment
+      context))
            (caller-grants (plist-get options :capability-grants))
-           ;; Prepended keys win under `plist-get', so the merged session id and
+           ;; Prepended keys win under `plist-get', so the merged session id
+           ;; and
            ;; capability grants shadow any the caller left in OPTIONS without
            ;; mutating the caller's plist.
            (merged-options
@@ -404,12 +415,15 @@ session the rest of Emacs evaluates against, rather than an island."
            (grant (and reader
                        (consent--find-standard-stream-grant
                         eval-context 'stdin 'read)))
-           ;; A pre-built `:program-input-port' lets the multi-session REPL share
-           ;; one stdin cursor across every session it switches between, instead
+           ;; A pre-built `:program-input-port' lets the multi-session REPL
+           ;; share
+           ;; one stdin cursor across every session it switches between,
+           ;; instead
            ;; of forking a fresh cursor per session.
            (input-port (or (plist-get merged-options :program-input-port)
                            (and reader grant
-                                (consent--make-program-input-port grant reader)))))
+                                (consent--make-program-input-port grant
+                              reader)))))
       (consent--make-interaction-context-record
        merged-options environment syntax-environment
        (consent--eval-context-libraries context)
@@ -424,7 +438,8 @@ session the rest of Emacs evaluates against, rather than an island."
 ;;;###autoload
 (defun consent-interaction-seed-program-input! (interaction text)
   "Seed the shared program-input cursor with TEXT (the post-form remainder).
-An evaluated read then consumes the input that follows the just-read submission.
+An evaluated read then consumes the input that follows the just-read\
+ submission.
 A no-op when program input is not connected.  Mirrors the portable twin."
   (let ((port (consent--interaction-context-program-input-port interaction)))
     (when port
@@ -461,7 +476,8 @@ The buffer is cleared before each evaluation."
 ;;;###autoload
 (defun consent-interaction-eval-form (interaction form)
   "Evaluate one already-read top-level FORM in durable INTERACTION.
-Reuse INTERACTION's value environment, syntax environment, library registry, and
+Reuse INTERACTION's value environment, syntax environment, library registry,\
+ and
 program-output port and return an `evaluation-result' datum (ok/values or
 captured error) like `consent-eval-source-result', never signaling on an
 evaluator error.  Mirrors the portable `(consent eval)'

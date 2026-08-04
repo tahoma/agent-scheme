@@ -1,4 +1,4 @@
-;;; consent-oracle.el --- R7RS reference oracle runner  -*- lexical-binding: t; -*-
+;;; consent-oracle.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -161,16 +161,69 @@ RESULTS is a list of plists with `:name', `:status', and optional
    "fixtures/r7rs/conformance-cases.scm"
    consent-oracle-root-directory))
 
+(defun consent-oracle--raw-symbol-name (value)
+  "Return VALUE's Consent Scheme symbol name, or nil."
+  (when (consent-symbol-p value)
+    (consent-symbol-name value)))
+
+(defun consent-oracle--tagged-datum (value)
+  "Normalize tagged fixture VALUE while retaining its typed payload."
+  (unless (and (consp value)
+               (consent-oracle--raw-symbol-name (car value)))
+    (error "Fixture value must be tagged: %S" value))
+  (let ((tag
+         (intern (consent-oracle--raw-symbol-name (car value)))))
+    (cons
+     tag
+     (if (eq tag 'condition)
+         (mapcar #'consent-oracle--host-datum (cdr value))
+       (cdr value)))))
+
+(defun consent-oracle--normalize-case (case)
+  "Normalize CASE metadata while retaining source and expected datums."
+  (mapcar
+   (lambda (entry)
+     (let* ((name
+             (intern
+              (or (consent-oracle--raw-symbol-name (car entry))
+                  (error "Invalid fixture field: %S" entry))))
+            (value (cadr entry)))
+       (list
+        name
+        (if (memq name '(source expect))
+            (consent-oracle--tagged-datum value)
+          (consent-oracle--host-datum value)))))
+   case))
+
+(defun consent-oracle--normalize-suite (suite)
+  "Normalize parsed fixture SUITE without erasing typed case payloads."
+  (unless (and (consp suite)
+               (equal
+                (consent-oracle--raw-symbol-name (car suite))
+                "consent-fixture-suite"))
+    (error "Fixture corpus must start with consent-fixture-suite"))
+  (let ((version nil)
+        (cases nil))
+    (dolist (entry (cdr suite))
+      (pcase (consent-oracle--raw-symbol-name (car entry))
+        ("version"
+         (setq version
+               (consent-oracle--host-datum (cadr entry))))
+        ("cases"
+         (setq cases
+               (mapcar #'consent-oracle--normalize-case
+                       (cdr entry))))))
+    (list 'consent-fixture-suite
+          (list 'version version)
+          (cons 'cases cases))))
+
 (defun consent-oracle-fixture-suite ()
   "Read and return the canonical fixture suite as host data."
   (let* ((source (with-temp-buffer
                    (insert-file-contents (consent-oracle--fixture-file))
                    (buffer-string)))
-         (suite (consent-oracle--host-datum
-                 (consent-read source))))
-    (unless (eq (car-safe suite) 'consent-fixture-suite)
-      (error "Fixture corpus must start with consent-fixture-suite"))
-    suite))
+         (suite (consent-read source)))
+    (consent-oracle--normalize-suite suite)))
 
 (defun consent-oracle-fixture-cases ()
   "Return all shared fixture cases as host data."
@@ -182,6 +235,40 @@ RESULTS is a list of plists with `:name', `:status', and optional
 (defun consent-oracle--field (case field)
   "Return FIELD from fixture CASE."
   (cadr (assq field case)))
+
+(defun consent-oracle--source-file (path)
+  "Return the validated fixture source file named by relative PATH."
+  (unless (and (stringp path)
+               (string-match-p
+                "\\`programs/[[:alnum:]_.-]+\\.scm\\'"
+                path))
+    (error "Invalid fixture source file path: %S" path))
+  (let* ((root
+          (file-name-as-directory
+           (file-name-directory (consent-oracle--fixture-file))))
+         (file (expand-file-name path root)))
+    (unless (and (file-in-directory-p file root)
+                 (file-regular-p file))
+      (error "Missing fixture source file: %S" path))
+    file))
+
+(defun consent-oracle--source-text (case)
+  "Materialize CASE source text at the oracle boundary."
+  (pcase (consent-oracle--field case 'source)
+    (`(text ,text) text)
+    (`(form ,form)
+     (concat (consent-datum->external form) "\n"))
+    (`(forms . ,forms)
+     (concat
+      (mapconcat #'consent-datum->external forms "\n")
+      "\n"))
+    (`(file ,path)
+     (with-temp-buffer
+       (insert-file-contents-literally
+        (consent-oracle--source-file path))
+       (buffer-string)))
+    (_
+     (error "Unsupported fixture source representation"))))
 
 (defun consent-oracle--datum-symbol-name (datum)
   "Return DATUM's symbol name, or nil when DATUM is not a Scheme symbol."
@@ -258,7 +345,7 @@ RESULTS is a list of plists with `:name', `:status', and optional
         (oracle-eligibility
          (consent-oracle--field case 'oracle-eligibility))
         (options (consent-oracle--field case 'options))
-        (source (consent-oracle--field case 'source)))
+        (source (consent-oracle--source-text case)))
     (cond
      ((memq oracle-eligibility '(policy-gated not-oracle-eligible))
       oracle-eligibility)
@@ -300,7 +387,7 @@ RESULTS is a list of plists with `:name', `:status', and optional
 (defun consent-oracle--agent-actual (case)
   "Run CASE through Consent Scheme and return a normalized actual plist."
   (let ((phase (consent-oracle--field case 'phase))
-        (source (consent-oracle--field case 'source))
+        (source (consent-oracle--source-text case))
         (options (consent-oracle--fixture-options-plist case)))
     (condition-case condition
         (pcase phase
@@ -397,10 +484,12 @@ multiple values."
             #'identity
             (list
              (consent-datum->external final)
-             "(call-with-values (lambda () (if #f #f)) (lambda results (consent-oracle-emit results)))")
+             "(call-with-values (lambda () (if #f #f)) (lambda results\
+ (consent-oracle-emit results)))")
             "\n")
          (format
-          "(call-with-values (lambda () %s) (lambda results (consent-oracle-emit results)))"
+          "(call-with-values (lambda () %s) (lambda results\
+ (consent-oracle-emit results)))"
           (consent-datum->external final)))))
      "\n")))
 
@@ -408,16 +497,16 @@ multiple values."
   "Return a reference Scheme program for CASE."
   (pcase (consent-oracle--field case 'phase)
     ('read
-     (consent-oracle--read-program
-      (consent-oracle--field case 'source)
+      (consent-oracle--read-program
+      (consent-oracle--source-text case)
       nil))
     ('read-all
-     (consent-oracle--read-program
-      (consent-oracle--field case 'source)
+      (consent-oracle--read-program
+      (consent-oracle--source-text case)
       t))
     ('eval
      (consent-oracle--eval-program
-      (consent-oracle--field case 'source)))
+      (consent-oracle--source-text case)))
     (phase
      (error "Unsupported oracle phase: %S" phase))))
 
@@ -784,7 +873,9 @@ When STATUSES is nil, return REPORTS unchanged."
                   nil
                   (append
                    (consent-oracle--gambit-r7rs-arguments)
-                   '("-e" "(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)"))))
+                   '("-e"
+                     "(import (scheme base) (scheme write)) (write (+ 1 2))\
+ (newline)"))))
         (file-error nil)))))
 
 ;;;###autoload

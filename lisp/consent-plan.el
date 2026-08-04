@@ -1,4 +1,4 @@
-;;; consent-plan.el --- First-class planning records  -*- lexical-binding: t; -*-
+;;; consent-plan.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

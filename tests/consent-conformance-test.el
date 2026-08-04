@@ -1,4 +1,4 @@
-;;; consent-conformance-test.el --- R7RS conformance fixture tests  -*- lexical-binding: t; -*-
+;;; consent-conformance-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -6,7 +6,8 @@
 
 ;; Bootstrap tests for the R7RS-small conformance slice of the shared fixture
 ;; corpus. Pending cases are loaded and validated now; cases become executable
-;; by changing their status to `implemented' once the runtime can evaluate them.
+;; by changing their status to `implemented' once the runtime can evaluate
+;; them.
 
 ;;; Code:
 
@@ -33,13 +34,13 @@
 (defvar consent-conformance-evaluator nil
   "Function used to evaluate implemented R7RS conformance cases.
 
-The function receives one Scheme source string and returns a plist:
+The function receives materialized Scheme source and returns a plist:
 
-  (:status value :value PRINTED-VALUE)
-  (:status values :values (PRINTED-VALUE ...))
+  (:status value :value VALUE)
+  (:status values :values (VALUE ...))
   (:status error :condition CONDITION)
 
-PRINTED-VALUE strings should use Consent Scheme's stable writer.")
+Values are compared through Consent Scheme's stable writer.")
 
 (defun consent--conformance-matrix-file ()
   "Return the R7RS conformance matrix file path."
@@ -70,7 +71,7 @@ PRINTED-VALUE strings should use Consent Scheme's stable writer.")
   "Run one implemented R7RS conformance CASE."
   (if (and consent-conformance-evaluator
            (eq (consent--conformance-field case 'phase) 'eval))
-      (let* ((source (consent--conformance-field case 'source))
+      (let* ((source (consent-test-fixture-source-text case))
              (expect (consent--conformance-field case 'expect))
              (actual (funcall consent-conformance-evaluator source)))
         (unless (consent--conformance-actual-matches-p expect actual)
@@ -130,7 +131,7 @@ PRINTED-VALUE strings should use Consent Scheme's stable writer.")
     '(:status value :value "3")))
   (should
    (consent--conformance-actual-matches-p
-    '(values ("1" "2"))
+    '(values "1" "2")
     '(:status values :values ("1" "2"))))
   (should
    (consent--conformance-actual-matches-p
@@ -138,7 +139,7 @@ PRINTED-VALUE strings should use Consent Scheme's stable writer.")
     '(:status result :value "(evaluation-result (status ok) (value 3))")))
   (should
    (consent--conformance-actual-matches-p
-    '(error)
+    '(condition (category evaluation-error))
     '(:status error :condition boom)))
   (should-not
    (consent--conformance-actual-matches-p
@@ -149,10 +150,10 @@ PRINTED-VALUE strings should use Consent Scheme's stable writer.")
   "Confirm the fixture runner passes Scheme source to a custom evaluator."
   (let ((consent-conformance-evaluator
          (lambda (source)
-           (should (equal source "(+ 1 2)"))
+           (should (equal source "(+ 1 2)\n"))
            '(:status value :value "3"))))
     (consent--conformance-run-case
-     '((id runner-demo)
+     `((id runner-demo)
        (kind r7rs-conformance)
        (phase eval)
        (category primitive-expressions)
@@ -160,7 +161,7 @@ PRINTED-VALUE strings should use Consent Scheme's stable writer.")
        (status implemented)
        (oracle shared)
        (options ())
-       (source "(+ 1 2)")
+       (source (form ,(consent-read "(+ 1 2)")))
        (expect (value "3"))
        (description "Synthetic conformance runner case.")))))
 

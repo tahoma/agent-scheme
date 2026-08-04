@@ -62,7 +62,8 @@
          (values (type list)
           (description "Zero or more Scheme-readable field values.")))
         (returns (type pair)
-         (description ("A field pair whose car is NAME and whose cdr is VALUES.")))
+         (description
+           ("A field pair whose car is NAME and whose cdr is VALUES.")))
         (effects pure))
       (cons name values))
 
@@ -129,7 +130,8 @@
             (vcs-field 'detached? detached?)))
 
     (define (make-vcs-remote name url-metadata)
-      "Return safe remote metadata without requiring a raw host remote object."
+      "Return safe remote metadata without requiring a raw host remote object.\
+"
       #((parameters
          (name (type string)
           (description "Remote name."))
@@ -163,7 +165,8 @@
             (vcs-field 'author author)
             (vcs-field 'timestamp timestamp)))
 
-    (define (make-vcs-status system repository branch entries operation-state outcome)
+    (define (make-vcs-status system repository branch entries operation-state
+      outcome)
       "Return a repository status snapshot from pure Scheme-readable fields."
       #((parameters
          (system (type symbol)
@@ -222,7 +225,8 @@
         (effects pure))
       (vcs-field-value status 'entries '()))
 
-    (define (make-vcs-status-entry kind path index-status worktree-status details)
+    (define (make-vcs-status-entry kind path index-status worktree-status
+      details)
       "Return a worktree/index status entry with additional DETAILS fields."
       #((parameters
          (kind (type symbol)
@@ -234,7 +238,8 @@
          (worktree-status (type symbol)
           (description "Worktree-side status symbol."))
          (details (type list)
-          (description ("Additional VCS fields for backend-specific metadata."))))
+          (description
+            ("Additional VCS fields for backend-specific metadata."))))
         (returns (type vcs-status-entry)
          (description "A `vcs-status-entry` datum."))
         (effects pure))
@@ -333,7 +338,8 @@
          (type (type symbol)
           (description "Conflict type symbol."))
          (paths (type (list-of string))
-          (description ("Repository-relative paths participating in the conflict."))))
+          (description
+            ("Repository-relative paths participating in the conflict."))))
         (returns (type vcs-conflict-state)
          (description "A `vcs-conflict-state` datum."))
         (effects pure))
@@ -342,7 +348,8 @@
             (vcs-field 'paths paths)))
 
     (define (make-vcs-diff-summary system files)
-      "Return a diff summary whose files may compose with `(agent diff)' hunks."
+      "Return a diff summary whose files may compose with `(agent diff)' hunks\
+."
       #((parameters
          (system (type symbol)
           (description "VCS system symbol, such as git."))
@@ -412,7 +419,8 @@
           ("A `vcs-capability-request` datum with derived authority"
             "metadata.")))
         (effects pure)
-        (see-also vcs-authorize-capability-request vcs-operation-required-authority))
+        (see-also vcs-authorize-capability-request
+          vcs-operation-required-authority))
       (list 'vcs-capability-request
             (vcs-field 'id id)
             (vcs-field 'operation operation)
@@ -470,7 +478,8 @@
             (vcs-field 'status status)
             (vcs-field 'value value)))
 
-    (define (make-vcs-capability-grant id authority operations repository remote)
+    (define (make-vcs-capability-grant id authority operations repository
+      remote)
       "Return a scoped VCS authority grant record."
       #((parameters
          (id (type (or symbol string))
@@ -536,7 +545,8 @@
             "authorization result.")))
         (effects pure))
       (let ((operation (vcs-capability-request-operation request)))
-        (let ((required-authority (vcs-operation-required-authority operation)))
+        (let ((required-authority (vcs-operation-required-authority
+          operation)))
           (list 'vcs-capability-decision
                 (vcs-field 'id (vcs-capability-request-id request))
                 (vcs-field 'operation operation)
@@ -604,9 +614,11 @@
 
     ;; Read-only VCS observations never mutate repository state.
     (define vcs-read-only-operations
-      '(status refs branches commit-summary diff-summary remotes operation-state))
+      '(status refs branches commit-summary diff-summary remotes
+        operation-state))
 
-    ;; Mutating VCS operations require a separate policy-gated capability family.
+    ;; Mutating VCS operations require a separate policy-gated capability
+    ;; family.
     (define vcs-mutating-operations
       '(stage unstage commit branch-create branch-delete checkout switch
         fetch pull push merge rebase cherry-pick revert reset))
@@ -637,7 +649,8 @@
          (operation (type symbol)
           (description "VCS operation symbol to classify.")))
         (returns (type boolean)
-         (description ("#t when OPERATION mutates repository state; otherwise #f.")))
+         (description
+           ("#t when OPERATION mutates repository state; otherwise #f.")))
         (effects pure))
       (if (memq operation vcs-mutating-operations) #t #f))
 
@@ -701,7 +714,8 @@
         (eq? operation operations))))
 
     (define (vcs-scope-matches? scope value)
-      "Report whether VALUE matches SCOPE, where #f and all mean unrestricted."
+      "Report whether VALUE matches SCOPE, where #f and all mean unrestricted.\
+"
       (or (not scope) (eq? scope 'all) (equal? scope value)))
 
     (define (vcs-grant-allows? request grant)
@@ -760,7 +774,8 @@
           ("A VCS capability decision approving or denying REQUEST"
             "with an explanatory reason.")))
         (effects pure)
-        (see-also make-vcs-capability-request make-vcs-capability-grant make-vcs-approval-decision))
+        (see-also make-vcs-capability-request make-vcs-capability-grant
+          make-vcs-approval-decision))
       (let ((operation (vcs-capability-request-operation request)))
         (let ((required-authority (vcs-operation-required-authority operation))
               (requested-authority (vcs-field-value request 'authority #f)))
@@ -872,7 +887,8 @@
            (else (loop (+ index 1)))))))
 
     (define (vcs-delimited-token-generator text char)
-      "Return a generator over TEXT tokens split on CHAR, dropping empty tokens."
+      "Return a generator over TEXT tokens split on CHAR, dropping empty token\
+s."
       (let ((characters (gen:string->generator text)))
         (gen:make-coroutine-generator
          (lambda (yield)
@@ -933,7 +949,8 @@
          (else (loop (cdr rest) (- cursor 1))))))
 
     (define (vcs-parse-count text)
-      "Convert a signed Git count field such as +2 or -1 to a nonnegative count."
+      "Convert a signed Git count field such as +2 or -1 to a nonnegative coun\
+t."
       (let ((length (string-length text)))
         (let ((start
                (if (and (> length 0)
@@ -973,7 +990,8 @@
           'unknown))
 
     (define (vcs-status-kind index-status worktree-status)
-      "Return the status-entry kind implied by INDEX-STATUS and WORKTREE-STATUS."
+      "Return the status-entry kind implied by INDEX-STATUS and WORKTREE-STATU\
+S."
       (cond
        ((not (eq? index-status 'unchanged)) index-status)
        ((not (eq? worktree-status 'unchanged)) worktree-status)
@@ -1108,7 +1126,8 @@
          '())))
 
     (define (parse-git-status-porcelain-v2-z text)
-      "Parse Git status --porcelain=v2 -z --branch output into a status datum."
+      "Parse Git status --porcelain=v2 -z --branch output into a status datum.\
+"
       #((parameters
          (text (type string)
           (description
@@ -1300,7 +1319,8 @@
           ("A `vcs-diff-summary` datum containing file-level diff"
             "records.")))
         (effects pure)
-        (see-also make-vcs-diff-summary make-vcs-diff-file parse-git-status-porcelain-v2-z))
+        (see-also make-vcs-diff-summary make-vcs-diff-file
+          parse-git-status-porcelain-v2-z))
       (let ((tokens (vcs-nul-token-generator text)))
         (let loop ((token (tokens)) (files '()))
           (cond

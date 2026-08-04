@@ -1,4 +1,4 @@
-;;; consent-ci.el --- CI timing and run records  -*- lexical-binding: t; -*-
+;;; consent-ci.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -17,19 +17,26 @@
 (require 'subr-x)
 
 (defconst consent-ci--result-line-regexp
-  "^[[:space:]]+\\([[:alpha:]-]+\\)[[:space:]]+\\([0-9]+\\)/\\([0-9]+\\)[[:space:]]+\\([^[:space:]]+\\)[[:space:]]+(\\([0-9.]+\\) sec)"
+  (concat "^[[:space:]]+\\([[:alpha:]-]+\\)[[:space:]]+"
+          "\\([0-9]+\\)/\\([0-9]+\\)[[:space:]]+"
+          "\\([^[:space:]]+\\)[[:space:]]+(\\([0-9.]+\\) sec)")
   "Regexp matching one ERT per-test result line.")
 
 (defconst consent-ci--summary-line-regexp
-  "^Ran \\([0-9]+\\) tests, \\([0-9]+\\) results as expected, \\([0-9]+\\) unexpected\\(?:, \\([0-9]+\\) skipped\\)? .*, \\([0-9.]+\\) sec)"
+  "^Ran \\([0-9]+\\) tests, \\([0-9]+\\) results as expected, \\([0-9]+\\)\
+ unexpected\\(?:, \\([0-9]+\\) skipped\\)? .*, \\([0-9.]+\\) sec)"
   "Regexp matching the final ERT batch summary line.")
 
 (defconst consent-ci--portable-summary-line-regexp
-  "^CONSENT_CI_PORTABLE_SUMMARY=\\([0-9]+\\)[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9.]+\\)$"
+  (concat "^CONSENT_CI_PORTABLE_SUMMARY=\\([0-9]+\\)[[:space:]]+"
+          "\\([0-9]+\\)[[:space:]]+\\([0-9]+\\)[[:space:]]+"
+          "\\([0-9]+\\)[[:space:]]+\\([0-9.]+\\)$")
   "Regexp matching a portable Scheme batch summary line.")
 
 (defconst consent-ci--check-timing-regexp
-  "^CONSENT_CI_CHECK_SECONDS=\\([^[:space:]]+\\)[[:space:]]+\\([+-]?\\(?:[0-9]+\\(?:\\.[0-9]*\\)?\\|\\.[0-9]+\\)\\(?:[eE][+-]?[0-9]+\\)?\\)$"
+  (concat "^CONSENT_CI_CHECK_SECONDS=\\([^[:space:]]+\\)[[:space:]]+"
+          "\\([+-]?\\(?:[0-9]+\\(?:\\.[0-9]*\\)?\\|\\.[0-9]+\\)"
+          "\\(?:[eE][+-]?[0-9]+\\)?\\)$")
   "Regexp matching one portable Scheme fine-grained timing line.")
 
 (defconst consent-ci--program-timing-regexp
@@ -316,7 +323,8 @@ durations, and optional wall-clock seconds recorded by the workflow."
       (concat
        "\n\n"
        "## Slow Portable Checks\n\n"
-       "Fine-grained portable Scheme timings are diagnostic details from runners that emit them; shard-level timing remains the primary CI signal.\n\n"
+       "Fine-grained portable Scheme timings are diagnostic details from\
+ runners that emit them; shard-level timing remains the primary CI signal.\n\n"
        "| Shard | Check | Seconds |\n"
        "| --- | --- | ---: |\n"
        (mapconcat
@@ -354,7 +362,8 @@ durations, and optional wall-clock seconds recorded by the workflow."
       (concat
        "\n\n"
        "## Slow Portable Programs\n\n"
-       "Program-level timings expose balancing units inside Scheme-native shards.\n\n"
+       "Program-level timings expose balancing units inside Scheme-native\
+ shards.\n\n"
        "| Shard | Program | Seconds |\n"
        "| --- | --- | ---: |\n"
        (mapconcat
@@ -371,7 +380,8 @@ durations, and optional wall-clock seconds recorded by the workflow."
 (defun consent-ci--split-option-variant-name (name)
   "Return plist for NAME split into base name and option variant fields."
   (if (string-match
-       "\\`\\(.+\\) / source metadata \\([^ /]+\\) / docstrings \\([^ /]+\\)\\'"
+       "\\`\\(.+\\) / source metadata \\([^ /]+\\) / docstrings \\([^\
+ /]+\\)\\'"
        name)
       (list :base (match-string 1 name)
             :source-metadata (match-string 2 name)
@@ -408,12 +418,14 @@ durations, and optional wall-clock seconds recorded by the workflow."
         (cond
          ((or (string-prefix-p
                "Portable R7RS Gambit-compiled Consent Scheme " name)
-              (string-prefix-p "Portable R7RS Gambit-compiled self-host " name))
+              (string-prefix-p "Portable R7RS Gambit-compiled self-host "
+                name))
           6)
          ((string-prefix-p "Portable R7RS Gambit " name) 3)
          ((or (string-prefix-p
                "Portable R7RS Racket-compiled Consent Scheme " name)
-              (string-prefix-p "Portable R7RS Racket-compiled self-host " name))
+              (string-prefix-p "Portable R7RS Racket-compiled self-host "
+                name))
           10)
          ((string-prefix-p "Portable R7RS Racket " name) 7)
          ((string-prefix-p "Portable R7RS Guile " name) 11)
@@ -489,8 +501,10 @@ the case for whole-suite portable host shards."
            rows)
       (concat
        "## Paired Validation Surfaces\n\n"
-       "Portable R7RS rows are reported beside their Emacs-hosted counterparts where the suite already has paired coverage.\n\n"
-       "| Surface | Emacs-hosted tests / ERT time | Portable R7RS tests / ERT time |\n"
+       "Portable R7RS rows are reported beside their Emacs-hosted counterparts\
+ where the suite already has paired coverage.\n\n"
+       "| Surface | Emacs-hosted tests / ERT time | Portable R7RS tests /\
+ ERT time |\n"
        "| --- | ---: | ---: |\n"
        (mapconcat
         (lambda (row)
@@ -509,7 +523,8 @@ the case for whole-suite portable host shards."
   (let ((shards (consent-ci--sort-shards shards)))
     (concat
      "## Test Shard Timing\n\n"
-     "| Shard | Selector | Ran | Expected | Unexpected | Skipped | ERT time | Wall time | Slowest tests |\n"
+     "| Shard | Selector | Ran | Expected | Unexpected | Skipped | ERT time\
+ | Wall time | Slowest tests |\n"
      "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n"
      (mapconcat
       (lambda (shard)
@@ -628,7 +643,8 @@ RUN-URL, when non-nil, links the comment back to the producing workflow run."
 ;;; Structured per-run record (#465)
 
 ;; Beyond the human-facing timing summary above, CI emits one machine-readable,
-;; append-only record per run so longitudinal questions ("how did metric X drift
+;; append-only record per run so longitudinal questions ("how did metric X
+;; drift
 ;; across the last N PRs") have a stable data source. The record is JSON Lines:
 ;; one self-describing object per line, tagged with `schema_version'. Schema
 ;; discipline: add fields freely, but never silently rename or repurpose one --
@@ -727,7 +743,8 @@ docstring variant are split out of the shard name."
           (cons "expected" (consent-ci--sum-shard-field shards :expected))
           (cons "unexpected" unexpected)
           (cons "skipped" (consent-ci--sum-shard-field shards :skipped))
-          (cons "ert_seconds" (consent-ci--sum-shard-field shards :ert-seconds))
+          (cons "ert_seconds" (consent-ci--sum-shard-field shards
+            :ert-seconds))
           (cons "wall_seconds"
                 (consent-ci--sum-shard-field shards :wall-seconds))
           (cons "all_passed" (consent-ci--json-boolean (= unexpected 0))))))
@@ -740,7 +757,8 @@ totals come from the parsed shard logs.  Encode the result with
   (let ((shards (consent-ci--sort-shards shards)))
     (append
      (list (cons "schema_version" consent-ci-run-record-schema-version)
-           (cons "generated_at" (consent-ci--env-string "CONSENT_CI_TIMESTAMP")))
+           (cons "generated_at" (consent-ci--env-string
+             "CONSENT_CI_TIMESTAMP")))
      (consent-ci--run-record-provenance)
      (list (cons "totals" (consent-ci--run-record-totals shards))
            (cons "shards"

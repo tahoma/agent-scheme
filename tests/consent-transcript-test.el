@@ -1,4 +1,4 @@
-;;; consent-transcript-test.el --- Replayable transcript tests  -*- lexical-binding: t; -*-
+;;; consent-transcript-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -154,7 +154,8 @@
                 (result \"3\"))))"))))
     (should
      (string-match-p
-      (regexp-quote "(evaluation-result (status ok) (value deterministic-pure)")
+      (regexp-quote
+        "(evaluation-result (status ok) (value deterministic-pure)")
       result))))
 
 ;;; consent-transcript-test.el ends here

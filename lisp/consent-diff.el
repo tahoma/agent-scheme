@@ -1,4 +1,4 @@
-;;; consent-diff.el --- Canonical diff datums and rendering  -*- lexical-binding: t; -*-
+;;; consent-diff.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

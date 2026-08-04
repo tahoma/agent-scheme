@@ -127,7 +127,8 @@
 
     (define (touch-plan store record)
       "Return RECORD with refreshed updated-at sequence."
-      (replace-field record 'updated-at (integer-datum (next-sequence! store))))
+      (replace-field record 'updated-at (integer-datum (next-sequence!
+        store))))
 
     (define (plan-record-id record)
       "Return canonical id field from a plan RECORD."
@@ -340,7 +341,8 @@
          (store (type consent-plan-store)
           (description "Plan store to mutate."))
          (datum (type list)
-          (description ("Plan payload or field list as Scheme-readable data."))))
+          (description
+            ("Plan payload or field list as Scheme-readable data."))))
         (returns (type plan)
          (description "The created or replaced plan record datum."))
         (effects state-write error))
@@ -360,7 +362,8 @@
          (id (type symbol)
           (description "Plan id symbol."))
          (step-datum (type list)
-          (description ("Step payload or field list as Scheme-readable data."))))
+          (description
+            ("Step payload or field list as Scheme-readable data."))))
         (returns (type plan)
          (description "The updated plan record datum."))
         (effects state-write error))

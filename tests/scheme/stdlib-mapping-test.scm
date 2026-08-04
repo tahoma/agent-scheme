@@ -3,8 +3,10 @@
 ;; SPDX-FileCopyrightText: 2016 Marc Nieper-Wißkirchen
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; Compact all-host checks for `(stdlib mapping)'. The broader upstream-derived
-;;; conformance suite lives in `stdlib-mapping-conformance-test.scm' and runs on
+;;; Compact all-host checks for `(stdlib mapping)'. The broader
+;;; upstream-derived
+;;; conformance suite lives in `stdlib-mapping-conformance-test.scm' and runs
+;;; on
 ;;; direct R7RS hosts; this file stays small enough for compiled host runners.
 
 (import (scheme base)
@@ -113,7 +115,8 @@
     (cons (car model1) (model-difference (cdr model1) model2)))))
 
 (define (model-range>= model boundary)
-  "Return sorted alist entries from MODEL whose keys are at or above BOUNDARY."
+  "Return sorted alist entries from MODEL whose keys are at or above BOUNDARY.\
+"
   (cond
    ((null? model) '())
    ((>= (caar model) boundary) model)
@@ -310,7 +313,8 @@
 (define mapping-base
   (alist->mapping integer-comparator model-base))
 
-;; Expected model after a set operation with insertion, replacement, and front insertion.
+;; Expected model after a set operation with insertion, replacement, and front
+;; insertion.
 (define model-after-set
   (model-set-pairs model-base '((4 . four) (2 . TWO) (0 . zero))))
 
@@ -361,17 +365,20 @@
  'model-union-left-biased '(portable stdlib)
 (test-equal 'model-union-left-biased
              (model-union model-after-adjoin model-other)
-             (mapping->alist (mapping-union mapping-after-adjoin mapping-other))))
+             (mapping->alist (mapping-union mapping-after-adjoin
+               mapping-other))))
 (testing-registry-case
  'model-intersection-left-values '(portable stdlib)
 (test-equal 'model-intersection-left-values
              (model-intersection model-after-adjoin model-other)
-             (mapping->alist (mapping-intersection mapping-after-adjoin mapping-other))))
+             (mapping->alist (mapping-intersection mapping-after-adjoin
+               mapping-other))))
 (testing-registry-case
  'model-difference '(portable stdlib)
 (test-equal 'model-difference
              (model-difference model-after-adjoin model-other)
-             (mapping->alist (mapping-difference mapping-after-adjoin mapping-other))))
+             (mapping->alist (mapping-difference mapping-after-adjoin
+               mapping-other))))
 (testing-registry-case
  'model-range>= '(portable stdlib)
 (test-equal 'model-range>=

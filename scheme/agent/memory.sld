@@ -285,7 +285,8 @@
            (else (loop (+ index 1)))))))
 
     (define (scope-records store scope)
-      "Return all canonical records from STORE belonging to SCOPE, newest first."
+      "Return all canonical records from STORE belonging to SCOPE, newest firs\
+t."
       (let ((normalized-scope (normalize-scope scope)))
         (filter
          (lambda (record)
@@ -409,7 +410,8 @@
           (description "Memory scope symbol."))
          (key . "Memory key datum.")
          (datum (type list)
-          (description ("Memory payload or field list as Scheme-readable data."))))
+          (description
+            ("Memory payload or field list as Scheme-readable data."))))
         (returns (type list)
          (description "The stored memory record datum."))
         (effects state-write error))
@@ -472,7 +474,8 @@
          (kind (type symbol)
           (description "Memory kind symbol."))
          (datum (type list)
-          (description ("Memory payload or field list as Scheme-readable data."))))
+          (description
+            ("Memory payload or field list as Scheme-readable data."))))
         (returns (type list)
          (description "The generated memory record datum."))
         (effects state-write error))
@@ -561,7 +564,8 @@
          (memory-id . "Memory record id that was selected or inspected.")
          (scope (type symbol)
           (description "Memory scope symbol."))
-         (context . "Prompt, task, or retrieval context that accessed memory."))
+         (context .
+           "Prompt, task, or retrieval context that accessed memory."))
         (returns (type list)
          (description "The appended `memory-access` event record."))
         (effects state-write error))
@@ -583,7 +587,8 @@
         (set-store-records! store (cons record (store-records store)))
         record))
 
-    (define (memory-store-reflect! store scope kind datum cites receipt loop-id)
+    (define (memory-store-reflect! store scope kind datum cites receipt
+      loop-id)
       "Append a gated reflection or synthesis datum with provenance."
       #((parameters
          (store (type consent-memory-store)
@@ -904,7 +909,8 @@
       #((parameters
          (datum . "Value to inspect."))
         (returns (type boolean)
-         (description "#t when DATUM is tagged as a memory-selection receipt."))
+         (description
+           "#t when DATUM is tagged as a memory-selection receipt."))
         (effects pure))
       (tagged-record? datum 'memory-selection))
 

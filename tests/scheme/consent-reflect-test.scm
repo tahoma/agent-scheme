@@ -281,7 +281,8 @@
                        (documentation-field
                         (documentation '+)
                         \"documentation\")
-                       (documentation-field (documentation '+) 'missing 'default)
+                       (documentation-field (documentation '+) 'missing 'defau\
+lt)
                        (docstring '+)
                        (docstring (documentation '+))
                        (docstring 'missing 'default))"
@@ -290,11 +291,15 @@
                    #f
                    default
                    default
-                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
-                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
+                   \"Return the sum of all numeric arguments, or 0 when called \
+with no arguments.\"
+                   \"Return the sum of all numeric arguments, or 0 when called \
+with no arguments.\"
                    default
-                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
-                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
+                   \"Return the sum of all numeric arguments, or 0 when called \
+with no arguments.\"
+                   \"Return the sum of all numeric arguments, or 0 when called \
+with no arguments.\"
                    default)")))
 
 (testing-runner-main "Consent Reflect portable tests" (command-line))

@@ -79,7 +79,8 @@
  'approval-boundary-request-status '(portable core)
 (test-equal 'approval-boundary-request-status
              'pending
-             (approval:approval-store-status approval-store portable-approval-id)))
+             (approval:approval-store-status approval-store
+               portable-approval-id)))
 
 (testing-registry-case
  'approval-boundary-pending '(portable core)
@@ -95,7 +96,8 @@
  'approval-boundary-resolved-status '(portable core)
 (test-equal 'approval-boundary-resolved-status
              'denied
-             (approval:approval-store-status approval-store portable-approval-id)))
+             (approval:approval-store-status approval-store
+               portable-approval-id)))
 
 (testing-registry-case
  'approval-boundary-cancel-resolved-denied '(portable core)
@@ -103,7 +105,8 @@
              #t
              (raises?
         (lambda ()
-          (approval:approval-store-cancel! approval-store portable-approval-id)))))
+          (approval:approval-store-cancel! approval-store
+            portable-approval-id)))))
 
 ;; Store for exercising the portable job boundary.
 (define job-store (job:consent-make-job-store))
@@ -183,7 +186,8 @@
  'memory-boundary-by-tag '(portable core)
 (test-equal 'memory-boundary-by-tag
              1
-             (length (memory:memory-store-by-tag memory-store 'instance 'portable))))
+             (length (memory:memory-store-by-tag memory-store 'instance
+               'portable))))
 
 (testing-registry-case
  'memory-boundary-find '(portable core)

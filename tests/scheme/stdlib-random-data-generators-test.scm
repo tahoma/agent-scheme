@@ -307,7 +307,8 @@
 (test-equal 'gsampling-single-generator
              '(a b #t #t)
              (let ((sample (gsampling (generator 'a 'b))))
-         (list (sample) (sample) (eof-object? (sample)) (eof-object? (sample))))))
+         (list (sample) (sample) (eof-object? (sample)) (eof-object?
+           (sample))))))
 
 (testing-registry-case
  'invalid-range-raises '(portable stdlib)
@@ -324,4 +325,5 @@
 (test-assert 'invalid-categorical-weights-raises
              (raises? (lambda () (make-categorical-generator '#(0 0))))))
 
-(testing-runner-main "Stdlib Random Data Generators portable tests" (command-line))
+(testing-runner-main "Stdlib Random Data Generators portable tests"
+  (command-line))

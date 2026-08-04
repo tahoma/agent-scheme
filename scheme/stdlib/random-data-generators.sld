@@ -152,10 +152,12 @@
     (define %random-data-pi (* 4 (atan 1.0)))
 
     (define (with-random-source random-source thunk)
-      "Call THUNK with CURRENT-RANDOM-SOURCE temporarily bound to RANDOM-SOURCE."
+      "Call THUNK with CURRENT-RANDOM-SOURCE temporarily bound to RANDOM-SOURC\
+E."
       #((parameters
          (random-source (type random-source)
-          (description "SRFI 27 random source used while constructing generators."))
+          (description
+            "SRFI 27 random source used while constructing generators."))
          (thunk (type procedure)
           (description "Procedure called with no arguments.")))
         (returns (type any)
@@ -170,7 +172,8 @@
       "Return a generator of deterministic SRFI 27 random sources."
       #((parameters
          (stream-index (type exact-non-negative-integer)
-          (description "Pseudo-random stream index used for generated sources.")))
+          (description
+            "Pseudo-random stream index used for generated sources.")))
         (returns (type procedure)
          (description "Generator producing fresh random sources."))
         (effects allocation state-write))
@@ -219,7 +222,8 @@
       "Return a generator of unsigned 8-bit integers."
       #((parameters)
         (returns (type procedure)
-         (description "Generator thunk returning exact integers in `[0, 256)'."))
+         (description
+           "Generator thunk returning exact integers in `[0, 256)'."))
         (effects allocation state-write))
       (make-random-integer-generator 0 256))
 
@@ -227,7 +231,8 @@
       "Return a generator of signed 8-bit integers."
       #((parameters)
         (returns (type procedure)
-         (description "Generator thunk returning exact integers in `[-128, 128)'."))
+         (description
+           "Generator thunk returning exact integers in `[-128, 128)'."))
         (effects allocation state-write))
       (make-random-integer-generator -128 128))
 
@@ -235,7 +240,8 @@
       "Return a generator of unsigned 16-bit integers."
       #((parameters)
         (returns (type procedure)
-         (description "Generator thunk returning exact integers in `[0, 65536)'."))
+         (description
+           "Generator thunk returning exact integers in `[0, 65536)'."))
         (effects allocation state-write))
       (make-random-integer-generator 0 65536))
 
@@ -243,7 +249,8 @@
       "Return a generator of signed 16-bit integers."
       #((parameters)
         (returns (type procedure)
-         (description "Generator thunk returning exact integers in `[-32768, 32768)'."))
+         (description
+           "Generator thunk returning exact integers in `[-32768, 32768)'."))
         (effects allocation state-write))
       (make-random-integer-generator -32768 32768))
 
@@ -251,7 +258,8 @@
       "Return a generator of unsigned 32-bit integers."
       #((parameters)
         (returns (type procedure)
-         (description "Generator thunk returning exact integers in `[0, 2^32)'."))
+         (description
+           "Generator thunk returning exact integers in `[0, 2^32)'."))
         (effects allocation state-write))
       (make-random-integer-generator 0 (expt 2 32)))
 
@@ -259,7 +267,8 @@
       "Return a generator of signed 32-bit integers."
       #((parameters)
         (returns (type procedure)
-         (description "Generator thunk returning exact integers in `[-2^31, 2^31)'."))
+         (description
+           "Generator thunk returning exact integers in `[-2^31, 2^31)'."))
         (effects allocation state-write))
       (make-random-integer-generator (- (expt 2 31)) (expt 2 31)))
 
@@ -267,7 +276,8 @@
       "Return a generator of unsigned 64-bit integers."
       #((parameters)
         (returns (type procedure)
-         (description "Generator thunk returning exact integers in `[0, 2^64)'."))
+         (description
+           "Generator thunk returning exact integers in `[0, 2^64)'."))
         (effects allocation state-write))
       (make-random-integer-generator 0 (expt 2 64)))
 
@@ -275,7 +285,8 @@
       "Return a generator of signed 64-bit integers."
       #((parameters)
         (returns (type procedure)
-         (description "Generator thunk returning exact integers in `[-2^63, 2^63)'."))
+         (description
+           "Generator thunk returning exact integers in `[-2^63, 2^63)'."))
         (effects allocation state-write))
       (make-random-integer-generator (- (expt 2 63)) (expt 2 63)))
 
@@ -305,7 +316,8 @@
        (else value)))
 
     (define (make-random-real-generator lower-bound upper-bound)
-      "Return a generator of inexact reals between LOWER-BOUND and UPPER-BOUND."
+      "Return a generator of inexact reals between LOWER-BOUND and UPPER-BOUND\
+."
       #((parameters
          (lower-bound (type real)
           (description "Inclusive lower bound."))
@@ -440,7 +452,8 @@
       "Return a generator of random characters from STRING."
       #((parameters
          (string (type string)
-          (description "Non-empty source string; duplicate characters weight results.")))
+          (description
+            "Non-empty source string; duplicate characters weight results.")))
         (returns (type procedure)
          (description "Generator thunk returning characters from STRING."))
         (effects allocation state-write))
@@ -474,9 +487,11 @@
       "Return a generator of Bernoulli random variables."
       #((parameters
          (probability (type real)
-          (description "Success probability in the closed interval `[0, 1]'.")))
+          (description
+            "Success probability in the closed interval `[0, 1]'.")))
         (returns (type procedure)
-         (description "Generator thunk returning 1 for success or 0 for failure."))
+         (description
+           "Generator thunk returning 1 for success or 0 for failure."))
         (effects allocation state-write))
       (if (not (real? probability))
           (error "expected real probability" probability))
@@ -592,7 +607,8 @@
          (mean (type positive-real)
           (description "Distribution mean and variance.")))
         (returns (type procedure)
-         (description "Generator thunk returning exact non-negative integers."))
+         (description
+           "Generator thunk returning exact non-negative integers."))
         (effects allocation state-write))
       (if (not (%random-data-positive-finite-real? mean))
           (error "expected positive finite mean" mean))
@@ -666,7 +682,9 @@
       "Return a generator sampling uniformly from GENERATORS until exhausted."
       #((parameters
          (generators (type list)
-          (description "Generator thunks to sample from. Exhausted generators are removed.")))
+          (description
+            "Generator thunks to sample from. Exhausted generators are removed\
+.")))
         (returns (type procedure)
          (description "Generator thunk returning sampled values or EOF."))
         (effects allocation state-write procedure-call))
@@ -680,7 +698,8 @@
             (if (eof-object? value)
                 (begin
                   (set! generator-vector
-                        (%random-data-remove-vector-index generator-vector index))
+                        (%random-data-remove-vector-index generator-vector
+                          index))
                   (if (= (vector-length generator-vector) 0)
                       (eof-object)
                       (pick)))
@@ -729,7 +748,8 @@
          (n (type exact-positive-integer)
           (description "Number of Bernoulli trials."))
          (probability (type real)
-          (description "Success probability in the closed interval `[0, 1]'.")))
+          (description
+            "Success probability in the closed interval `[0, 1]'.")))
         (returns (type procedure)
          (description "Generator thunk returning exact integers in `[0, n]'."))
         (effects allocation state-write))
@@ -912,7 +932,8 @@
       "Return a generator of points on an N-sphere."
       #((parameters
          (n (type exact-positive-integer)
-          (description "Sphere dimension; generated vectors have length N + 1.")))
+          (description
+            "Sphere dimension; generated vectors have length N + 1.")))
         (returns (type procedure)
          (description "Generator thunk returning coordinate vectors."))
         (effects allocation state-write))
@@ -989,13 +1010,15 @@
       "Return a generator of points inside a ball or ellipsoid."
       #((parameters
          (dimensions (type (or exact-positive-integer vector))
-          (description "Exact positive dimension or vector of positive finite axes.")))
+          (description
+            "Exact positive dimension or vector of positive finite axes.")))
         (returns (type procedure)
          (description "Generator thunk returning coordinate vectors."))
         (effects allocation state-write))
       (let ((return-error
              (lambda ()
-               (error "expected exact positive dimension or positive finite axes"
+               (error
+                 "expected exact positive dimension or positive finite axes"
                       dimensions))))
         (cond
          ((%random-data-exact-positive-integer? dimensions)

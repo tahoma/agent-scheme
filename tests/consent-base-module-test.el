@@ -1,4 +1,4 @@
-;;; consent-base-module-test.el --- Base registry module tests  -*- lexical-binding: t; -*-
+;;; consent-base-module-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

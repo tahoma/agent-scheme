@@ -6,7 +6,8 @@
 ;;; Adapted from the upstream SRFI 128 `comparators-test.scm` tests at
 ;;; https://github.com/scheme-requests-for-implementation/srfi-128.
 ;;; The original tests use the Chicken test egg; this file keeps the same
-;;; behavioral assertions in a small portable harness so the full Consent Scheme
+;;; behavioral assertions in a small portable harness so the full Consent
+;;; Scheme
 ;;; host matrix can exercise the adapted `(stdlib comparator)' library.
 ;;; The restored upstream-style case-lambda hasher below proves SRFI 16 support
 ;;; through this same host matrix, including the compiled portable host path.

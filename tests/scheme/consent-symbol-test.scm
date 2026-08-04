@@ -241,7 +241,8 @@
                  (consent-symbol-equivalent? discarded replacement)))))
 
 (testing-registry-case
- 'symbol-table-hash-collision-and-resize-stress '(portable runtime symbol stress)
+ 'symbol-table-hash-collision-and-resize-stress '(portable runtime symbol
+   stress)
 (let* ((table (consent-make-symbol-table))
        ;; These names have the same complete portable hash, not merely the
        ;; same initial bucket.

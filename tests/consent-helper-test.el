@@ -1,4 +1,4 @@
-;;; consent-helper-test.el --- Helper artifact workflow tests  -*- lexical-binding: t; -*-
+;;; consent-helper-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -111,7 +111,8 @@
    :type 'consent-helper-error))
 
 (ert-deftest consent-helper-test-artifacts-memory-and-skill-candidate ()
-  "Artifacts yield through `(agent io)' and helpers promote to skill candidates."
+  "Artifacts yield through `(agent io)' and helpers promote to skill\
+ candidates."
   (consent-helper-test--reset)
   (consent-session-create! 'named '(:id "helper-artifacts"))
   (let ((consent-helper-directory
@@ -121,10 +122,12 @@
         (let ((result
                (consent-helper-test--result-external
                 (consent-eval-source-result
-                 "(import (scheme base) (agent helper) (agent io) (agent memory))
+                 "(import (scheme base) (agent helper) (agent io) (agent\
+ memory))
                   (agent-artifact
                    'example
-                   '(example (source \"(emit)\") (expect \"(helper-result ok)\")))
+                   '(example (source \"(emit)\") (expect \"(helper-result\
+ ok)\")))
                   (agent-helper-save!
                    '(agent helpers yielding)
                    '((define (emit)
@@ -145,9 +148,11 @@
           (should (string-match-p "(status ok)" result))
           (should (string-match-p "(agent-skill-candidate" result))
           (should (string-match-p "(name \"yielding-helper\")" result))
-          (should (string-match-p "(source-library (agent helpers yielding))" result))
+          (should (string-match-p "(source-library (agent helpers yielding))"
+            result))
           (should (string-match-p "(examples ((emit-example" result))
-          (should (string-match-p "(references ((r7rs \"docs/r7rs-small-report.md\")))" result))
+          (should (string-match-p
+            "(references ((r7rs \"docs/r7rs-small-report.md\")))" result))
           (should (string-match-p "(tests (((source \"(emit)\")" result))
           (should (string-match-p "(tags (helper library))" result))
           (should

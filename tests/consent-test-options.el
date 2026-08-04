@@ -1,4 +1,4 @@
-;;; consent-test-options.el --- CI matrix test option helpers  -*- lexical-binding: t; -*-
+;;; consent-test-options.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

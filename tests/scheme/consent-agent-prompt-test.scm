@@ -3,12 +3,16 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; This program runs under an external R7RS Scheme and exercises the
-;;; `(agent prompt)' REPL harness directly: the harness container, the `prompt',
-;;; `prompt-role', and `prompt-model' verbs driving the minimal task runner in a
+;;; `(agent prompt)' REPL harness directly: the harness container, the
+;;; `prompt',
+;;; `prompt-role', and `prompt-model' verbs driving the minimal task runner in
+;;; a
 ;;; harness session, fail-closed dispatch without session authority, budget
 ;;; threading, the Scheme-readable result/receipt/audit surface, the
-;;; `agents'/`roles'/`models' discovery helpers, the ambient current harness, and
-;;; determinism.  It loads no Emacs host adapter; the same source backs the Emacs
+;;; `agents'/`roles'/`models' discovery helpers, the ambient current harness,
+;;; and
+;;; determinism. It loads no Emacs host adapter; the same source backs the
+;;; Emacs
 ;;; interpreter, so passing here is the portable half of the parity check.
 
 (import (scheme base)
@@ -93,7 +97,8 @@
   (test-assert 'closed-not-ok (not (prompt-result-ok? result)))
   (test-equal 'closed-state 'failed-closed (prompt-result-state result))
   (test-equal 'closed-no-run 'none (prompt-result-run result))
-  (test-equal 'closed-receipt-tag 'prompt-error (car (prompt-result-receipt result)))
+  (test-equal 'closed-receipt-tag 'prompt-error (car (prompt-result-receipt
+    result)))
   (test-equal 'closed-receipt-reason
              'authority-missing
              (cadr (assq 'reason (cdr (prompt-result-receipt result)))))
@@ -235,7 +240,8 @@
              (task-field-value (prompt-result-budget from-agent) 'max-steps))
     (test-equal 'budget-option-overrides
              5
-             (task-field-value (prompt-result-budget from-option) 'max-steps)))))
+             (task-field-value (prompt-result-budget from-option)
+               'max-steps)))))
 
 ;;;; Discovery helpers list agents, distinct roles, and distinct models
 
@@ -265,7 +271,8 @@
  'ambient-installed '(portable agent)
 (let ((custom (make-staffed-harness)))
   (set-current-prompt-harness! custom)
-  (test-equal 'ambient-installed '(default coder-1 reviewer-1) (map agent-id (agents)))
+  (test-equal 'ambient-installed '(default coder-1 reviewer-1) (map agent-id
+    (agents)))
   (test-equal 'ambient-role-id
              'coder-1
              (prompt-result-agent-id

@@ -1,4 +1,4 @@
-;;; consent-repl-stream-test.el --- Incremental stdin REPL parity tests  -*- lexical-binding: t; -*-
+;;; consent-repl-stream-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -7,7 +7,8 @@
 ;; Coverage for the Emacs incremental, line-oriented Consent Scheme REPL entry
 ;; (`consent-repl-stream'), the Emacs parity twin of the portable terminal REPL
 ;; shell.  These tests exercise the same cross-host REPL interaction contract
-;; (docs/repl-interaction-contract.md) scenarios the portable shell test asserts
+;; (docs/repl-interaction-contract.md) scenarios the portable shell test
+;; asserts
 ;; (tests/scheme/consent-repl-test.scm): the emitted record vocabulary, durable
 ;; session evaluation, recoverable reader/evaluator conditions, EOF/exit close
 ;; status, policy-gated host-effect denial, and program-output/record stream
@@ -75,15 +76,18 @@ OPTIONS are evaluator options.  Return the ordered contract records."
 ;;;; Simple expression evaluation through the runtime writer/result path
 
 (ert-deftest consent-repl-stream-simple-evaluation ()
-  "A simple expression yields a wrapped `evaluation-result' and a clean EOF close."
+  "A simple expression yields a wrapped `evaluation-result' and a clean EOF\
+ close."
   (let* ((records (consent-repl-stream-test--drive "(+ 1 2)\n"))
          (result (car (consent-repl-stream-test--of records "repl-result"))))
     (should (equal (consent-repl-stream-test--field result "display") "3"))
     (should (equal (consent-repl-stream-test--sym
                     (consent-repl-stream-test--field result "submission"))
                    "sub-1"))
-    (let ((evaluation (consent-repl-stream-test--field result "evaluation-result")))
-      (should (consent-repl-stream-test--kind-p evaluation "evaluation-result"))
+    (let ((evaluation (consent-repl-stream-test--field result
+      "evaluation-result")))
+      (should (consent-repl-stream-test--kind-p evaluation
+        "evaluation-result"))
       (should (equal (consent-repl-stream-test--sym
                       (consent-repl-stream-test--field evaluation "status"))
                      "ok")))
@@ -140,7 +144,8 @@ OPTIONS are evaluator options.  Return the ordered contract records."
          (results (consent-repl-stream-test--of records "repl-result")))
     (should (= (length results) 3))
     (let ((imports (consent-repl-stream-test--field (nth 1 results) "display"))
-          (bindings (consent-repl-stream-test--field (nth 2 results) "display")))
+          (bindings (consent-repl-stream-test--field (nth 2 results)
+            "display")))
       (should (string-match-p (regexp-quote "(agent reflect)") imports))
       (should (string-match-p (regexp-quote "(scheme base)") imports))
       (should (string-match-p
@@ -167,8 +172,10 @@ OPTIONS are evaluator options.  Return the ordered contract records."
 
 (ert-deftest consent-repl-stream-recoverable-evaluator-condition ()
   "A recoverable evaluator condition is reported without ending the session."
-  (let* ((records (consent-repl-stream-test--drive "undefined-name\n(+ 4 5)\n"))
-         (condition (car (consent-repl-stream-test--of records "repl-condition"))))
+  (let* ((records (consent-repl-stream-test--drive
+    "undefined-name\n(+ 4 5)\n"))
+         (condition (car (consent-repl-stream-test--of records
+           "repl-condition"))))
     (should (equal (consent-repl-stream-test--sym
                     (consent-repl-stream-test--field condition "phase"))
                    "eval"))
@@ -193,8 +200,10 @@ OPTIONS are evaluator options.  Return the ordered contract records."
             "(define (uses-missing-helper value)\n"
             "  (missing-helper value))\n"
             "(uses-missing-helper '(a b))\n")))
-         (condition (car (consent-repl-stream-test--of records "repl-condition")))
-         (condition-datum (consent-repl-stream-test--field condition "condition")))
+         (condition (car (consent-repl-stream-test--of records
+           "repl-condition")))
+         (condition-datum (consent-repl-stream-test--field condition
+           "condition")))
     (should (equal (consent-repl-stream-test--field condition "display")
                    "consent eval error: unbound identifier: missing-helper"))
     (should (equal (consent-repl-stream-test--sym
@@ -204,16 +213,19 @@ OPTIONS are evaluator options.  Return the ordered contract records."
 ;;;; A recoverable reader condition keeps the session open
 
 (ert-deftest consent-repl-stream-recoverable-reader-condition ()
-  "A malformed datum is reported as a recoverable reader condition; eval resumes."
+  "A malformed datum is reported as a recoverable reader condition; eval\
+ resumes."
   (let* ((records (consent-repl-stream-test--drive ")\n(+ 6 7)\n"))
-         (condition (car (consent-repl-stream-test--of records "repl-condition"))))
+         (condition (car (consent-repl-stream-test--of records
+           "repl-condition"))))
     (should (equal (consent-repl-stream-test--sym
                     (consent-repl-stream-test--field condition "phase"))
                    "read"))
     (should (consent-repl-stream-test--true-p
              (consent-repl-stream-test--field condition "recoverable")))
     (let ((result (car (consent-repl-stream-test--of records "repl-result"))))
-      (should (equal (consent-repl-stream-test--field result "display") "13")))))
+      (should (equal (consent-repl-stream-test--field result "display")
+        "13")))))
 
 ;;;; An incomplete form is continued, not reported as a hard error
 
@@ -221,7 +233,8 @@ OPTIONS are evaluator options.  Return the ordered contract records."
   "An incomplete prefix re-prompts as a continuation on the same ordinal."
   (let* ((records (consent-repl-stream-test--drive "(+ 1\n2)\n"))
          (prompts (consent-repl-stream-test--of records "repl-prompt"))
-         (submission (car (consent-repl-stream-test--of records "repl-submission"))))
+         (submission (car (consent-repl-stream-test--of records
+           "repl-submission"))))
     (should (equal (consent-repl-stream-test--sym
                     (consent-repl-stream-test--field (nth 1 prompts) "state"))
                    "continuation"))
@@ -299,7 +312,8 @@ OPTIONS are evaluator options.  Return the ordered contract records."
 ;;;; The continuation prompt carries the reader's pending-nesting indicator
 
 (ert-deftest consent-repl-stream-continuation-carries-nesting ()
-  "Carry nesting depth and the innermost pending construct kind on continuation.
+  "Carry nesting depth and the innermost pending construct kind on\
+ continuation.
 The depth narrows as constructs close (two open lists, then one), the kind
 names the innermost pending construct, and a ready prompt omits both fields."
   (let* ((records (consent-repl-stream-test--drive "(+ (* 2\n3)\n4)\n"))
@@ -387,8 +401,10 @@ the prompt is emitted."
 (ert-deftest consent-repl-stream-eof-mid-form ()
   "Input ending while a partial form is buffered closes with `closed-error'."
   (let* ((records (consent-repl-stream-test--drive "(+ 1\n"))
-         (submission (car (consent-repl-stream-test--of records "repl-submission")))
-         (condition (car (consent-repl-stream-test--of records "repl-condition")))
+         (submission (car (consent-repl-stream-test--of records
+           "repl-submission")))
+         (condition (car (consent-repl-stream-test--of records
+           "repl-condition")))
          (exit (car (consent-repl-stream-test--of records "repl-exit"))))
     (should (consent-repl-stream-test--false-p
              (consent-repl-stream-test--field submission "complete")))
@@ -424,7 +440,8 @@ the prompt is emitted."
                2))))
 
 (ert-deftest consent-repl-stream-explicit-exit-nonzero ()
-  "An explicit exit carrying a nonzero object renders `closed-error' with detail."
+  "An explicit exit carrying a nonzero object renders `closed-error' with\
+ detail."
   (let* ((records (consent-repl-stream-test--drive "(exit 7)\n"))
          (exit (car (consent-repl-stream-test--of records "repl-exit"))))
     (should (equal (consent-repl-stream-test--sym
@@ -442,8 +459,10 @@ the prompt is emitted."
   (let* ((records
           (consent-repl-stream-test--drive
            (concat "(begin (import (scheme file)) "
-                   "(open-output-file \"/tmp/consent-repl-stream-denied\"))\n")))
-         (condition (car (consent-repl-stream-test--of records "repl-condition"))))
+                   "(open-output-file\
+ \"/tmp/consent-repl-stream-denied\"))\n")))
+         (condition (car (consent-repl-stream-test--of records
+           "repl-condition"))))
     (should (equal (consent-repl-stream-test--sym
                     (consent-repl-stream-test--field condition "phase"))
                    "eval"))
@@ -466,7 +485,8 @@ the prompt is emitted."
            (concat "(import (scheme base) (scheme repl))\n"
                    "(interaction-environment)\n")
            '(:policy-actions ((standard-host-effect . deny)))))
-         (condition (car (consent-repl-stream-test--of records "repl-condition"))))
+         (condition (car (consent-repl-stream-test--of records
+           "repl-condition"))))
     (should (equal (consent-repl-stream-test--sym
                     (consent-repl-stream-test--field condition "phase"))
                    "eval"))
@@ -514,13 +534,15 @@ the prompt is emitted."
 ;;;; The interactive command renders records through the shared chrome
 
 (ert-deftest consent-repl-stream-interactive-command-renders-comment-chrome ()
-  "`consent-repl-stream' returns records and paints them through the default chrome."
+  "`consent-repl-stream' returns records and paints them through the default\
+ chrome."
   (when (get-buffer consent-repl-stream-buffer-name)
     (kill-buffer consent-repl-stream-buffer-name))
   (let ((records (consent-repl-stream "(+ 1 2)\n")))
     (should (= (consent-repl-stream-test--count records "repl-result") 1))
     (with-current-buffer consent-repl-stream-buffer-name
-      ;; The default `comment' chrome renders aligned line comments, not raw tags.
+      ;; The default `comment' chrome renders aligned line comments, not raw
+      ;; tags.
       (should (string-match-p (regexp-quote ";;   => 3") (buffer-string)))
       (should (string-match-p (regexp-quote ";;   __ exit closed-ok")
                               (buffer-string)))
@@ -531,7 +553,8 @@ the prompt is emitted."
   (kill-buffer consent-repl-stream-buffer-name))
 
 (ert-deftest consent-repl-stream-interactive-command-datum-chrome ()
-  "The `datum' chrome keeps the canonical raw record stream reachable in the buffer."
+  "The `datum' chrome keeps the canonical raw record stream reachable in the\
+ buffer."
   (when (get-buffer consent-repl-stream-buffer-name)
     (kill-buffer consent-repl-stream-buffer-name))
   (consent-repl-stream "(+ 1 2)\n" nil 'datum)
@@ -584,9 +607,11 @@ the prompt is emitted."
     ;; Re-driving the rendered control stream reproduces the same results: the
     ;; comments are ignored and the echoed forms re-evaluate identically.
     (should (equal (consent-repl-stream-test--result-displays
-                    (consent-repl-stream-records-from-string rendered "repl-main"))
+                    (consent-repl-stream-records-from-string rendered
+                      "repl-main"))
                    (consent-repl-stream-test--result-displays
-                    (consent-repl-stream-records-from-string input "repl-main"))))))
+                    (consent-repl-stream-records-from-string input
+                      "repl-main"))))))
 
 (ert-deftest consent-repl-stream-chrome-comment-prompt-shapes ()
   "The default session shows the ordinal alone; a named session grows a label.
@@ -594,48 +619,59 @@ The result is a `;;'-aligned line comment plus a `;;' separator, and the EOF
 exit is a `;;   __ ' line, byte-identical to the portable renderer."
   (should (equal (consent-repl-stream-rendered-from-string
                   "(+ 1 2)\n" "repl-main" 'comment nil)
-                 "#| 1 |# (+ 1 2)\n;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"))
+                 "#| 1 |# (+ 1 2)\n;;   => 3\n;;\n#| 2 |# ;;   __ exit\
+ closed-ok\n"))
   (should (equal (consent-repl-stream-rendered-from-string
                   "(+ 1 2)\n" "project-main" 'comment nil)
                  (concat
                   "#| project-main:1 |# (+ 1 2)\n;;                => 3\n;;\n"
-                  "#| project-main:2 |# ;;                __ exit closed-ok\n"))))
+                  "#| project-main:2 |# ;;                __ exit\
+ closed-ok\n"))))
 
 (ert-deftest consent-repl-stream-chrome-comment-marker-alignment ()
   "Result/output markers track the ordinal width, matching the portable shell."
   (should (equal (consent-repl-stream-rendered-from-string
-                  "1\n2\n3\n4\n5\n6\n7\n8\n9\n(+ 1 1)\n" "repl-main" 'comment nil)
+                  "1\n2\n3\n4\n5\n6\n7\n8\n9\n(+ 1 1)\n" "repl-main" 'comment
+                    nil)
                  (concat
                   "#| 1 |# 1\n;;   => 1\n;;\n#| 2 |# 2\n;;   => 2\n;;\n"
                   "#| 3 |# 3\n;;   => 3\n;;\n#| 4 |# 4\n;;   => 4\n;;\n"
                   "#| 5 |# 5\n;;   => 5\n;;\n#| 6 |# 6\n;;   => 6\n;;\n"
                   "#| 7 |# 7\n;;   => 7\n;;\n#| 8 |# 8\n;;   => 8\n;;\n"
-                  "#| 9 |# 9\n;;   => 9\n;;\n#| 10 |# (+ 1 1)\n;;    => 2\n;;\n"
+                  "#| 9 |# 9\n;;   => 9\n;;\n#| 10 |# (+ 1 1)\n;;    =>\
+ 2\n;;\n"
                   "#| 11 |# ;;    __ exit closed-ok\n"))))
 
 (ert-deftest consent-repl-stream-chrome-comment-input-echoed-suppresses-echo ()
   "When the host already echoes input, the comment chrome drops its own echo.
 This is the parity twin of the portable terminal shell's interactive-TTY
-posture: the terminal's own cooked-mode echo is the single replayable copy, so a
+posture: the terminal's own cooked-mode echo is the single replayable copy, so\
+ a
 second chrome echo would replay each form twice.  Both Emacs entries leave the
-flag nil today (piped batch stdin and buffer rendering never terminal-echo); the
-flag exists for model symmetry and is exercised here through the rendered hook."
+flag nil today (piped batch stdin and buffer rendering never terminal-echo);\
+ the
+flag exists for model symmetry and is exercised here through the rendered\
+ hook."
   (let* ((input "(+ 1 2)\n(define base 7)\n(set! base 9)\n(* base 3)\n")
          (echoed (consent-repl-stream-rendered-from-string
                   input "repl-main" 'comment nil nil t)))
-    ;; The interactive render carries no bare submission echo, so re-driving the
+    ;; The interactive render carries no bare submission echo, so re-driving
+    ;; the
     ;; chrome output alone evaluates nothing: the single copy is the terminal
     ;; echo (the input), never a duplicate in the control channel.
     (should (equal (consent-repl-stream-test--result-displays
-                    (consent-repl-stream-records-from-string echoed "repl-main"))
+                    (consent-repl-stream-records-from-string echoed
+                      "repl-main"))
                    nil))
     ;; Prompts and results still render as line comments; only the redundant
     ;; submission echo is dropped.
     (should (string-match-p (regexp-quote ";;   => ") echoed))
-    ;; The bare submission echo lands in the prompt slot the terminal echo fills.
+    ;; The bare submission echo lands in the prompt slot the terminal echo
+    ;; fills.
     (should (equal (consent-repl-stream-rendered-from-string
                     "(+ 1 2)\n" "repl-main" 'comment nil nil t)
-                   "#| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"))))
+                   "#| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit\
+ closed-ok\n"))))
 
 (ert-deftest consent-repl-stream-chrome-blank-ready-prompt-reprompts ()
   "Human chromes redraw a same-ordinal ready prompt after blank input."
@@ -643,13 +679,15 @@ flag exists for model symmetry and is exercised here through the rendered hook."
   ;; blank line and typed datum appear between the repeated ready prompts.
   (should (equal (consent-repl-stream-rendered-from-string
                   "\n(+ 1 2)\n" "repl-main" 'comment nil nil t)
-                 "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"))
+                 "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit\
+ closed-ok\n"))
   (should (equal (consent-repl-stream-rendered-from-string
                   "\n(+ 1 2)\n" "repl-main" 'classic nil nil t)
                  "> > = 3\n\n> _ exit closed-ok\n"))
   (should (equal (consent-repl-stream-rendered-from-string
                   "  ;; comment\n(+ 1 2)\n" "repl-main" 'comment nil nil t)
-                 "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"))
+                 "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit\
+ closed-ok\n"))
   (should (equal (consent-repl-stream-rendered-from-string
                   "  ;; comment\n(+ 1 2)\n" "repl-main" 'classic nil nil t)
                  "> > = 3\n\n> _ exit closed-ok\n")))
@@ -661,7 +699,8 @@ with a `_ ' exit line; a `! ' marks a condition."
   (should (equal (consent-repl-stream-rendered-from-string
                   "(+ 1 2)\n" "repl-main" 'classic nil)
                  "> (+ 1 2)\n= 3\n\n> _ exit closed-ok\n"))
-  ;; The condition is marked `! ', and its diagnostic text is now byte-identical
+  ;; The condition is marked `! ', and its diagnostic text is now
+  ;; byte-identical
   ;; to the portable twin for an error whose wording agrees (the Emacs runtime
   ;; renders the `consent eval error: ' prefix unquoted, matching portable), so
   ;; assert the whole line exactly across hosts.
@@ -698,11 +737,12 @@ is alignment dots as wide as the prompt body, matching the portable renderer."
             "undefined-name\n" "repl-main" 'comment nil))))
 
 (ert-deftest consent-repl-stream-chrome-program-output ()
-  "`comment' owns program output (commented, on the control channel); every other
+  "`comment' owns program output (commented, on the control channel); every\
+ other
 chrome leaves it raw on its own stream.  Matches the portable renderer, and the
 comment transcript still replays."
   (let ((prelude "(import (scheme base) (scheme write))\n"))
-    ;; A printed line becomes an aligned `;;   :: ' comment before the result, on
+    ;; A printed line becomes an aligned `;; :: ' comment before the result, on
     ;; the control channel.
     (should (equal (consent-repl-stream-rendered-from-string
                     (concat prelude "(display \"hi\\n\")\n(+ 1 1)\n")
@@ -719,13 +759,15 @@ comment transcript still replays."
                          (concat prelude "(display \"hi\\n\")\n(+ 1 1)\n")
                          "repl-main" 'comment nil))
                    ""))
-    ;; Multi-line output is one comment per line; a missing trailing newline gains
+    ;; Multi-line output is one comment per line; a missing trailing newline
+    ;; gains
     ;; one so the comment closes before the result.
     (should (string-match-p
              (regexp-quote ";;   :: a\n;;   :: b\n;;   => 0")
              (consent-repl-stream-rendered-from-string
               (concat prelude
-                      "(begin (display \"a\")(newline)(display \"b\")(newline) 0)\n")
+                      "(begin (display \"a\")(newline)(display \"b\")(newline)\
+ 0)\n")
               "repl-main" 'comment nil)))
     (should (string-match-p
              (regexp-quote ";;   :: x\n;;   => 5")
@@ -736,19 +778,22 @@ comment transcript still replays."
     ;; 12321 is computed so it is absent from the echoed source); the control
     ;; channel carries records only.
     (let ((classic (consent-repl-stream-capture-from-string
-                    (concat prelude "(begin (display (* 111 111))(newline) 1)\n")
+                    (concat prelude
+                      "(begin (display (* 111 111))(newline) 1)\n")
                     "repl-main" 'classic nil)))
       (should (equal (cdr classic) "12321\n"))
       (should-not (string-match-p "12321" (car classic))))
     ;; The comment control-channel transcript round-trips: commented output is
-    ;; inert on replay and the re-evaluated forms regenerate it, so results match.
+    ;; inert on replay and the re-evaluated forms regenerate it, so results
+    ;; match.
     (let* ((input (concat prelude
                           "(display \"hello\\n\")\n"
                           "(begin (display \"x\")(newline) 42)\n(+ 2 3)\n"))
            (transcript (consent-repl-stream-rendered-from-string
                         input "repl-main" 'comment nil)))
       (should (equal (consent-repl-stream-test--result-displays
-                      (consent-repl-stream-records-from-string transcript "repl-main"))
+                      (consent-repl-stream-records-from-string transcript
+                        "repl-main"))
                      (consent-repl-stream-test--result-displays
                       (consent-repl-stream-records-from-string
                        input "repl-main")))))))
@@ -772,7 +817,8 @@ comment transcript still replays."
 ;;;; Transcript capture and replay (docs/repl-interaction-contract.md)
 
 (defun consent-repl-stream-test--serialize (records)
-  "Serialize RECORDS through the consent writer for a host-portable stream compare."
+  "Serialize RECORDS through the consent writer for a host-portable stream\
+ compare."
   (mapcar #'consent-result->external records))
 
 (defun consent-repl-stream-test--group (record name)
@@ -786,7 +832,8 @@ comment transcript still replays."
   "A captured transcript serializes, reloads, and replays to the same stream."
   (let* ((captured (consent-repl-stream-test--drive
                     "(define base 7)\n(* base 3)\n"))
-         (text (mapconcat (lambda (r) (concat (consent-result->external r) "\n"))
+         (text (mapconcat (lambda (r) (concat (consent-result->external r)
+           "\n"))
                           captured ""))
          (reloaded (consent-repl-stream-records-from-datum-stream text)))
     (should (= (length reloaded) (length captured)))
@@ -794,7 +841,8 @@ comment transcript still replays."
                    '("(define base 7)" "(* base 3)")))
     ;; Replaying the reloaded transcript reproduces the captured record stream.
     (should (equal (consent-repl-stream-test--serialize
-                    (consent-repl-stream-replay-records reloaded "project-main"))
+                    (consent-repl-stream-replay-records reloaded
+                      "project-main"))
                    (consent-repl-stream-test--serialize captured)))))
 
 (ert-deftest consent-repl-stream-replay-skips-incomplete ()
@@ -806,7 +854,8 @@ comment transcript still replays."
   "A pure transcript replays to an equal record stream and the report says so."
   (let* ((captured (consent-repl-stream-test--drive
                     "(import (scheme base))\n(define base 20)\n(* base 3)\n"))
-         (replayed (consent-repl-stream-replay-records captured "project-main"))
+         (replayed (consent-repl-stream-replay-records captured
+           "project-main"))
          (report (consent-repl-stream-replay-report captured replayed)))
     (should (equal (consent-repl-stream-replay-input captured)
                    "(import (scheme base))\n(define base 20)\n(* base 3)\n"))
@@ -834,7 +883,8 @@ silently reproducing the recorded value."
     ;; Capture: both forms succeeded (two results, no conditions).
     (should (= (consent-repl-stream-test--count captured "repl-result") 2))
     (should (= (consent-repl-stream-test--count captured "repl-condition") 0))
-    ;; Replay denied the effect: the interaction-environment form is a condition.
+    ;; Replay denied the effect: the interaction-environment form is a
+    ;; condition.
     (should (= (consent-repl-stream-test--count replayed "repl-result") 1))
     (should (= (consent-repl-stream-test--count replayed "repl-condition") 1))
     ;; The report flags the result -> condition divergence with its source.
@@ -859,7 +909,8 @@ silently reproducing the recorded value."
 ;;;; Scheme-callable session switching redirects forms across sandboxes
 
 (ert-deftest consent-repl-stream-session-switch-redirects-and-isolates ()
-  "A `switch-session' verb redirects subsequent forms to per-session sandboxes."
+  "A `switch-session' verb redirects subsequent forms to per-session\
+ sandboxes."
   (consent-session-clear!)
   (setq consent-session-current-id nil)
   (let* ((records

@@ -102,6 +102,11 @@ Repository conventions override generic workflow defaults. In particular:
   line fits within the soft line limit; keep longer type forms on their own
   line. Prefer plain description strings when they fit, and reserve
   string-list descriptions for wrapping prose.
+- Keep maintained source, tests, fixtures, tooling, Make recipes, and workflows
+  within the repository's 80-column soft limit and 100-column hard limit. Run
+  `make lint-readability`; use a classified local exception only for an atomic
+  datum, external identifier, or exact text that cannot be reflowed safely.
+  See `docs/readability.md` for the decision table and provenance rules.
 - Do not put assistant, tool, vendor, or workflow branding in branch names, pull
   request titles, commit messages, issue text, generated artifacts, or ordinary
   documentation. The dedicated project credits page is the exception for

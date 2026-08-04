@@ -1,4 +1,4 @@
-;;; consent-debugger.el --- Debugger condition records  -*- lexical-binding: t; -*-
+;;; consent-debugger.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -882,12 +882,14 @@ datum before `consent-debugger-restart-action-function' is called."
 
 (defconst consent-debugger--primitive-implementation-table
   `((primitive-current-error . ,#'consent-debugger--primitive-current-error)
-    (primitive-condition-stack . ,#'consent-debugger--primitive-condition-stack)
+    (primitive-condition-stack .
+      ,#'consent-debugger--primitive-condition-stack)
     (primitive-condition-environment
      . ,#'consent-debugger--primitive-condition-environment)
     (primitive-condition-restarts
      . ,#'consent-debugger--primitive-condition-restarts)
-    (primitive-restart-invoke! . ,#'consent-debugger--primitive-restart-invoke!)
+    (primitive-restart-invoke! .
+      ,#'consent-debugger--primitive-restart-invoke!)
     (primitive-debugger-yield . ,#'consent-debugger--primitive-debugger-yield))
   "Provider-owned primitive implementations for `(agent debugger)'.")
 

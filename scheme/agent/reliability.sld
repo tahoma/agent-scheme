@@ -72,7 +72,8 @@
 
     (define (trial-policy trial)
       "Return the effective policy alist for TRIAL.  Gate-enforced policy is"
-      "intentionally always included; callers may request a gate ablation, but"
+      "intentionally always included; callers may request a gate ablation, but\
+"
       "authority-denying rules are not removed."
       (append (field-value trial 'gate-policy '())
               (field-value trial 'policy '())))
@@ -246,7 +247,8 @@
          (result (type reliability-trial-result)
           (description "Trial result returned by `measure-reliability'.")))
         (returns (type boolean)
-         (description "#t when the trial completed and matched the final state."))
+         (description
+           "#t when the trial completed and matched the final state."))
         (effects pure))
       (field-value result 'passed #f))
 

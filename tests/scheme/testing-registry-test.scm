@@ -121,7 +121,8 @@
 (testing-registry-case 'broken '(fast failure)
   (error "expected registry failure"))
 
-;; A batch failure remains inspectable by an embedding test or interactive host.
+;; A batch failure remains inspectable by an embedding test or interactive
+;; host.
 (define registered-failure-report
   (parameterize
       ((testing-registry-diagnostic-hook

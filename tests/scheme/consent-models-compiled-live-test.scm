@@ -3,7 +3,8 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; This program runs directly inside a compiled Consent `--host-run' context.
-;;; Direct R7RS hosts use consent-models-live-test.scm, which enters the Consent
+;;; Direct R7RS hosts use consent-models-live-test.scm, which enters the
+;;; Consent
 ;;; evaluator explicitly; nesting that evaluator inside a self-host needlessly
 ;;; repeats bootstrap and does not exercise the compiled interaction context.
 

@@ -1,4 +1,4 @@
-;;; consent-runtime-test.el --- Runtime value module tests  -*- lexical-binding: t; -*-
+;;; consent-runtime-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -87,7 +87,8 @@
           (with-temp-buffer
             (insert-file-contents file)
             (when (re-search-forward
-                   "\\(consent-version 0 15 4\\|0\\.15\\.1\\|'(0 15 4\\|(list 0 15 4\\)"
+                   "\\(consent-version 0 15 4\\|0\\.15\\.1\\|'(0 15\
+ 4\\|(list 0 15 4\\)"
                    nil t)
               (push file matches))))))
     (should-not matches)))

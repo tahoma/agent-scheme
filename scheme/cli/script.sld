@@ -6,19 +6,21 @@
 ;;; executable-script support (docs/executable-scripts.md).  It is the
 ;;; non-interactive twin of the terminal REPL shell (cli repl-shell): where the
 ;;; REPL reads interaction input from a terminal, a script is an ordinary
-;;; Consent Scheme source file that a `#!' line marks executable so the shell can
+;;; Consent Scheme source file that a `#!' line marks executable so the shell
+;;; can
 ;;; run it directly.
 ;;;
 ;;; `#!' is not free in Scheme: it prefixes reader directives (`#!fold-case'),
 ;;; version flags (`#!r6rs'), named values (`#!eof'), and DSSSL keywords
 ;;; (`#!optional').  So a shebang is recognized only NARROWLY -- a `#!' that is
 ;;; the first two bytes of the source followed by `/' or whitespace -- and is
-;;; consumed here, at the script-loading boundary, before the source reaches the
-;;; reader.  The reader's directive handling is left untouched, so `#!fold-case'
+;;; consumed here, at the script-loading boundary, before the source reaches
+;;; the
+;;; reader. The reader's directive handling is left untouched, so `#!fold-case'
 ;;; and every other `#!'-token keep their normal token meaning everywhere else.
 ;;;
 ;;; The strip preserves the line terminator that ended the shebang line, so the
-;;; first line of the remaining source is blank rather than removed.  Datum line
+;;; first line of the remaining source is blank rather than removed. Datum line
 ;;; numbers therefore match the original file, keeping reader and evaluator
 ;;; diagnostics aligned with what the author sees on disk.
 
@@ -52,7 +54,8 @@
       "narrow enough to leave `#!fold-case' and other `#!'-tokens alone."
       #((parameters
          (source (type string)
-          (description ("Script source text to inspect for a leading shebang."))))
+          (description
+            ("Script source text to inspect for a leading shebang."))))
         (returns (type boolean)
          (description
           ("#t when SOURCE opens with a `#!' followed by `/' or"
@@ -64,7 +67,8 @@
            (script--whitespace-after-bang? (string-ref source 2))))
 
     (define (script--line-terminator-index source)
-      "Return the index of the first newline in SOURCE, or its length when none."
+      "Return the index of the first newline in SOURCE, or its length when non\
+e."
       (let ((length (string-length source)))
         (let loop ((index 0))
           (cond
@@ -138,7 +142,8 @@
             options))
 
     (define (script--run-file path environment options)
-      "Run PATH with ENVIRONMENT and OPTIONS after script option normalization."
+      "Run PATH with ENVIRONMENT and OPTIONS after script option normalization\
+."
       (consent-eval-source
        (cli-script-source-from-file path)
        environment
@@ -189,7 +194,8 @@
           (description
            ("Optional evaluation arguments forwarded to"
              "`consent-eval-source' (environment, options)."))))
-        (returns . ("The last value produced by evaluating the script's source."))
+        (returns .
+          ("The last value produced by evaluating the script's source."))
         (effects state-read host-eval error))
       (apply script--run-file-dispatch path rest))
 
@@ -197,7 +203,8 @@
     ;; compiled runtime act as a Consent-Scheme host runner for portable test
     ;; programs. It grants access to the runtime's own internal libraries and
     ;; raises the per-run budgets so a test file that drives the runtime hard
-    ;; can complete. Program output is captured per form through the interaction
+    ;; can complete. Program output is captured per form through the
+    ;; interaction
     ;; context rather than written to a raw host port.  Program input is a
     ;; granted textual stream already at EOF: test programs receive an ordinary
     ;; current input port without exposing the host runner's own stdin.
@@ -217,14 +224,17 @@
       "root, so a host runner reads fixtures and writes scratch files only"
       "under that working-tree subtree. The file capability system matches by"
       "absolute path containment, so ROOT must be absolute. First-class"
-      "(persisted) capability grants are used rather than the transient legacy"
+      "(persisted) capability grants are used rather than the transient legacy\
+"
       "file-paths allow-list so that port handles opened by"
       "`call-with-input-file' and friends revalidate against an active grant"
       "on every read/write rather than failing closed mid-stream. A"
       "process-environment grant is included so a host-runner test can read"
-      "its CI configuration from the host environment; that capability remains"
+      "its CI configuration from the host environment; that capability remains\
+"
       "denied to ordinary scripts. A mediated stdin port already at EOF lets"
-      "portable tests observe and dynamically bind `current-input-port' without"
+      "portable tests observe and dynamically bind `current-input-port' withou\
+t"
       "receiving ambient access to the host runner's stdin."
       #((parameters
          (root (type string)
@@ -250,7 +260,8 @@
                                 (list 'id 'host-run-file-grant)
                                 (list 'domain 'file)
                                 (cons 'operations
-                                      '(read create write metadata delete load))
+                                      '(read create write metadata delete
+                              load))
                                 (list 'scope
                                       (list 'file-root root)
                                       (list 'paths (list "."))
@@ -290,10 +301,13 @@
 
     (define (cli-script-host-run-file path root emit)
       "Run host-runner test file PATH on this Consent runtime, form by form."
-      "ROOT is the absolute working directory the run is scoped to (file access"
+      "ROOT is the absolute working directory the run is scoped to (file acces\
+s"
       "and include resolution). Each form is evaluated through a durable"
-      "interaction context under the host-run capability bundle; EMIT is called"
-      "with the program output each form produced so the host can stream it to"
+      "interaction context under the host-run capability bundle; EMIT is calle\
+d"
+      "with the program output each form produced so the host can stream it to\
+"
       "real stdout. Returns #t when every form completes, or the failing"
       "`evaluation-result' datum at the first error -- so a CLI caller exits"
       "non-zero exactly when a captured test assertion raised."

@@ -1,16 +1,19 @@
-;;; consent-repl-comint-test.el --- Live comint REPL buffer tests  -*- lexical-binding: t; -*-
+;;; consent-repl-comint-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
 ;; Coverage for the live, interactive Consent Scheme REPL buffer
-;; (`consent-repl-comint'), the in-editor comint surface onto a durable session.
+;; (`consent-repl-comint'), the in-editor comint surface onto a durable
+;; session.
 ;; These tests drive the buffer the way a user does -- typing at the prompt and
-;; pressing RET -- and assert the chrome-rendered transcript, the contract record
+;; pressing RET -- and assert the chrome-rendered transcript, the contract
+;; record
 ;; vocabulary (through the always-reachable `datum' chrome), durable session
 ;; evaluation shared with the other Emacs eval paths, multi-line continuation,
-;; recoverable conditions, EOF/exit close status, and program-input multiplexing
+;; recoverable conditions, EOF/exit close status, and program-input
+;; multiplexing
 ;; over the shared stdin cursor (#505).  They also assert the existing eval
 ;; surfaces are undisturbed, per the issue's strictly-additive contract.
 
@@ -68,7 +71,8 @@ The session id is bound to `id' for sharing assertions."
     (consent-repl-comint-test--submit buffer "(+ 1 2)")
     (let ((text (consent-repl-comint-test--text buffer)))
       (should (string-match-p "=> 3" text))
-      ;; The submission echo is the user's typed text, not a second chrome echo.
+      ;; The submission echo is the user's typed text, not a second chrome
+      ;; echo.
       (should (string-match-p (regexp-quote "(+ 1 2)") text)))
     (with-current-buffer buffer
       ;; Ordinal advanced past the evaluated submission; session stays open.
@@ -77,7 +81,8 @@ The session id is bound to `id' for sharing assertions."
       (should-not consent-repl-comint--closed))))
 
 (ert-deftest consent-repl-comint-prompt-is-read-only ()
-  "The rendered prompt is read only so editing happens only in the input region."
+  "The rendered prompt is read only so editing happens only in the input\
+ region."
   (consent-repl-comint-test--with-buffer buffer
     (with-current-buffer buffer
       (should (get-text-property (point-min) 'read-only)))))
@@ -85,7 +90,8 @@ The session id is bound to `id' for sharing assertions."
 ;;;; Durable session shared with the other Emacs eval paths
 
 (ert-deftest consent-repl-comint-shares-session-with-eval-paths ()
-  "Definitions cross between the live buffer and `consent-session-eval-source'."
+  "Definitions cross between the live buffer and\
+ `consent-session-eval-source'."
   (consent-repl-comint-test--with-buffer buffer
     ;; Defined in the live buffer ...
     (consent-repl-comint-test--submit buffer "(define answer 41)")
@@ -114,7 +120,8 @@ The session id is bound to `id' for sharing assertions."
 ;;;; Multi-line continuation
 
 (ert-deftest consent-repl-comint-incomplete-form-continues ()
-  "An incomplete form is not evaluated; it keeps pending with a continuation gutter."
+  "An incomplete form is not evaluated; it keeps pending with a continuation\
+ gutter."
   (consent-repl-comint-test--with-buffer buffer
     (consent-repl-comint-test--submit buffer "(+ 1")
     (with-current-buffer buffer
@@ -132,7 +139,8 @@ The session id is bound to `id' for sharing assertions."
       (should (= consent-repl-comint--count 1)))))
 
 (ert-deftest consent-repl-comint-continuation-gutter-is-aligned-dots ()
-  "A continuation gutter is clean width-matched alignment dots, no nesting count."
+  "A continuation gutter is clean width-matched alignment dots, no nesting\
+ count."
   (consent-repl-comint-test--with-buffer buffer
     (consent-repl-comint-test--submit buffer "(list (vector 1")
     (with-current-buffer buffer
@@ -145,7 +153,8 @@ The session id is bound to `id' for sharing assertions."
 ;;;; Recoverable conditions keep the session open
 
 (ert-deftest consent-repl-comint-recoverable-condition-keeps-session ()
-  "A recoverable evaluator condition is rendered and the session keeps running."
+  "A recoverable evaluator condition is rendered and the session keeps\
+ running."
   (consent-repl-comint-test--with-buffer buffer
     (consent-repl-comint-test--submit buffer "this-is-unbound")
     (with-current-buffer buffer
@@ -156,7 +165,8 @@ The session id is bound to `id' for sharing assertions."
     (should (string-match-p "=> 4" (consent-repl-comint-test--text buffer)))))
 
 (ert-deftest consent-repl-comint-recoverable-reader-condition ()
-  "A malformed datum is reported as a reader condition without closing the session."
+  "A malformed datum is reported as a reader condition without closing the\
+ session."
   (consent-repl-comint-test--with-buffer buffer
     ;; A lone closing paren is a malformed datum the driver reports.
     (consent-repl-comint-test--submit buffer ")")
@@ -168,7 +178,8 @@ The session id is bound to `id' for sharing assertions."
 
 (ert-deftest consent-repl-comint-exit-form-closes-session ()
   "An explicit `(exit)' closes with `(reason explicit) (status closed-ok)'.
-The close-status vocabulary is asserted on the raw `repl-exit' record through the
+The close-status vocabulary is asserted on the raw `repl-exit' record\
+ through the
 `datum' chrome, since the `comment' chrome drops the reason and detail fields."
   (consent-repl-comint-test--with-buffer buffer
     (with-current-buffer buffer (consent-repl-comint-set-chrome 'datum))
@@ -189,7 +200,8 @@ The close-status vocabulary is asserted on the raw `repl-exit' record through th
         (should (= count consent-repl-comint--count))))))
 
 (ert-deftest consent-repl-comint-exit-with-error-status ()
-  "An exit carrying a nonzero object closes `closed-error' with the object as detail."
+  "An exit carrying a nonzero object closes `closed-error' with the object\
+ as detail."
   (consent-repl-comint-test--with-buffer buffer
     (with-current-buffer buffer (consent-repl-comint-set-chrome 'datum))
     (consent-repl-comint-test--submit buffer "(exit 7)")
@@ -200,7 +212,8 @@ The close-status vocabulary is asserted on the raw `repl-exit' record through th
     (with-current-buffer buffer (should consent-repl-comint--closed))))
 
 (ert-deftest consent-repl-comint-send-eof-closes-clean ()
-  "`consent-repl-comint-send-eof' at a fresh prompt closes `(reason eof) closed-ok'."
+  "`consent-repl-comint-send-eof' at a fresh prompt closes `(reason eof)\
+ closed-ok'."
   (consent-repl-comint-test--with-buffer buffer
     (with-current-buffer buffer (consent-repl-comint-set-chrome 'datum))
     (consent-repl-comint-test--submit buffer "(+ 1 1)")
@@ -211,7 +224,8 @@ The close-status vocabulary is asserted on the raw `repl-exit' record through th
     (with-current-buffer buffer (should consent-repl-comint--closed))))
 
 (ert-deftest consent-repl-comint-send-eof-unterminated-is-error ()
-  "EOF with a buffered partial form closes `closed-error' with a read condition.
+  "EOF with a buffered partial form closes `closed-error' with a read\
+ condition.
 Mirrors the engine's EOF-mid-form handling rather than closing `closed-ok'."
   (consent-repl-comint-test--with-buffer buffer
     (with-current-buffer buffer
@@ -242,7 +256,8 @@ Mirrors the engine's EOF-mid-form handling rather than closing `closed-ok'."
 ;;;; Forced send (C-j) of an incomplete form reports and resyncs
 
 (ert-deftest consent-repl-comint-force-send-incomplete-reports-condition ()
-  "`consent-repl-comint-send-input' on an incomplete form reports a read condition.
+  "`consent-repl-comint-send-input' on an incomplete form reports a read\
+ condition.
 The session stays open and a subsequent complete form still evaluates."
   (consent-repl-comint-test--with-buffer buffer
     (with-current-buffer buffer
@@ -252,7 +267,8 @@ The session stays open and a subsequent complete form still evaluates."
     (with-current-buffer buffer
       (should (string-match-p "!!" (buffer-string)))
       (should-not consent-repl-comint--closed)
-      ;; The incomplete form is reported, not counted as an evaluated submission.
+      ;; The incomplete form is reported, not counted as an evaluated
+      ;; submission.
       (should (= consent-repl-comint--count 0)))
     (consent-repl-comint-test--submit buffer "(+ 2 3)")
     (with-current-buffer buffer
@@ -262,7 +278,8 @@ The session stays open and a subsequent complete form still evaluates."
 ;;;; Reopening a closed buffer revives the session
 
 (ert-deftest consent-repl-comint-reopen-after-close-revives ()
-  "Reissuing `consent-repl-comint' on a closed buffer reopens the same session."
+  "Reissuing `consent-repl-comint' on a closed buffer reopens the same\
+ session."
   (let ((id (consent-repl-comint-test--fresh-id)))
     (let ((buffer (consent-repl-comint id)))
       (unwind-protect
@@ -272,7 +289,8 @@ The session stays open and a subsequent complete form still evaluates."
             (with-current-buffer buffer (should consent-repl-comint--closed))
             ;; Reopen: same buffer, same session, revived.
             (should (eq buffer (consent-repl-comint id)))
-            (with-current-buffer buffer (should-not consent-repl-comint--closed))
+            (with-current-buffer buffer (should-not
+              consent-repl-comint--closed))
             ;; State persisted across the reopen.
             (consent-repl-comint-test--submit buffer "(* kept 2)")
             (with-current-buffer buffer
@@ -282,7 +300,8 @@ The session stays open and a subsequent complete form still evaluates."
 ;;;; The canonical datum chrome stays reachable
 
 (ert-deftest consent-repl-comint-datum-chrome-reachable ()
-  "Switching to the `datum' chrome renders the canonical contract record stream."
+  "Switching to the `datum' chrome renders the canonical contract record\
+ stream."
   (consent-repl-comint-test--with-buffer buffer
     (with-current-buffer buffer
       (consent-repl-comint-set-chrome 'datum))
@@ -307,7 +326,8 @@ The session stays open and a subsequent complete form still evaluates."
 ;;;; Program input over the shared stdin cursor (#505)
 
 (ert-deftest consent-repl-comint-program-input-from-queue ()
-  "An evaluated `read-line' consumes seeded program input over the shared cursor."
+  "An evaluated `read-line' consumes seeded program input over the shared\
+ cursor."
   (consent-repl-comint-test--with-buffer buffer
     (with-current-buffer buffer
       (setq consent-repl-comint--input-queue (list "typed line\n")))
@@ -327,10 +347,13 @@ The session stays open and a subsequent complete form still evaluates."
 ;;;; Multi-line form history is a single, gutter-free ring entry
 
 (ert-deftest consent-repl-comint-multiline-form-single-history-entry ()
-  "A continued multi-line form lands in the input ring as one gutter-free entry."
+  "A continued multi-line form lands in the input ring as one gutter-free\
+ entry."
   (consent-repl-comint-test--with-buffer buffer
-    (consent-repl-comint-test--submit buffer "(list 1")   ; incomplete: continues
-    (consent-repl-comint-test--submit buffer "2 3)")      ; completes and submits
+    (consent-repl-comint-test--submit buffer "(list 1")
+      ; incomplete: continues
+    (consent-repl-comint-test--submit buffer "2 3)")
+      ; completes and submits
     (with-current-buffer buffer
       (should (string-match-p "=> (1 2 3)" (buffer-string)))
       (let ((entry (ring-ref comint-input-ring 0)))
@@ -345,7 +368,8 @@ The session stays open and a subsequent complete form still evaluates."
 ;;;; Macros and imports cross the comint<->session bridge in both directions
 
 (ert-deftest consent-repl-comint-macros-shared-bidirectionally ()
-  "A macro defined in the live buffer is usable via the session, and vice versa."
+  "A macro defined in the live buffer is usable via the session, and vice\
+ versa."
   (consent-repl-comint-test--with-buffer buffer
     (consent-repl-comint-test--submit buffer "(import (scheme base))")
     ;; Defined in the live buffer ...
@@ -371,12 +395,14 @@ The session stays open and a subsequent complete form still evaluates."
     (should (= (length (seq-filter
                         (lambda (r)
                           (and (consp r) (consent-symbol-p (car r))
-                               (equal (consent-symbol-name (car r)) "repl-result")))
+                               (equal (consent-symbol-name (car r))
+                              "repl-result")))
                         records))
                1))))
 
 (ert-deftest consent-repl-comint-session-eval-after-live-buffer ()
-  "`consent-session-eval-source' keeps working on a session a live buffer used."
+  "`consent-session-eval-source' keeps working on a session a live buffer\
+ used."
   (consent-repl-comint-test--with-buffer buffer
     (consent-repl-comint-test--submit buffer "(define shared 5)")
     ;; The original session-source eval path is unchanged and signals on error.

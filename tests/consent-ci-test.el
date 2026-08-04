@@ -1,4 +1,4 @@
-;;; consent-ci-test.el --- CI reporting tests  -*- lexical-binding: t; -*-
+;;; consent-ci-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -38,12 +38,29 @@
           (throw 'missing nil))
         (setq start (+ found (length string)))))))
 
+(defun consent-ci-test--make-logical-text (makefile)
+  "Return MAKEFILE with physical continuation lines joined."
+  (replace-regexp-in-string "\\\\\n[ \t]*" "" makefile))
+
+(defun consent-ci-test--yaml-semantic-text (text)
+  "Return TEXT without YAML folding syntax or formatting whitespace."
+  (replace-regexp-in-string
+   "[[:space:]]+" ""
+   (replace-regexp-in-string ":[ \t]*>-?[0-9]*[ \t]*\n" ":" text)))
+
+(defun consent-ci-test--yaml-contains-p (needle workflow)
+  "Return non-nil when WORKFLOW semantically contains literal NEEDLE."
+  (string-match-p
+   (regexp-quote (consent-ci-test--yaml-semantic-text needle))
+   (consent-ci-test--yaml-semantic-text workflow)))
+
 (defun consent-ci-test--make-variable-datum (name makefile)
   "Read Scheme/ERT selector datum NAME from MAKEFILE text."
-  (let ((regexp (format "^%s \\?= \\(.+\\)$" (regexp-quote name))))
-    (unless (string-match regexp makefile)
+  (let ((regexp (format "^%s \\?= \\(.+\\)$" (regexp-quote name)))
+        (logical (consent-ci-test--make-logical-text makefile)))
+    (unless (string-match regexp logical)
       (error "Missing Make variable %s" name))
-    (read (match-string 1 makefile))))
+    (read (match-string 1 logical))))
 
 (ert-deftest consent-ci-test-live-model-profile-shards-are-local-only ()
   "Keep quick-start live model profile shards explicit and opt-in."
@@ -52,9 +69,14 @@
                       "test-live-model-recommended:"
                       "test-live-model-large:"))
       (should (string-match-p (regexp-quote target) makefile)))
-    (dolist (cases '("CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_SMALL_SET)'"
-                     "CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_RECOMMENDED_SET)'"
-                     "CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_LARGE_SET)'"))
+    (dolist (cases
+             (list
+              (concat "CONSENT_LIVE_MODEL_MATRIX_CASES='"
+                      "$(CONSENT_LIVE_MODEL_SMALL_SET)'")
+              (concat "CONSENT_LIVE_MODEL_MATRIX_CASES='"
+                      "$(CONSENT_LIVE_MODEL_RECOMMENDED_SET)'")
+              (concat "CONSENT_LIVE_MODEL_MATRIX_CASES='"
+                      "$(CONSENT_LIVE_MODEL_LARGE_SET)'")))
       (should (string-match-p (regexp-quote cases) makefile)))))
 
 (ert-deftest consent-ci-test-parses-result-counts-and-slowest-tests ()
@@ -68,7 +90,8 @@
                 "\n"
                 "Ran 3 tests, 2 results as expected, 1 unexpected, 1 skipped "
                 "(2026-05-25 13:00:02-0700, 1.280000 sec)\n"
-                "CONSENT_CI_CHECK_SECONDS=source-library-docstring-reflection 6.800\n"
+                "CONSENT_CI_CHECK_SECONDS=source-library-docstring-\
+reflection 6.800\n"
                 "CONSENT_CI_SHARD_NAME=Emacs-hosted ERT\n"
                 "CONSENT_CI_SHARD_SELECTOR=(not \"consent-scheme-.*\")\n"
                 "CONSENT_CI_WALL_SECONDS=2\n")))
@@ -142,7 +165,8 @@
            (concat
             "Running 2 tests (2026-05-25 13:00:00-0700, selector `x')\n"
             "   passed  1/2  consent-reader-test-booleans (0.040000 sec)\n"
-            "   passed  2/2  consent-conformance-test-implemented-cases-run (0.500000 sec)\n"
+            "   passed  2/2  consent-conformance-test-implemented-cases-run\
+ (0.500000 sec)\n"
             "\n"
             "Ran 2 tests, 2 results as expected, 0 unexpected "
             "(2026-05-25 13:00:01-0700, 0.540000 sec)\n"
@@ -153,9 +177,12 @@
           (consent-ci-test--write-log
            (concat
             "Running 3 tests (2026-05-25 13:00:00-0700, selector `x')\n"
-            "   passed  1/3  consent-scheme-reader-test-r7rs-suite (0.030000 sec)\n"
-            "   passed  2/3  consent-scheme-eval-test-r7rs-suite (0.200000 sec)\n"
-            "   passed  3/3  consent-scheme-fixture-test-r7rs-suite (0.080000 sec)\n"
+            "   passed  1/3  consent-scheme-reader-test-r7rs-suite (0.030000\
+ sec)\n"
+            "   passed  2/3  consent-scheme-eval-test-r7rs-suite (0.200000\
+ sec)\n"
+            "   passed  3/3  consent-scheme-fixture-test-r7rs-suite\
+ (0.080000 sec)\n"
             "\n"
             "Ran 3 tests, 3 results as expected, 0 unexpected "
             "(2026-05-25 13:00:01-0700, 0.310000 sec)\n"
@@ -170,7 +197,8 @@
                    (list portable-log emacs-log)))))
     (unwind-protect
         (progn
-          (should (string-match-p "| Portable R7RS Chibi evaluator subset |" markdown))
+          (should (string-match-p "| Portable R7RS Chibi evaluator subset |"
+            markdown))
           (should (string-match-p "| Emacs-hosted ERT |" markdown))
           (should (string-match-p "| Reader | 1 / 0\\.040s | 1 / 0\\.030s |"
                                   markdown))
@@ -185,7 +213,8 @@
                    "`tests/scheme/consent-eval-test.scm` | 1\\.000s"
                    markdown))
           (should (string-match-p
-                   "| Portable R7RS Chibi evaluator subset | `standard-inexact-transcendentals` | 0\\.700s |"
+                   "| Portable R7RS Chibi evaluator subset |\
+ `standard-inexact-transcendentals` | 0\\.700s |"
                    markdown)))
       (delete-file emacs-log)
       (delete-file portable-log))))
@@ -211,13 +240,16 @@
         (progn
           (should (string-match-p consent-ci-pr-summary-marker markdown))
           (should (string-match-p
-                   "Latest run: \\[GitHub Actions\\](https://github.example/run/1)"
+                   "Latest run: \\[GitHub\
+ Actions\\](https://github.example/run/1)"
                    markdown))
           (should (string-match-p
-                   "| Emacs core language/runtime | 1 | 0 | 0 | 0\\.040s | 1\\.000s |"
+                   "| Emacs core language/runtime | 1 | 0 | 0 | 0\\.040s |\
+ 1\\.000s |"
                    markdown))
           (should (string-match-p
-                   "<summary>Detailed shard timings and diagnostic timings</summary>"
+                   "<summary>Detailed shard timings and diagnostic\
+ timings</summary>"
                    markdown))
           (should (string-match-p "`consent-reader-test-booleans` 0\\.040s"
                                   markdown)))
@@ -234,7 +266,8 @@
                                       :ert-seconds 94.0
                                       :wall-seconds 95.0
                                       :tests nil))
-         (portable-rest-shard '(:name "Portable R7RS Chibi non-evaluator subset"
+         (portable-rest-shard '(:name
+           "Portable R7RS Chibi non-evaluator subset"
                                       :selector "portable-rest"
                                       :ran 16
                                       :expected 16
@@ -259,13 +292,16 @@
                  portable-eval-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
     (should (string-match-p
-             "| Portable R7RS Chibi evaluator subset | 1 | 0 | 0 | 94\\.000s | 95\\.000s |"
+             "| Portable R7RS Chibi evaluator subset | 1 | 0 | 0 | 94\\.000s |\
+ 95\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Portable R7RS Chibi non-evaluator subset | 16 | 0 | 0 | 18\\.000s | 18\\.000s |"
+             "| Portable R7RS Chibi non-evaluator subset | 16 | 0 | 0 |\
+ 18\\.000s | 18\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Portable R7RS Gambit full suite | 1 | 0 | 0 | 14\\.000s | 14\\.000s |"
+             "| Portable R7RS Gambit full suite | 1 | 0 | 0 | 14\\.000s |\
+ 14\\.000s |"
              above-fold))
     (should (string-match-p "## Shard Timing by Wall Time" above-fold))
     (should-not (string-match-p "## Portable Host Shard Timing" above-fold))
@@ -275,7 +311,9 @@
 (ert-deftest consent-ci-test-pr-summary-renders-shards-by-wall-time ()
   "Render visible pull request timing rows by wall time across every shard."
   (let* ((gambit-full-shard
-          '(:name "Portable R7RS Gambit full suite / source metadata on / docstrings full"
+          '(:name
+            "Portable R7RS Gambit full suite / source metadata on / docstrings\
+ full"
             :selector "portable-gambit"
             :ran 1
             :expected 1
@@ -285,7 +323,9 @@
             :wall-seconds 15.0
             :tests nil))
          (gambit-stripped-shard
-          '(:name "Portable R7RS Gambit full suite / source metadata off / docstrings none"
+          '(:name
+            "Portable R7RS Gambit full suite / source metadata off /\
+ docstrings none"
             :selector "portable-gambit"
             :ran 1
             :expected 1
@@ -295,7 +335,9 @@
             :wall-seconds 12.0
             :tests nil))
          (gauche-reflect-stress-shard
-          '(:name "Portable R7RS Gauche reflection stress / source metadata on / docstrings full"
+          '(:name
+            "Portable R7RS Gauche reflection stress / source metadata on /\
+ docstrings full"
             :selector "portable-gauche-reflect-stress"
             :ran 1
             :expected 1
@@ -305,7 +347,9 @@
             :wall-seconds 331.0
             :tests nil))
          (emacs-reflect-stress-shard
-          '(:name "Emacs reflection dynamic manifest stress / source metadata on / docstrings full"
+          '(:name
+            "Emacs reflection dynamic manifest stress / source metadata on /\
+ docstrings full"
             :selector "emacs-reflect-dynamic-manifest-stress"
             :ran 1
             :expected 1
@@ -315,7 +359,8 @@
             :wall-seconds 231.0
             :tests nil))
          (emacs-library-shard
-          '(:name "Emacs library/conformance / source metadata on / docstrings full"
+          '(:name
+            "Emacs library/conformance / source metadata on / docstrings full"
             :selector "library"
             :ran 94
             :expected 87
@@ -346,19 +391,24 @@
       (should-not (string-match-p "## Emacs Shard Timing" above-fold))
       (let ((gauche-stress
              (row-index
-              "Portable R7RS Gauche reflection stress / source metadata on / docstrings full"))
+              "Portable R7RS Gauche reflection stress / source metadata on /\
+ docstrings full"))
             (emacs-stress
              (row-index
-              "Emacs reflection dynamic manifest stress / source metadata on / docstrings full"))
+              "Emacs reflection dynamic manifest stress / source metadata on /\
+ docstrings full"))
             (emacs-library
              (row-index
-              "Emacs library/conformance / source metadata on / docstrings full"))
+              "Emacs library/conformance / source metadata on / docstrings\
+ full"))
             (gambit-full
              (row-index
-              "Portable R7RS Gambit full suite / source metadata on / docstrings full"))
+              "Portable R7RS Gambit full suite / source metadata on /\
+ docstrings full"))
             (gambit-stripped
              (row-index
-              "Portable R7RS Gambit full suite / source metadata off / docstrings none")))
+              "Portable R7RS Gambit full suite / source metadata off /\
+ docstrings none")))
         (should (< gauche-stress emacs-stress))
         (should (< emacs-stress emacs-library))
         (should (< emacs-library gambit-full))
@@ -384,7 +434,8 @@
                                         :ert-seconds 12.0
                                         :wall-seconds 13.0
                                         :tests nil))
-         (portable-compiled-shard '(:name "Portable R7RS Racket-compiled Consent Scheme self-host corpus"
+         (portable-compiled-shard '(:name
+           "Portable R7RS Racket-compiled Consent Scheme self-host corpus"
                                           :selector "portable-compiled"
                                           :ran 1
                                           :expected 1
@@ -401,13 +452,16 @@
          (above-fold (car (split-string markdown "\n<details>" t))))
     (should (string-match-p "## Shard Timing by Wall Time" above-fold))
     (should (string-match-p
-             "| Portable R7RS Gambit full suite | 1 | 0 | 0 | 14\\.000s | 14\\.000s |"
+             "| Portable R7RS Gambit full suite | 1 | 0 | 0 | 14\\.000s |\
+ 14\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Portable R7RS Racket full suite | 1 | 0 | 0 | 12\\.000s | 13\\.000s |"
+             "| Portable R7RS Racket full suite | 1 | 0 | 0 | 12\\.000s |\
+ 13\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Portable R7RS Racket-compiled Consent Scheme self-host corpus | 1 | 0 | 0 | 10\\.000s | 11\\.000s |"
+             "| Portable R7RS Racket-compiled Consent Scheme self-host\
+ corpus | 1 | 0 | 0 | 10\\.000s | 11\\.000s |"
              above-fold))
     (should-not (string-match-p "## Portable Host Shard Timing" above-fold))
     (should-not (string-match-p "## Emacs Shard Timing" above-fold))
@@ -417,7 +471,9 @@
 (ert-deftest consent-ci-test-pr-summary-renders-option-variant-shard-rows ()
   "Render option-variant portable shards as individual CI shard rows."
   (let* ((portable-gambit-shard
-          '(:name "Portable R7RS Gambit full suite / source metadata off / docstrings none"
+          '(:name
+            "Portable R7RS Gambit full suite / source metadata off /\
+ docstrings none"
             :selector "portable-gambit"
             :ran 1
             :expected 1
@@ -427,7 +483,9 @@
             :wall-seconds 12.0
             :tests nil))
          (portable-racket-shard
-          '(:name "Portable R7RS Racket full suite / source metadata on / docstrings simple"
+          '(:name
+            "Portable R7RS Racket full suite / source metadata on / docstrings\
+ simple"
             :selector "portable-racket"
             :ran 1
             :expected 1
@@ -444,10 +502,12 @@
              "## Shard Timing by Wall Time"
              above-fold))
     (should (string-match-p
-             "| Portable R7RS Gambit full suite / source metadata off / docstrings none | 1 | 0 | 0 | 11\\.000s | 12\\.000s |"
+             "| Portable R7RS Gambit full suite / source metadata off /\
+ docstrings none | 1 | 0 | 0 | 11\\.000s | 12\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Portable R7RS Racket full suite / source metadata on / docstrings simple | 1 | 0 | 0 | 7\\.000s | 8\\.000s |"
+             "| Portable R7RS Racket full suite / source metadata on /\
+ docstrings simple | 1 | 0 | 0 | 7\\.000s | 8\\.000s |"
              above-fold))
     (should-not (string-match-p "## Portable Host Shard Timing" above-fold))
     (should-not (string-match-p "## Emacs Shard Timing" above-fold))
@@ -460,7 +520,9 @@
 (ert-deftest consent-ci-test-pr-summary-renders-emacs-option-variant-rows ()
   "Render Emacs option variants as individual wall-time rows."
   (let* ((core-full-shard
-          '(:name "Emacs core language/runtime / source metadata on / docstrings full"
+          '(:name
+            "Emacs core language/runtime / source metadata on / docstrings\
+ full"
             :selector "core"
             :ran 73
             :expected 73
@@ -470,7 +532,9 @@
             :wall-seconds 53.0
             :tests nil))
          (core-none-shard
-          '(:name "Emacs core language/runtime / source metadata off / docstrings none"
+          '(:name
+            "Emacs core language/runtime / source metadata off / docstrings\
+ none"
             :selector "core"
             :ran 73
             :expected 73
@@ -480,7 +544,8 @@
             :wall-seconds 50.0
             :tests nil))
          (library-full-shard
-          '(:name "Emacs library/conformance / source metadata on / docstrings full"
+          '(:name
+            "Emacs library/conformance / source metadata on / docstrings full"
             :selector "library"
             :ran 94
             :expected 87
@@ -490,7 +555,9 @@
             :wall-seconds 52.0
             :tests nil))
          (stdlib-reference-full-shard
-          '(:name "Emacs stdlib/reference corpus / source metadata on / docstrings full"
+          '(:name
+            "Emacs stdlib/reference corpus / source metadata on / docstrings\
+ full"
             :selector "stdlib-reference"
             :ran 6
             :expected 6
@@ -500,7 +567,9 @@
             :wall-seconds 109.0
             :tests nil))
          (stdlib-reference-stress-full-shard
-          '(:name "Emacs stdlib/reference stress / source metadata on / docstrings full"
+          '(:name
+            "Emacs stdlib/reference stress / source metadata on / docstrings\
+ full"
             :selector "stdlib-reference-stress"
             :ran 1
             :expected 1
@@ -545,22 +614,27 @@
                    above-fold))
       (let ((stdlib-reference
              (row-index
-              "Emacs stdlib/reference corpus / source metadata on / docstrings full"))
+              "Emacs stdlib/reference corpus / source metadata on / docstrings\
+ full"))
             (agent-control
              (row-index
               "Emacs agent control / source metadata on / docstrings full"))
             (stdlib-reference-stress
              (row-index
-              "Emacs stdlib/reference stress / source metadata on / docstrings full"))
+              "Emacs stdlib/reference stress / source metadata on / docstrings\
+ full"))
             (core-full
              (row-index
-              "Emacs core language/runtime / source metadata on / docstrings full"))
+              "Emacs core language/runtime / source metadata on / docstrings\
+ full"))
             (library
              (row-index
-              "Emacs library/conformance / source metadata on / docstrings full"))
+              "Emacs library/conformance / source metadata on / docstrings\
+ full"))
             (core-none
              (row-index
-              "Emacs core language/runtime / source metadata off / docstrings none")))
+              "Emacs core language/runtime / source metadata off /\
+ docstrings none")))
         (should (< stdlib-reference agent-control))
         (should (< agent-control stdlib-reference-stress))
         (should (< stdlib-reference-stress core-full))
@@ -570,7 +644,9 @@
 (ert-deftest consent-ci-test-pr-summary-renders-portable-shards-by-ci-name ()
   "Render portable shard rows by actual CI shard name above the fold."
   (let* ((gambit-full-shard
-          '(:name "Portable R7RS Gambit full suite / source metadata on / docstrings full"
+          '(:name
+            "Portable R7RS Gambit full suite / source metadata on / docstrings\
+ full"
             :selector "portable-gambit"
             :ran 1
             :expected 1
@@ -580,7 +656,9 @@
             :wall-seconds 15.0
             :tests nil))
          (gambit-stripped-shard
-          '(:name "Portable R7RS Gambit full suite / source metadata off / docstrings none"
+          '(:name
+            "Portable R7RS Gambit full suite / source metadata off /\
+ docstrings none"
             :selector "portable-gambit"
             :ran 1
             :expected 1
@@ -590,7 +668,9 @@
             :wall-seconds 12.0
             :tests nil))
          (gambit-reflect-stress-shard
-          '(:name "Portable R7RS Gambit reflection stress / source metadata on / docstrings full"
+          '(:name
+            "Portable R7RS Gambit reflection stress / source metadata on /\
+ docstrings full"
             :selector "portable-gambit-reflect-stress"
             :ran 1
             :expected 1
@@ -600,7 +680,9 @@
             :wall-seconds 56.0
             :tests nil))
          (gauche-reflect-stress-shard
-          '(:name "Portable R7RS Gauche reflection stress / source metadata on / docstrings full"
+          '(:name
+            "Portable R7RS Gauche reflection stress / source metadata on /\
+ docstrings full"
             :selector "portable-gauche-reflect-stress"
             :ran 1
             :expected 1
@@ -610,7 +692,9 @@
             :wall-seconds 331.0
             :tests nil))
          (emacs-reflect-stress-shard
-          '(:name "Emacs reflection dynamic manifest stress / source metadata on / docstrings full"
+          '(:name
+            "Emacs reflection dynamic manifest stress / source metadata on /\
+ docstrings full"
             :selector "emacs-reflect-dynamic-manifest-stress"
             :ran 1
             :expected 1
@@ -644,19 +728,24 @@
                    above-fold))
       (let ((gauche-stress
              (row-index
-              "Portable R7RS Gauche reflection stress / source metadata on / docstrings full"))
+              "Portable R7RS Gauche reflection stress / source metadata on /\
+ docstrings full"))
             (emacs-stress
              (row-index
-              "Emacs reflection dynamic manifest stress / source metadata on / docstrings full"))
+              "Emacs reflection dynamic manifest stress / source metadata on /\
+ docstrings full"))
             (gambit-stress
              (row-index
-              "Portable R7RS Gambit reflection stress / source metadata on / docstrings full"))
+              "Portable R7RS Gambit reflection stress / source metadata on /\
+ docstrings full"))
             (gambit-full
              (row-index
-              "Portable R7RS Gambit full suite / source metadata on / docstrings full"))
+              "Portable R7RS Gambit full suite / source metadata on /\
+ docstrings full"))
             (gambit-stripped
              (row-index
-              "Portable R7RS Gambit full suite / source metadata off / docstrings none")))
+              "Portable R7RS Gambit full suite / source metadata off /\
+ docstrings none")))
         (should (< gauche-stress emacs-stress))
         (should (< emacs-stress gambit-stress))
         (should (< gambit-stress gambit-full))
@@ -667,7 +756,9 @@
 (ert-deftest consent-ci-test-pr-summary-omits-empty-paired-surfaces ()
   "Avoid showing zero portable paired-surface rows for whole-suite hosts."
   (let* ((portable-gambit-shard
-          '(:name "Portable R7RS Gambit full suite / source metadata on / docstrings full"
+          '(:name
+            "Portable R7RS Gambit full suite / source metadata on / docstrings\
+ full"
             :selector "portable-gambit"
             :ran 1
             :expected 1
@@ -678,7 +769,9 @@
             :tests ((:name "consent-scheme-gambit-host-test-r7rs-suite"
                      :seconds 14.0))))
          (emacs-shard
-          '(:name "Emacs core language/runtime / source metadata on / docstrings full"
+          '(:name
+            "Emacs core language/runtime / source metadata on / docstrings\
+ full"
             :selector "core"
             :ran 73
             :expected 73
@@ -702,9 +795,11 @@
     (should-not (string-match-p "name: portable R7RS / Chibi" workflow))
     (should-not (string-match-p "[[:space:]]+- test-portable\n" workflow))
     ;; Chibi runs the same aggregate host suite as its peers but stays out of
-    ;; the default/CI portable shard set, reachable only through its own target.
+    ;; the default/CI portable shard set, reachable only through its own
+    ;; target.
     (should-not (string-match-p
-                 "CONSENT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-chibi"
+                 "CONSENT_PORTABLE_TEST_SHARD_TARGETS\
+ \\?=.*test-portable-chibi"
                  makefile))
     (should (string-match-p
              "CONSENT_PORTABLE_HOST=chibi"
@@ -817,35 +912,42 @@
                    ".github/workflows/test.yml")))
     ;; The trimmed extra-host / emacs-hosted / parity jobs still read their
     ;; syntax and docstring axes straight off the matrix context.
-    (should (string-match-p
-             "CONSENT_TEST_SOURCE_METADATA: \\${{ matrix.source_metadata }}"
+    (should (consent-ci-test--yaml-contains-p
+             "CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}"
              workflow))
-    (should (string-match-p
-             "CONSENT_TEST_DOCSTRING_RETENTION: \\${{ matrix.docstring_retention }}"
+    (should (consent-ci-test--yaml-contains-p
+             "CONSENT_TEST_DOCSTRING_RETENTION: ${{\
+ matrix.docstring_retention }}"
              workflow))
-    (should (string-match-p
-             "CONSENT_TEST_MAX_SOURCE_METADATA: \\${{ matrix.source_metadata == 'on' && '250000' || '' }}"
+    (should (consent-ci-test--yaml-contains-p
+             "CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata\
+ == 'on' && '250000' || '' }}"
              workflow))
     ;; The canonical Gambit, compiled-build, and Emacs-core jobs carry a
     ;; per-combo metadata object instead of two literal axes (#481), so their
     ;; environment and artifact names index through `matrix.combo`.
-    (should (string-match-p
-             "CONSENT_TEST_SOURCE_METADATA: \\${{ matrix.combo.source_metadata }}"
+    (should (consent-ci-test--yaml-contains-p
+             "CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata\
+ }}"
              workflow))
-    (should (string-match-p
-             "CONSENT_TEST_DOCSTRING_RETENTION: \\${{ matrix.combo.docstring_retention }}"
+    (should (consent-ci-test--yaml-contains-p
+             "CONSENT_TEST_DOCSTRING_RETENTION: ${{\
+ matrix.combo.docstring_retention }}"
              workflow))
-    (should (string-match-p
-             "CONSENT_TEST_MAX_SOURCE_METADATA: \\${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}"
+    (should (consent-ci-test--yaml-contains-p
+             "CONSENT_TEST_MAX_SOURCE_METADATA: ${{\
+ matrix.combo.source_metadata == 'on' && '250000' || '' }}"
              workflow))
-    (should (string-match-p
+    (should (consent-ci-test--yaml-contains-p
              "CONSENT_CI_LOG_PREFIX: portable-gambit-direct"
              workflow))
-    (should (string-match-p
-             "CONSENT_CI_LOG_SUFFIX: \\${{ matrix.combo.source_metadata }}-docstrings-\\${{ matrix.combo.docstring_retention }}"
+    (should (consent-ci-test--yaml-contains-p
+             "CONSENT_CI_LOG_SUFFIX: ${{ matrix.combo.source_metadata\
+ }}-docstrings-${{ matrix.combo.docstring_retention }}"
              workflow))
-    (should (string-match-p
-             "portable-\\${{ matrix.host.host }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}"
+    (should (consent-ci-test--yaml-contains-p
+             "portable-${{ matrix.host.host }}-${{\
+ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}"
              workflow))
     (should (string-match-p "host: compiled" workflow))
     (should (string-match-p "Compile Gambit self-host" workflow))
@@ -858,11 +960,14 @@
              workflow))
     ;; Emacs-core indexes its log through the combo too; the other Emacs shards
     ;; keep the bare matrix axes.
-    (should (string-match-p
-             "emacs-\\${{ matrix.shard.shard }}-\\${{ matrix.combo.source_metadata }}-docstrings-\\${{ matrix.combo.docstring_retention }}\\.log"
+    (should (consent-ci-test--yaml-contains-p
+             "emacs-${{ matrix.shard.shard }}-${{\
+ matrix.combo.source_metadata }}-docstrings-${{\
+ matrix.combo.docstring_retention }}.log"
              workflow))
-    (should (string-match-p
-             "emacs-\\${{ matrix.shard.shard }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
+    (should (consent-ci-test--yaml-contains-p
+             "emacs-${{ matrix.shard.shard }}-${{ matrix.source_metadata\
+ }}-docstrings-${{ matrix.docstring_retention }}.log"
              workflow))))
 
 (ert-deftest consent-ci-test-workflow-splits-capabilities-policy-shard ()
@@ -873,23 +978,26 @@
                       "label: agent control"
                       "make_target: test-emacs-agent-control"
                       "summary_name: Emacs agent control"
-                      "selector: '(or \"consent-agent-prompt.*\""
+                      "selector: (or \"consent-agent-prompt.*\""
                       "shard: emacs-agent-reliability"
                       "label: agent reliability"
                       "make_target: test-emacs-agent-reliability"
                       "summary_name: Emacs agent reliability"
-                      "selector: '(or \"consent-agent-reliability.*\" \"consent-agent-runner.*\")'"
+                      "selector: (or \"consent-agent-reliability.*\"\
+ \"consent-agent-runner.*\")"
                       "shard: emacs-capability-boundary"
                       "label: capability boundary"
                       "make_target: test-emacs-capability-boundary"
                       "summary_name: Emacs capability boundary"
-                      "selector: '(or \"consent-approval.*\" \"consent-capability.*\""
+                      "selector: (or \"consent-approval.*\"\
+ \"consent-capability.*\""
                       "shard: emacs-agent-state"
                       "label: agent state"
                       "make_target: test-emacs-agent-state"
                       "summary_name: Emacs agent state"
-                      "selector: '(or \"consent-agent-io.*\" \"consent-context.*\""))
-      (should (string-match-p (regexp-quote needle) workflow)))
+                      "selector: (or \"consent-agent-io.*\"\
+ \"consent-context.*\""))
+      (should (consent-ci-test--yaml-contains-p needle workflow)))
     (should-not (string-match-p "make_target: test-emacs-capabilities"
                                 workflow))))
 
@@ -905,12 +1013,15 @@
     ;; so schedule / workflow_dispatch expand back to the full cross-product.
     ;; job-level `if:` cannot read the matrix context, so the trim lives in the
     ;; matrix axis expression instead.
-    (should (string-match-p
-             "(github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON"
+    (should (consent-ci-test--yaml-contains-p
+             "(github.event_name == 'schedule' || github.event_name ==\
+ 'workflow_dispatch') && fromJSON"
              workflow))
     ;; Per-push lane falls back to the canonical on/full combo.
-    (should (string-match-p "|| fromJSON('\\[\"on\"\\]')" workflow))
-    (should (string-match-p "|| fromJSON('\\[\"full\"\\]')" workflow))
+    (should (consent-ci-test--yaml-contains-p
+             "|| fromJSON('[\"on\"]')" workflow))
+    (should (consent-ci-test--yaml-contains-p
+             "|| fromJSON('[\"full\"]')" workflow))
     ;; One portable host (Gambit) and one Emacs shard (core) keep the full
     ;; syntax/docstring cross on the exhaustive lane in their own jobs.
     (should (string-match-p "^  test-portable-gambit:" workflow))
@@ -922,16 +1033,22 @@
     ;; full on every push. Per push they run only the canonical on/full combo
     ;; plus a single fully-stripped off/none smoke leg; the exhaustive lane
     ;; expands back to the full 2×3 cross.
-    (should (string-match-p
-             "fromJSON('\\[{\"source_metadata\":\"on\",\"docstring_retention\":\"full\"}"
+    (should (consent-ci-test--yaml-contains-p
+             (concat "fromJSON('[{\"source_metadata\":\"on\","
+                     "\"docstring_retention\":\"full\"}")
              workflow))
-    (should (string-match-p
-             "|| fromJSON('\\[{\"source_metadata\":\"on\",\"docstring_retention\":\"full\"},{\"source_metadata\":\"off\",\"docstring_retention\":\"none\"}\\]')"
+    (should (consent-ci-test--yaml-contains-p
+             (concat
+              "|| fromJSON('[{\"source_metadata\":\"on\","
+              "\"docstring_retention\":\"full\"},{\"source_metadata\":"
+              "\"off\",\"docstring_retention\":\"none\"}]')")
              workflow))
-    ;; Compiled build jobs produce only the canonical on/full artifact per push;
+    ;; Compiled build jobs produce only the canonical on/full artifact per
+    ;; push;
     ;; the exhaustive lane expands those build matrices before their consumers.
-    (should (string-match-p
-             "|| fromJSON('\\[{\"source_metadata\":\"on\",\"docstring_retention\":\"full\"}\\]')"
+    (should (consent-ci-test--yaml-contains-p
+             (concat "|| fromJSON('[{\"source_metadata\":\"on\","
+                     "\"docstring_retention\":\"full\"}]')")
              workflow))))
 
 (ert-deftest consent-ci-test-compiled-caches-exclude-product-binaries ()
@@ -1010,7 +1127,7 @@
                       "Run exhaustive Guile shard set"
                       "Run exhaustive Gauche shard set"
                       "make test-portable-shard"))
-      (should (string-match-p (regexp-quote needle) workflow)))
+      (should (consent-ci-test--yaml-contains-p needle workflow)))
     ;; Scheduled-only jobs with job-level guards are rendered as abstract
     ;; skipped checks on pull requests because GitHub does not expand their
     ;; matrixes.  Keep exhaustive cases inside the concrete host matrixes.
@@ -1022,27 +1139,35 @@
 
 (ert-deftest consent-ci-test-make-test-trims-default-and-keeps-full ()
   "Trim the default make test shard set with a make test-full escape hatch."
-  (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
+  (let ((makefile
+         (consent-ci-test--make-logical-text
+          (consent-ci-test--repo-file-string "Makefile"))))
     ;; Trimmed default keeps the full Emacs shard set plus one portable host.
     (should (string-match-p
-             "CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-racket"
+             "CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS\
+ \\?=.*test-portable-racket"
              makefile))
     (should (string-match-p
-             "CONSENT_TEST_SHARD_TARGETS \\?=.*CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS"
+             "CONSENT_TEST_SHARD_TARGETS\
+ \\?=.*CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS"
              makefile))
     ;; Default no longer fans out across every portable host.
     (should-not (string-match-p
-                 "CONSENT_TEST_SHARD_TARGETS \\?=.*CONSENT_PORTABLE_TEST_SHARD_TARGETS"
+                 "CONSENT_TEST_SHARD_TARGETS\
+ \\?=.*CONSENT_PORTABLE_TEST_SHARD_TARGETS"
                  makefile))
     ;; Exhaustive opt-in set and target remain available.
     (should (string-match-p
-             "CONSENT_FULL_TEST_SHARD_TARGETS \\?=.*CONSENT_PORTABLE_TEST_SHARD_TARGETS"
+             "CONSENT_FULL_TEST_SHARD_TARGETS\
+ \\?=.*CONSENT_PORTABLE_TEST_SHARD_TARGETS"
              makefile))
     (should (string-match-p "^test-full:" makefile))))
 
 (ert-deftest consent-ci-test-emacs-shards-start-longest-first ()
   "Order Emacs shard starts by expected wall time."
-  (let* ((makefile (consent-ci-test--repo-file-string "Makefile"))
+  (let* ((makefile
+          (consent-ci-test--make-logical-text
+           (consent-ci-test--repo-file-string "Makefile")))
          (workflow (consent-ci-test--repo-file-string
                     ".github/workflows/test.yml"))
          (make-targets
@@ -1090,7 +1215,8 @@
     (should (consent-ci-test--ordered-substrings-p
              workflow-shards workflow))))
 
-(ert-deftest consent-ci-test-emacs-library-shards-exactly-partition-aggregate ()
+(ert-deftest consent-ci-test-emacs-library-shards-exactly-partition-aggregate
+  ()
   "Keep the five library shards disjoint and coverage-equivalent to aggregate."
   (let* ((makefile (consent-ci-test--repo-file-string "Makefile"))
          (aggregate-selector
@@ -1113,7 +1239,7 @@
              (mapcar #'ert-test-name (ert-select-tests selector t)))
            partition-selectors))
          (flattened (apply #'append parts)))
-    (should (= (length aggregate) 217))
+    (should (= (length aggregate) 220))
     (should (= (length flattened)
                (length (delete-dups (copy-sequence flattened)))))
     (should (equal (sort aggregate #'string-lessp)
@@ -1123,7 +1249,8 @@
   "Run capability and agent tests as parallel default Emacs shards."
   (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
     (should-not (string-match-p
-                 "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-capabilities"
+                 "CONSENT_EMACS_TEST_SHARD_TARGETS\
+ \\?=.*test-emacs-capabilities"
                  makefile))
     (dolist (needle '("CONSENT_EMACS_AGENT_CONTROL_TEST_SELECTOR ?="
                       "CONSENT_EMACS_AGENT_RELIABILITY_TEST_SELECTOR ?="
@@ -1155,11 +1282,13 @@
                    ".github/workflows/test.yml")))
     (dolist (needle '("build-gambit-self-host:"
                       "needs: build-gambit-self-host"
-                      "name: gambit-self-host-${{ matrix.combo.source_metadata }}"
+                      "name: gambit-self-host-${{ matrix.combo.source_metadata\
+ }}"
                       "build-racket-self-host:"
                       "needs: build-racket-self-host"
-                      "name: racket-self-host-${{ matrix.combo.source_metadata }}"))
-      (should (string-match-p (regexp-quote needle) workflow)))
+                      "name: racket-self-host-${{ matrix.combo.source_metadata\
+ }}"))
+      (should (consent-ci-test--yaml-contains-p needle workflow)))
     (should (consent-ci-test--ordered-substrings-p
              '("Compile Gambit self-host" "Upload Gambit self-host")
              workflow))
@@ -1169,20 +1298,37 @@
 
 (ert-deftest consent-ci-test-make-splits-reflection-behavior-shards ()
   "Run reflection contract and stress coverage as behavior-focused shards."
-  (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
+  (let ((makefile
+         (consent-ci-test--make-logical-text
+          (consent-ci-test--repo-file-string "Makefile"))))
     (should (string-match-p
-             "CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-racket-reflect.*test-portable-racket-reflect-stress"
+             "CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS\
+ \\?=.*test-portable-racket-reflect.*test-portable-racket-reflect-stress"
              makefile))
     (should (string-match-p
-             "CONSENT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-gambit-reflect.*test-portable-gambit-reflect-stress.*test-portable-racket-reflect.*test-portable-racket-reflect-stress.*test-portable-guile-reflect.*test-portable-guile-reflect-stress.*test-portable-gauche-reflect.*test-portable-gauche-reflect-stress"
+             (concat
+              "CONSENT_PORTABLE_TEST_SHARD_TARGETS \\?="
+              ".*test-portable-gambit-reflect"
+              ".*test-portable-gambit-reflect-stress"
+              ".*test-portable-racket-reflect"
+              ".*test-portable-racket-reflect-stress"
+              ".*test-portable-guile-reflect"
+              ".*test-portable-guile-reflect-stress"
+              ".*test-portable-gauche-reflect"
+              ".*test-portable-gauche-reflect-stress")
              makefile))
-    (dolist (needle '("CONSENT_EMACS_REFLECT_TEST_SELECTOR \\?=.*consent-reflect"
+    (dolist (needle
+      (list "CONSENT_EMACS_REFLECT_TEST_SELECTOR \\?=.*consent-reflect"
                       "CONSENT_EMACS_REFLECT_CATALOG_STRESS_TEST_SELECTOR \\?="
-                      "CONSENT_EMACS_REFLECT_DOCUMENTATION_STRESS_TEST_SELECTOR \\?="
-                      "CONSENT_EMACS_REFLECT_BINDING_CROSSWALK_STRESS_TEST_SELECTOR \\?="
-                      "CONSENT_EMACS_REFLECT_DYNAMIC_MANIFEST_STRESS_TEST_SELECTOR \\?="
+                      (concat "CONSENT_EMACS_REFLECT_DOCUMENTATION_STRESS_"
+                              "TEST_SELECTOR \\?=")
+                      (concat "CONSENT_EMACS_REFLECT_BINDING_CROSSWALK_STRESS_"
+                              "TEST_SELECTOR \\?=")
+                      (concat "CONSENT_EMACS_REFLECT_DYNAMIC_MANIFEST_STRESS_"
+                              "TEST_SELECTOR \\?=")
                       "CONSENT_EMACS_REFLECT_STRESS_TEST_SELECTOR \\?=.*stress"
-                      "CONSENT_EMACS_INTEGRATION_TEST_SELECTOR \\?=.*consent-native-cli-daemon.*consent-repl.*consent-vcs"
+                      "CONSENT_EMACS_INTEGRATION_TEST_SELECTOR\
+ \\?=.*consent-native-cli-daemon.*consent-repl.*consent-vcs"
                       "^test-emacs-reflect:"
                       "^test-emacs-reflect-catalog-stress:"
                       "^test-emacs-reflect-documentation-stress:"
@@ -1199,12 +1345,14 @@
                       "^test-portable-gauche-reflect-stress:"))
       (should (string-match-p needle makefile)))
     (should-not (string-match-p
-                 "CONSENT_EMACS_INTEGRATION_TEST_SELECTOR \\?=.*consent-reflect"
+                 "CONSENT_EMACS_INTEGRATION_TEST_SELECTOR\
+ \\?=.*consent-reflect"
                  makefile))))
 
 (ert-deftest consent-ci-test-workflow-splits-reflection-behavior-shards ()
   "Expose reflection contract and stress shards in the CI matrix."
-  (let ((workflow (consent-ci-test--repo-file-string ".github/workflows/test.yml")))
+  (let ((workflow (consent-ci-test--repo-file-string
+    ".github/workflows/test.yml")))
     (dolist (needle '("shard: emacs-reflect"
                       "shard: emacs-reflect-catalog-stress"
                       "shard: emacs-reflect-documentation-stress"
@@ -1215,8 +1363,10 @@
                       "summary_name: Emacs reflection documentation stress"
                       "summary_name: Emacs reflection binding crosswalk stress"
                       "summary_name: Emacs reflection dynamic manifest stress"
-                      "CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection contract"
-                      "CONSENT_CI_REFLECT_STRESS_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection stress"
+                      "CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME: Portable R7RS\
+ Gambit reflection contract"
+                      "CONSENT_CI_REFLECT_STRESS_SHARD_SUMMARY_NAME:\
+ Portable R7RS Gambit reflection stress"
                       "host: racket-reflect"
                       "host: racket-reflect-stress"
                       "host: guile-reflect"
@@ -1229,9 +1379,11 @@
                       "summary_name: Portable R7RS Guile reflection stress"
                       "summary_name: Portable R7RS Gauche reflection contract"
                       "summary_name: Portable R7RS Gauche reflection stress"))
-      (should (string-match-p needle workflow)))
+      (should (consent-ci-test--yaml-contains-p needle workflow)))
     (should-not (string-match-p
-                 "summary_name: Emacs integration/REPL[^\n]*\n[^\n]*selector: '(or \"consent-native-cli-daemon\\.\\*\" \"consent-reflect"
+                 "summary_name: Emacs\
+ integration/REPL[^\n]*\n[^\n]*selector: '(or\
+ \"consent-native-cli-daemon\\.\\*\" \"consent-reflect"
                  workflow))))
 
 (ert-deftest consent-ci-test-pr-summary-uses-stable-shard-order ()
@@ -1281,7 +1433,8 @@
                               :ert-seconds 1.0
                               :wall-seconds 1.0
                               :tests nil))
-         (portable-rest-shard '(:name "Portable R7RS Chibi non-evaluator subset"
+         (portable-rest-shard '(:name
+           "Portable R7RS Chibi non-evaluator subset"
                                       :selector "portable-rest"
                                       :ran 1
                                       :expected 1
@@ -1320,7 +1473,8 @@
             :wall-seconds 1.0
             :tests nil))
          (portable-gambit-native-shard
-          '(:name "Portable R7RS Gambit-compiled Consent Scheme self-host corpus"
+          '(:name
+            "Portable R7RS Gambit-compiled Consent Scheme self-host corpus"
             :selector "portable-gambit-native"
             :ran 1
             :expected 1
@@ -1358,7 +1512,8 @@
             :ert-seconds 1.0
             :wall-seconds 1.0
             :tests nil))
-         (portable-compiled-shard '(:name "Portable R7RS Racket-compiled Consent Scheme self-host corpus"
+         (portable-compiled-shard '(:name
+           "Portable R7RS Racket-compiled Consent Scheme self-host corpus"
                                           :selector "portable-compiled"
                                           :ran 1
                                           :expected 1
@@ -1513,12 +1668,28 @@
                  portable-eval-shard)))
          (details (cadr (split-string
                          markdown
-                         "<summary>Detailed shard timings and diagnostic timings</summary>\n\n"
+                         "<summary>Detailed shard timings and diagnostic\
+ timings</summary>\n\n"
                          t))))
     (should details)
     (should
      (string-match-p
-      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit reflection contract |.*\n| Portable R7RS Gambit reflection stress |.*\n| Portable R7RS Gambit-compiled Consent Scheme self-host corpus |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket reflection contract |.*\n| Portable R7RS Racket reflection stress |.*\n| Portable R7RS Racket-compiled Consent Scheme self-host corpus |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Guile reflection contract |.*\n| Portable R7RS Guile reflection stress |.*\n| Portable R7RS Gauche full suite |.*\n| Portable R7RS Gauche reflection contract |.*\n| Portable R7RS Gauche reflection stress |.*\n| Emacs agent control |.*\n| Emacs agent reliability |.*\n| Emacs capability boundary |.*\n| Emacs agent state |.*\n| Emacs tools/docs/integration |.*\n| Emacs reflection contract |.*\n| Emacs reflection catalog stress |.*\n| Emacs reflection documentation stress |.*\n| Emacs reflection binding crosswalk stress |.*\n| Emacs reflection dynamic manifest stress |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi\
+ non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable\
+ R7RS Gambit reflection contract |.*\n| Portable R7RS Gambit reflection\
+ stress |.*\n| Portable R7RS Gambit-compiled Consent Scheme self-host corpus\
+ |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket\
+ reflection contract |.*\n| Portable R7RS Racket reflection stress |.*\n|\
+ Portable R7RS Racket-compiled Consent Scheme self-host corpus |.*\n|\
+ Portable R7RS Guile full suite |.*\n| Portable R7RS Guile reflection\
+ contract |.*\n| Portable R7RS Guile reflection stress |.*\n| Portable R7RS\
+ Gauche full suite |.*\n| Portable R7RS Gauche reflection contract |.*\n|\
+ Portable R7RS Gauche reflection stress |.*\n| Emacs agent control |.*\n|\
+ Emacs agent reliability |.*\n| Emacs capability boundary |.*\n|\
+ Emacs agent state |.*\n| Emacs tools/docs/integration |.*\n| Emacs reflection\
+ contract |.*\n| Emacs reflection catalog stress |.*\n| Emacs reflection\
+ documentation stress |.*\n| Emacs reflection binding crosswalk stress\
+ |.*\n| Emacs reflection dynamic manifest stress |"
       details))))
 
 ;;; Structured per-run record (#465)
@@ -1543,8 +1714,10 @@ emitter sees it as absent."
      "\n"
      "Ran 1 tests, 1 results as expected, 0 unexpected "
      "(2026-06-06 13:00:01-0700, 0.080000 sec)\n"
-     "CONSENT_CI_SHARD_NAME=Portable R7RS Gambit full suite / source metadata on / docstrings full\n"
-     "CONSENT_CI_SHARD_SELECTOR=\"^consent-scheme-gambit-host-test-r7rs-suite$\"\n"
+     "CONSENT_CI_SHARD_NAME=Portable R7RS Gambit full suite / source\
+ metadata on / docstrings full\n"
+     "CONSENT_CI_SHARD_SELECTOR=\
+\"^consent-scheme-gambit-host-test-r7rs-suite$\"\n"
      "CONSENT_CI_WALL_SECONDS=10\n"))
    (consent-ci-test--write-log
     (concat
@@ -1554,7 +1727,8 @@ emitter sees it as absent."
      "\n"
      "Ran 2 tests, 1 results as expected, 1 unexpected "
      "(2026-06-06 13:00:01-0700, 0.540000 sec)\n"
-     "CONSENT_CI_SHARD_NAME=Emacs core language/runtime / source metadata on / docstrings full\n"
+     "CONSENT_CI_SHARD_NAME=Emacs core language/runtime / source metadata on /\
+ docstrings full\n"
      "CONSENT_CI_SHARD_SELECTOR=(or \"consent-reader.*\")\n"
      "CONSENT_CI_WALL_SECONDS=3\n"))))
 
@@ -1607,7 +1781,8 @@ emitter sees it as absent."
             (should (= (alist-get 'ran totals) 3))
             (should (= (alist-get 'unexpected totals) 1))
             (should (eq (alist-get 'all_passed totals) :false))
-            ;; Shards sort into display order: portable Gambit before Emacs core.
+            ;; Shards sort into display order: portable Gambit before Emacs
+            ;; core.
             (should (= (length shards) 2))
             (let ((gambit (aref shards 0))
                   (emacs (aref shards 1)))
@@ -1683,7 +1858,8 @@ emitter sees it as absent."
     ;; The emitter runs over the downloaded shard logs in the summary job.
     (should (string-match-p "name: Emit per-run CI record" workflow))
     (should (string-match-p "consent-ci-run-record-batch-main" workflow))
-    (should (string-match-p "CONSENT_CI_RUN_RECORD_FILE=ci-logs/run-record.jsonl"
+    (should (string-match-p
+      "CONSENT_CI_RUN_RECORD_FILE=ci-logs/run-record.jsonl"
                             workflow))
     ;; The parity gate outcome is threaded in from the job graph.
     (should (string-match-p

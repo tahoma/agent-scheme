@@ -7,16 +7,18 @@
 ;;; effect runs.  A model proposal is carried as data inside an
 ;;; `agent-action (kind code-action) (form <quoted-datum>) ...' record; this
 ;;; library READS that form as data, walks it for capability requests, accounts
-;;; the cost of its pure sub-forms against a bounded budget, and quarantines any
-;;; control-plane sub-form to a denied `capability-decision'.  The form is never
+;;; the cost of its pure sub-forms against a bounded budget, and quarantines
+;;; any
+;;; control-plane sub-form to a denied `capability-decision'. The form is never
 ;;; evaluated here as raw authority: model output proposes, the policy gate
-;;; (driven by the runner) disposes.  This is the design decision recorded as D2
+;;; (driven by the runner) disposes. This is the design decision recorded as D2
 ;;; in `docs/control-loop.md' (free-form code execution vs. capability-gated
 ;;; effects).
 ;;;
 ;;; The library is host-neutral and single-sourced: the Emacs interpreter and
 ;;; the portable hosts load this same Scheme source, so the analysis datum is
-;;; cross-host identical and replayable without a separate Emacs reimplementation.
+;;; cross-host identical and replayable without a separate Emacs
+;;; reimplementation.
 
 (define-library (agent proposal)
   (export proposal-control-plane-operations
@@ -35,10 +37,12 @@
   (import (scheme base))
   (begin
     ;; Control-plane operations are the consent machinery itself: minting or
-    ;; attenuating grants, revoking or releasing authority, resolving approvals,
+    ;; attenuating grants, revoking or releasing authority, resolving
+    ;; approvals,
     ;; and stamping a verifier as passed.  A model proposal that names any of
     ;; these is escalating its own authority or bypassing the gate, so the
-    ;; boundary quarantines it rather than turning it into a capability request.
+    ;; boundary quarantines it rather than turning it into a capability
+    ;; request.
     (define proposal-control-plane-operations
       '(grant-capability! grant-attenuate grant-revoke! handle-release!
                           approval-resolve! verifier-pass!
@@ -66,7 +70,8 @@
        (else (member-eq? value (cdr values)))))
 
     (define (option-ref options key default)
-      "Return KEY from OPTIONS, or DEFAULT when KEY is absent.  OPTIONS entries"
+      "Return KEY from OPTIONS, or DEFAULT when KEY is absent.  OPTIONS entrie\
+s"
       "may be dotted alist cells or two-element option records."
       (let ((cell (assq key options)))
         (if cell
@@ -108,7 +113,8 @@
       "Return #t when OPERATION is a default control-plane operation symbol."
       #((parameters
          (operation (type symbol)
-          (description ("Symbol naming a proposed call operator to classify."))))
+          (description
+            ("Symbol naming a proposed call operator to classify."))))
         (returns (type boolean)
          (description
           ("#t when OPERATION is part of the default control-plane"
@@ -185,17 +191,20 @@
       (proposal-field-value analysis 'pure-cost 0))
 
     (define (analysis-capability-requests analysis)
-      "Return the capability-request datums the proposal would route to policy."
+      "Return the capability-request datums the proposal would route to policy\
+."
       #((parameters
          (analysis (type code-action-analysis)
           (description "A `code-action-analysis' record.")))
         (returns (type (list-of capability-request))
-         (description ("A list of `capability-request' datums in document order.")))
+         (description
+           ("A list of `capability-request' datums in document order.")))
         (effects pure))
       (proposal-field-value analysis 'capability-requests '()))
 
     (define (analysis-quarantine-decisions analysis)
-      "Return the denied capability-decision datums for quarantined sub-forms."
+      "Return the denied capability-decision datums for quarantined sub-forms.\
+"
       #((parameters
          (analysis (type code-action-analysis)
           (description "A `code-action-analysis' record.")))
@@ -224,7 +233,8 @@
            (or (eq? (car node) 'quote) (eq? (car node) 'quasiquote))))
 
     (define (operation-entry operation table)
-      "Return the host-operation TABLE entry for OPERATION, or #f when absent."
+      "Return the host-operation TABLE entry for OPERATION, or #f when absent.\
+"
       (and (symbol? operation) (assq operation table)))
 
     (define (structural-operation? operation)
@@ -406,7 +416,8 @@
     (define (signature-requires-for-request signature)
       "Return the request authority field derived from SIGNATURE."
       (let ((effects (capability-signature-effects signature)))
-        (if (and (pair? effects) (null? (cdr effects)) (eq? (car effects) 'pure))
+        (if (and (pair? effects) (null? (cdr effects)) (eq? (car effects)
+          'pure))
             'none
             effects)))
 
@@ -416,7 +427,8 @@
         (and (pair? effects) (null? (cdr effects)) (eq? (car effects) 'pure))))
 
     (define (analyze-code-action form options)
-      "Analyze a model-proposed FORM as data and return a code-action analysis."
+      "Analyze a model-proposed FORM as data and return a code-action analysis\
+."
       #((parameters
          (form
           . ("The model-proposed Scheme datum to read and walk; it is"
@@ -461,7 +473,8 @@
             "Return #t once the walk has visited more nodes than the budget."
             (> visited max-pure-cost))
           (define (control-plane? operation)
-            "Return #t when OPERATION is a default or option-supplied trigger."
+            "Return #t when OPERATION is a default or option-supplied trigger.\
+"
             (and (symbol? operation)
                  (or (member-eq? operation proposal-control-plane-operations)
                      (member-eq? operation extra-quarantine))))
@@ -523,7 +536,8 @@
                         failures)))
           (define (admit-signature-call! operation node)
             "Admit NODE against the registered signature for OPERATION."
-            (let ((signature (capability-signature-entry operation signatures)))
+            (let ((signature (capability-signature-entry operation
+              signatures)))
               (cond
                ((not signature)
                 (record-failure! 'hallucinated-tool operation node

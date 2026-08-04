@@ -38,6 +38,7 @@ jobs:
       # Pin the Gambit toolchain to the same version/digest the test workflow
       # builds, so released binaries come from a known-good compiler.
       CONSENT_GAMBIT_VERSION: "4.9.7"
+# readability-allow: contiguous-datum -- Compiler checksum stays atomic.
       CONSENT_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
       CONSENT_COMPILE_HOST: gambit
     steps:
@@ -52,15 +53,19 @@ jobs:
           # Soft consistency check: the tag (minus a leading `v`) should match
           # version.sld so the published asset name lines up with the tag. A
           # mismatch is surfaced as a warning rather than failing the release.
-          version=$(make -s --no-print-directory print-version 2>/dev/null || true)
+          version=$(make -s --no-print-directory print-version 2>/dev/null || \
+            true)
           if [ -n "$version" ] && [ "${tag#v}" != "$version" ]; then
-            printf '::warning::release tag %s does not match version.sld %s\n' "$tag" "$version"
+            printf \
+              '::warning::release tag %s does not match version.sld %s\n' \
+              "$tag" "$version"
           fi
 
       - name: Cache Gambit
         id: cache-gambit
         uses: actions/cache@v4
         with:
+# readability-allow: external-identifier -- Cache key expression stays whole.
           path: ${{ runner.tool_cache }}/gambit/${{ env.CONSENT_GAMBIT_VERSION }}
           key: ${{ runner.os }}-gambit-${{ env.CONSENT_GAMBIT_VERSION }}
 
@@ -73,16 +78,21 @@ jobs:
         run: |
           gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${CONSENT_GAMBIT_VERSION}"
           if [ ! -x "${gambit_prefix}/bin/gsi" ]; then
+            gambit_repo_root="https://github.com/gambit/gambit"
+            gambit_archive_root="${gambit_repo_root}/archive/refs/tags"
+
             curl -fsSL \
-              "https://github.com/gambit/gambit/archive/refs/tags/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
+              "${gambit_archive_root}/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
               -o /tmp/gambit.tar.gz
-            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | sha256sum -c -
+            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | \
+              sha256sum -c -
 
             rm -rf /tmp/gambit-src
             mkdir -p /tmp/gambit-src "${gambit_prefix}"
             tar -xzf /tmp/gambit.tar.gz -C /tmp/gambit-src --strip-components=1
             cd /tmp/gambit-src
-            ./configure --prefix="${gambit_prefix}" --enable-single-host --enable-openssl
+            ./configure --prefix="${gambit_prefix}" --enable-single-host \
+              --enable-openssl
             make -j"$(nproc)"
             make install
           fi
@@ -90,7 +100,8 @@ jobs:
           echo "${gambit_prefix}/bin" >> "$GITHUB_PATH"
           "${gambit_prefix}/bin/gsi" -v
           "${gambit_prefix}/bin/gsc" -v
-          "${gambit_prefix}/bin/gsi" -:r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+          "${gambit_prefix}/bin/gsi" -:r7rs -e \
+            '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Build and test the standalone Gambit runtime
         # Builds the Gambit binary (running compile-time smoke gates) and runs
@@ -114,5 +125,6 @@ jobs:
           tag='${{ steps.tag.outputs.tag }}'
           tarball=$(ls build/compile/dist/consent-*-gambit.tar.gz)
           gh release view "$tag" >/dev/null 2>&1 \
-            || gh release create "$tag" --title "Consent Scheme $tag" --generate-notes
+            || gh release create "$tag" --title "Consent Scheme $tag" \
+              --generate-notes
           gh release upload "$tag" "$tarball" --clobber

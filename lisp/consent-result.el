@@ -1,4 +1,4 @@
-;;; consent-result.el --- Stable Consent Scheme result rendering  -*- lexical-binding: t; -*-
+;;; consent-result.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

@@ -1,4 +1,4 @@
-;;; consent-capability-test.el --- Emacs capability library tests  -*- lexical-binding: t; -*-
+;;; consent-capability-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -18,7 +18,8 @@
 (require 'consent-session)
 
 (defvar consent-capability-test--secret "secret-value"
-  "Private test value whose contents must not be exposed through variable-info.")
+  "Private test value whose contents must not be exposed through\
+ variable-info.")
 
 (defvar consent-capability-test--command-log nil
   "Arguments received by command capability test commands.")
@@ -327,7 +328,8 @@
                    (consent-capability-test--value-external
                     (consent-session-eval-source
                      "handle-lifecycle"
-                     "(import (scheme base) (consent capability) (emacs buffer))
+                     "(import (scheme base) (consent capability) (emacs\
+ buffer))
                       (define saved (emacs-current-buffer))
                       (list (handle-live? saved)
                             (handle-kind saved)
@@ -499,7 +501,8 @@
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
-(ert-deftest consent-capability-test-buffer-edits-record-transaction-metadata ()
+(ert-deftest consent-capability-test-buffer-edits-record-transaction-metadata
+  ()
   "Insert, delete, and replace edit audits record touched text and region."
   (let ((consent-policy-category-actions
          (consent-capability-test--actions '((buffer-edit . allow))))
@@ -1014,7 +1017,8 @@
         (kill-buffer buffer)))))
 
 (ert-deftest consent-capability-test-window-and-project-queries ()
-  "Expose current window handles and project root through capability libraries."
+  "Expose current window handles and project root through capability\
+ libraries."
   (let ((default-directory consent--test-root))
     (should
      (equal
@@ -1649,7 +1653,8 @@
                             "\n")))
       (should-not (string-match-p "sk-processenv-denied" audit)))))
 
-(ert-deftest consent-capability-test-process-ports-route-through-capabilities ()
+(ert-deftest consent-capability-test-process-ports-route-through-capabilities
+  ()
   "Represent process streams as process-backed port capabilities."
   (let ((consent-policy-category-actions
          (consent-capability-test--actions '((command-process . allow))))
@@ -1889,7 +1894,8 @@
                 (redirects 0)
                 (timeout-ms 50)))")))
       (should (equal external
-                     "(network-response (status 200) (headers ((\"content-type\" \"text/plain\"))) (body \"ok\"))"))
+                     "(network-response (status 200) (headers\
+ ((\"content-type\" \"text/plain\"))) (body \"ok\"))"))
       (should (= (length consent-capability-test--network-requests) 1))
       (should-not
        (string-match-p
@@ -1907,7 +1913,8 @@
       "(operation request)"
       "(result (ok"))))
 
-(ert-deftest consent-capability-test-network-local-only-denied-before-transport ()
+(ert-deftest consent-capability-test-network-local-only-denied-before-transport
+  ()
   "Deny local-only payloads before fake transport is called."
   (let ((consent-policy-category-actions
          (consent-capability-test--actions '((network-access . allow))))

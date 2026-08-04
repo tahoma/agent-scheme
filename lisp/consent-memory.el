@@ -1,4 +1,4 @@
-;;; consent-memory.el --- Inspectable scoped memory records  -*- lexical-binding: t; -*-
+;;; consent-memory.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

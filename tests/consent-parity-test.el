@@ -1,4 +1,4 @@
-;;; consent-parity-test.el --- Emacs/portable dual-core parity gate  -*- lexical-binding: t; -*-
+;;; consent-parity-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -32,14 +32,20 @@
 
 (ert-deftest consent-parity-test-key-normalization ()
   "Emacs and portable key normalization agree on each result shape."
-  (should (equal (consent-parity--emacs-key '(:status value :value "3"))
+  (should (equal (consent-parity--emacs-key
+                  (list :status 'value :value (consent-read "3")))
                  (consent-parity--portable-key '(value "3"))))
   (should (equal (consent-parity--emacs-key
-                  '(:status values :values ("1" "2")))
+                  (list :status 'values
+                        :values
+                        (consent-read-all "1 2")))
                  (consent-parity--portable-key '(values ("1" "2")))))
   (should (equal (consent-parity--emacs-key
-                  '(:status result :value "(evaluation-result)"))
-                 (consent-parity--portable-key '(result "(evaluation-result)"))))
+                  (list :status 'result
+                        :value
+                        (consent-read "(evaluation-result)")))
+                 (consent-parity--portable-key '(result
+                   "(evaluation-result)"))))
   (should (equal (consent-parity--emacs-key '(:status error :condition boom))
                  (consent-parity--portable-key '(error)))))
 

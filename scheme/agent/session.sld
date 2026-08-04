@@ -3,7 +3,7 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; This library owns the host-neutral session lifecycle model as
-;;; Scheme-readable datums.  Host adapters can layer live environments, handles,
+;;; Scheme-readable datums. Host adapters can layer live environments, handles,
 ;;; jobs, and persistence over these records while preserving the same state
 ;;; names and snapshot rules.
 
@@ -120,7 +120,7 @@
       (failure session-failure set-session-failure!))
 
     ;; Live session manager: the multi-environment-native layer over the pure
-    ;; lifecycle store.  It owns a store of session records, a map of session id
+    ;; lifecycle store. It owns a store of session records, a map of session id
     ;; to live host interaction context (each its own sandbox environment), a
     ;; default session id the REPL evaluates subsequent forms in, and an
     ;; injected context factory so this host-neutral library never imports the
@@ -409,7 +409,8 @@
          (id (type symbol)
           (description "Session id symbol."))
          (fields (type list)
-          (description "Association list of public session fields to update.")))
+          (description
+            "Association list of public session fields to update.")))
         (returns (type list)
          (description "The updated public session datum."))
         (effects state-write error))
@@ -498,7 +499,8 @@
          (id (type symbol)
           (description "Session id symbol."))
          (options (type list)
-          (description ("Association list overriding the generated snapshot id."))))
+          (description
+            ("Association list overriding the generated snapshot id."))))
         (returns (type list)
          (description "A `session-snapshot` datum."))
         (effects state-write error))
@@ -583,7 +585,8 @@
          (scope (type symbol)
           (description "Session scope symbol."))
          (maybe-options (type list)
-          (description "Zero or one association list of construction fields.")))
+          (description
+            "Zero or one association list of construction fields.")))
         (returns (type list)
          (description "The created public session datum."))
         (effects state-write error))
@@ -639,7 +642,8 @@
          (id (type symbol)
           (description "Session id symbol."))
          (maybe-options (type list)
-          (description "Zero or one association list overriding the snapshot id.")))
+          (description
+            "Zero or one association list overriding the snapshot id.")))
         (returns (type list)
          (description "A `session-snapshot` datum."))
         (effects state-write error))
@@ -655,7 +659,8 @@
          (id (type symbol)
           (description "Source session id symbol."))
          (maybe-options (type list)
-          (description "Zero or one association list overriding the fork id.")))
+          (description
+            "Zero or one association list overriding the fork id.")))
         (returns (type list)
          (description "The forked public session datum."))
         (effects state-write error))
@@ -713,12 +718,14 @@
     (define (session-manager-reset! manager)
       "Clear MANAGER's sessions, live contexts, and default session."
       "The manager is process-local and shared across evaluations, so a REPL"
-      "run resets it at the start to keep multiple runs in one process (tests,"
+      "run resets it at the start to keep multiple runs in one process (tests,\
+"
       "embeddings) from leaking sessions or already-imported environments."
       #((parameters
          (manager (type consent-session-manager)
           (description "Session manager to reset.")))
-        (returns . ("Unspecified. The installed context factory is preserved."))
+        (returns .
+          ("Unspecified. The installed context factory is preserved."))
         (effects state-write))
       (set-manager-store! manager (consent-make-session-store))
       (set-manager-contexts! manager '())
@@ -786,20 +793,23 @@
          (scope (type symbol)
           (description "Session scope symbol."))
          (options (type list)
-          (description ("Association list overriding id and construction fields."))))
+          (description
+            ("Association list overriding id and construction fields."))))
         (returns (type list)
          (description
           ("The created public session datum. Does not change the"
             "default session.")))
         (effects state-write error))
-      (let* ((datum (session-store-create! (manager-store manager) scope options))
+      (let* ((datum (session-store-create! (manager-store manager) scope
+        options))
              (id (session-datum-id datum)))
         (manager-register-context!
          manager id (manager-build-context manager id scope options))
         datum))
 
     (define (session-manager-seed! manager id scope context)
-      "Register a pre-built CONTEXT as session ID (SCOPE) and make it default."
+      "Register a pre-built CONTEXT as session ID (SCOPE) and make it default.\
+"
       #((parameters
          (manager (type consent-session-manager)
           (description "Session manager to mutate."))

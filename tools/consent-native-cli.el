@@ -1,4 +1,4 @@
-;;; consent-native-cli.el --- Native CLI process-boundary entrypoint  -*- lexical-binding: t; -*-
+;;; consent-native-cli.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -14,18 +14,20 @@
 ;; native-cli)' and `(cli process-host)' libraries; this Emacs implementation
 ;; mirrors the same Scheme-readable record contract under the Emacs host so the
 ;; two bootstrap hosts stay at parity.  It is run as a real OS process (see the
-;; `tools/consent-native-cli' wrapper with `CONSENT_NATIVE_CLI_HOST=emacs') and,
-;; when a capability request is approved, it spawns, streams, waits for, signals,
+;; `tools/consent-native-cli' wrapper with `CONSENT_NATIVE_CLI_HOST=emacs')
+;; and,
+;; when a capability request is approved, it spawns, streams, waits for,
+;; signals,
 ;; and reaps a real child process before emitting the contract's records.
 ;;
 ;; Design invariants the harness depends on:
 ;;
 ;; - The adapter resolves the request authority posture from the checked-in
-;;   fixture, so the interpreted process path and the future compiled path share
+;; fixture, so the interpreted process path and the future compiled path share
 ;;   one capability-request/decision vocabulary (effect-path
 ;;   `shared-capability-request').
 ;; - Every denial -- noninteractive confirmation, stale or invalid job handle,
-;;   denied stdin port -- is decided before any host operation runs, so a denied
+;; denied stdin port -- is decided before any host operation runs, so a denied
 ;;   request never spawns, signals, or reads a child.
 ;; - The Scheme-readable boundary record stream is written to stdout only.
 ;;   Approval prompts and adapter diagnostics are written to stderr, so an
@@ -107,7 +109,8 @@ A field is a sub-list whose head identifier is NAME."
      (equal (consent-native-cli--name
              (consent-native-cli--field-value entry "class"))
             class))
-   (consent-native-cli--field-value (consent-native-cli--adapter) "authority")))
+   (consent-native-cli--field-value (consent-native-cli--adapter)
+     "authority")))
 
 (defun consent-native-cli--policy-for (class)
   "Return the declared policy posture name for authority CLASS."
@@ -119,14 +122,16 @@ A field is a sub-list whose head identifier is NAME."
 
 ;; Each operation maps to the fixture binding, domain, authority class, and the
 ;; `(library ...)' that owns it.  The adapter never invents authority outside
-;; this table; it resolves the posture for the authority class from the fixture.
+;; this table; it resolves the posture for the authority class from the
+;; fixture.
 (defconst consent-native-cli--operations
   '(("process-run"
      :binding cli-process-start! :library (cli process)
      :domain process :operation spawn :authority "process-control")
     ("process-status"
      :binding cli-process-status :library (cli process)
-     :domain process :operation process-status :authority "process-observation")
+     :domain process :operation process-status :authority
+       "process-observation")
     ("process-signal"
      :binding cli-process-signal! :library (cli process)
      :domain process :operation signal :authority "process-control")
@@ -155,35 +160,49 @@ argument vector after Emacs option processing."
     (while rest
       (let ((flag (car rest)))
         (pcase flag
-          ("--mode" (setq opts (plist-put opts :mode (cadr rest)) rest (cddr rest)))
-          ("--execution" (setq opts (plist-put opts :execution (cadr rest)) rest (cddr rest)))
-          ("--session" (setq opts (plist-put opts :session (cadr rest)) rest (cddr rest)))
-          ("--request-id" (setq opts (plist-put opts :request-id (cadr rest)) rest (cddr rest)))
-          ("--command" (setq opts (plist-put opts :command (cadr rest)) rest (cddr rest)))
+          ("--mode" (setq opts (plist-put opts :mode (cadr rest)) rest (cddr
+            rest)))
+          ("--execution" (setq opts (plist-put opts :execution (cadr rest))
+            rest (cddr rest)))
+          ("--session" (setq opts (plist-put opts :session (cadr rest)) rest
+            (cddr rest)))
+          ("--request-id" (setq opts (plist-put opts :request-id (cadr rest))
+            rest (cddr rest)))
+          ("--command" (setq opts (plist-put opts :command (cadr rest)) rest
+            (cddr rest)))
           ("--arg"
            (setq opts (plist-put opts :child-arguments
                                  (append (plist-get opts :child-arguments)
                                          (list (cadr rest))))
                  rest (cddr rest)))
-          ("--stdin-file" (setq opts (plist-put opts :stdin-file (cadr rest)) rest (cddr rest)))
-          ("--cwd" (setq opts (plist-put opts :cwd (cadr rest)) rest (cddr rest)))
+          ("--stdin-file" (setq opts (plist-put opts :stdin-file (cadr rest))
+            rest (cddr rest)))
+          ("--cwd" (setq opts (plist-put opts :cwd (cadr rest)) rest (cddr
+            rest)))
           ("--env"
            (setq opts (plist-put opts :child-environment
                                  (append (plist-get opts :child-environment)
                                          (list (cadr rest))))
                  rest (cddr rest)))
-          ("--job-id" (setq opts (plist-put opts :job-id (cadr rest)) rest (cddr rest)))
-          ("--job-state" (setq opts (plist-put opts :job-state (cadr rest)) rest (cddr rest)))
-          ("--signal" (setq opts (plist-put opts :signal (cadr rest)) rest (cddr rest)))
-          ("--grant" (setq opts (plist-put opts :grant (cadr rest)) rest (cddr rest)))
-          ("--terminal" (setq opts (plist-put opts :terminal t) rest (cdr rest)))
+          ("--job-id" (setq opts (plist-put opts :job-id (cadr rest)) rest
+            (cddr rest)))
+          ("--job-state" (setq opts (plist-put opts :job-state (cadr rest))
+            rest (cddr rest)))
+          ("--signal" (setq opts (plist-put opts :signal (cadr rest)) rest
+            (cddr rest)))
+          ("--grant" (setq opts (plist-put opts :grant (cadr rest)) rest (cddr
+            rest)))
+          ("--terminal" (setq opts (plist-put opts :terminal t) rest (cdr
+            rest)))
           ("--channel" (setq opts (plist-put opts :channel t) rest (cdr rest)))
-          ("--approval" (setq opts (plist-put opts :approval t) rest (cdr rest)))
+          ("--approval" (setq opts (plist-put opts :approval t) rest (cdr
+            rest)))
           (_ (error "Unknown native CLI flag: %s" flag)))))
     opts))
 
 (defun consent-native-cli--environment-entry (assignment)
-  "Return the `(NAME VALUE)' datum for a NAME=VALUE child environment ASSIGNMENT."
+  "Return the `(NAME VALUE)' datum for a NAME=VALUE child environment\
+ ASSIGNMENT."
   (let ((split (string-match "=" assignment)))
     (if split
         (list (intern (substring assignment 0 split))
@@ -243,7 +262,8 @@ RESOURCE-TERM is the already-built `(resource ...)' field."
         (list 'audit audit)
         (list 'resource-usage usage)))
 
-(defun consent-native-cli--audit-datum (id session request-id decision-id result)
+(defun consent-native-cli--audit-datum (id session request-id decision-id
+  result)
   "Return the Scheme-readable adapter-audit datum."
   (list 'adapter-audit
         (list 'id id)
@@ -278,8 +298,10 @@ liveness denial can carry the nested capability-error condition."
 
 ;;;; Capability decision resolver
 
-;; The resolver derives the decision from the fixture authority posture plus the
-;; prompt-posture inputs.  It runs the liveness gate first, so a stale or invalid
+;; The resolver derives the decision from the fixture authority posture plus
+;; the
+;; prompt-posture inputs. It runs the liveness gate first, so a stale or
+;; invalid
 ;; job handle is denied before any prompt posture or host operation is reached.
 (defun consent-native-cli--resolve (opts spec)
   "Resolve the capability decision for OPTS against operation SPEC.
@@ -294,11 +316,13 @@ when an interactive approval channel rendered one)."
     (cond
      ;; Liveness gate: a non-live handle fails closed before any posture runs.
      ((and job-state (not (equal job-state "live")))
-      (let ((kind (if (equal job-state "stale") 'stale-handle 'invalid-handle)))
+      (let ((kind (if (equal job-state "stale") 'stale-handle
+        'invalid-handle)))
         (list :status 'denied :error-kind kind :reason kind)))
      ;; A covering grant approves a confirmation-gated request directly.
      ((and grant (member policy '("confirmation-gated" "grant-required")))
-      (list :status 'approved :reason "covered-by-grant" :grant (intern grant)))
+      (list :status 'approved :reason "covered-by-grant" :grant (intern
+        grant)))
      ((member policy '("allow-or-confirm" "redaction-gated"))
       (list :status 'approved :reason "allowed-by-policy"))
      ((member policy '("confirmation-gated" "grant-required"))
@@ -400,7 +424,8 @@ Return the denial exit code after proving no host operation ran."
          (request-id (cadr (consent-native-cli--field request "id")))
          (kind (plist-get resolution :error-kind))
          (reason (plist-get resolution :reason))
-         (handle (and (plist-get opts :job-id) (intern (plist-get opts :job-id))))
+         (handle (and (plist-get opts :job-id) (intern (plist-get opts
+           :job-id))))
          (liveness (memq kind '(stale-handle invalid-handle)))
          (decision (consent-native-cli--decision-datum
                     decision-id request-id 'denied reason nil))
@@ -535,12 +560,14 @@ ARGS is the raw argument vector after Emacs option processing."
                     (list (cons 'environment
                                 (list (mapcar
                                        #'consent-native-cli--environment-entry
-                                       (plist-get opts :child-environment))))))))
+                                       (plist-get opts
+                              :child-environment))))))))
              ((plist-get opts :job-id)
               (list 'resource (list 'handle 'process-job
                                     (intern (plist-get opts :job-id)))))
              (t (list 'resource 'none))))
-           (request (consent-native-cli--request-datum opts spec resource-term))
+           (request (consent-native-cli--request-datum opts spec
+             resource-term))
            (request-id (cadr (consent-native-cli--field request "id")))
            (decision-id (consent-native-cli--id "dec" request-id))
            (resolution (consent-native-cli--resolve opts spec)))

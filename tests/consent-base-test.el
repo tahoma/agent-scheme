@@ -1,4 +1,4 @@
-;;; consent-base-test.el --- R7RS base primitive tests  -*- lexical-binding: t; -*-
+;;; consent-base-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -235,7 +235,8 @@
       (should (eq (plist-get spec :backend-effect-path)
                   'shared-capability-request))
       (should (plist-get spec :policy-category))))
-  (dolist (binding '(("(scheme file)" "file-exists?" host-file file-system deny)
+  (dolist (binding '(("(scheme file)" "file-exists?" host-file file-system
+    deny)
                      ("(scheme process-context)" "command-line"
                       host-process process-environment deny)
                      ("(scheme time)" "current-second" host-time clock grant)))
@@ -551,14 +552,16 @@
   (should
    (equal (consent-result->external
            (consent-eval-source-result "(+ 1 2)"))
-          "(evaluation-result (status ok) (value 3) (events ()) (budget (steps-used 5) (host-calls 1)))"))
+          "(evaluation-result (status ok) (value 3) (events ()) (budget\
+ (steps-used 5) (host-calls 1)))"))
   (let ((error-result
          (consent-result->external
           (consent-eval-source-result "(car '())"))))
     (should
      (string-match-p
       (regexp-quote
-       "(evaluation-result (status error) (error (condition (condition (type type-error)")
+       "(evaluation-result (status error) (error (condition (condition (type\
+ type-error)")
       error-result))
     (should
      (string-match-p

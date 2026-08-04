@@ -1,11 +1,11 @@
-;;; consent-diagnostics.el --- Diagnostic datums and Emacs backend adapters  -*- lexical-binding: t; -*-
+;;; consent-diagnostics.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
 ;; Canonical diagnostic datum constructors plus Emacs diagnostic backend
-;; normalization.  The Scheme-facing record shape matches `(agent diagnostics)';
+;; normalization. The Scheme-facing record shape matches `(agent diagnostics)';
 ;; live Emacs backend objects never cross the Consent Scheme boundary.
 
 ;;; Code:

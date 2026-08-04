@@ -108,7 +108,8 @@
           (description
            "One-argument procedure applied to indexes from 0 to LEN - 1.")))
         (returns (type list)
-         (description "List of values returned by PROC in increasing index order."))
+         (description
+           "List of values returned by PROC in increasing index order."))
         (effects procedure-call error))
       (check-non-negative-integer 'list-tabulate len)
       (check-procedure 'list-tabulate proc)
@@ -170,7 +171,8 @@
          (values (type list)
           (description "Additional elements of the circular list.")))
         (returns (type pair)
-         (description "A newly allocated circular list containing the operands."))
+         (description
+           "A newly allocated circular list containing the operands."))
         (effects allocation))
       (let ((result (cons value values)))
         (set-cdr! (last-pair result) result)
@@ -182,7 +184,8 @@
          (obj (type any)
           (description "Object to inspect.")))
         (returns (type boolean)
-         (description "Whether OBJ is a finite list ending in the empty list."))
+         (description
+           "Whether OBJ is a finite list ending in the empty list."))
         (effects pure))
       (let loop ((fast obj) (slow obj))
         (cond
@@ -202,7 +205,8 @@
          (obj (type any)
           (description "Object to inspect.")))
         (returns (type boolean)
-         (description "Whether OBJ is a finite pair chain ending in a non-list tail."))
+         (description
+           "Whether OBJ is a finite pair chain ending in a non-list tail."))
         (effects pure))
       (let loop ((fast obj) (slow obj))
         (cond
@@ -756,7 +760,8 @@
       "Left-fold KONS over LIS1 and optional parallel LISTS."
       #((parameters
          (kons (type procedure)
-          (description "Combiner receiving elements followed by the accumulator."))
+          (description
+            "Combiner receiving elements followed by the accumulator."))
          (knil (type any)
           (description "Initial accumulator."))
          (lis1 (type list)
@@ -778,7 +783,8 @@
       "Right-fold KONS over LIS1 and optional parallel LISTS."
       #((parameters
          (kons (type procedure)
-          (description "Combiner receiving elements followed by the accumulator."))
+          (description
+            "Combiner receiving elements followed by the accumulator."))
          (knil (type any)
           (description "Initial rightmost accumulator."))
          (lis1 (type list)
@@ -1059,7 +1065,8 @@
          (else (loop (cdr rest))))))
 
     (define (partition pred lis)
-      "Return two values: elements satisfying PRED and the remaining elements."
+      "Return two values: elements satisfying PRED and the remaining elements.\
+"
       #((parameters
          (pred (type procedure)
           (description "Predicate applied to each element."))

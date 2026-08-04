@@ -1,4 +1,4 @@
-;;; consent-test-helper.el --- Shared Consent Scheme test helpers  -*- lexical-binding: t; -*-
+;;; consent-test-helper.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -18,7 +18,7 @@
   "Allowed shared fixture kind values.")
 
 (defconst consent-test-fixture-phases
-  '(read read-all expand eval eval-result error)
+  '(read read-all expand eval eval-result error write)
   "Allowed shared fixture phase values.")
 
 (defconst consent-test-fixture-statuses
@@ -39,7 +39,8 @@
   "Allowed explicit fixture oracle eligibility reason values.")
 
 (defconst consent-test-fixture-required-fields
-  '(id kind phase category section status oracle options source expect description)
+  '(id kind phase category section status oracle options source expect
+    description)
   "Required fields for one shared fixture case.")
 
 (defun consent-test-fixture-host-datum (datum)
@@ -74,16 +75,71 @@
    "fixtures/r7rs/conformance-cases.scm"
    consent--test-root))
 
+(defun consent-test-fixture--raw-symbol-name (value)
+  "Return VALUE's Consent Scheme symbol name, or nil."
+  (when (consent-symbol-p value)
+    (consent-symbol-name value)))
+
+(defun consent-test-fixture--tagged-datum (value)
+  "Normalize tagged fixture VALUE while retaining its typed payload."
+  (unless (and (consp value)
+               (consent-test-fixture--raw-symbol-name (car value)))
+    (ert-fail (format "Fixture value must be tagged: %S" value)))
+  (let ((tag
+         (intern
+          (consent-test-fixture--raw-symbol-name (car value)))))
+    (cons
+     tag
+     (if (eq tag 'condition)
+         (mapcar #'consent-test-fixture-host-datum (cdr value))
+       (cdr value)))))
+
+(defun consent-test-fixture--normalize-case (case)
+  "Normalize fixture CASE metadata while retaining typed payload datums."
+  (mapcar
+   (lambda (entry)
+     (let* ((name
+             (intern
+              (or (consent-test-fixture--raw-symbol-name (car entry))
+                  (ert-fail
+                   (format "Invalid fixture field name: %S" entry)))))
+            (value (cadr entry)))
+       (list
+        name
+        (if (memq name '(source expect))
+            (consent-test-fixture--tagged-datum value)
+          (consent-test-fixture-host-datum value)))))
+   case))
+
+(defun consent-test-fixture--normalize-suite (suite)
+  "Normalize parsed fixture SUITE without erasing typed case payloads."
+  (unless (and (consp suite)
+               (equal
+                (consent-test-fixture--raw-symbol-name (car suite))
+                "consent-fixture-suite"))
+    (ert-fail "Fixture corpus must start with consent-fixture-suite"))
+  (let ((version nil)
+        (cases nil))
+    (dolist (entry (cdr suite))
+      (pcase (consent-test-fixture--raw-symbol-name (car entry))
+        ("version"
+         (setq version
+               (consent-test-fixture-host-datum (cadr entry))))
+        ("cases"
+         (setq cases
+               (mapcar #'consent-test-fixture--normalize-case
+                       (cdr entry))))))
+    (list 'consent-fixture-suite
+          (list 'version version)
+          (cons 'cases cases))))
+
 (defun consent-test-fixture-suite ()
   "Read and return the canonical shared fixture suite datum."
   (let* ((source (with-temp-buffer
                    (insert-file-contents (consent-test-fixture-file))
                    (buffer-string)))
-         (suite (consent-test-fixture-host-datum
-                 (consent-read source))))
-    (unless (eq (car-safe suite) 'consent-fixture-suite)
-      (ert-fail "Fixture corpus must start with consent-fixture-suite"))
-    suite))
+         (suite (consent-read source)))
+    (consent-test-fixture--normalize-suite suite)))
 
 (defun consent-test-fixture-field (case field)
   "Return FIELD from fixture CASE."
@@ -110,14 +166,17 @@
   (let ((case-id (consent-test-fixture-field case 'id))
         (expect (consent-test-fixture-field case 'expect)))
     (pcase expect
-      (`(value ,value)
+      (`(value ,_) t)
+      (`(values . ,_) t)
+      (`(result ,_) t)
+      (`(serialized-value ,value)
        (should (stringp value)))
-      (`(values ,values)
-       (should (and (listp values) (cl-every #'stringp values))))
-      (`(result ,value)
-       (should (stringp value)))
-      (`(error . ,_)
-       t)
+      (`(external-text ,value)
+       (should (stringp value))
+       (should
+        (eq (consent-test-fixture-field case 'phase) 'write)))
+      (`(condition (category ,category) . ,_)
+       (should (memq category '(read-error evaluation-error))))
       (_
        (ert-fail
         (format "Invalid expectation for fixture case %S: %S"
@@ -150,8 +209,7 @@
     (should (listp options))
     (should (stringp description))
     (should (> (length description) 0))
-    (should (stringp source))
-    (should (> (length source) 0))
+    (consent-test-fixture-validate-source case source)
     (when (or oracle-eligibility oracle-reason)
       (should (memq oracle-eligibility
                     consent-test-fixture-oracle-eligibilities))
@@ -159,12 +217,52 @@
                     consent-test-fixture-oracle-reasons)))
     (consent-test-fixture-validate-expectation case)))
 
+(defun consent-test-fixture--source-file (path)
+  "Return the validated fixture source file named by relative PATH."
+  (unless (and (stringp path)
+               (string-match-p
+                "\\`programs/[[:alnum:]_.-]+\\.scm\\'"
+                path))
+    (ert-fail (format "Invalid fixture source file path: %S" path)))
+  (let* ((root
+          (file-name-as-directory
+           (file-name-directory (consent-test-fixture-file))))
+         (file (expand-file-name path root)))
+    (unless (and (file-in-directory-p file root)
+                 (file-regular-p file))
+      (ert-fail (format "Missing fixture source file: %S" path)))
+    file))
+
+(defun consent-test-fixture-validate-source (case source)
+  "Validate CASE's structured SOURCE representation."
+  (let ((phase (consent-test-fixture-field case 'phase)))
+    (pcase source
+      (`(text ,text)
+       (should (stringp text))
+       (should (> (length text) 0))
+       (should (memq phase '(read read-all))))
+      (`(form ,_)
+       (should-not (memq phase '(read read-all))))
+      (`(forms . ,forms)
+       (should forms)
+       (should-not (memq phase '(read read-all write))))
+      (`(file ,path)
+       (should-not (memq phase '(read read-all write)))
+       (consent-test-fixture--source-file path))
+      (_
+       (ert-fail
+        (format "Invalid source for fixture case %S: %S"
+                (consent-test-fixture-field case 'id)
+                source))))))
+
 (defun consent-test-fixture-validate-suite (suite)
   "Validate the shared fixture SUITE."
   (unless (eq (car-safe suite) 'consent-fixture-suite)
     (ert-fail "Fixture corpus must start with consent-fixture-suite"))
-  (let ((cases-field (assq 'cases (cdr suite)))
+  (let ((version (cadr (assq 'version (cdr suite))))
+        (cases-field (assq 'cases (cdr suite)))
         (ids nil))
+    (should (= version 2))
     (unless cases-field
       (ert-fail "Fixture corpus must include a cases field"))
     (dolist (case (cdr cases-field))
@@ -192,48 +290,70 @@
     plist))
 
 (defun consent-test-fixture--eval-actual (value)
-  "Return an expectation plist for evaluated VALUE."
+  "Return a typed expectation plist for evaluated VALUE."
   (if (consent--multiple-values-p value)
       (list :status 'values
             :values
-            (mapcar #'consent-value->external
-                    (consent--multiple-values-values value)))
+            (consent--multiple-values-values value))
     (list :status 'value
-          :value (consent-value->external value))))
+          :value value)))
+
+(defun consent-test-fixture-source-text (case)
+  "Materialize CASE's structured source at the execution boundary."
+  (pcase (consent-test-fixture-field case 'source)
+    (`(text ,text) text)
+    (`(form ,form)
+     (concat (consent-datum->external form) "\n"))
+    (`(forms . ,forms)
+     (concat
+      (mapconcat #'consent-datum->external forms "\n")
+      "\n"))
+    (`(file ,path)
+     (with-temp-buffer
+       (insert-file-contents-literally
+        (consent-test-fixture--source-file path))
+       (buffer-string)))
+    (_
+     (ert-fail "Unsupported fixture source representation"))))
+
+(defun consent-test-fixture--external-equal-p (left right)
+  "Return non-nil when typed datums LEFT and RIGHT serialize equally."
+  (equal (consent-datum->external left)
+         (consent-datum->external right)))
 
 (defun consent-test-fixture-actual (case)
   "Run CASE and return a normalized actual result plist."
   (let ((phase (consent-test-fixture-field case 'phase))
-        (source (consent-test-fixture-field case 'source))
+        (source (consent-test-fixture-source-text case))
         (options (consent-test-fixture-options-plist case)))
     (condition-case condition
         (pcase phase
           ('read
            (list :status 'value
-                 :value
-                 (consent-datum->external
-                  (consent-read source options))))
+                 :value (consent-read source options)))
           ('read-all
            (list :status 'values
-                 :values
-                 (mapcar #'consent-datum->external
-                         (consent-read-all source options))))
+                 :values (consent-read-all source options)))
           ('expand
            (list :status 'values
                  :values
-                 (mapcar #'consent-datum->external
-                         (consent-expand-source source nil options))))
+                 (consent-expand-source source nil options)))
           ('eval
            (consent-test-fixture--eval-actual
             (consent-eval-source source nil options)))
           ('eval-result
            (list :status 'result
                  :value
-                 (consent-result->external
-                  (consent-eval-source-result source nil options))))
+                 (consent-eval-source-result source nil options)))
           ('error
            (consent-test-fixture--eval-actual
             (consent-eval-source source nil options)))
+          ('write
+           (list
+            :status 'external-text
+            :value
+            (consent-datum->external
+             (cadr (consent-test-fixture-field case 'source)))))
           (_
            (ert-fail (format "Unsupported fixture phase: %S" phase))))
       (error
@@ -244,14 +364,32 @@
   (pcase expect
     (`(value ,value)
      (and (eq (plist-get actual :status) 'value)
-          (equal (plist-get actual :value) value)))
-    (`(values ,values)
+          (consent-test-fixture--external-equal-p
+           (plist-get actual :value)
+           value)))
+    (`(values . ,values)
      (and (eq (plist-get actual :status) 'values)
-          (equal (plist-get actual :values) values)))
+          (= (length (plist-get actual :values)) (length values))
+          (cl-every
+           #'identity
+           (cl-mapcar
+            #'consent-test-fixture--external-equal-p
+            (plist-get actual :values)
+            values))))
     (`(result ,value)
      (and (eq (plist-get actual :status) 'result)
+          (consent-test-fixture--external-equal-p
+           (plist-get actual :value)
+           value)))
+    (`(serialized-value ,value)
+     (and (eq (plist-get actual :status) 'value)
+          (equal
+           (consent-datum->external (plist-get actual :value))
+           value)))
+    (`(external-text ,value)
+     (and (eq (plist-get actual :status) 'external-text)
           (equal (plist-get actual :value) value)))
-    (`(error . ,_)
+    (`(condition . ,_)
      (eq (plist-get actual :status) 'error))
     (_ nil)))
 

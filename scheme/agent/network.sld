@@ -35,7 +35,8 @@
          (values (type list)
           (description "Zero or more Scheme-readable values for the field.")))
         (returns (type pair)
-         (description ("A field pair whose car is NAME and whose cdr is VALUES.")))
+         (description
+           ("A field pair whose car is NAME and whose cdr is VALUES.")))
         (effects pure))
       (cons name values))
 
@@ -192,7 +193,8 @@
             (network-field 'status status)
             (network-field 'reason reason)))
 
-    (define (make-network-capability-decision request status grant approval reason)
+    (define (make-network-capability-decision request status grant approval
+      reason)
       "Return a network authorization decision record."
       #((parameters
          (request (type network-capability-request)
@@ -313,11 +315,13 @@
          (grant (type (or symbol string network-capability-grant))
           (description "Grant id or grant datum associated with the port."))
          (limits (type list)
-          (description ("Association list of byte, event, or lifetime limits.")))
+          (description
+            ("Association list of byte, event, or lifetime limits.")))
          (status (type symbol)
           (description "Current capability status symbol.")))
         (returns (type port-capability)
-         (description ("A `port-capability` datum backed by a network stream.")))
+         (description
+           ("A `port-capability` datum backed by a network stream.")))
         (effects pure))
       (list 'port-capability
             (network-field 'id id)
@@ -389,7 +393,8 @@
         (network-resource-value scope field default)))
 
     (define (network-scope-value-covers? value scope)
-      "Return #t when VALUE is covered by SCOPE; #f and all mean unrestricted."
+      "Return #t when VALUE is covered by SCOPE; #f and all mean unrestricted.\
+"
       (or (not scope)
           (eq? scope 'all)
           (and (pair? scope) (member value scope))
@@ -464,7 +469,8 @@
          (else #f))))
 
     (define (network-find-grant request grants)
-      "Return the first grant that authorizes REQUEST, or the last denial tuple."
+      "Return the first grant that authorizes REQUEST, or the last denial tupl\
+e."
       (let loop ((rest grants) (denied #f))
         (cond
          ((null? rest) denied)
@@ -505,7 +511,8 @@
           ("A network capability decision approving or denying REQUEST"
             "with an explanatory reason.")))
         (effects pure)
-        (see-also make-network-request make-network-grant make-network-approval-decision))
+        (see-also make-network-request make-network-grant
+          make-network-approval-decision))
       (let ((match (network-find-grant request grants)))
         (cond
          ((and match (eq? (car match) 'approved))

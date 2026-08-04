@@ -28,6 +28,7 @@
                 (consent-expand-source raw-consent-expand-source)
                 (consent-eval-result raw-consent-eval-result)
                 (consent-eval-source-result raw-consent-eval-source-result))
+        (consent symbol)
         (consent symbol-boundary))
 
 ;; Unique marker for unset CI matrix defaults.
@@ -176,30 +177,123 @@
    (consent-test-rest-environment rest)
    (consent-test-merge-options (consent-test-rest-options rest))))
 
+;; Return #t when VALUE is an owned fixture symbol named NAME.
+(define (fixture-symbol=? value name)
+  (and (consent-symbol? value)
+       (string=? (consent-symbol-name value)
+                 (symbol->string name))))
+
+;; Return the entry named NAME in fixture ALIST.
+(define (fixture-entry alist name)
+  (let loop ((rest alist))
+    (cond
+     ((null? rest) #f)
+     ((fixture-symbol=? (caar rest) name) (car rest))
+     (else (loop (cdr rest))))))
+
 ;; Return the value for NAME in a fixture CASE alist.
 (define (field case name)
-  (let ((entry (assq name case)))
+  (let ((entry (fixture-entry case name)))
     (if entry (cadr entry) #f)))
 
-;; Load the canonical fixture corpus through the host Scheme reader.
+;; Return all text from PORT without applying the host Scheme reader.
+(define (fixture-port-text port)
+  (let loop ((parts '()))
+    (let ((part (read-string 4096 port)))
+      (if (eof-object? part)
+          (apply string-append (reverse parts))
+          (loop (cons part parts))))))
+
+;; Load the canonical fixture corpus through the Consent Scheme reader.
 (define (read-suite)
-  (call-with-input-file "fixtures/r7rs/conformance-cases.scm" read))
+  (call-with-input-file
+   "fixtures/r7rs/conformance-cases.scm"
+   (lambda (port)
+     (consent-read (fixture-port-text port)))))
 
 ;; Extract the case list from a shared fixture SUITE datum.
 (define (suite-cases suite)
-  (let ((cases-field (assq 'cases (cdr suite))))
+  (let ((cases-field (fixture-entry (cdr suite) 'cases)))
     (if cases-field (cdr cases-field) '())))
+
+;; Return a host symbol for owned fixture SYMBOL.
+(define (fixture-host-symbol symbol)
+  (string->symbol (consent-symbol-name symbol)))
+
+;; Return #t when TEXT contains NEEDLE.
+(define (fixture-string-contains? text needle)
+  (let ((text-length (string-length text))
+        (needle-length (string-length needle)))
+    (let loop ((index 0))
+      (cond
+       ((> (+ index needle-length) text-length) #f)
+       ((string=?
+         (substring text index (+ index needle-length))
+         needle)
+        #t)
+       (else (loop (+ index 1)))))))
+
+;; Return #t when PATH names an allowed file-backed fixture program.
+(define (source-file-path-valid? path)
+  (and (string? path)
+       (> (string-length path) 13)
+       (string=? (substring path 0 9) "programs/")
+       (not (fixture-string-contains? path ".."))
+       (not (fixture-string-contains? path "\\"))
+       (let ((length (string-length path)))
+         (string=? (substring path (- length 4) length) ".scm"))
+       (file-exists?
+        (string-append "fixtures/r7rs/" path))))
+
+;; Return SOURCE's variant as a host symbol.
+(define (source-variant source)
+  (if (and (pair? source) (consent-symbol? (car source)))
+      (fixture-host-symbol (car source))
+      #f))
 
 ;; Convert fixture options from record syntax to the alist expected by portable
 ;; reader and evaluator APIs.
 (define (fixture-options case)
   (map (lambda (entry)
-         (cons (car entry) (cadr entry)))
+         (cons (fixture-host-symbol (car entry))
+               (cadr entry)))
        (field case 'options)))
 
 ;; Return whether EXPECT describes multiple values.
 (define (values-expectation? expect)
-  (and (pair? expect) (eq? (car expect) 'values)))
+  (and (pair? expect)
+       (fixture-symbol=? (car expect) 'values)))
+
+;; Materialize CASE source text only at the execution boundary.
+(define (fixture-source-text case)
+  (let* ((source (field case 'source))
+         (variant (source-variant source)))
+    (cond
+     ((eq? variant 'text) (cadr source))
+     ((eq? variant 'form)
+      (string-append
+       (consent-datum->external (cadr source))
+       "\n"))
+     ((eq? variant 'forms)
+      (let loop ((forms (cdr source)) (parts '()))
+        (if (null? forms)
+            (apply string-append (reverse parts))
+            (loop
+             (cdr forms)
+             (cons
+              (string-append
+               (consent-datum->external (car forms))
+               "\n")
+              parts)))))
+     ((eq? variant 'file)
+      (let ((path (cadr source)))
+        (if (not (source-file-path-valid? path))
+            (error "invalid fixture source file path" path))
+        (call-with-input-file
+         (string-append "fixtures/r7rs/" path)
+         fixture-port-text)))
+     (else
+      (error "unsupported fixture source" source)))))
 
 ;; Decode the portable evaluator's `(values ...)' external wrapper when a case
 ;; expects multiple values.
@@ -210,7 +304,8 @@
         (map consent-datum->external (cdr datum))
         #f)))
 
-;; Evaluate SOURCE with OPTIONS and normalize the result for expectation checks.
+;; Evaluate SOURCE with OPTIONS and normalize the result for expectation
+;; checks.
 (define (eval-actual source options expect)
   (let ((external
          (consent-value->external
@@ -226,8 +321,8 @@
 ;; The shape matches the portable fixture runner: `(value STR)', `(values
 ;; (STR ...))', `(result STR)', or `(error ...)'.
 (define (actual case)
-  (let ((phase (field case 'phase))
-        (source (field case 'source))
+  (let ((phase (fixture-host-symbol (field case 'phase)))
+        (source (fixture-source-text case))
         (options (fixture-options case))
         (expect (field case 'expect)))
     (guard (condition
@@ -253,6 +348,10 @@
                (consent-eval-source-result source #f options))))
        ((eq? phase 'error)
         (eval-actual source options expect))
+       ((eq? phase 'write)
+        (list 'external-text
+              (consent-datum->external
+               (cadr (field case 'source)))))
        (else
         (list 'error phase))))))
 
@@ -268,13 +367,15 @@
     (list 'values (cadr actual-result)))
    ((eq? (car actual-result) 'result)
     (list 'result (cadr actual-result)))
+   ((eq? (car actual-result) 'external-text)
+    (list 'external-text (cadr actual-result)))
    (else
     (list 'error))))
 
 ;; Emit one Scheme-readable parity record for CASE.
 (define (emit-case case)
   (write (list 'parity-actual
-               (field case 'id)
+               (fixture-host-symbol (field case 'id))
                (parity-payload (actual case))))
   (newline))
 
@@ -286,7 +387,7 @@
 
 (for-each
  (lambda (case)
-   (if (and (eq? (field case 'status) 'implemented)
-            (eq? (field case 'oracle) 'shared))
+   (if (and (fixture-symbol=? (field case 'status) 'implemented)
+            (fixture-symbol=? (field case 'oracle) 'shared))
        (emit-case case)))
  cases)

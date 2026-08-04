@@ -1,4 +1,4 @@
-;;; consent-agent-registry-test.el --- Agent abstraction and registry tests  -*- lexical-binding: t; -*-
+;;; consent-agent-registry-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -6,7 +6,8 @@
 
 ;; Focused coverage for the host-neutral `(agent registry)' contract evaluated
 ;; through the Emacs Consent interpreter.  The same Scheme source backs the
-;; portable host shards (tests/scheme/consent-agent-registry-test.scm), so these
+;; portable host shards (tests/scheme/consent-agent-registry-test.scm), so
+;; these
 ;; expectations are the Emacs half of the cross-host parity check for the agent
 ;; datum, the registry surface, and deterministic automatic selection.
 
@@ -47,7 +48,8 @@
             (agent-description agent)
             (agent-field-value agent 'role)
             (agent-field-value agent 'missing 'fallback))")
-    "(#t coder-1 \"Coder One\" coder portable-coder (no-secrets) (edit-file) (budget (max-steps 8)) \"Writes code.\" coder fallback)")))
+    "(#t coder-1 \"Coder One\" coder portable-coder (no-secrets) (edit-file)\
+ (budget (max-steps 8)) \"Writes code.\" coder fallback)")))
 
 (ert-deftest consent-agent-registry-test-agent-defaults ()
   "Minimal construction fills the documented agent field defaults."

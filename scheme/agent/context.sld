@@ -74,7 +74,8 @@
          (summary (type (or string pair))
           (description "Conversation summary text or datum.")))
         (returns (type (or conversation-summary boolean))
-         (description "A `conversation-summary` datum, or #f when SUMMARY is #f."))
+         (description
+           "A `conversation-summary` datum, or #f when SUMMARY is #f."))
         (effects pure))
       (if summary
           (append
@@ -86,12 +87,14 @@
           #f))
 
     (define (make-focus-context records)
-      "Return a focus-context from RECORDS, or #f when all records are absent."
+      "Return a focus-context from RECORDS, or #f when all records are absent.\
+"
       #((parameters
          (records (type list)
           (description "List of optional context records.")))
         (returns (type (or focus-context boolean))
-         (description "A `focus-context` datum containing present records, or #f."))
+         (description
+           "A `focus-context` datum containing present records, or #f."))
         (effects pure))
       (let ((present (context-present-records records)))
         (if (null? present)

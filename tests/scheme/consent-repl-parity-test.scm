@@ -4,17 +4,20 @@
 ;;;
 ;;; This program runs under an external R7RS Scheme and drives the host-neutral
 ;;; REPL parity corpus (fixtures/repl/parity-cases.scm) against the portable
-;;; terminal REPL shell `(cli repl-shell)'.  It is the portable twin of the Emacs
+;;; terminal REPL shell `(cli repl-shell)'. It is the portable twin of the
+;;; Emacs
 ;;; runner tests/consent-repl-parity-test.el: both read the SAME corpus and
-;;; assert the SAME expected record sequence for each scenario, so any divergence
+;;; assert the SAME expected record sequence for each scenario, so any
+;;; divergence
 ;;; from the cross-host REPL interaction contract
 ;;; (docs/repl-interaction-contract.md) fails on the diverging host.
 ;;;
 ;;; The corpus enumerates every record a turn produces.  This runner asserts
-;;; per-kind record counts and the contract-meaningful fields of each record.  A
+;;; per-kind record counts and the contract-meaningful fields of each record. A
 ;;; `repl-result'/`repl-condition' is correlated to its submission by the
 ;;; `(submission sub-N)' field -- the durable join named in the contract's
-;;; forward-compatibility section -- while prompts, submissions, and the exit are
+;;; forward-compatibility section -- while prompts, submissions, and the exit
+;;; are
 ;;; matched positionally within their kind.
 
 (import (scheme base)
@@ -88,7 +91,8 @@
        (= (length (car v)) 2)
        (symbol? (caar v))))
 
-;; Convert a corpus option value (record-style alist or atom) to a dotted alist.
+;; Convert a corpus option value (record-style alist or atom) to a dotted
+;; alist.
 (define (option-value v)
   (if (option-assoc-form? v)
       (map (lambda (entry) (cons (car entry) (option-value (cadr entry)))) v)
@@ -200,7 +204,8 @@
      expect)
     (run-roundtrip id case actual session options)))
 
-;;;; Capture/replay round-trip (docs/repl-interaction-contract.md, "Capture and Replay")
+;;;; Capture/replay round-trip (docs/repl-interaction-contract.md, "Capture and
+;;;; Replay")
 
 ;; Serialize a record stream through the consent writer.  Comparing serialized
 ;; streams is host-portable: value-equal canonical numbers render identically,
@@ -210,7 +215,7 @@
   (map consent-datum->external records))
 
 ;; Replay the captured record stream to a fresh session with the same options
-;; and compare.  A `reproduced' case must replay to an EQUAL stream (every input
+;; and compare. A `reproduced' case must replay to an EQUAL stream (every input
 ;; chunk became a complete submission); a `partial' case must NOT (it drops an
 ;; unreplayable bare reader condition or EOF-truncated incomplete form), so the
 ;; contract's reproduces-vs-cannot split is asserted in both directions.
@@ -224,7 +229,8 @@
         (test-assert (list id 'replay-reproduced) same?)
         (test-assert (list id 'replay-partial) (not same?)))))
 
-;;;; Stream-separation parity check (not record-stream shaped, asserted directly)
+;;;; Stream-separation parity check (not record-stream shaped, asserted
+;;;; directly)
 
 ;; Drive a session with program output and assert the contract separation:
 ;; program output reaches the program-output stream, never a result rendering.
@@ -251,7 +257,8 @@
              "emitted"
              (apply string-append (reverse output)))
       (let ((records (reverse records)))
-        (test-equal 'stream-separation-result-count 3 (count-of records 'repl-result))
+        (test-equal 'stream-separation-result-count 3 (count-of records
+          'repl-result))
         (test-assert 'stream-separation-has-exit
              (> (count-of records 'repl-exit) 0))
         (for-each

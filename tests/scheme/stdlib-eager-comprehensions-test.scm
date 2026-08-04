@@ -219,4 +219,5 @@
              (list (list-ec (:mygen x '(1 2 3)) x)
              (new-list-ec (: i 5) i))))
 
-(testing-runner-main "Stdlib Eager Comprehensions portable tests" (command-line))
+(testing-runner-main "Stdlib Eager Comprehensions portable tests"
+  (command-line))

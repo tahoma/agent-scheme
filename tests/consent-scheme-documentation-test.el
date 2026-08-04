@@ -1,4 +1,4 @@
-;;; consent-scheme-documentation-test.el --- Scheme documentation checks  -*- lexical-binding: t; -*-
+;;; consent-scheme-documentation-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -73,9 +73,12 @@ quote completes on a later line, so the opening line never satisfies the
 standalone-string predicate.  Crediting the opening line lets the
 documentation rule recognize such docstrings the same as single-line
 ones."
-  (string-match-p
-   "\\`[[:space:]]*\"\\(?:[^\"\\]\\|\\\\.\\)*\\'"
-   line))
+  (or
+   (string-match-p
+    "\\`[[:space:]]*\"\\(?:[^\"\\]\\|\\\\.\\)*\\'"
+    line)
+   (and (string-match-p "\\`[[:space:]]*\"" line)
+        (string-suffix-p "\\" line))))
 
 (defun consent--scheme-documentation-definition-end-index
     (file lines index)
@@ -137,14 +140,18 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
     (cl-loop for line in lines
              for index from 0
              when (and (> index 0)
+;; readability-allow: external-identifier -- Existing helper stays intact.
                        (consent--scheme-documentation-procedure-definition-line-p
                         line)
                        (consent--scheme-documentation-comment-line-p
                         (nth (1- index) lines))
-                       (not (consent--scheme-documentation-procedure-docstring-p
+                       (not
+                         (consent--scheme-documentation-procedure-docstring-p
                              file lines index)))
              do
-             (push (format "%s:%d document with a procedure docstring, not only a leading ;; comment before %s"
+             (push (format
+               "%s:%d document with a procedure docstring, not only a\
+ leading ;; comment before %s"
                            relative-file
                            index
                            (string-trim line))
@@ -164,10 +171,13 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
              for next-line in (cdr lines)
              for index from 0
              when (and (consent--scheme-documentation-string-line-p line)
+;; readability-allow: external-identifier -- Existing helper stays intact.
                        (consent--scheme-documentation-procedure-definition-line-p
                         next-line))
              do
-             (push (format "%s:%d move procedure docstring after leading internal definitions before %s"
+             (push (format
+               "%s:%d move procedure docstring after leading internal\
+ definitions before %s"
                            relative-file
                            (1+ index)
                            (string-trim next-line))
@@ -204,7 +214,9 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
                             file
                             lines
                             index))
-                 (push (format "%s:%d missing leading ;; comment or procedure docstring before %s"
+                 (push (format
+                   "%s:%d missing leading ;; comment or procedure docstring\
+ before %s"
                                relative-file
                                (1+ index)
                                (string-trim line))
@@ -225,16 +237,19 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
   (let ((errors
          (cl-loop for file in (consent--scheme-documentation-source-files)
                   append
+;; readability-allow: external-identifier -- Existing helper stays intact.
                   (consent--scheme-documentation-procedure-leading-comment-errors
                    file))))
     (when errors
       (ert-fail (mapconcat #'identity errors "\n")))))
 
-(ert-deftest consent-scheme-documentation-test-body-docstrings-follow-definitions ()
+(ert-deftest
+  consent-scheme-documentation-test-body-docstrings-follow-definitions ()
   "Ensure body docstrings do not break leading internal definition blocks."
   (let ((errors
          (cl-loop for file in (consent--scheme-documentation-source-files)
                   append
+;; readability-allow: external-identifier -- Existing helper stays intact.
                   (consent--scheme-documentation-docstring-before-definition-errors
                    file))))
     (when errors
@@ -672,6 +687,7 @@ Each result has the form (NAME START END FORMAL-NAMES)."
             (when (consent--scheme-documentation-slice-head-named-p
                    source declaration "export")
               (dolist (name
+;; readability-allow: external-identifier -- Existing helper stays intact.
                        (consent--scheme-documentation-exported-symbols-from-slice
                         source declaration))
                 (puthash name t exports))))
@@ -685,6 +701,7 @@ Each result has the form (NAME START END FORMAL-NAMES)."
                 (when (consent--scheme-documentation-slice-head-named-p
                        source body-form "define")
                   (let* ((signature
+;; readability-allow: external-identifier -- Existing helper stays intact.
                           (consent--scheme-documentation-define-procedure-signature-from-slice
                            source body-form))
                          (name (car signature))
@@ -784,11 +801,11 @@ Each result has the form (NAME START END FORMAL-NAMES)."
   (catch 'found
     (dotimes (index (length vector))
       (let ((entry (aref vector index)))
-	(when (and (consp entry)
-	           (consent--scheme-documentation-symbol-named-p
-	            (car entry)
-	            name))
-	  (throw 'found (cons t (cdr entry))))))
+        (when (and (consp entry)
+                   (consent--scheme-documentation-symbol-named-p
+                    (car entry)
+                    name))
+          (throw 'found (cons t (cdr entry))))))
     nil))
 
 (defun consent--scheme-documentation-descriptor-has-type-p (descriptor)
@@ -889,7 +906,8 @@ Each result has the form (NAME START END FORMAL-NAMES)."
                  definition-text)))
           (if (not vector)
               (push
-               (format "%s:%d exported procedure %s missing rich metadata vector with typed parameters and returns"
+               (format "%s:%d exported procedure %s missing rich metadata
+                 vector with typed parameters and returns"
                        relative-file
                        (consent--scheme-documentation-source-line text start)
                        name)
@@ -904,7 +922,8 @@ Each result has the form (NAME START END FORMAL-NAMES)."
                      formal-names)))
               (when missing
                 (push
-                 (format "%s:%d exported procedure %s parameters metadata missing formals: %s"
+                 (format "%s:%d exported procedure %s parameters metadata
+                   missing formals: %s"
                          relative-file
                          (consent--scheme-documentation-source-line text start)
                          name
@@ -950,7 +969,8 @@ Each result has the form (NAME START END FORMAL-NAMES)."
                   symbol-end)
               nil
               t)
-        (push (format "%s:%d use named procedure definition syntax instead of defining a lambda value"
+        (push (format "%s:%d use named procedure definition syntax instead of
+          defining a lambda value"
                       relative-file
                       (line-number-at-pos (match-beginning 0)))
               errors)))
@@ -1007,7 +1027,9 @@ Each result has the form (NAME START END FORMAL-NAMES)."
              (let ((rhs (match-string 1 line)))
                (unless (consent--scheme-documentation-simple-value-rhs-p
                         rhs)
-                 (push (format "%s:%d place complex define value on a following line after the definition name"
+                 (push (format
+                   "%s:%d place complex define value on a following line after\
+ the definition name"
                                relative-file
                                (1+ index))
                        errors))))
@@ -1026,13 +1048,15 @@ Each result has the form (NAME START END FORMAL-NAMES)."
              for index from 0
              for head = (and
                          (string-match
-                          "\\`\\([[:space:]]*\\)(\\([^[:space:]()]+\\)[[:space:]]*\\'"
+                          (concat "\\`\\([[:space:]]*\\)("
+                                  "\\([^[:space:]()]+\\)[[:space:]]*\\'")
                           line)
                          (list (match-string 1 line)
                                (match-string 2 line)))
              for type = (and
                          (string-match
-                          "\\`[[:space:]]*\\((type[[:space:]]+.*)\\)[[:space:]]*\\'"
+                          (concat "\\`[[:space:]]*\\((type[[:space:]]+.*)"
+                                  "\\)[[:space:]]*\\'")
                           next)
                          (match-string 1 next))
              when (and head type)
@@ -1044,7 +1068,9 @@ Each result has the form (NAME START END FORMAL-NAMES)."
                             type)))
                (when (<= (length combined)
                          consent--scheme-documentation-soft-line-limit)
-                 (push (format "%s:%d compact `(type ...)' metadata onto the descriptor head line"
+                 (push (format
+                   "%s:%d compact `(type ...)' metadata onto the descriptor\
+ head line"
                                relative-file
                                (1+ index))
                        errors))))
@@ -1101,7 +1127,8 @@ Each result has the form (NAME START END FORMAL-NAMES)."
      (consent--scheme-documentation-rich-vector-p obvious-shorthand))
     (should (consent--scheme-documentation-rich-vector-p explicit-type))))
 
-(ert-deftest consent-scheme-documentation-test-public-rich-detects-value-lambdas ()
+(ert-deftest
+  consent-scheme-documentation-test-public-rich-detects-value-lambdas ()
   "Treat exported lambda-valued definitions as public procedures."
   (let ((file
          (make-temp-file
@@ -1144,7 +1171,8 @@ Each result has the form (NAME START END FORMAL-NAMES)."
             errors)))
       (delete-file file))))
 
-(ert-deftest consent-scheme-documentation-test-public-rich-covers-rest-formals ()
+(ert-deftest consent-scheme-documentation-test-public-rich-covers-rest-formals
+  ()
   "Require public metadata to cover dotted and rest-only formals."
   (let ((file
          (make-temp-file
@@ -1276,10 +1304,12 @@ Each result has the form (NAME START END FORMAL-NAMES)."
     (when errors
       (ert-fail (mapconcat #'identity errors "\n")))))
 
-(ert-deftest consent-scheme-documentation-test-value-procedure-define-style-corpus ()
+(ert-deftest
+  consent-scheme-documentation-test-value-procedure-define-style-corpus ()
   "Reject value lambda and case-lambda definitions in Scheme source."
   (let ((errors
-         (cl-loop for file in (consent--scheme-documentation-scheme-style-files)
+         (cl-loop for file in
+           (consent--scheme-documentation-scheme-style-files)
                   append
                   (consent--scheme-documentation-value-procedure-define-errors
                    file))))
@@ -1289,7 +1319,8 @@ Each result has the form (NAME START END FORMAL-NAMES)."
 (ert-deftest consent-scheme-documentation-test-value-define-style-corpus ()
   "Reject same-line non-datum value definitions in Scheme source."
   (let ((errors
-         (cl-loop for file in (consent--scheme-documentation-scheme-style-files)
+         (cl-loop for file in
+           (consent--scheme-documentation-scheme-style-files)
                   append
                   (consent--scheme-documentation-same-line-complex-define-errors
                    file))))
@@ -1310,7 +1341,8 @@ Each result has the form (NAME START END FORMAL-NAMES)."
       (ert-fail (mapconcat #'identity (nreverse missing) "\n")))))
 
 (ert-deftest consent-scheme-documentation-test-public-rich-docstrings ()
-  "Ensure every exported Scheme procedure carries rich parameter and return metadata.
+  "Ensure every exported Scheme procedure carries rich parameter and return\
+ metadata.
 Runs fail-closed over every runtime `scheme/' source file, so a new file is
 covered automatically. A file with no exported procedures produces no errors."
   (let ((errors

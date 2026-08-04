@@ -146,7 +146,8 @@
       (set! library-primitive-resolver primitive-resolver)
       (set! library-policy-denied-primitive policy-denied)
       (set! library-trampoline trampoline)
-      (set! library-make-empty-syntax-environment make-empty-syntax-environment)
+      (set! library-make-empty-syntax-environment
+        make-empty-syntax-environment)
       (set! library-syntax-environment-ref syntax-environment-ref)
       (set! library-with-syntax-environment with-syntax-environment)
       consent-unspecified)
@@ -162,13 +163,15 @@
             minimum
             maximum))
 
-    ;; Alias specs are alists so new optional fields remain backwards-compatible.
+    ;; Alias specs are alists so new optional fields remain
+    ;; backwards-compatible.
     (define (library-alias-field spec field)
       "Return FIELD from alias SPEC, or #f when absent."
       (let ((entry (library-assq field spec)))
         (if entry (cdr entry) #f)))
 
-    ;; Cache selected source path and contents by manifest source-file/key pair.
+    ;; Cache selected source path and contents by manifest source-file/key
+    ;; pair.
     (define manifest-source-library-source-cache '())
 
     ;; Parsed manifest source is immutable evaluator input in the process-wide
@@ -187,14 +190,16 @@
     ;; user imports.
     (define source-library-internal-import-depth 0)
 
-    ;; Cache manifest-backed catalog entries after the evaluator backend is live.
+    ;; Cache manifest-backed catalog entries after the evaluator backend is
+    ;; live.
     (define library-catalog-cache #f)
 
     ;; Ad-hoc manifest catalog sources are metadata only and have highest
     ;; precedence in discovery.
     (define library-catalog-ad-hoc-manifests '())
 
-    ;; Manifest root catalog sources are metadata only and follow ad-hoc inputs.
+    ;; Manifest root catalog sources are metadata only and follow ad-hoc
+    ;; inputs.
     (define library-catalog-root-manifests '())
 
     ;; Diagnostics emitted by the most recent catalog merge.
@@ -221,9 +226,11 @@
                                (exact? (car rest))
                                (>= (car rest) 0))
                           (and (consent-number? (car rest))
-                               (library-symbol-eq? (consent-number-kind (car rest))
+                               (library-symbol-eq? (consent-number-kind (car
+                              rest))
                                     'integer)
-                               (library-symbol-eq? (consent-number-exactness (car rest))
+                               (library-symbol-eq? (consent-number-exactness
+                              (car rest))
                                     'exact)
                                (>= (consent-number-value (car rest)) 0)))
                       (loop (cdr rest)))
@@ -312,7 +319,8 @@
                        description)))
           (if (not (and (>= (length parts) 2)
                         (identifier-named? (car parts) 'define-library)
-                        (library-datum-equal? (library-name-key (second parts)) key)))
+                        (library-datum-equal? (library-name-key (second parts))
+                          key)))
               (eval-error
                (string-append description " name does not match registry key")
                key))
@@ -397,7 +405,8 @@
       (let ((parts (proper-list-elements value "quoted manifest")))
         (if (not (and (= (length parts) 2)
                       (identifier-named? (car parts) 'quote)))
-            (eval-error "manifest variable must be quoted" (list key variable)))
+            (eval-error "manifest variable must be quoted" (list key
+              variable)))
         (cadr parts)))
 
     (define (collection-manifest-define-value form variable key)
@@ -424,7 +433,8 @@
                (parts (proper-list-elements form description)))
           (if (not (and (>= (length parts) 2)
                         (identifier-named? (car parts) 'define-library)
-                        (library-datum-equal? (library-name-key (second parts)) key)))
+                        (library-datum-equal? (library-name-key (second parts))
+                          key)))
               (eval-error
                (string-append description
                               " library name does not match registry key")
@@ -813,12 +823,14 @@
       "Return SOURCE normalized to resolved PATH when SOURCE is a path datum."
       (if (and source path (pair? source))
           (let ((parts (proper-list-elements source "manifest source")))
-            (if (and (= (length parts) 2) (library-symbol-eq? (car parts) 'path))
+            (if (and (= (length parts) 2) (library-symbol-eq? (car parts)
+              'path))
                 (list 'path path)
                 source))
           source))
 
-    (define (manifest-source-default source source-file target implementation-id)
+    (define (manifest-source-default source source-file target
+      implementation-id)
       "Return normalized source metadata."
       (cond
        (source source)
@@ -866,7 +878,8 @@
     (define (manifest-normalized-dependency entry description)
       "Return dependency ENTRY as a normalized library key."
       (let ((parts (and (pair? entry) (proper-list-elements/maybe entry))))
-        (if (and parts (library-symbol-eq? (car parts) 'library) (pair? (cdr parts)))
+        (if (and parts (library-symbol-eq? (car parts) 'library) (pair? (cdr
+          parts)))
             (library-name-key (cadr parts))
             (library-name-key entry))))
 
@@ -902,7 +915,8 @@
                    source-file
                    key
                    (consent-library-search-directory-list))))
-        (let ((cached (assoc/equal cache-key manifest-source-library-source-cache)))
+        (let ((cached (assoc/equal cache-key
+          manifest-source-library-source-cache)))
           (if cached
               (cdr cached)
               (let ((entry
@@ -927,7 +941,8 @@
       (cdr (manifest-source-library-source-entry source-file key root)))
 
     (define (collection-manifest-entry entry spec)
-      "Return catalog metadata parsed from collection manifest ENTRY and SPEC."
+      "Return catalog metadata parsed from collection manifest ENTRY and SPEC.\
+"
       (let* ((key
               (library-name-key
                (collection-manifest-field entry 'name #f)))
@@ -1154,7 +1169,8 @@
       "Return collection-manifest metadata for configured manifest roots."
       (let ((cache-key (library-manifest-root-cache-key)))
         (if (and library-collection-manifest-cache
-                 (library-datum-equal? (car library-collection-manifest-cache) cache-key))
+                 (library-datum-equal? (car library-collection-manifest-cache)
+                   cache-key))
             (cadr library-collection-manifest-cache)
             (let ((entries
                    (apply
@@ -1177,7 +1193,8 @@
       (let loop ((entries (library-collection-manifest-entries)))
         (cond
          ((null? entries) #f)
-         ((library-datum-equal? key (collection-entry-field (car entries) 'name '()))
+         ((library-datum-equal? key (collection-entry-field (car entries) 'name
+           '()))
           (car entries))
          (else (loop (cdr entries))))))
 
@@ -1269,7 +1286,8 @@
       "Reject catalog ENTRY when CONTEXT lacks its required import posture."
       (let ((visibility
              (if entry
-                 (library-catalog-field entry 'visibility (library-visibility key))
+                 (library-catalog-field entry 'visibility (library-visibility
+                   key))
                  (library-visibility key))))
         (if (and (library-visibility-internal? visibility)
                  (not (library-internal-import-allowed? context)))
@@ -1343,7 +1361,8 @@
                  (result '()))
         (cond
          ((null? entries) (reverse result))
-         ((library-datum-equal? key (collection-entry-field (car entries) 'target #f))
+         ((library-datum-equal? key (collection-entry-field (car entries)
+           'target #f))
           (loop (cdr entries)
                 (cons (collection-entry-field (car entries) 'name '())
                       result)))
@@ -1382,7 +1401,8 @@
       (and (library-assq field fields) #t))
 
     (define (library-catalog-require-symbol value description)
-      "Return VALUE when it is a symbol, else raise a catalog diagnostic error."
+      "Return VALUE when it is a symbol, else raise a catalog diagnostic error\
+."
       (if (library-symbol? value)
           value
           (eval-error
@@ -1429,7 +1449,8 @@
                          (identifier-named? (car parts)
                                             'manifest-index-entry))))
             (eval-error
-             "catalog entry must begin with manifest-entry or manifest-index-entry"
+             "catalog entry must begin with manifest-entry or manifest-index-e\
+ntry"
              form))
         (let* ((fields (cdr parts))
                (index-entry?
@@ -1457,7 +1478,8 @@
                  target))
                (availability
                 (library-catalog-require-symbol
-                 (library-catalog-manifest-field fields 'availability 'required)
+                 (library-catalog-manifest-field fields 'availability
+                   'required)
                  "catalog availability"))
                (availability-condition
                 (library-catalog-manifest-field
@@ -1614,7 +1636,8 @@
            (list 'summary summary)))))
 
     (define (library-catalog-parse-manifest manifest origin source-id)
-      "Validate MANIFEST and return catalog entries with ORIGIN and SOURCE-ID."
+      "Validate MANIFEST and return catalog entries with ORIGIN and SOURCE-ID.\
+"
       (let ((parts (proper-list-elements manifest "library catalog manifest")))
         (if (or (null? parts)
                 (not (identifier-named? (car parts) 'library-catalog)))
@@ -1626,7 +1649,8 @@
          (cdr parts))))
 
     (define (library-catalog-replace-source sources source-id entries)
-      "Return SOURCES with SOURCE-ID replaced by ENTRIES at highest precedence."
+      "Return SOURCES with SOURCE-ID replaced by ENTRIES at highest precedence\
+."
       (let loop ((rest sources) (result '()))
         (cond
          ((null? rest) (cons (cons source-id entries) (reverse result)))
@@ -1989,7 +2013,8 @@
       (let loop ((rest symbols))
         (cond
          ((null? rest) #f)
-         ((library-catalog-text-match? (library-symbol-name (car rest)) needle) #t)
+         ((library-catalog-text-match? (library-symbol-name (car rest)) needle)
+           #t)
          (else (loop (cdr rest))))))
 
     (define (library-catalog-name-list-match? names needle)
@@ -2014,16 +2039,19 @@
         (library-symbol-name (library-catalog-field entry 'category 'library))
         needle)
        (library-catalog-text-match?
-        (library-symbol-name (library-catalog-field entry 'source-kind 'manifest))
+        (library-symbol-name (library-catalog-field entry 'source-kind
+          'manifest))
         needle)
        (library-catalog-text-match?
         (library-symbol-name (library-catalog-field entry 'visibility 'public))
         needle)
        (library-catalog-text-match?
-        (library-symbol-name (library-catalog-field entry 'status 'implemented))
+        (library-symbol-name (library-catalog-field entry 'status
+          'implemented))
         needle)
        (library-catalog-text-match?
-        (library-symbol-name (library-catalog-field entry 'origin 'built-in-seed))
+        (library-symbol-name (library-catalog-field entry 'origin
+          'built-in-seed))
         needle)
        (library-catalog-text-match?
         (library-catalog-field entry 'source-file #f)
@@ -2098,7 +2126,8 @@
         (let loop ((entries (consent-library-catalog-entries)))
           (cond
            ((null? entries) #f)
-           ((library-datum-equal? key (library-catalog-field (car entries) 'name '()))
+           ((library-datum-equal? key (library-catalog-field (car entries)
+             'name '()))
             (car entries))
            (else (loop (cdr entries)))))))
 
@@ -2128,7 +2157,8 @@
                    (result '()))
           (cond
            ((null? entries) (reverse result))
-           ((library-datum-equal? key (library-catalog-field (car entries) 'name '()))
+           ((library-datum-equal? key (library-catalog-field (car entries)
+             'name '()))
             (loop (cdr entries) (cons (car entries) result)))
            (else (loop (cdr entries) result))))))
 
@@ -2167,7 +2197,8 @@
        ((library-symbol-eq? root 'manifest-root) 'explicit)
        ((library-symbol-eq? root 'user) 'user)
        ((library-symbol-eq? root 'host-adapter) 'host)
-       ((or (library-symbol-eq? root 'stdlib-vendored) (library-symbol-eq? root 'builtin)) 'bundled)
+       ((or (library-symbol-eq? root 'stdlib-vendored) (library-symbol-eq? root
+         'builtin)) 'bundled)
        (else 'unknown)))
 
     (define (library-entry-resolved-name entry seen)
@@ -2203,7 +2234,8 @@
                (library-catalog-field entry 'provider #f))
               (library-resolution-field 'trust trust))))
 
-    (define (library-resolution-record name entry status reason loaded candidates)
+    (define (library-resolution-record name entry status reason loaded
+      candidates)
       "Return a Scheme-readable library-resolution record."
       (let* ((key (library-name-key name))
              (resolved-key
@@ -2267,7 +2299,8 @@
          (name (type (list-of (or symbol exact-integer)))
           (description "Library name to resolve."))
          (context (type eval-context)
-          (description "Context whose internal-library posture is consulted.")))
+          (description
+            "Context whose internal-library posture is consulted.")))
         (returns (type list)
          (description "A library-resolution record."))
         (effects state-read state-write allocation error))
@@ -2598,7 +2631,8 @@
       "Return the implementation manifest ENTRY represents."
       (let ((target (library-catalog-field entry 'target #f)))
         (if (and target
-                 (library-symbol-eq? (library-catalog-field entry 'status #f) 'alias))
+                 (library-symbol-eq? (library-catalog-field entry 'status #f)
+                   'alias))
             (or (consent-library-catalog-entry target) entry)
             entry)))
 
@@ -2678,7 +2712,8 @@
                     #f)
                    'shim))
           'shim)
-         ((or (library-symbol-eq? implementation-status 'vendored-adapted-implementation)
+         ((or (library-symbol-eq? implementation-status
+           'vendored-adapted-implementation)
               (library-symbol-eq? (vendored-srfi-provenance-field
                     implementation-entry
                     'vendored?)
@@ -2831,7 +2866,8 @@
           (else (loop (cdr entries) result))))))
 
     (define (consent-standard-source-library-specs)
-      "Public metadata accessor for standard libraries backed by source files."
+      "Public metadata accessor for standard libraries backed by source files.\
+"
       #((parameters)
         (returns (type list)
          (description
@@ -2870,11 +2906,13 @@
       "Return the registered library for KEY in CONTEXT, or #f."
       #((parameters
          (context (type eval-context)
-          (description ("Evaluation context whose library registry is searched.")))
+          (description
+            ("Evaluation context whose library registry is searched.")))
          (key (type list)
           (description "Library registry key to look up.")))
         (returns (type (or library boolean))
-         (description "The library registered under KEY, or #f when it is absent."))
+         (description
+           "The library registered under KEY, or #f when it is absent."))
         (effects state-read))
       (let ((cell (assoc/equal key (context-libraries context))))
         (if cell (cdr cell) #f)))
@@ -2883,12 +2921,14 @@
       "Store LIBRARY under KEY in CONTEXT's registry."
       #((parameters
          (context (type eval-context)
-          (description ("Evaluation context whose library registry is updated.")))
+          (description
+            ("Evaluation context whose library registry is updated.")))
          (key (type list)
           (description "Library registry key to associate with LIBRARY."))
          (library (type library)
           (description "Library object to store under KEY.")))
-        (returns . ("An unspecified value after registering LIBRARY under KEY."))
+        (returns .
+          ("An unspecified value after registering LIBRARY under KEY."))
         (effects state-write))
       (let replace ((rest (context-libraries context)) (prefix '()))
         (cond
@@ -2906,7 +2946,8 @@
 
     (define (current-syntax-binding syntax-environment name)
       "Return NAME's binding from SYNTAX-ENVIRONMENT's current frame only."
-      (let ((cell (library-assq name (syntax-environment-frame syntax-environment))))
+      (let ((cell (library-assq name (syntax-environment-frame
+        syntax-environment))))
         (if cell (cdr cell) #f)))
 
     (define (form-named? form name)
@@ -2927,7 +2968,8 @@
       #((parameters
          (form . "Datum to test for an import declaration heading."))
         (returns (type boolean)
-         (description ("#t when FORM is headed by the import identifier, else #f.")))
+         (description
+           ("#t when FORM is headed by the import identifier, else #f.")))
         (effects pure))
       (form-named? form 'import))
 
@@ -2954,7 +2996,8 @@
       "Report whether two library bindings refer to the same exported object."
       (and (library-binding? left)
            (library-binding? right)
-           (library-symbol-eq? (library-binding-kind left) (library-binding-kind right))
+           (library-symbol-eq? (library-binding-kind left)
+             (library-binding-kind right))
            (library-symbol-eq? (library-binding-object left)
                 (library-binding-object right))))
 
@@ -3011,7 +3054,8 @@
 
     (define (manifest-source-library-forms source context)
       "Return parsed SOURCE forms in CONTEXT's symbol domain."
-      "The default owned-symbol table is shared process-wide, so its immutable"
+      "The default owned-symbol table is shared process-wide, so its immutable\
+"
       "source graph can be cached safely. Isolated tables still receive a"
       "fresh parse whose symbols belong only to that table."
       (if (host-eq? (context-symbol-table context)
@@ -3060,13 +3104,17 @@
       "Owned characters become host characters, and canonical number records"
       "become bounded host numbers -- a custom resync"
       "strategy returns an offset the reader clamps with host arithmetic --"
-      "while values outside the adapter range keep their owned representation."
+      "while values outside the adapter range keep their owned representation.\
+"
       "The interpreter's end-of-file record becomes the host end-of-file"
       "object a native input driver tests with eof-object?. Owned symbols are"
-      "converted only for native libraries that inspect their callback result;"
-      "higher-order host controls such as `call-with-input-file' return callback"
+      "converted only for native libraries that inspect their callback result;\
+"
+      "higher-order host controls such as `call-with-input-file' return callba\
+ck"
       "results opaquely and preserve their Consent symbol identity instead."
-      "Pairs and vectors are walked copy-on-write so untouched structure keeps"
+      "Pairs and vectors are walked copy-on-write so untouched structure keeps\
+"
       "its identity, and SEEN returns cyclic data unchanged on revisit."
       (cond
        ((and convert-symbols? (consent-symbol? value))
@@ -3131,7 +3179,8 @@
                         (loop next-slow next-fast))))))))
 
     (define (native-runtime-datum-result value seen)
-      "Convert runtime VALUE to borrowed-host data without quadratic list walks."
+      "Convert runtime VALUE to borrowed-host data without quadratic list walk\
+s."
       (cond
        ((consent-symbol? value)
         (host-string->symbol (consent-symbol-name value)))
@@ -3193,7 +3242,8 @@
     (define (consent-runtime-datum->native-datum value)
       "Convert runtime VALUE to ordinary host-facing Scheme data."
       "This is the context-free egress half of the native-call bridge. It is"
-      "used for public result datums that contain no live evaluator callbacks."
+      "used for public result datums that contain no live evaluator callbacks.\
+"
       #((parameters
          (value (type object)
           (description "Runtime datum about to return to native code.")))
@@ -3223,7 +3273,8 @@
       "Wrap interpreted callable VALUE as a host procedure applying it in"
       "CONTEXT. Callback arguments re-enter the Consent world through the"
       "shared host-datum bridge, so interpreted callbacks see canonical"
-      "Consent numbers and preserved source-metadata structure instead of raw host"
+      "Consent numbers and preserved source-metadata structure instead of raw \
+host"
       "runtime values leaking through the compiled boundary."
       "The closure's result crosses back under the callback result conversion"
       "(canonical records become raw host numbers), so native higher-order"
@@ -3267,10 +3318,12 @@
     ;; context.
     (define native-call-context #f)
 
-    ;; Some internal-library exports operate on reader-owned Consent datums whose
+    ;; Some internal-library exports operate on reader-owned Consent datums
+    ;; whose
     ;; identity must survive the native call boundary intact: source-metadata
     ;; accessors key off the original pair/vector/string object, character
-    ;; accessors inspect owned records, and numeric predicates inspect canonical
+    ;; accessors inspect owned records, and numeric predicates inspect
+    ;; canonical
     ;; number records instead of host-unwrapped payloads. Most other portable
     ;; libraries still want ordinary host-facing scalar conversion.
     (define native-preserved-argument-bindings
@@ -3364,7 +3417,8 @@
           consent-host-symbol-assoc))))
 
     ;; Accessors that intentionally publish a host scalar payload should keep
-    ;; that surface instead of rewrapping the result back into a Consent number.
+    ;; that surface instead of rewrapping the result back into a Consent
+    ;; number.
     (define native-host-result-bindings
       '((((consent reader) consent-number-value))))
 
@@ -3485,8 +3539,10 @@
         (if (host-memq value seen)
             value
             (let* ((next-seen (cons value seen))
-                   (head (native-nested-argument (car value) context next-seen))
-                   (tail (native-nested-argument (cdr value) context next-seen)))
+                   (head (native-nested-argument (car value) context
+                     next-seen))
+                   (tail (native-nested-argument (cdr value) context
+                     next-seen)))
               (if (and (host-eq? head (car value))
                        (host-eq? tail (cdr value)))
                   value
@@ -3517,7 +3573,8 @@
       "apply machinery already handle (consent-procedure? on a"
       "consent-eval-source result must see the record, not a wrapper)."
       "Symbols, characters, bounded numbers, and eof objects cross as plain"
-      "host Scheme values; larger numbers retain owned storage. Containers are"
+      "host Scheme values; larger numbers retain owned storage. Containers are\
+"
       "walked so"
       "nested scalars and the options-alist callback convention both preserve"
       "the portable library surface."
@@ -3721,7 +3778,8 @@
       "use. Internal libraries re-export one another's bindings ((consent"
       "eval) re-exports the (consent runtime) predicates, for example), and"
       "importing two such libraries into one program is only compatible when"
-      "both export records carry the same boundary policy. Procedure cells are"
+      "both export records carry the same boundary policy. Procedure cells are\
+"
       "shared globally. Data cells are shared only within one evaluation"
       "context because symbol-bearing constants must be interned into that"
       "context's sole symbol table."
@@ -3791,7 +3849,8 @@
           cell)))
 
     (define (register-native-library! key bindings context)
-      "Register internal library KEY from its compiled-in native BINDINGS table."
+      "Register internal library KEY from its compiled-in native BINDINGS tabl\
+e."
       (let ((value-environment (consent-make-empty-environment))
             (syntax-environment (library-make-empty-syntax-environment #f)))
         (for-each
@@ -3822,7 +3881,8 @@
       "Return NAME's binding from EXPORTS, or #f when absent."
       (cond
        ((null? exports) #f)
-       ((library-symbol-eq? name (library-binding-name (car exports))) (car exports))
+       ((library-symbol-eq? name (library-binding-name (car exports))) (car
+         exports))
        (else (find-library-export name (cdr exports)))))
 
     (define (register-subset-library! key export-names context environment)
@@ -3927,7 +3987,8 @@
       "Register KEY as a library populated from primitive specs."
       (if (not (library-registry-ref context key))
           (let ((value-environment (consent-make-empty-environment))
-                (syntax-environment (library-make-empty-syntax-environment #f)))
+                (syntax-environment (library-make-empty-syntax-environment
+                  #f)))
             (for-each
              (lambda (spec)
                (define-primitive!
@@ -3963,7 +4024,8 @@
             (loop (cdr rest) replaced? (cons (car rest) result)))))))
 
     (define (register-library-primitive-bindings! key primitive-specs context)
-      "Overlay PRIMITIVE-SPECS onto the already registered source library KEY."
+      "Overlay PRIMITIVE-SPECS onto the already registered source library KEY.\
+"
       (let ((library (library-registry-ref context key)))
         (if (not library)
             (eval-error "source library is not registered" key))
@@ -4068,15 +4130,18 @@
 
     (define (validate-primitive-library-declaration declaration)
       "Validate and return primitive-library DECLARATION."
-      (if (not (library-symbol-eq? (collection-entry-field declaration 'kind #f)
+      (if (not (library-symbol-eq? (collection-entry-field declaration 'kind
+        #f)
                     'primitive-library))
           (eval-error
            "primitive-library declaration must have kind primitive-library"
            (collection-entry-field declaration 'name #f)))
-      (if (not (library-symbol-eq? (collection-entry-field declaration 'source-kind #f)
+      (if (not (library-symbol-eq? (collection-entry-field declaration
+        'source-kind #f)
                     'primitive))
           (eval-error
-           "primitive-library declaration must have source-kind primitive-library"
+           "primitive-library declaration must have source-kind primitive-libr\
+ary"
            (collection-entry-field declaration 'name #f)))
       (let ((name (primitive-library-required-field
                    declaration
@@ -4189,7 +4254,8 @@
          (collection-entry-field validated 'primitive-exports '()))))
 
     (define (register-r5rs-library! key context environment)
-      "Register `(scheme r5rs)' with R5RS aliases for exact/inexact conversion."
+      "Register `(scheme r5rs)' with R5RS aliases for exact/inexact conversion\
+."
       (if (not (library-registry-ref context key))
           (let* ((base-library
                   (resolve-library scheme-base-library-key
@@ -4239,7 +4305,8 @@
           (guard (condition (else #f))
             (and (manifest-primitive-implementation-specs entry) #t)))
          ((library-symbol-eq? kind 'derived)
-          (library-symbol-eq? (collection-entry-field entry 'implementation-id #f)
+          (library-symbol-eq? (collection-entry-field entry 'implementation-id
+            #f)
                'scheme-r5rs))
          (else #f))))
 
@@ -4339,7 +4406,8 @@
         (register-native-library! key bindings context)
         (finish-manifest-library-registration! entry context)))
 
-    (define (register-manifest-implementation-library! entry context environment)
+    (define (register-manifest-implementation-library! entry context
+      environment)
       "Register primitive or derived library described by manifest ENTRY."
       (let ((key (collection-entry-field entry 'name #f))
             (native-bindings
@@ -4354,9 +4422,11 @@
            key
            (manifest-exported-primitive-specs entry)
            context))
-         ((and (library-symbol-eq? (collection-entry-field entry 'source-kind #f)
+         ((and (library-symbol-eq? (collection-entry-field entry 'source-kind
+           #f)
                     'derived)
-               (library-symbol-eq? (collection-entry-field entry 'implementation-id #f)
+               (library-symbol-eq? (collection-entry-field entry
+                 'implementation-id #f)
                     'scheme-r5rs))
           (register-r5rs-library! key context environment))
         (else
@@ -4374,7 +4444,8 @@
            ("Evaluation context whose registry and host grant are"
              "consulted.")))
          (environment (type environment)
-          (description ("Environment available for resolving the library name."))))
+          (description
+            ("Environment available for resolving the library name."))))
         (returns (type boolean)
          (description
           ("#t when NAME names a known, registered, or host-loadable"
@@ -4397,7 +4468,8 @@
              (and (library-registry-ref context key) #t)))))
 
     (define (resolve-library name context environment)
-      "Resolve NAME to a library, registering lazy standard libraries as needed."
+      "Resolve NAME to a library, registering lazy standard libraries as neede\
+d."
       #((parameters
          (name (type (list-of (or symbol exact-integer)))
           (description "Library name to resolve to a registered library."))
@@ -4406,7 +4478,8 @@
            ("Evaluation context whose registry receives lazily"
              "registered libraries.")))
          (environment (type environment)
-          (description ("Environment used when building or registering the library."))))
+          (description
+            ("Environment used when building or registering the library."))))
         (returns (type library)
          (description "The resolved library object for NAME."))
         (effects state-read state-write error))
@@ -4425,7 +4498,8 @@
                (manifest-library-alias-spec entry)
                context
                environment))
-             ((library-symbol-eq? (collection-entry-field entry 'source-kind #f)
+             ((library-symbol-eq? (collection-entry-field entry 'source-kind
+               #f)
                    'base-snapshot)
               (register-scheme-base-library! context environment))
              ((collection-entry-field entry 'source-file #f)
@@ -4447,7 +4521,8 @@
       "Return NAME's import binding from BINDINGS, or #f."
       (cond
        ((null? bindings) #f)
-       ((library-symbol-eq? name (library-binding-name (car bindings))) (car bindings))
+       ((library-symbol-eq? name (library-binding-name (car bindings))) (car
+         bindings))
        (else (find-import-binding name (cdr bindings)))))
 
     (define (ensure-import-names-present names bindings description)
@@ -4464,9 +4539,11 @@
       "Merge duplicate compatible imports and reject conflicting imports."
       #((parameters
          (bindings (type list)
-          (description ("List of import library bindings to deduplicate and check."))))
+          (description
+            ("List of import library bindings to deduplicate and check."))))
         (returns (type list)
-         (description ("A list of bindings with compatible duplicates merged.")))
+         (description
+           ("A list of bindings with compatible duplicates merged.")))
         (effects error))
       (let loop ((rest bindings) (seen '()) (result '()))
         (if (null? rest)
@@ -4604,7 +4681,8 @@
                value-environment
                (cons (cons name object)
                      (environment-frame value-environment))))
-             ((library-datum-equal? binding-library-key scheme-base-library-key)
+             ((library-datum-equal? binding-library-key
+               scheme-base-library-key)
               ;; Repeated `(scheme base)' imports are common while source
               ;; libraries bootstrap; reinstalling the same base name is
               ;; harmless and keeps import-set handling small.
@@ -4615,7 +4693,8 @@
              ((library-symbol-eq? existing object))
              (else
               (eval-error "conflicting import for identifier" name))))
-          (if (not (library-memq name (environment-imported-names value-environment)))
+          (if (not (library-memq name (environment-imported-names
+            value-environment)))
               (set-environment-imported-names!
                value-environment
                (cons name (environment-imported-names value-environment)))))
@@ -4623,7 +4702,8 @@
           (let ((existing (current-syntax-binding syntax-environment name)))
             (cond
              ((or (not existing)
-                  (library-datum-equal? binding-library-key scheme-base-library-key))
+                  (library-datum-equal? binding-library-key
+                    scheme-base-library-key))
               (set-syntax-environment-frame!
                syntax-environment
                (cons (cons name object)
@@ -4655,17 +4735,21 @@
         (resolve-import-set import-set context value-environment))))
 
     (define (eval-import form environment context)
-      "Evaluate an import declaration into the active value and syntax frames."
+      "Evaluate an import declaration into the active value and syntax frames.\
+"
       #((parameters
          (form (type pair)
-          (description ("Import declaration form whose import sets are installed.")))
+          (description
+            ("Import declaration form whose import sets are installed.")))
          (environment (type environment)
-          (description ("Value environment receiving the imported value bindings.")))
+          (description
+            ("Value environment receiving the imported value bindings.")))
          (context (type eval-context)
           (description
            ("Evaluation context whose syntax environment and registry"
              "are used."))))
-        (returns . ("The unspecified value after installing every import set."))
+        (returns .
+          ("The unspecified value after installing every import set."))
         (effects state-read state-write error))
       (let ((parts (proper-list-elements form "import declaration")))
         (if (< (length parts) 2)
@@ -4684,7 +4768,8 @@
       "Parse export clauses into internal-name/external-name pairs."
       #((parameters
          (forms (type list)
-          (description ("List of export clause forms (identifiers or rename forms)."))))
+          (description
+            ("List of export clause forms (identifiers or rename forms)."))))
         (returns (type pair)
          (description
           ("A list of internal-name/external-name pairs in declaration"
@@ -4702,7 +4787,8 @@
                 (let ((parts (proper-list-elements form "export rename")))
                   (if (not (= (length parts) 3))
                       (eval-error
-                       "export rename requires internal and external identifiers"))
+                       "export rename requires internal and external identifie\
+rs"))
                   (loop
                    (cdr rest)
                    (cons
@@ -4721,7 +4807,8 @@
       "Report whether a cond-expand feature requirement is satisfied."
       (cond
        ((identifier-datum? requirement)
-        (library-memq (identifier-datum-name requirement) '(r7rs srfi-0 consent)))
+        (library-memq (identifier-datum-name requirement) '(r7rs srfi-0
+          consent)))
        ((pair? requirement)
         (let* ((parts (proper-list-elements requirement "feature requirement"))
                (operator (car parts)))
@@ -4760,7 +4847,8 @@
        (else #f)))
 
     (define (expand-library-cond-expand clauses context environment)
-      "Select declarations from the first satisfied library cond-expand clause."
+      "Select declarations from the first satisfied library cond-expand clause\
+."
       (let loop ((rest clauses))
         (if (null? rest)
             (eval-error "unfulfilled library cond-expand")
@@ -4853,7 +4941,8 @@
       (path-policy-allows-file? path (context-include-paths context)))
 
     (define (resolve-include-file filename context operation binding)
-      "Resolve FILENAME against the include directory and enforce file policy."
+      "Resolve FILENAME against the include directory and enforce file policy.\
+"
       (let* ((authorization
               (authorize-file-capability
                filename
@@ -4896,7 +4985,8 @@
          (path (type string)
           (description "Filesystem path of the file to read.")))
         (returns (type string)
-         (description ("A string holding the entire contents of the file at PATH.")))
+         (description
+           ("A string holding the entire contents of the file at PATH.")))
         (effects state-read))
       (call-with-input-file
        path
@@ -4936,7 +5026,8 @@
              previous-directory)))))
 
     (define (read-include-file-forms filename context fold-case? operation)
-      "Read and parse all forms from an include file, returning forms and directory."
+      "Read and parse all forms from an include file, returning forms and dire\
+ctory."
       (let* ((path (resolve-include-file
                     filename
                     context
@@ -5003,7 +5094,8 @@
              (external-name (cdr spec))
              (cell (environment-cell value-environment internal-name))
              (syntax-binding
-              (library-syntax-environment-ref syntax-environment internal-name)))
+              (library-syntax-environment-ref syntax-environment
+                internal-name)))
         (cond
          ((and cell syntax-binding)
           (eval-error
@@ -5068,7 +5160,8 @@
               (eval-error "invalid library name" name))
           (let ((library-key (library-name-key name))
                 (value-environment (consent-make-empty-environment))
-                (syntax-environment (library-make-empty-syntax-environment #f)))
+                (syntax-environment (library-make-empty-syntax-environment
+                  #f)))
             (let loop ((raw-declarations (cddr parts))
                        (export-spec-list '()))
               (if (null? raw-declarations)
@@ -5152,7 +5245,8 @@
                              operator
                              'include-library-declarations)
                             (eval-error
-                             "include-library-declarations must expand before evaluation"
+                             "include-library-declarations must expand before \
+evaluation"
                              operator))
                            (else
                             (eval-error

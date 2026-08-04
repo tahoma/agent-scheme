@@ -1,4 +1,4 @@
-;;; consent-scheme-module-boundary-test.el --- Portable module boundary tests  -*- lexical-binding: t; -*-
+;;; consent-scheme-module-boundary-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -30,7 +30,9 @@
      (consent--test-target-file "scheme/consent/version.sld"))
     (goto-char (point-min))
     (unless (re-search-forward
-             "'(consent-version[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\))"
+             (concat "'(consent-version[[:space:]]+\\([0-9]+\\)"
+                     "[[:space:]]+\\([0-9]+\\)"
+                     "[[:space:]]+\\([0-9]+\\))")
              nil
              t)
       (error "Could not read target Consent Scheme version datum"))
@@ -39,7 +41,8 @@
             (match-string 2)
             (match-string 3))))
 
-(ert-deftest consent-scheme-module-boundary-test-runtime-version-loads-outside-repo ()
+(ert-deftest
+  consent-scheme-module-boundary-test-runtime-version-loads-outside-repo ()
   "Load portable runtime version data from a non-repository working directory."
   (let ((runner (consent--scheme-module-boundary-runner)))
     (skip-unless runner)

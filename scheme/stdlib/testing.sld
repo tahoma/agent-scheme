@@ -832,7 +832,8 @@
     (define (%test-match-all . predicates)
       "Return a specifier matching only when every PREDICATES item matches."
       (lambda (runner)
-        ;; Stateful specifiers such as `test-match-nth` must observe every test,
+        ;; Stateful specifiers such as `test-match-nth` must observe every
+        ;; test,
         ;; even when an earlier predicate already determines the conjunction.
         (let loop ((rest predicates) (matched? #t))
           (if (null? rest)

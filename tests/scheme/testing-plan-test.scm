@@ -150,7 +150,8 @@
     (test-assert "balanced direct shards exactly partition full programs"
                  (programs-exactly-partitioned?
                   programs 'full direct-shards))
-    (test-assert "balanced compiled shards exactly partition admitted programs"
+    (test-assert "balanced compiled shards exactly partition admitted programs\
+"
                  (programs-exactly-partitioned?
                   programs 'compiled compiled-shards)))
   (test-equal "compiled live shard uses the self-hosted program"

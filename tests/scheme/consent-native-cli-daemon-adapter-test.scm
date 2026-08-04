@@ -6,8 +6,9 @@
 ;;; checked-in native-cli-daemon adapter declaration and capability manifest as
 ;;; Scheme data, and validates library names, authority classes, handle kinds,
 ;;; event kinds, error kinds, capability and boundary record shapes, and the
-;;; mock noninteractive-confirmation and stale-handle denials.  It uses only the
-;;; standard R7RS reader, so it needs no Consent runtime libraries and starts no
+;;; mock noninteractive-confirmation and stale-handle denials. It uses only the
+;;; standard R7RS reader, so it needs no Consent runtime libraries and starts
+;;; no
 ;;; real process, terminal, socket, or daemon boundary.
 
 (import (scheme base)
@@ -39,7 +40,8 @@
        (every? (lambda (item) (in-set? item right)) left)
        (every? (lambda (item) (in-set? item left)) right)))
 
-;; Return RECORD's field forms, treating a leading head symbol as non-field data
+;; Return RECORD's field forms, treating a leading head symbol as non-field
+;; data
 ;; and a leading sub-list as the first field of a headless record.
 (define (record-fields record)
   (if (pair? (car record)) record (cdr record)))
@@ -233,7 +235,8 @@
     (test-assert (list name 'library) (in-set? library provided-libraries))
     (test-assert (list name 'authority) (in-set? authority authority-classes))
     (test-assert (list name 'handle-kind) (in-set? handle-kind handle-kinds))
-    (test-equal (list name 'effect-path) 'shared-capability-request effect-path)
+    (test-equal (list name 'effect-path) 'shared-capability-request
+      effect-path)
     (test-equal (list name 'effect) (authority-effect authority) effect)))
 
 ;; Validate one boundary record holds every field its head requires.
@@ -265,7 +268,8 @@
           (test-equal (list id 'decision-reason)
              reason
              (field-value decision 'reason))
-          (test-equal (list id 'error-kind) kind (field-value error-form 'kind))
+          (test-equal (list id 'error-kind) kind (field-value error-form
+            'kind))
           (test-assert (list id 'error-kind-declared)
              (in-set? (field-value error-form 'kind) error-kinds))))))
 
@@ -275,7 +279,8 @@
 (test-equal 'fixture-tag 'consent-host-adapter-fixture (car fixture)))
 (testing-registry-case
  'fixture-id '(portable core)
-(test-equal 'fixture-id 'native-cli-daemon-host-adapter (field-value fixture 'id)))
+(test-equal 'fixture-id 'native-cli-daemon-host-adapter (field-value fixture
+  'id)))
 (testing-registry-case
  'fixture-status '(portable core)
 (test-equal 'fixture-status 'contract (field-value fixture 'status)))
@@ -290,7 +295,8 @@
 (test-equal 'adapter-contract 'r7rs-small (field-value adapter 'contract)))
 (testing-registry-case
  'manifest-adapter '(portable core)
-(test-equal 'manifest-adapter 'native-cli-daemon (field-value manifest 'adapter)))
+(test-equal 'manifest-adapter 'native-cli-daemon (field-value manifest
+  'adapter)))
 (testing-registry-case
  'manifest-effect-path '(portable core)
 (test-equal 'manifest-effect-path
@@ -377,4 +383,5 @@
 
 ;; Report the aggregate result and fail the process on any mismatch.
 
-(testing-runner-main "Consent Native Cli Daemon Adapter portable tests" (command-line))
+(testing-runner-main "Consent Native Cli Daemon Adapter portable tests"
+  (command-line))

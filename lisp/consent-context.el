@@ -1,4 +1,4 @@
-;;; consent-context.el --- Current request and focus context  -*- lexical-binding: t; -*-
+;;; consent-context.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -6,7 +6,8 @@
 
 ;; The `(agent context)' library exposes the current request, editor focus,
 ;; region, buffer, project, and conversation summary as Scheme-readable datums.
-;; Live host objects stay behind opaque handles and read-only observation policy.
+;; Live host objects stay behind opaque handles and read-only observation
+;; policy.
 
 ;;; Code:
 

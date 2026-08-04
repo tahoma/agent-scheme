@@ -39,7 +39,8 @@
     #f))
 
 (define (with-seeded-random-source stream substream thunk)
-  "Call THUNK while SRFI 194 generator constructors use a deterministic source."
+  "Call THUNK while SRFI 194 generator constructors use a deterministic source\
+."
   (let ((source (make-random-source)))
     (random-source-pseudo-randomize! source stream substream)
     (with-random-source source thunk)))
@@ -147,7 +148,8 @@
               (if (= offset n)
                   expected
                   (begin
-                    (vector-set! expected offset (/ (vector-ref weights offset) sum))
+                    (vector-set! expected offset (/ (vector-ref weights offset)
+                      sum))
                     (normalize (+ offset 1))))))
           (let* ((rank (+ index 1))
                  (weight (expt (+ rank deformation) (- exponent))))
@@ -177,7 +179,8 @@
                 tolerance)
                (loop (+ index 1)))))))))
 
-;; Fixed-width integer generator cases: name, constructor, lower bound, upper bound.
+;; Fixed-width integer generator cases: name, constructor, lower bound, upper
+;; bound.
 (define fixed-integer-cases
   (list
    (list 'u1 make-random-u1-generator 0 2)
@@ -220,7 +223,8 @@
       (lambda ()
         (test-equal 'seeded-integer-replay
              left
-             (generator->fixed-list (make-random-integer-generator -100 100) 16))))))))
+             (generator->fixed-list (make-random-integer-generator -100 100)
+               16))))))))
 
 (testing-registry-case
  'random-real-generator-broad-range '(portable stdlib)
@@ -228,7 +232,8 @@
  12
  0
  (lambda ()
-   (let ((values (generator->fixed-list (make-random-real-generator -2.5 7.5) 400)))
+   (let ((values (generator->fixed-list (make-random-real-generator -2.5 7.5)
+     400)))
      (test-assert 'random-real-generator-broad-range
              (all-real-values-in-range? values -2.5 7.5))
      (test-assert 'random-real-generator-hits-lower-half
@@ -251,7 +256,8 @@
           (generator-count-if (make-bernoulli-generator 0.7)
                               3000
                               (lambda (value) (= value 1)))))
-     (check-ratio-near 'bernoulli-statistical-frequency successes 2100 0.12)))))
+     (check-ratio-near 'bernoulli-statistical-frequency successes 2100
+       0.12)))))
 
 (testing-registry-case
  'categorical-first-frequency '(portable stdlib)
@@ -281,10 +287,14 @@
  15
  0
  (lambda ()
-   (let ((counts (categorical-counts (make-binomial-generator 10 0.25) 11 8000)))
-     (check-ratio-near 'binomial-zero-frequency (vector-ref counts 0) 450.508 0.30)
-     (check-ratio-near 'binomial-two-frequency (vector-ref counts 2) 2252.541 0.20)
-     (check-ratio-near 'binomial-five-frequency (vector-ref counts 5) 467.011 0.30)))))
+   (let ((counts (categorical-counts (make-binomial-generator 10 0.25) 11
+     8000)))
+     (check-ratio-near 'binomial-zero-frequency (vector-ref counts 0) 450.508
+       0.30)
+     (check-ratio-near 'binomial-two-frequency (vector-ref counts 2) 2252.541
+       0.20)
+     (check-ratio-near 'binomial-five-frequency (vector-ref counts 5) 467.011
+       0.30)))))
 
 (testing-registry-case
  'normal-mean '(portable stdlib)
@@ -325,9 +335,11 @@
  19
  0
  (lambda ()
-   (let ((small-summary (generator-mean-and-variance (make-poisson-generator 4.0)
+   (let ((small-summary (generator-mean-and-variance (make-poisson-generator
+     4.0)
                                                      8000))
-         (large-summary (generator-mean-and-variance (make-poisson-generator 40.0)
+         (large-summary (generator-mean-and-variance (make-poisson-generator
+           40.0)
                                                      8000)))
      (check-near 'poisson-small-mean (car small-summary) 4.0 0.15)
      (check-near 'poisson-small-variance (cadr small-summary) 4.0 0.35)
@@ -353,7 +365,8 @@
    (let ((sphere-points (generator->fixed-list (make-sphere-generator 3) 600)))
      (for-each
       (lambda (point)
-        (check-near 'sphere-point-on-surface (vector-sum-squares point) 1.0 0.000000001))
+        (check-near 'sphere-point-on-surface (vector-sum-squares point) 1.0
+          0.000000001))
       sphere-points)
      (check-near 'sphere-first-coordinate-mean
                  (vector-mean sphere-points 0 600)
@@ -374,7 +387,8 @@
           (points (generator->fixed-list (make-ellipsoid-generator axes) 500)))
      (for-each
       (lambda (point)
-        (check-near 'ellipsoid-point-on-surface (ellipsoid-sum point axes) 1.0 0.000000001))
+        (check-near 'ellipsoid-point-on-surface (ellipsoid-sum point axes) 1.0
+          0.000000001))
       points)
      (check-near 'ellipsoid-first-coordinate-mean
                  (vector-mean points 0 500)
@@ -413,7 +427,8 @@
                            (set! rest (cdr rest))
                            value)))
                      500
-                     (lambda (point) (> (ellipsoid-sum point axes) 0.75)))))))))
+                     (lambda (point) (> (ellipsoid-sum point axes)
+                       0.75)))))))))
 
 (testing-registry-case
  'gsampling-empty '(portable stdlib)
@@ -424,7 +439,8 @@
 (testing-registry-case
  'gsampling-mixed-finite-generators '(portable stdlib)
 (test-assert 'gsampling-mixed-finite-generators
-             (let ((sample (gsampling (generator 'a) (generator) (generator 'b 'c))))
+             (let ((sample (gsampling (generator 'a) (generator) (generator 'b
+               'c))))
               (let* ((values (generator->fixed-list sample 4))
                      (draws (list (car values) (cadr values) (caddr values))))
                 (and (member 'a draws)
@@ -503,4 +519,5 @@
   (list 'invalid-ball-axes
         (lambda () (make-ball-generator '#(1.0 -1.0)))))))
 
-(testing-runner-main "Stdlib Random Data Generators Upstream portable tests" (command-line))
+(testing-runner-main "Stdlib Random Data Generators Upstream portable tests"
+  (command-line))

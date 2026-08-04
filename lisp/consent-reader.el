@@ -1,4 +1,4 @@
-;;; consent-reader.el --- R7RS datum reader  -*- lexical-binding: t; -*-
+;;; consent-reader.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -1133,13 +1133,15 @@ The return value is (BODY EXACTNESS RADIX), or nil."
 (defun consent--decimal-token-p (body)
   "Return non-nil if BODY is a decimal number token."
   (string-match-p
-   "\\`[+-]?\\(?:[0-9]+\\(?:\\.[0-9]*\\)?\\|\\.[0-9]+\\)\\(?:[eE][+-]?[0-9]+\\)?\\'"
+   (concat "\\`[+-]?\\(?:[0-9]+\\(?:\\.[0-9]*\\)?\\|\\.[0-9]+\\)"
+           "\\(?:[eE][+-]?[0-9]+\\)?\\'")
    body))
 
 (defun consent--parse-exact-decimal (body)
   "Return exact rational components for decimal BODY, or nil."
   (when (string-match
-         "\\`\\([+-]?\\)\\([0-9]*\\)\\(?:\\.\\([0-9]*\\)\\)?\\(?:[eE]\\([+-]?[0-9]+\\)\\)?\\'"
+         (concat "\\`\\([+-]?\\)\\([0-9]*\\)\\(?:\\.\\([0-9]*\\)\\)?"
+                 "\\(?:[eE]\\([+-]?[0-9]+\\)\\)?\\'")
          body)
     (let* ((sign (if (string= (match-string 1 body) "-") -1 1))
            (whole (or (match-string 2 body) ""))
@@ -1287,7 +1289,8 @@ The return value is (BODY EXACTNESS RADIX), or nil."
            reader token lower-body exactness radix)))))
 
 (defun consent--character-name-start-p (char)
-  "Report whether CHAR (an ASCII letter) can begin a named or #\\x hex literal."
+  "Report whether CHAR (an ASCII letter) can begin a named or #\\x hex
+    literal."
   (and char
        (or (and (<= ?a char) (<= char ?z))
            (and (<= ?A char) (<= char ?Z)))))
@@ -1675,7 +1678,8 @@ Return (DATUM . NEXT-POSITION).  DATUM is
                (integerp position)
                (<= 0 position)
                (<= position (length source)))
-    (signal 'wrong-type-argument (list 'string-position (list source position))))
+    (signal 'wrong-type-argument
+            (list 'string-position (list source position))))
   (let ((reader (consent--new-reader source options)))
     (let ((consent--active-symbol-table
            (consent--reader-symbol-table reader)))
@@ -1805,7 +1809,8 @@ malformed region via RESYNC with guaranteed forward progress."
         (let* ((range (consent--recovery-range line-starts start length))
                (text (substring source start length))
                (diagnostic
-                (consent--recovery-diagnostic source-id 'incomplete reason range))
+                (consent--recovery-diagnostic
+                 source-id 'incomplete reason range))
                (span (consent--recovery-span 'incomplete reason range text)))
           (setf (consent--reader-position reader) start)
           (consent--make-recovery-step
@@ -1822,7 +1827,8 @@ malformed region via RESYNC with guaranteed forward progress."
         (consent--make-recovery-step 'invalid nil diagnostic span next)))))
 
 (defun consent--recover-step (reader resync line-starts source-id options)
-  "Read one form from READER in recovery mode and return a `consent-recovery-step'.
+  "Read one form from READER in recovery mode and return a
+    `consent-recovery-step'.
 Leading trivia is skipped first so a malformed region is anchored at the
 datum start, not at preceding whitespace; trivia-level failures (such as an
 unterminated block comment) are anchored where the trivia began.  RESYNC is
@@ -1876,7 +1882,8 @@ otherwise `complete'.  The resync point is caller-selectable through the
 `:resync' option (defaulting to `consent-resync-to-next-form')."
   (unless (stringp source)
     (signal 'wrong-type-argument (list 'stringp source)))
-  (let* ((resync (consent--option options :resync #'consent-resync-to-next-form))
+  (let* ((resync (consent--option
+                  options :resync #'consent-resync-to-next-form))
          (source-id (consent--option options :source-id nil))
          (line-starts (consent--source-line-starts source))
          (reader (consent--recovery-reader source options))
@@ -1917,8 +1924,10 @@ continuation prompts never confuse a valid prefix with a syntax error."
                (integerp position)
                (<= 0 position)
                (<= position (length source)))
-    (signal 'wrong-type-argument (list 'string-position (list source position))))
-  (let* ((resync (consent--option options :resync #'consent-resync-to-next-form))
+    (signal 'wrong-type-argument
+            (list 'string-position (list source position))))
+  (let* ((resync (consent--option
+                  options :resync #'consent-resync-to-next-form))
          (source-id (consent--option options :source-id nil))
          (line-starts (consent--source-line-starts source))
          (reader (consent--recovery-reader source options)))
@@ -2322,7 +2331,8 @@ surface.  Mirrors the portable `consent-datum->external-bounded'."
            (t (emit (atom-text value)))))
          (render-pair
           (value depth)
-          ;; Render pair VALUE at DEPTH, breaking a cycle back to an ancestor or
+          ;; Render pair VALUE at DEPTH, breaking a cycle back to an ancestor
+          ;; or
           ;; an over-deep nesting with the marker, and eliding the spine past
           ;; LENGTH-LIMIT with a trailing marker.
           (cond
@@ -2388,7 +2398,8 @@ surface.  Mirrors the portable `consent-datum->external-bounded'."
          (render-bytevector
           (value depth)
           ;; Render bytevector VALUE at DEPTH (over-deep nesting renders as the
-          ;; marker), eliding bytes past LENGTH-LIMIT with a trailing marker; no
+          ;; marker), eliding bytes past LENGTH-LIMIT with a trailing marker;
+          ;; no
           ;; cycle check is needed since a bytevector holds no compounds.
           (cond
            ((and depth-limit (>= depth depth-limit)) (emit marker))
