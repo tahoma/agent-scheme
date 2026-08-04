@@ -1,27 +1,35 @@
-;;; repl-shell.sld --- Portable terminal REPL shell over the interaction contract
+;;; repl-shell.sld --- Portable terminal REPL shell over the interaction
+;;; contract
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; Host/core boundary: this library is the portable, host-neutral half of the
-;;; terminal REPL shell (docs/portable-repl.md).  It implements the host-neutral
+;;; terminal REPL shell (docs/portable-repl.md). It implements the host-neutral
 ;;; obligations of the cross-host REPL interaction contract
-;;; (docs/repl-interaction-contract.md) on the portable R7RS runtime: incremental
+;;; (docs/repl-interaction-contract.md) on the portable R7RS runtime:
+;;; incremental
 ;;; one-form-at-a-time reading, evaluation in a durable session interaction
-;;; environment, and emission of the contract's Scheme-readable record vocabulary
+;;; environment, and emission of the contract's Scheme-readable record
+;;; vocabulary
 ;;; (`repl-prompt', `repl-submission', `repl-result', `repl-condition',
 ;;; `repl-exit').
 ;;;
-;;; The loop is a driver over the substrate, not new runtime mechanism.  Durable
-;;; session evaluation is `(consent eval)' `consent-interaction-eval-form' over a
+;;; The loop is a driver over the substrate, not new runtime mechanism. Durable
+;;; session evaluation is `(consent eval)' `consent-interaction-eval-form' over
+;;; a
 ;;; `consent-make-interaction-context'; values, results, and conditions are the
-;;; existing `(consent result)' datums; reading is the shared `(consent reader)'.
+;;; existing `(consent result)' datums; reading is the shared `(consent
+;;; reader)'.
 ;;; The driver consumes only interaction input; evaluated forms write their own
 ;;; output to the program ports, so a scripted consumer of program stdout is
 ;;; never corrupted by prompts, results, or diagnostics.
 ;;;
-;;; `cli-repl-drive' is a pure function from an interaction-input chunk source to
-;;; the list of contract records, so the cross-host conformance corpus (#392) and
-;;; the portable smoke tests can assert the emitted record stream without a TTY.
+;;; `cli-repl-drive' is a pure function from an interaction-input chunk source
+;;; to
+;;; the list of contract records, so the cross-host conformance corpus (#392)
+;;; and
+;;; the portable smoke tests can assert the emitted record stream without a
+;;; TTY.
 ;;; `cli-repl-main' wires that driver to stdin and the diagnostic stream for an
 ;;; interactive or piped terminal session.
 ;;;
@@ -30,26 +38,34 @@
 ;;; host-neutral (cli repl-chrome) layer.  `cli-repl-main' selects the chrome,
 ;;; resolves `--color=auto|always|never' against the control channel's terminal
 ;;; status and NO_COLOR, applies the chrome to each record, and flushes the
-;;; control channel so a no-newline prompt appears before the blocking read.  It
+;;; control channel so a no-newline prompt appears before the blocking read. It
 ;;; also decides from stdin's terminal status whether the interaction input is
-;;; already echoed -- an interactive TTY echoes each typed form in cooked mode --
+;;; already echoed -- an interactive TTY echoes each typed form in cooked mode
+;;; --
 ;;; so the `comment' chrome suppresses its own submission echo and a captured
-;;; transcript keeps exactly one replayable copy of each form.  Chrome text stays
-;;; on the control channel (stderr).  Program output follows a per-chrome policy:
-;;; the replayable `comment' chrome OWNS it, rendering each chunk as a commented
-;;; (`;;   :: ') line on the control channel so a captured transcript replays the
+;;; transcript keeps exactly one replayable copy of each form. Chrome text
+;;; stays
+;;; on the control channel (stderr). Program output follows a per-chrome
+;;; policy:
+;;; the replayable `comment' chrome OWNS it, rendering each chunk as a
+;;; commented
+;;; (`;; :: ') line on the control channel so a captured transcript replays the
 ;;; output too, leaving stdout clean; every other chrome
-;;; (`classic'/`quiet'/`silent'/`datum') leaves program output raw on stdout.  So
+;;; (`classic'/`quiet'/`silent'/`datum') leaves program output raw on stdout.
+;;; So
 ;;; a consumer that wants raw program output on stdout selects one of those (or
-;;; `--chrome silent' for output alone).  `--chrome datum' recovers the canonical
+;;; `--chrome silent' for output alone). `--chrome datum' recovers the
+;;; canonical
 ;;; record stream and is always reachable.
 ;;;
 ;;; Transcript capture and replay (docs/repl-interaction-contract.md, "Capture
 ;;; and Replay") build on that canonical surface.  The `datum' chrome stream is
 ;;; the capture format: one contract record datum per line, written by the
 ;;; consent writer and reloadable with the standard reader.
-;;; `cli-repl-records-from-datum-stream' reloads a captured stream into records;
-;;; `cli-repl-submissions-from-records' extracts the complete submissions, which
+;;; `cli-repl-records-from-datum-stream' reloads a captured stream into
+;;; records;
+;;; `cli-repl-submissions-from-records' extracts the complete submissions,
+;;; which
 ;;; `cli-repl-replay-records' re-feeds to a FRESH session, so a transcript
 ;;; doubles as a reproducible bug report and a fixture capture.  Replay
 ;;; reproduces submissions, ordering, and deterministic results/conditions, but
@@ -57,7 +73,8 @@
 ;;; granted, so an effect that succeeded under the captured authority fails
 ;;; closed under a weaker replay posture -- surfaced as a `repl-condition', not
 ;;; the recorded value.  `cli-repl-replay-report' compares the captured and
-;;; replayed per-submission outcomes and reports any such divergence rather than
+;;; replayed per-submission outcomes and reports any such divergence rather
+;;; than
 ;;; letting it pass silently; the `--replay FILE' terminal mode emits the
 ;;; replayed stream and that report and exits non-zero on divergence.
 
@@ -90,12 +107,14 @@
           (cli repl-chrome))
 
   ;; The one host-specific obligation of the chrome layer: deciding whether a
-  ;; given port is a terminal.  The control channel (stderr) drives `--color=auto'
+  ;; given port is a terminal. The control channel (stderr) drives
+  ;; `--color=auto'
   ;; -- ANSI off when the session is piped or redirected -- and the interaction
   ;; input (stdin) drives the `comment' chrome's echo decision -- suppress the
   ;; submission echo when the terminal already echoes typed forms.  R7RS-small
   ;; has no portable terminal-port predicate, so each host branch imports its
-  ;; own; hosts without one fall to the `else' branch, where a port is treated as
+  ;; own; hosts without one fall to the `else' branch, where a port is treated
+  ;; as
   ;; non-terminal (color off, echo kept).
   (cond-expand
    (gambit
@@ -157,7 +176,8 @@
         (let find-start ((start 0))
           (cond
            ((>= start length) "")
-           ((repl--whitespace? (string-ref string start)) (find-start (+ start 1)))
+           ((repl--whitespace? (string-ref string start)) (find-start (+ start
+             1)))
            (else
             (let find-end ((end length))
               (if (repl--whitespace? (string-ref string (- end 1)))
@@ -165,15 +185,19 @@
                   (substring string start end))))))))
 
     (define (repl--horizontal-whitespace? char)
-      "Return #t when CHAR is space or tab (horizontal whitespace, not a line break)."
+      "Return #t when CHAR is space or tab (horizontal whitespace, not a line \
+break)."
       (or (char=? char #\space)
           (char=? char #\tab)))
 
     (define (repl--submission-boundary buffer next)
       "Return the index in BUFFER where program input begins after a form"
-      "ending at NEXT.  Skip horizontal whitespace after the form; if a newline"
-      "follows, consume exactly that newline as the submission terminator (the"
-      "Enter that submits a line is not program data), so program input begins"
+      "ending at NEXT.  Skip horizontal whitespace after the form; if a newlin\
+e"
+      "follows, consume exactly that newline as the submission terminator (the\
+"
+      "Enter that submits a line is not program data), so program input begins\
+"
       "on the next line.  Otherwise the boundary is NEXT and any same-line"
       "trailing text is program input for an evaluated read."
       (let ((length (string-length buffer)))
@@ -188,7 +212,8 @@
     ;;;; Interaction-input chunk sources
 
     (define (repl--list-chunk-source chunks)
-      "Return a chunk source thunk yielding each newline-kept string in CHUNKS then EOF."
+      "Return a chunk source thunk yielding each newline-kept string in CHUNKS \
+then EOF."
       (let ((remaining chunks))
         (lambda ()
           (if (null? remaining)
@@ -255,7 +280,8 @@
              '()))))
 
     (define (repl--submission-record session ordinal source complete eof)
-      "Build a `repl-submission' record for the SOURCE read at ORDINAL in SESSION."
+      "Build a `repl-submission' record for the SOURCE read at ORDINAL in SESS\
+ION."
       (list 'repl-submission
             (list 'id (repl--tag "sub" ordinal))
             (list 'session (repl--session-field session))
@@ -266,7 +292,8 @@
 
     (define (repl--result-record session ordinal evaluation-result display)
       "Build a `repl-result' record wrapping EVALUATION-RESULT and DISPLAY at"
-      "ORDINAL.  The `ordinal' field mirrors `repl-prompt' so a pure chrome can"
+      "ORDINAL.  The `ordinal' field mirrors `repl-prompt' so a pure chrome ca\
+n"
       "right-align the result marker to the prompt-gutter width without"
       "coupling to the `submission' id format."
       (list 'repl-result
@@ -280,7 +307,8 @@
     (define (repl--condition-record session ordinal phase recoverable
                                     condition display)
       "Build a `repl-condition' record for PHASE/RECOVERABLE CONDITION at"
-      "ORDINAL.  The `ordinal' field mirrors `repl-prompt' so a pure chrome can"
+      "ORDINAL.  The `ordinal' field mirrors `repl-prompt' so a pure chrome ca\
+n"
       "right-align the condition marker to the prompt-gutter width."
       (list 'repl-condition
             (list 'id (repl--tag "cond" ordinal))
@@ -293,7 +321,8 @@
             (list 'display display)))
 
     (define (repl--exit-record session reason status count detail)
-      "Build a `repl-exit' record closing SESSION with REASON, STATUS, COUNT, DETAIL."
+      "Build a `repl-exit' record closing SESSION with REASON, STATUS, COUNT, \
+DETAIL."
       (list 'repl-exit
             (list 'session (repl--session-field session))
             (list 'reason reason)
@@ -304,7 +333,8 @@
     ;;;; Bounded result rendering (#508)
 
     ;; Default depth/length/size ceiling `repl--result-display' applies to the
-    ;; `repl-result' `display' field; a `render-limits' evaluator option overrides
+    ;; `repl-result' `display' field; a `render-limits' evaluator option
+    ;; overrides
     ;; it.  `consent-datum->external-bounded' documents the bounding semantics,
     ;; and the Emacs twin mirrors these defaults in
     ;; `consent-repl-stream-default-render-limits'.
@@ -312,7 +342,8 @@
       '((depth . 8) (length . 64) (size . 4096)))
 
     (define (repl--render-limits options)
-      "Return the render-limits alist from OPTIONS, or the documented default."
+      "Return the render-limits alist from OPTIONS, or the documented default.\
+"
       (let ((entry (assq 'render-limits options)))
         (if entry (cdr entry) cli-repl-default-render-limits)))
 
@@ -328,14 +359,16 @@
       (eq? (repl--field evaluation-result 'status) 'error))
 
     (define (repl--result-display evaluation-result limits)
-      "Return a human-readable display string for a non-error EVALUATION-RESULT,"
+      "Return a human-readable display string for a non-error EVALUATION-RESUL\
+T,"
       "bounded by LIMITS so a deep, long, or cyclic value renders in bounded"
       "time and space with the `...' truncation marker (#508)."
       (let ((status (repl--field evaluation-result 'status)))
         (cond
          ((eq? status 'values)
           (let ((entry (assq 'values (cdr evaluation-result))))
-            (consent-datum->external-bounded (cons 'values (cadr entry)) limits)))
+            (consent-datum->external-bounded (cons 'values (cadr entry))
+              limits)))
          (else
           (let ((value (repl--field evaluation-result 'value)))
             (consent-datum->external-bounded value limits))))))
@@ -401,7 +434,8 @@
     ;;;; Explicit-exit recognition
 
     (define (repl--exit-form? datum)
-      "Return #t when reader DATUM is a process-context exit/emergency-exit call."
+      "Return #t when reader DATUM is a process-context exit/emergency-exit ca\
+ll."
       (let ((stripped (strip-identifiers datum)))
         (and (pair? stripped)
              (let ((operator (consent-value->external (car stripped))))
@@ -409,7 +443,8 @@
                    (string=? operator "emergency-exit"))))))
 
     (define (repl--exit-disposition datum)
-      "Return (cons STATUS DETAIL) for an exit DATUM per the close-status rules."
+      "Return (cons STATUS DETAIL) for an exit DATUM per the close-status rule\
+s."
       (let ((stripped (strip-identifiers datum)))
         (if (or (null? (cdr stripped)) (not (pair? (cdr stripped))))
             (cons 'closed-ok #f)
@@ -427,7 +462,8 @@
           "reader error"))
 
     (define (repl--try-read buffer)
-      "Read one datum from BUFFER at position 0 over the recovery-aware reader."
+      "Read one datum from BUFFER at position 0 over the recovery-aware reader\
+."
       "Return (empty), (complete DATUM NEXT), (incomplete PENDING), or"
       "(malformed MESSAGE).  An incomplete read carries the reader's"
       "open-construct stack so the continuation prompt can render nesting"
@@ -452,7 +488,8 @@
 
     (define (repl--callable callback)
       "Return CALLBACK as a directly applicable host procedure."
-      "A self-hosted caller (consent --host-run) passes interpreted closures as"
+      "A self-hosted caller (consent --host-run) passes interpreted closures a\
+s"
       "engine callbacks; consent-apply-callable runs those in the calling"
       "program's context while host procedures pass through untouched."
       (if (procedure? callback)
@@ -470,21 +507,25 @@
                          (expires never)))
 
     (define (repl--option-value options key default)
-      "Return the value of OPTIONS entry KEY (a (key . values) pair), or DEFAULT."
+      "Return the value of OPTIONS entry KEY (a (key . values) pair), or DEFAU\
+LT."
       (let ((entry (assq key options)))
         (if entry (cdr entry) default)))
 
     (define (repl--interaction-options session-id read-chunk options)
       "Augment REPL OPTIONS with the session id, a program-input reader over"
       "READ-CHUNK, and the consent-by-invocation stdin grant, so the"
-      "interaction context shares one stdin cursor between the form reader and"
-      "evaluated reads.  Any grants already in OPTIONS are preserved by merging"
+      "interaction context shares one stdin cursor between the form reader and\
+"
+      "evaluated reads.  Any grants already in OPTIONS are preserved by mergin\
+g"
       "into the first capability-grants entry."
       (let ((reader (lambda ()
                       (let ((chunk (read-chunk)))
                         (if (eof-object? chunk) #f chunk))))
             (grants (cons repl--program-input-grant
-                          (repl--option-value options 'capability-grants '()))))
+                          (repl--option-value options 'capability-grants
+                            '()))))
         (cons (cons 'session-id session-id)
               (cons (cons 'program-input-reader reader)
                     (cons (cons 'capability-grants grants)
@@ -503,11 +544,13 @@
              ;; The live session manager owns one interaction context per
              ;; session.  Seeding installs the initial default session and a
              ;; factory that shares a single stdin cursor across sessions, so a
-             ;; `switch-session'/`create-session' verb run in one form redirects
+             ;; `switch-session'/`create-session' verb run in one form
+             ;; redirects
              ;; the next form to the now-current session's sandbox environment.
              (manager (consent-repl-session-manager))
              ;; The depth/length/size ceiling applied to each result `display'
-             ;; (#508); a `render-limits' option overrides the documented default.
+             ;; (#508); a `render-limits' option overrides the documented
+             ;; default.
              (render-limits (repl--render-limits options))
              (exit-code 0))
         (define (current-interaction)
@@ -547,7 +590,8 @@
               ;; emitting it after the read glues the gutter to the next result
               ;; line instead (#448).  Reaching this branch always means a
               ;; partial form is buffered, so the prompt is always warranted --
-              ;; including before an EOF-mid-form, where the gutter was shown and
+              ;; including before an EOF-mid-form, where the gutter was shown
+              ;; and
               ;; the user then hit Ctrl-D.
               (emit (repl--prompt-record session ordinal 'continuation #t
                                          (cadr outcome)))
@@ -588,7 +632,8 @@
                  (emit (repl--submission-record session ordinal source #f #t))
                  (emit (repl--condition-record
                         session ordinal 'read #f
-                        (repl--read-condition "unterminated form at end of input")
+                        (repl--read-condition
+                          "unterminated form at end of input")
                         "unterminated form at end of input"))
                  (emit (repl--exit-record
                         session 'eof 'closed-error count
@@ -604,28 +649,36 @@
                       (next (cadr payload))
                       (source (repl--trim (substring current 0 next)))
                       (boundary (repl--submission-boundary current next))
-                      ;; Everything after the submission's terminating newline is
-                      ;; this turn's program input, shared on the one stdin cursor.
+                      ;; Everything after the submission's terminating newline
+                      ;; is
+                      ;; this turn's program input, shared on the one stdin
+                      ;; cursor.
                       (program-input
                        (substring current boundary (string-length current))))
                  (cond
                   ((repl--exit-form? datum)
-                   (emit (repl--submission-record session ordinal source #t #f))
+                   (emit (repl--submission-record session ordinal source #t
+                     #f))
                    (let ((disposition (repl--exit-disposition datum)))
                      (emit (repl--exit-record session 'explicit
                                               (car disposition)
                                               (+ count 1)
                                               (cdr disposition)))))
                   (else
-                   (emit (repl--submission-record session ordinal source #t #f))
-                   ;; Resolve the session this form runs in *now*: a prior form's
+                   (emit (repl--submission-record session ordinal source #t
+                     #f))
+                   ;; Resolve the session this form runs in *now*: a prior
+                   ;; form's
                    ;; `switch-session'/`create-session' may have changed the
                    ;; manager's default, redirecting this turn to a different
-                   ;; sandbox environment.  All sessions share one stdin cursor.
+                   ;; sandbox environment. All sessions share one stdin cursor.
                    (let ((interaction (current-interaction)))
-                     ;; Seed the shared cursor so an evaluated read consumes the
-                     ;; input after this form; whatever it leaves unread is threaded
-                     ;; back as the next form-reading buffer, so neither reader steals
+                     ;; Seed the shared cursor so an evaluated read consumes
+                     ;; the
+                     ;; input after this form; whatever it leaves unread is
+                     ;; threaded
+                     ;; back as the next form-reading buffer, so neither reader
+                     ;; steals
                      ;; the other's characters.
                      (consent-interaction-seed-program-input! interaction
                                                               program-input)
@@ -645,7 +698,8 @@
                                   (repl--error-message result)))
                            (emit (repl--result-record
                                   session ordinal result
-                                  (repl--result-display result render-limits))))
+                                  (repl--result-display result
+                              render-limits))))
                        (loop (or (consent-interaction-program-input-remainder
                                   interaction)
                                  program-input)
@@ -679,11 +733,14 @@
            ("Chunk source thunk yielding the next newline-kept"
              "interaction-input string or EOF.")))
          (write-record (type procedure)
-          (description ("Procedure receiving each emitted contract record datum.")))
+          (description
+            ("Procedure receiving each emitted contract record datum.")))
          (write-output (type procedure)
-          (description ("Procedure receiving each drained program-output string.")))
+          (description
+            ("Procedure receiving each drained program-output string.")))
          (session (type symbol)
-          (description ("Session identifier symbol or string for the record stream.")))
+          (description
+            ("Session identifier symbol or string for the record stream.")))
          (maybe-options (type list)
           (description
            ("Optional single-element list holding the REPL option"
@@ -706,7 +763,8 @@
       (apply
        (case-lambda
        ((read-chunk session write-record)
-        (cli-repl-run read-chunk write-record (lambda (output) output) session))
+        (cli-repl-run read-chunk write-record (lambda (output) output)
+          session))
        ((read-chunk session write-record options)
         (cli-repl-run read-chunk
                       write-record
@@ -727,7 +785,8 @@
            ("Chunk source thunk yielding the next interaction-input"
              "string or EOF.")))
          (session (type (or symbol string))
-          (description ("Session identifier symbol or string for the record stream.")))
+          (description
+            ("Session identifier symbol or string for the record stream.")))
          (maybe-options (type list)
           (description
            ("Optional single-element list holding the REPL option"
@@ -771,7 +830,8 @@
            ("Interaction-input text to split into newline-kept chunks"
              "and drive.")))
          (session (type (or symbol string))
-          (description ("Session identifier symbol or string for the record stream.")))
+          (description
+            ("Session identifier symbol or string for the record stream.")))
          (maybe-options (type list)
           (description
            ("Optional single-element list holding the REPL option"
@@ -786,7 +846,8 @@
     ;; The canonical capture format is the `datum' chrome's record stream: one
     ;; contract record datum per line, written by the consent writer.  The
     ;; writer emits plain symbols, numerals, strings, and booleans, so the
-    ;; standard reader reloads each record with the same representation the live
+    ;; standard reader reloads each record with the same representation the
+    ;; live
     ;; loop produces for the fields replay consults (`source', `complete').
     (define (cli-repl-records-from-datum-stream text)
       "Reload a captured `datum'-chrome record stream TEXT into the list of"
@@ -813,7 +874,8 @@
                     (loop))))))))
 
     (define (cli-repl-submissions-from-records records)
-      "Return the external source text of each complete submission in RECORDS,"
+      "Return the external source text of each complete submission in RECORDS,\
+"
       "in order.  A `repl-submission' with `(complete #t)' contributes its"
       "`source'; an incomplete (EOF-truncated) submission, prompts, results,"
       "conditions, and the exit record contribute nothing, so the result is"
@@ -1026,7 +1088,8 @@
     ;;;; Terminal entry
 
     (define (repl--color-inline argument)
-      "Return the VALUE in a `--color=VALUE' ARGUMENT, or #f for any other argument."
+      "Return the VALUE in a `--color=VALUE' ARGUMENT, or #f for any other arg\
+ument."
       (let* ((prefix "--color=")
              (length (string-length prefix)))
         (and (>= (string-length argument) length)
@@ -1098,7 +1161,8 @@
       "(stdout) and untouched by the control channel.  ECHO -- the chrome's"
       "output formatter -- yields the comment chrome's control-channel"
       "segments, or #f for a chrome that keeps output raw; that #f is the"
-      "switch between the two streams.  The engine stays chrome-agnostic; this"
+      "switch between the two streams.  The engine stays chrome-agnostic; this\
+"
       "writer carries the policy."
       (lambda (output)
         (let ((segments (echo output)))
@@ -1127,7 +1191,8 @@
          (input (type string)
           (description "Interaction-input text driven through the REPL."))
          (session (type (or symbol string))
-          (description ("Session identifier symbol or string for the record stream.")))
+          (description
+            ("Session identifier symbol or string for the record stream.")))
          (chrome-name (type symbol)
           (description
            ("Chrome name symbol selecting the control-channel"
@@ -1175,7 +1240,8 @@
          (input (type string)
           (description "Interaction-input text driven through the REPL."))
          (session (type (or symbol string))
-          (description ("Session identifier symbol or string for the record stream.")))
+          (description
+            ("Session identifier symbol or string for the record stream.")))
          (chrome-name (type symbol)
           (description
            ("Chrome name symbol selecting the control-channel"
@@ -1229,7 +1295,8 @@
            ("Chrome procedure painting each replayed record for"
              "RECORD-PORT.")))
          (color? (type boolean)
-          (description "True to paint the replayed record stream with ANSI color."))
+          (description
+            "True to paint the replayed record stream with ANSI color."))
          (record-port (type port)
           (description
            ("Output port receiving the painted replay stream and report"
@@ -1239,7 +1306,8 @@
           ("0 when the replay reproduced the captured outcomes, 1 when"
             "it diverged.")))
         (effects host-eval state-read state-write allocation error))
-      (let* ((captured (cli-repl-records-from-datum-stream (repl--read-file path)))
+      (let* ((captured (cli-repl-records-from-datum-stream (repl--read-file
+        path)))
              (replayed (cli-repl-replay-records captured session))
              (write-record (repl--rendering-writer chrome color? record-port))
              (report (cli-repl-replay-report captured replayed)))
@@ -1252,7 +1320,8 @@
         (if (eq? (repl--field report 'status) 'reproduced) 0 1)))
 
     (define (repl--fatal message detail)
-      "Write MESSAGE and DETAIL to the control channel and exit with status 2."
+      "Write MESSAGE and DETAIL to the control channel and exit with status 2.\
+"
       (let ((port (current-error-port)))
         (display "consent-repl: " port)
         (display message port)
@@ -1293,7 +1362,8 @@
           (if replay-path
               (exit (cli-repl-replay-main replay-path session chrome
                                           color? record-port))
-              (let* (;; An interactive terminal echoes each typed form in cooked
+              (let*
+                (;; An interactive terminal echoes each typed form in cooked
                      ;; mode, so stdin being a TTY means the form is already on
                      ;; screen; the comment chrome then suppresses its own echo
                      ;; to keep one copy.

@@ -1,4 +1,4 @@
-;;; consent-task-library-test.el --- Agent task library tests  -*- lexical-binding: t; -*-
+;;; consent-task-library-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

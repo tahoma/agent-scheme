@@ -81,11 +81,13 @@
       (and (pair? form) (macro-symbol-eq? (car form) 'define)))
 
     (define (define-values-form? form)
-      "Report whether FORM is a define-values form after identifier unwrapping."
+      "Report whether FORM is a define-values form after identifier unwrapping\
+."
       #((parameters
          (form . "Candidate form to classify."))
         (returns (type boolean)
-         (description ("True when FORM is a pair whose head names define-values.")))
+         (description
+           ("True when FORM is a pair whose head names define-values.")))
         (effects pure))
       (and (pair? form) (identifier-named? (car form) 'define-values)))
 
@@ -224,7 +226,8 @@
          (tag (type symbol)
           (description "Symbol the head identifier must name.")))
         (returns (type boolean)
-         (description ("True when DATUM is a pair whose head identifier names TAG.")))
+         (description
+           ("True when DATUM is a pair whose head identifier names TAG.")))
         (effects pure))
       (and (pair? datum)
            (identifier-named? (car datum) tag)))
@@ -282,7 +285,8 @@
       "Raise the diagnostic represented by a syntax-error form."
       #((parameters
          (form (type pair)
-          (description ("A syntax-error form supplying the diagnostic message.")))
+          (description
+            ("A syntax-error form supplying the diagnostic message.")))
          (maybe-source-form (type list)
           (description "Optional source form named in the error.")))
         (returns . "Does not return; always raises an evaluation error.")
@@ -310,14 +314,16 @@
       (make-syntax-environment '() parent '()))
 
     (define (syntax-environment-ref syntax-environment name)
-      "Return NAME's syntax transformer by walking syntax-environment parents."
+      "Return NAME's syntax transformer by walking syntax-environment parents.\
+"
       #((parameters
          (syntax-environment (type syntax-environment)
           (description "Syntax environment to search."))
          (name (type symbol)
           (description "Keyword symbol whose transformer is sought.")))
         (returns (type (or syntax-transformer boolean))
-         (description "NAME's syntax transformer, or #f when no parent binds it."))
+         (description
+           "NAME's syntax transformer, or #f when no parent binds it."))
         (effects state-read))
       (let loop ((cursor syntax-environment))
         (cond
@@ -337,7 +343,8 @@
           (description "Syntax transformer to associate with NAME.")))
         (returns . ("An unspecified value; the frame gains the new binding."))
         (effects state-write error))
-      (if (macro-memq name (syntax-environment-imported-names syntax-environment))
+      (if (macro-memq name (syntax-environment-imported-names
+        syntax-environment))
           (eval-error "cannot redefine imported syntax binding" name))
       (set-syntax-environment-frame!
        syntax-environment
@@ -348,7 +355,8 @@
       "Run THUNK with CONTEXT temporarily using SYNTAX-ENVIRONMENT."
       #((parameters
          (context (type eval-context)
-          (description ("Evaluation context whose syntax environment is swapped.")))
+          (description
+            ("Evaluation context whose syntax environment is swapped.")))
          (syntax-environment (type syntax-environment)
           (description "Syntax environment to install for the call."))
          (thunk (type procedure)
@@ -421,7 +429,8 @@
             #f)))
 
     (define (ellipsis-identifier? datum ellipsis)
-      "Report whether DATUM names the active syntax-rules ellipsis identifier."
+      "Report whether DATUM names the active syntax-rules ellipsis identifier.\
+"
       (and (identifier-datum? datum)
            (macro-symbol-eq? (identifier-datum-name datum) ellipsis)))
 
@@ -431,7 +440,8 @@
          (datum (type list)
           (description "Candidate proper list to flatten.")))
         (returns (type (or list boolean))
-         (description ("DATUM's elements as a list, or #f when DATUM is improper.")))
+         (description
+           ("DATUM's elements as a list, or #f when DATUM is improper.")))
         (effects allocation))
       (let loop ((cursor datum) (elements '()))
         (cond
@@ -454,7 +464,8 @@
           (if (not (and (pair? pattern)
                         (identifier-datum? (car pattern))))
               (eval-error
-               "syntax-rules pattern must be a list beginning with an identifier"
+               "syntax-rules pattern must be a list beginning with an identifi\
+er"
                pattern))
           (cons pattern (second parts)))))
 
@@ -582,7 +593,8 @@
          (elements (type list)
           (description "Proper list of leading elements."))
          (tail . "Final tail value, which may be improper."))
-        (returns . ("A structure consing ELEMENTS onto TAIL, possibly improper."))
+        (returns .
+          ("A structure consing ELEMENTS onto TAIL, possibly improper."))
         (effects allocation))
       (if (null? elements)
           tail
@@ -668,7 +680,8 @@
 
     (define (identifier-binding-token identifier value-environment
                                       syntax-environment)
-      "Return the value or syntax token used for literal-identifier comparison."
+      "Return the value or syntax token used for literal-identifier comparison\
+."
       (let ((cell
              (and value-environment
                   (environment-cell-for-identifier
@@ -681,7 +694,8 @@
          (else #f))))
 
     (define (binding-tokens-equal? left right)
-      "Report whether two literal-identifier binding tokens denote the same binding."
+      "Report whether two literal-identifier binding tokens denote the same bi\
+nding."
       (cond
        ((and (not left) (not right)) #t)
        ((and left right
@@ -729,7 +743,8 @@
          ((identifier-datum? pattern)
           (let ((name (identifier-datum-name pattern)))
             (cond
-             ((and (macro-symbol-eq? name '_) (not (syntax-literal? pattern literals)))
+             ((and (macro-symbol-eq? name '_) (not (syntax-literal? pattern
+               literals)))
               #t)
              ((syntax-literal? pattern literals)
               (literal-identifier-match?
@@ -744,7 +759,7 @@
          ((pair? pattern)
           ;; A pair pattern can still match the empty list when it is wholly
           ;; collapsible through an ellipsis, e.g. ((name val) ...) against ()
-          ;; as in (let () body ...).  match-pattern-elements rejects pairs that
+          ;; as in (let () body ...). match-pattern-elements rejects pairs that
           ;; genuinely require elements, so admitting null input here is safe.
           (and (or (pair? input) (null? input))
                (let ((pattern-pieces (list-elements-tail pattern))
@@ -1023,14 +1038,16 @@
                   (eval-error
                    "repeated pattern variable used without enough ellipses"
                    name)))
-             (cell (macro-assoc capture-path (pattern-binding-captures entry))))
+             (cell (macro-assoc capture-path (pattern-binding-captures
+               entry))))
         (if cell
             (cdr cell)
             (eval-error "missing pattern variable capture" name))))
 
     (define (expand-template template bindings syntax-context ellipsis . rest)
       "Expand a syntax-rules template using captured pattern bindings."
-      "Identifiers not captured by BINDINGS are wrapped with SYNTAX-CONTEXT so"
+      "Identifiers not captured by BINDINGS are wrapped with SYNTAX-CONTEXT so\
+"
       "free template identifiers keep their definition-time bindings."
       (let ((path (if (null? rest) '() (car rest)))
             (ellipsis-literal? (if (or (null? rest) (null? (cdr rest)))
@@ -1124,7 +1141,8 @@
         (make-syntax-context id value-environment syntax-environment)))
 
     (define (apply-syntax-transformer transformer form environment context)
-      "Apply TRANSFORMER to FORM by matching rules and expanding the template."
+      "Apply TRANSFORMER to FORM by matching rules and expanding the template.\
+"
       (let loop ((rules (syntax-transformer-rules transformer)))
         (if (null? rules)
             (eval-error
@@ -1157,7 +1175,8 @@
       #((parameters
          (form . "Candidate form to classify."))
         (returns (type boolean)
-         (description ("True when FORM is a pair whose head names define-syntax.")))
+         (description
+           ("True when FORM is a pair whose head names define-syntax.")))
         (effects pure))
       (and (pair? form) (identifier-named? (car form) 'define-syntax)))
 
@@ -1209,7 +1228,8 @@
          (environment (type environment)
           (description "Value environment captured by the transformers."))
          (context (type eval-context)
-          (description ("Evaluation context supplying the outer syntax environment.")))
+          (description
+            ("Evaluation context supplying the outer syntax environment.")))
          (recursive? (type boolean)
           (description "True for letrec-syntax so bindings see each other.")))
         (returns (type syntax-scope)
@@ -1253,7 +1273,8 @@
          (environment (type environment)
           (description "Value environment used for shadowing checks."))
          (context (type environment)
-          (description ("Evaluation context supplying the syntax environment."))))
+          (description
+            ("Evaluation context supplying the syntax environment."))))
         (returns
          . ("The single-step expansion: a syntax scope, a transformed"
             "form, or EXPRESSION unchanged."))
@@ -1377,7 +1398,8 @@
                                 (eval-error
                                  (string-append
                                   description
-                                  " binding must contain formals and initializer")
+                                  " binding must contain formals and initializ\
+er")
                                  binding))
                             (list (car binding-parts)
                                   (expand-expression/fully
@@ -1401,7 +1423,8 @@
                                 "letrec binding")))
                           (if (not (= (length binding-parts) 2))
                               (eval-error
-                               "letrec binding must contain an identifier and initializer"
+                               "letrec binding must contain an identifier and \
+initializer"
                                binding))
                           (list (car binding-parts)
                                 (expand-expression/fully
@@ -1458,7 +1481,8 @@
           (expand-core-combination expression environment context))
          (else expression))))
 
-    (define (expand-sequence-forms forms environment context allow-definitions?)
+    (define (expand-sequence-forms forms environment context
+      allow-definitions?)
       "Fully expand a sequence, executing allowed definition-time forms."
       #((parameters
          (forms (type list)
@@ -1466,7 +1490,8 @@
          (environment (type environment)
           (description "Value environment used during expansion."))
          (context (type eval-context)
-          (description ("Evaluation context whose syntax environment is mutated.")))
+          (description
+            ("Evaluation context whose syntax environment is mutated.")))
          (allow-definitions? (type boolean)
           (description
            ("True to run import, library, and syntax definitions in"
@@ -1532,7 +1557,8 @@
           (second rest)))
 
     (define (consent-expand expression . rest)
-      "Fully expand one already-read expression without evaluating its result."
+      "Fully expand one already-read expression without evaluating its result.\
+"
       #((parameters
          (expression . "Already-read expression to expand.")
          (rest (type list)
@@ -1545,7 +1571,8 @@
         (expand-expression/fully expression environment context)))
 
     (define (consent-expand-source source . rest)
-      "Read and expand a source body, preserving top-level definition structure"
+      "Read and expand a source body, preserving top-level definition structur\
+e"
       "for tests and future compiler/backend passes."
       #((parameters
          (source (type string)
@@ -1620,7 +1647,8 @@
         (eval-error "macroexpand option expects exact integer" name))))
 
     (define (macro-option-entry entry)
-      "Convert one Scheme-readable option entry to the host context alist shape."
+      "Convert one Scheme-readable option entry to the host context alist shap\
+e."
       (let ((parts (proper-list-elements/maybe entry)))
         (cond
          ((and parts (= (length parts) 2))
@@ -1633,7 +1661,8 @@
           (eval-error "macroexpand option must be a pair" entry)))))
 
     (define (macro-options-alist options)
-      "Convert Scheme-readable macroexpand OPTIONS to evaluator context options."
+      "Convert Scheme-readable macroexpand OPTIONS to evaluator context option\
+s."
       (map macro-option-entry
            (proper-list-elements
             (if options options '())
@@ -1816,7 +1845,8 @@
          (environment (type environment)
           (description "Value environment (unused by this lookup)."))
          (context (type eval-context)
-          (description ("Evaluation context supplying the syntax environment."))))
+          (description
+            ("Evaluation context supplying the syntax environment."))))
         (returns (type (or macro-binding boolean))
          (description
           ("A Scheme-readable macro-binding record, or #f when"
@@ -1892,7 +1922,8 @@
                              (records '()))
                     (cond
                      ((null? exports) records)
-                     ((macro-symbol-eq? (library-binding-kind (car exports)) 'syntax)
+                     ((macro-symbol-eq? (library-binding-kind (car exports))
+                       'syntax)
                       (loop
                        (cdr exports)
                        (insert-macro-record

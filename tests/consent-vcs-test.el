@@ -1,4 +1,4 @@
-;;; consent-vcs-test.el --- VCS datum and parser tests  -*- lexical-binding: t; -*-
+;;; consent-vcs-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -149,7 +149,8 @@
           \"# branch.upstream origin/main\" nul
           \"# branch.ab +2 -1\" nul
           \"1 M. N... 100644 100644 100644 aaaaaaa bbbbbbb src/main.scm\" nul
-          \"2 R. N... 100644 100644 100644 ccccccc ddddddd R100 src/new.scm\" nul
+          \"2 R. N... 100644 100644 100644 ccccccc ddddddd R100\
+ src/new.scm\" nul
           \"src/old.scm\" nul
           \"? scratch.scm\" nul
           \"! build/\" nul
@@ -181,7 +182,10 @@
        (vcs-field-value submodule 'commit-changed? #f)
        (vcs-field-value submodule 'tracked-changes? #f)
        (vcs-field-value submodule 'untracked? #f))")
-    "(\"main\" \"origin/main\" 2 1 modified \"src/main.scm\" modified unchanged renamed \"src/new.scm\" \"src/old.scm\" 100 untracked ignored \"vendor/lib\" #f #t #t)")))
+    "(\"main\" \"origin/main\" 2 1 modified \"src/main.scm\" modified\
+ unchanged renamed \"src/new.scm\" \"src/old.scm\" 100 untracked ignored\
+ \"vendor/lib\"\
+ #f #t #t)")))
 
 (ert-deftest consent-vcs-test-status-parser-covers-detached-and-conflict ()
   "Represent detached HEAD and unmerged porcelain v2 records explicitly."
@@ -196,7 +200,8 @@
           \"# branch.oid deadbeef\" nul
           \"# branch.head (detached)\" nul
           \"# branch.ab +0 -3\" nul
-          \"u UU N... 100644 100644 100644 100644 hbase hours htheirs conflict.scm\" nul)))
+          \"u UU N... 100644 100644 100644 100644 hbase hours htheirs\
+ conflict.scm\" nul)))
       (define branch (vcs-status-branch status))
       (define entry (car (vcs-status-entries status)))
       (define conflict (vcs-field-value entry 'conflict #f))
@@ -238,7 +243,8 @@
        (vcs-field-value renamed 'path #f)
        (vcs-field-value renamed 'orig-path #f)
        (vcs-field-value renamed 'score #f))")
-    "(modified \"src/main.scm\" \"100644\" renamed \"src/new.scm\" \"src/old.scm\" 86)")))
+    "(modified \"src/main.scm\" \"100644\" renamed \"src/new.scm\"\
+ \"src/old.scm\" 86)")))
 
 (ert-deftest consent-vcs-test-request-result-and-outcome-datums ()
   "VCS request and result datums distinguish observation from mutation."
@@ -313,10 +319,13 @@
        (vcs-field-value audit 'decision #f)
        (vcs-field-value audit 'result #f)
        (vcs-field-value audit 'outcome #f))")
-    "(#t #f repository-mutation #t repository-mutation denied \"missing VCS mutation grant or approval\" approved grant-local vcs-capability-audit approved ok ok)")))
+    "(#t #f repository-mutation #t repository-mutation denied \"missing VCS\
+ mutation grant or approval\" approved grant-local vcs-capability-audit\
+ approved ok ok)")))
 
 (ert-deftest consent-vcs-test-remote-mutation-uses-separate-authority ()
-  "Remote VCS operations require explicit remote mutation authority or approval."
+  "Remote VCS operations require explicit remote mutation authority or\
+ approval."
   (should
    (equal
     (consent-vcs-test--external
@@ -364,7 +373,8 @@
        (vcs-field-value audit 'outcome #f)
        (vcs-known-outcome? 'remote-authentication-failed)
        (vcs-known-outcome? 'remote-unavailable))")
-    "(#t remote-mutation denied approved approve-push #t #t remote-authentication-failed #t #t)")))
+    "(#t remote-mutation denied approved approve-push #t #t\
+ remote-authentication-failed #t #t)")))
 
 (ert-deftest consent-vcs-test-emacs-vcs-imports-read-only-bindings ()
   "The `(emacs vcs)' adapter exposes read-only VCS observation procedures."
@@ -620,7 +630,8 @@
                 "(outcome ok)")))))
       (delete-directory root t))))
 
-(ert-deftest consent-vcs-test-emacs-vcs-push-intent-is-authorized-without-live-remote ()
+(ert-deftest
+  consent-vcs-test-emacs-vcs-push-intent-is-authorized-without-live-remote ()
   "Push intent uses VCS authority records and does not require a live remote."
   (let ((consent-policy-category-actions
          (consent-vcs-test--actions '((vcs-mutation . allow))))
@@ -668,7 +679,9 @@
             "(outcome remote-unavailable)")))
       (delete-directory root t))))
 
-(ert-deftest consent-vcs-test-emacs-vcs-fetch-and-pull-intents-authorized-without-live-remote ()
+(ert-deftest
+;; readability-allow: external-identifier -- Existing test name stays intact.
+    consent-vcs-test-emacs-vcs-fetch-and-pull-intents-authorized-without-live-remote ()
   "Fetch and pull intents use remote authority without requiring live remotes."
   (let ((consent-policy-category-actions
          (consent-vcs-test--actions '((vcs-mutation . allow))))
@@ -719,7 +732,8 @@
               "(outcome remote-unavailable)"))))
       (delete-directory root t))))
 
-(ert-deftest consent-vcs-test-emacs-vcs-push-redacts-credentialed-remote-input ()
+(ert-deftest consent-vcs-test-emacs-vcs-push-redacts-credentialed-remote-input
+  ()
   "Credentialed remote-looking input is denied without leaking audit text."
   (let ((consent-policy-category-actions
          (consent-vcs-test--actions '((vcs-mutation . allow))))
@@ -752,7 +766,8 @@
                (vcs-field-value result 'status #f)
                (vcs-outcome-status outcome)
                (vcs-field-value outcome 'message #f))")
-            "(error permission-denied \"VCS remote must be a remote name, not a URL.\")"))
+            "(error permission-denied \"VCS remote must be a remote name,\
+ not a URL.\")"))
           (let ((audit
                  (consent-vcs-test--audit-entry-matching
                   "(event vcs-capability-audit)"
@@ -802,11 +817,13 @@
             (should
              (consent-vcs-test--contains-p
               external
-              "(\"src/main.scm\" \"scratch.scm\") modified \"src/main.scm\" \"initial commit\")"))))
+              "(\"src/main.scm\" \"scratch.scm\") modified \"src/main.scm\"\
+ \"initial commit\")"))))
       (delete-directory root t))))
 
 (ert-deftest consent-vcs-test-emacs-vcs-no-vc-is-explicit ()
-  "The Emacs VCS adapter returns explicit no-vcs outcomes outside repositories."
+  "The Emacs VCS adapter returns explicit no-vcs outcomes outside\
+ repositories."
   (let ((root (file-name-as-directory
                (make-temp-file "consent-no-vcs-" t))))
     (unwind-protect
@@ -829,7 +846,8 @@
       (delete-directory root t))))
 
 (ert-deftest consent-vcs-test-emacs-vcs-yields-and-audits ()
-  "VCS adapter observations are yieldable and audited as read-only capability calls."
+  "VCS adapter observations are yieldable and audited as read-only\
+ capability calls."
   (let ((root (consent-vcs-test--make-git-repo)))
     (unwind-protect
         (consent-vcs-test--with-project-root root

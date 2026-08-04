@@ -6,9 +6,10 @@
 ;;; `(agent proposal)' library directly: classifying a model-proposed form as
 ;;; data into pure sub-forms (budget-charged), host calls (routed to a
 ;;; capability-request), and control-plane sub-forms (quarantined to a denied
-;;; capability-decision).  It loads no Emacs host adapter; the same source backs
+;;; capability-decision). It loads no Emacs host adapter; the same source backs
 ;;; the Emacs interpreter, so passing here is the portable half of the parity
-;;; check for the proposal-datum boundary recorded as D2 in docs/control-loop.md.
+;;; check for the proposal-datum boundary recorded as D2 in
+;;; docs/control-loop.md.
 
 (import (scheme base)
         (scheme write)
@@ -73,7 +74,8 @@
   (test-equal 'pure-status 'allowed (analysis-status analysis))
   (test-equal 'pure-cost 4 (analysis-pure-cost analysis))
   (test-equal 'pure-no-requests '() (analysis-capability-requests analysis))
-  (test-equal 'pure-no-decisions '() (analysis-quarantine-decisions analysis))))
+  (test-equal 'pure-no-decisions '() (analysis-quarantine-decisions
+    analysis))))
 
 ;;;; A host call is routed to a capability-request, never executed
 

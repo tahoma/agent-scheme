@@ -1,4 +1,4 @@
-;;; consent-test.el --- Agent helper self-test primitives  -*- lexical-binding: t; -*-
+;;; consent-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -6,7 +6,8 @@
 
 ;; Primitive bridge for `(agent test)'.  The public test API is implemented in
 ;; portable Scheme; this module only evaluates declared source-string tests
-;; through the normal Consent Scheme evaluator so budgets and sandbox policy stay
+;; through the normal Consent Scheme evaluator so budgets and sandbox policy
+;; stay
 ;; in force.
 
 ;;; Code:

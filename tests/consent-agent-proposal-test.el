@@ -1,4 +1,4 @@
-;;; consent-agent-proposal-test.el --- Model-proposal boundary tests  -*- lexical-binding: t; -*-
+;;; consent-agent-proposal-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -6,10 +6,12 @@
 
 ;; Focused coverage for the host-neutral `(agent proposal)' contract evaluated
 ;; through the Emacs Consent interpreter.  The same Scheme source backs the
-;; portable host shards (tests/scheme/consent-agent-proposal-test.scm), so these
+;; portable host shards (tests/scheme/consent-agent-proposal-test.scm), so
+;; these
 ;; expectations are the Emacs half of the cross-host parity check for the
 ;; proposal-datum boundary (D2): model output is read and walked as data, host
-;; calls become capability requests, and control-plane sub-forms are quarantined
+;; calls become capability requests, and control-plane sub-forms are
+;; quarantined
 ;; to a denied capability-decision rather than executed as authority.
 
 ;;; Code:
@@ -67,7 +69,8 @@
             (proposal-field-value r 'effect)
             (proposal-field-value r 'requires)
             (proposal-field-value r 'form))")
-    "(gated 1 #t proposal file-write host-mutation file-system (file-write \"out.txt\" payload))")))
+    "(gated 1 #t proposal file-write host-mutation file-system (file-write\
+ \"out.txt\" payload))")))
 
 (ert-deftest consent-agent-proposal-test-control-plane-is-quarantined ()
   "A grant-minting sub-form is denied as data, never routed to an effect."
@@ -83,7 +86,8 @@
             (proposal-field-value d 'operation)
             (proposal-field-value d 'reason)
             (analysis-capability-requests a))")
-    "(quarantined #t denied grant-capability! proposal-quarantined-control-plane ())")))
+    "(quarantined #t denied grant-capability!\
+ proposal-quarantined-control-plane ())")))
 
 (ert-deftest consent-agent-proposal-test-budget-bounds-the-walk ()
   "A small pure-cost budget stops the walk with a budget-exhausted status."
@@ -165,7 +169,8 @@
             (analysis-status admitted)
             (proposal-field-value a 'operation)
             (analysis-failure-decisions admitted))")
-    "(rejected hallucinated-tool imaginary-tool rejected misapplied-tool file-write gated file-append gated file-write ())")))
+    "(rejected hallucinated-tool imaginary-tool rejected misapplied-tool\
+ file-write gated file-append gated file-write ())")))
 
 (provide 'consent-agent-proposal-test)
 ;;; consent-agent-proposal-test.el ends here

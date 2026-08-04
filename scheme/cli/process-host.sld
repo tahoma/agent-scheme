@@ -7,10 +7,12 @@
 ;;; capturing its output -- behind a host-neutral interface.  R7RS-small has no
 ;;; portable process spawn, so each host branch imports its own process module.
 ;;;
-;;; Every branch runs the child through `/bin/sh -c' with a trailing exit-status
+;;; Every branch runs the child through `/bin/sh -c' with a trailing
+;;; exit-status
 ;;; marker (`printf MARKER%s "$?"'), so the only host-specific capability each
 ;;; branch must provide is capturing a command's standard output.  Standard
-;;; input redirection, standard error redirection, and the child exit status are
+;;; input redirection, standard error redirection, and the child exit status
+;;; are
 ;;; carried by the shell, which keeps the per-host surface minimal and uniform.
 ;;; Hosts without a usable process module fall to the `else' branch, where
 ;;; `cli-host-available?' is #f and `cli-host-run' raises before any host work.
@@ -39,10 +41,12 @@
                                               '())))
           (cadr result)))))
    (gambit
-    ;; Import only `shell-command'; `(gambit)' as a whole re-exports `guard' and
+    ;; Import only `shell-command'; `(gambit)' as a whole re-exports `guard'
+    ;; and
     ;; other identifiers that clash with `(scheme base)', and Gambit's keyword
     ;; argument syntax for `open-process' is disabled under `-:r7rs'.
-    ;; `shell-command' with capture returns (STATUS . OUTPUT); the marker carries
+    ;; `shell-command' with capture returns (STATUS . OUTPUT); the marker
+    ;; carries
     ;; the status, so the captured OUTPUT is all this branch needs.
     (import (only (gambit) shell-command))
     (begin
@@ -60,7 +64,8 @@
     (begin
       (define (cli-host-available?) #t)
       (define (cli-host--capture shell-command)
-        ;; `"r"' is Guile's `OPEN_READ' mode, which is not bound under `--r7rs'.
+        ;; `"r"' is Guile's `OPEN_READ' mode, which is not bound under
+        ;; `--r7rs'.
         (let* ((port (open-pipe* "r" "/bin/sh" "-c" shell-command))
                (output (cli-host--drain port)))
           (close-pipe port)
@@ -104,11 +109,13 @@
 
     (define (cli-host--drain port)
       "Read every remaining character from PORT into a string.  Used by host"
-      "branches whose process module yields an input port rather than a string."
+      "branches whose process module yields an input port rather than a string\
+."
       (gen:generator->string (cli-host--port-character-generator port)))
 
     (define (cli-host--escape string)
-      "Return STRING with each single quote made shell-safe, for single-quoting."
+      "Return STRING with each single quote made shell-safe, for single-quotin\
+g."
       (let ((out (open-output-string)))
         (string-for-each
          (lambda (character)
@@ -136,18 +143,21 @@
         (let loop ((start 0))
           (cond
            ((> (+ start needle-length) haystack-length) #f)
-           ((string=? (substring haystack start (+ start needle-length)) needle)
+           ((string=? (substring haystack start (+ start needle-length))
+             needle)
             start)
            (else (loop (+ start 1)))))))
 
     (define (cli-host--environment-prefix environment)
-      "Render an environment-grant alist of (NAME . VALUE) string pairs as the"
+      "Render an environment-grant alist of (NAME . VALUE) string pairs as the\
+"
       "`NAME='VALUE' ...' shell prefix that scopes those variables to the"
       "child."
       (if (null? environment)
           ""
           (string-append
-           (car (car environment)) "=" (cli-host--quote (cdr (car environment)))
+           (car (car environment)) "=" (cli-host--quote (cdr (car
+             environment)))
            " "
            (cli-host--environment-prefix (cdr environment)))))
 
@@ -171,7 +181,8 @@
        " ; printf '" cli-host--exit-marker "%s' \"$?\""))
 
     (define (cli-host--read-file file)
-      "Read FILE's whole contents as a string, then delete it; return \"\" when"
+      "Read FILE's whole contents as a string, then delete it; return \"\" whe\
+n"
       "FILE is absent.  The caller owns the path, so the captured stderr does"
       "not outlive the boundary call."
       (if (and file (file-exists? file))
@@ -185,7 +196,8 @@
       "Spawn COMMAND with ARGUMENTS across a real process boundary and return"
       "a list (EXIT-STATUS STDOUT STDERR).  STDIN-FILE and STDERR-FILE, when"
       "non-#f, back the child's standard input and standard error.  CWD, when"
-      "non-#f, is the child's granted working directory, and ENVIRONMENT is an"
+      "non-#f, is the child's granted working directory, and ENVIRONMENT is an\
+"
       "alist of (NAME . VALUE) string pairs granted to the child.  Signals an"
       "error on a host without a process module, so a denied or unsupported"
       "request never reaches the shell."
@@ -193,14 +205,18 @@
          (command (type string)
           (description "Executable name or path to spawn as the child."))
          (arguments (type (list-of string))
-          (description ("List of string arguments passed to COMMAND as one group.")))
+          (description
+            ("List of string arguments passed to COMMAND as one group.")))
          (stdin-file (type (or string boolean))
-          (description ("Path backing the child's standard input, or #f for none.")))
+          (description
+            ("Path backing the child's standard input, or #f for none.")))
          (stderr-file (type (or string boolean))
-          (description ("Path capturing the child's standard error, or #f for none.")))
+          (description
+            ("Path capturing the child's standard error, or #f for none.")))
          (cwd . ("Granted working directory for the child, or #f to inherit."))
          (environment (type list)
-          (description ("Alist of (NAME . VALUE) string pairs granted to the child."))))
+          (description
+            ("Alist of (NAME . VALUE) string pairs granted to the child."))))
         (returns (type list)
          (description
           ("A list (EXIT-STATUS STDOUT STDERR): the child's exit"

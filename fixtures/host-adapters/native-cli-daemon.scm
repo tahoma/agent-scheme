@@ -1,13 +1,17 @@
-;;; native-cli-daemon.scm --- Native CLI and daemon host adapter contract fixture
+;;; native-cli-daemon.scm --- Native CLI and daemon host adapter contract
+;;; fixture
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; This fixture is the first executable slice of the native CLI and daemon host
-;;; adapter described in docs/native-cli-daemon-adapter.md.  It is Scheme-readable
-;;; data only: no real process, terminal, socket, or daemon boundary is started.
+;;; This fixture is the first executable slice of the native CLI and daemon
+;;; host
+;;; adapter described in docs/native-cli-daemon-adapter.md. It is
+;;; Scheme-readable
+;;; data only: no real process, terminal, socket, or daemon boundary is
+;;; started.
 ;;; The adapter is still a contract, so `status' is `contract' rather than
 ;;; `implemented'; capability names describe the planned host surface, not live
-;;; bindings.  tests/scheme/consent-native-cli-daemon-adapter-test.scm validates
+;;; bindings. tests/scheme/consent-native-cli-daemon-adapter-test.scm validates
 ;;; the shapes below under any available R7RS implementation.
 
 (consent-host-adapter-fixture

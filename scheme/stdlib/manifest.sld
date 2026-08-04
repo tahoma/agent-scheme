@@ -43,7 +43,8 @@
         (source-kind source-library)
         (source (path "json.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "671857bac55c53e3190a24ec53b457321a1d8f12"))
+        (source-version (upstream-revision
+          "671857bac55c53e3190a24ec53b457321a1d8f12"))
         (realization portable-source)
         (aliases ((consent json) (srfi 180) (srfi srfi-180)))
         (exports
@@ -419,7 +420,8 @@
         (api-version (compat 0))
         (source-version final)
         (realization shim)
-        (aliases ((srfi 97) (srfi srfi-97) (srfi :97) (srfi :97 srfi-libraries)))
+        (aliases ((srfi 97) (srfi srfi-97) (srfi :97) (srfi :97
+          srfi-libraries)))
         (exports ())
         (dependencies
          ((library (scheme base))))
@@ -460,7 +462,8 @@
           (upstream-license "MIT") (local-license "Apache-2.0")
           (vendored? #f)))
         (verification
-         ((test-status (import-resolution library-reference-aliases no-export-shim))))
+         ((test-status (import-resolution library-reference-aliases
+           no-export-shim))))
         (status built-in-shim)
         (canonical #f))
        (manifest-index-entry
@@ -527,7 +530,8 @@
         (source-kind source-library)
         (source (path "and-let-star.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "myenv-chez.scm,v 1.7 2006/01/19 02:14:07"))
+        (source-version (upstream-revision
+          "myenv-chez.scm,v 1.7 2006/01/19 02:14:07"))
         (realization portable-source)
         (aliases ((srfi 2) (srfi srfi-2) (srfi :2) (srfi :2 and-let*)))
         (exports
@@ -536,7 +540,8 @@
          ((library (scheme base))))
         (provenance
          ((origin repo)
-          (upstream-source-url "https://okmij.org/ftp/Scheme/lib/myenv-chez.scm")
+          (upstream-source-url
+            "https://okmij.org/ftp/Scheme/lib/myenv-chez.scm")
           (local-reference-documents
            ((path "reference/srfi-2/srfi-2.md")
             (role specification)
@@ -549,7 +554,8 @@
             (registry-aliases
              (aliases (srfi 2) (srfi srfi-2)
                       (srfi :2) (srfi :2 and-let*)))
-            (adapted-tests (file "tests/scheme/stdlib-and-let-star-test.scm"))))))
+            (adapted-tests (file
+              "tests/scheme/stdlib-and-let-star-test.scm"))))))
         (verification
          ((test-status
            (import-resolution representative-and-let-star-behavior
@@ -640,7 +646,8 @@
         (source-kind source-library)
         (source (path "list.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "d502ec3832de709f00f7ae5488a334a25da8a9f9"))
+        (source-version (upstream-revision
+          "d502ec3832de709f00f7ae5488a334a25da8a9f9"))
         (realization portable-source)
         (aliases
          ((scheme list) (srfi 1) (srfi srfi-1) (srfi :1) (srfi :1 lists)))
@@ -877,7 +884,8 @@
         (source-kind source-library)
         (source (path "generator.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "ffd5bac4caf70167d0b57f701a6c43aa07701158"))
+        (source-version (upstream-revision
+          "ffd5bac4caf70167d0b57f701a6c43aa07701158"))
         (realization portable-source)
         (aliases ((scheme generator) (srfi 158) (srfi srfi-158)))
         (exports
@@ -1031,7 +1039,8 @@
         (source-kind source-library)
         (source (path "testing.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "2d6a9fc514050f75802ef0003cfbf4846602a3ee"))
+        (source-version (upstream-revision
+          "2d6a9fc514050f75802ef0003cfbf4846602a3ee"))
         (realization portable-source)
         (aliases ((srfi 64) (srfi srfi-64) (srfi :64) (srfi :64 testing)))
         (exports
@@ -1232,7 +1241,8 @@
         (source-kind source-library)
         (source (path "random-bits.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "a547c5508d648c61e73bebed2bcd2283fba5abaa"))
+        (source-version (upstream-revision
+          "a547c5508d648c61e73bebed2bcd2283fba5abaa"))
         (realization portable-source)
         (aliases ((srfi 27) (srfi srfi-27) (srfi :27) (srfi :27 random-bits)))
         (exports
@@ -1378,7 +1388,8 @@
         (source-kind source-library)
         (source (path "random-distributions.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "a547c5508d648c61e73bebed2bcd2283fba5abaa"))
+        (source-version (upstream-revision
+          "a547c5508d648c61e73bebed2bcd2283fba5abaa"))
         (realization portable-source)
         (exports
          (random-source-make-permutations
@@ -1393,7 +1404,8 @@
           (library (stdlib random-bits))))
         (provenance
          ((origin repo)
-          (upstream-source-url "https://srfi.schemers.org/srfi-27/srfi-27.html")
+          (upstream-source-url
+            "https://srfi.schemers.org/srfi-27/srfi-27.html")
           (local-reference-documents
            ((path "reference/srfi-27/srfi-27.md")
             (role specification)
@@ -1427,7 +1439,8 @@
         (source-kind source-library)
         (source (path "random-data-generators.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "f2110d303dee2c5bbedc3bc0dfd841f3dacc4b4b"))
+        (source-version (upstream-revision
+          "f2110d303dee2c5bbedc3bc0dfd841f3dacc4b4b"))
         (realization portable-source)
         (aliases ((srfi 194) (srfi srfi-194)))
         (exports
@@ -1508,7 +1521,9 @@
             (documentation-metadata (scope exported-procedures))
             (adapted-tests
              (file "tests/scheme/stdlib-random-data-generators-test.scm")
-             (file "tests/scheme/stdlib-random-data-generators-upstream-test.scm"))))))
+             (file
+               "tests/scheme/stdlib-random-data-generators-upstream-test.\
+scm"))))))
         (verification
          ((test-status
            (import-resolution representative-random-data-behavior
@@ -1565,7 +1580,8 @@
         (source-kind source-library)
         (source (path "property-testing.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "5d809c60b5ba840cd277c48d65f7997a31bb3462"))
+        (source-version (upstream-revision
+          "5d809c60b5ba840cd277c48d65f7997a31bb3462"))
         (realization portable-source)
         (aliases ((srfi 252) (srfi srfi-252)))
         (exports
@@ -1651,7 +1667,8 @@
             (documentation-metadata (scope exported-procedures))
             (adapted-tests
              (file "tests/scheme/stdlib-property-testing-test.scm")
-             (file "tests/scheme/stdlib-property-testing-upstream-test.scm"))))))
+             (file
+               "tests/scheme/stdlib-property-testing-upstream-test.scm"))))))
         (verification
          ((test-status
            (import-resolution representative-property-behavior
@@ -1770,9 +1787,13 @@
            "ad456cbcb182ebdda0d490f53535b889c60125ac5e384ac250e867df21d967f0")
           (upstream-example-sha256
            (("examples.scm"
-             . "bcc2674881b83cf2e1dc1be9700ac6cce6b69dc9fed795059f65c8110fe868f9")
+             .
+               "bcc2674881b83cf2e1dc1be9700ac6cce6b69dc9fed795059f65c8110fe868\
+f9")
             ("extension.scm"
-             . "4de2353aaaead5e4193fe485aa868dea749ed51515be43b236f2fad884b292f3")))
+             .
+               "4de2353aaaead5e4193fe485aa868dea749ed51515be43b236f2fad884b292\
+f3")))
           (upstream-license "MIT") (local-license "MIT") (vendored? #t)
           (local-patches
            ((define-library-wrapper (library (stdlib eager-comprehensions)))
@@ -1906,7 +1927,8 @@
           (upstream-source-files ("check.scm" "examples.scm"))
           (upstream-source-urls
            (("check.scm" . "https://srfi.schemers.org/srfi-78/check.scm")
-            ("examples.scm" . "https://srfi.schemers.org/srfi-78/examples.scm")))
+            ("examples.scm" .
+              "https://srfi.schemers.org/srfi-78/examples.scm")))
           (upstream-source-sha256
            "ade1da44903e9208d906dbccd3bf2935b72cfea9dafc2d4db2ef6d0a5712568a")
           (upstream-example-sha256
@@ -2209,7 +2231,8 @@
         (source-kind source-library)
         (source (path "comparator.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "3ec333638e787d75a16de83fcf9645c998e4d976"))
+        (source-version (upstream-revision
+          "3ec333638e787d75a16de83fcf9645c998e4d976"))
         (realization portable-source)
         (aliases ((scheme comparator) (srfi 128) (srfi srfi-128)))
         (exports
@@ -2269,7 +2292,8 @@
           (upstream-license "MIT") (local-license "MIT") (vendored? #t)
           (local-patches
            ((library-name (from (srfi 128)) (to (stdlib comparator)))
-            (inlined-includes (files "srfi/128.body1.scm" "srfi/128.body2.scm"))
+            (inlined-includes (files "srfi/128.body1.scm"
+              "srfi/128.body2.scm"))
             (documentation-metadata (scope exported-procedures))
             (default-hash (source local-portable-implementation))
             (stateful-hasher (source upstream-style-case-lambda))
@@ -2302,7 +2326,8 @@
           mapping-update mapping-update! mapping-update/default
           mapping-update!/default mapping-pop mapping-pop! mapping-search
           mapping-search! mapping-size mapping-find mapping-count mapping-any?
-          mapping-every? mapping-keys mapping-values mapping-entries mapping-map
+          mapping-every? mapping-keys mapping-values mapping-entries
+            mapping-map
           mapping-map->list mapping-for-each mapping-fold mapping-filter
           mapping-filter! mapping-remove mapping-remove! mapping-partition
           mapping-partition! mapping-copy mapping->alist alist->mapping
@@ -2347,7 +2372,8 @@
         (source-kind source-library)
         (source (path "rbtree.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "28bd72ed4d8445d8a91f84d919630d0f3a7564fb"))
+        (source-version (upstream-revision
+          "28bd72ed4d8445d8a91f84d919630d0f3a7564fb"))
         (realization portable-source)
         (exports
          (make-tree
@@ -2381,7 +2407,8 @@
           (upstream-revision "28bd72ed4d8445d8a91f84d919630d0f3a7564fb")
           (upstream-source-blobs
            (("nieper/rbtree.sld" . "d74e8e469e990dcad0d6a02d8c9cc63943aa3cba")
-            ("nieper/rbtree.scm" . "03b901e37b5c82333860301ac0bbf6ef96646f26")))
+            ("nieper/rbtree.scm" .
+              "03b901e37b5c82333860301ac0bbf6ef96646f26")))
           (upstream-license "MIT") (local-license "MIT") (vendored? #t)
           (local-patches
            ((library-name (from (nieper rbtree)) (to (stdlib rbtree)))
@@ -2412,7 +2439,8 @@
         (source-kind source-library)
         (source (path "mapping.sld"))
         (api-version (compat 0))
-        (source-version (upstream-revision "28bd72ed4d8445d8a91f84d919630d0f3a7564fb"))
+        (source-version (upstream-revision
+          "28bd72ed4d8445d8a91f84d919630d0f3a7564fb"))
         (realization portable-source)
         (aliases ((scheme mapping) (srfi 146) (srfi srfi-146)))
         (exports
@@ -2528,7 +2556,8 @@
           (upstream-source-blobs
            (("srfi/146.sld" . "dbeb605b19232b8fbccb6fb8c94bd5ec1538a85e")
             ("srfi/146.scm" . "3e37da6667e55e14b7d7e93db8353530072819c9")
-            ("srfi/146/test.sld" . "e1804c30ee1e3c5a1cfbf0fa60ed382f2326dfdf")))
+            ("srfi/146/test.sld" .
+              "e1804c30ee1e3c5a1cfbf0fa60ed382f2326dfdf")))
           (upstream-license "MIT") (local-license "MIT") (vendored? #t)
           (local-patches
            ((library-name (from (srfi 146)) (to (stdlib mapping)))

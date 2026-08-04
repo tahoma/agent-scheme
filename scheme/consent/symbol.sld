@@ -159,6 +159,7 @@
              (transient-map-set! transient owned-name symbol)
              symbol)))))
 
-    ;; Process-default table used when callers do not supply explicit ownership.
+    ;; Process-default table used when callers do not supply explicit
+    ;; ownership.
     (define consent-default-symbol-table
       (consent-make-symbol-table))))

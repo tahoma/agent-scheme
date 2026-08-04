@@ -1,4 +1,4 @@
-;;; consent-agent-reliability-test.el --- Agent reliability metric tests  -*- lexical-binding: t; -*-
+;;; consent-agent-reliability-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

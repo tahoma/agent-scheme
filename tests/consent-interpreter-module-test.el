@@ -1,4 +1,4 @@
-;;; consent-interpreter-module-test.el --- Interpreter module tests  -*- lexical-binding: t; -*-
+;;; consent-interpreter-module-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

@@ -1,4 +1,4 @@
-;;; consent-test-test.el --- Helper self-test library tests  -*- lexical-binding: t; -*-
+;;; consent-test-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -36,7 +36,8 @@
     (should
      (string-match-p
       (regexp-quote
-       "(summary (total 4) (pass 2) (fail 1) (error 1) (skipped 0) (budget-exhausted 0))")
+       "(summary (total 4) (pass 2) (fail 1) (error 1) (skipped 0)\
+ (budget-exhausted 0))")
       external))
     (should (string-match-p (regexp-quote "(kind case)") external))
     (should (string-match-p (regexp-quote "(kind expected-error)") external))))
@@ -84,7 +85,8 @@
     (should
      (string-match-p
       (regexp-quote
-       "(summary (total 2) (pass 2) (fail 0) (error 0) (skipped 0) (budget-exhausted 0))")
+       "(summary (total 2) (pass 2) (fail 0) (error 0) (skipped 0)\
+ (budget-exhausted 0))")
       external))
     (should (string-match-p (regexp-quote "(name source-pass)") external))
     (should (string-match-p (regexp-quote "(name srfi-pass)") external))))
@@ -108,7 +110,8 @@
     (should
      (string-match-p
       (regexp-quote
-       "(summary (total 1) (pass 0) (fail 0) (error 0) (skipped 0) (budget-exhausted 1))")
+       "(summary (total 1) (pass 0) (fail 0) (error 0) (skipped 0)\
+ (budget-exhausted 1))")
       external))))
 
 ;;; consent-test-test.el ends here

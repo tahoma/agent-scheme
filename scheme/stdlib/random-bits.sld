@@ -7,7 +7,8 @@
 ;;; official SRFI 27 MRG32k3a reference implementation:
 ;;; https://github.com/scheme-requests-for-implementation/srfi-27.
 ;;; Local patches wrap the source in Consent Scheme's stdlib namespace, use
-;;; R7RS records and `(scheme time)' for the clock seed, and expose `(srfi 27)',
+;;; R7RS records and `(scheme time)' for the clock seed, and expose `(srfi
+;;; 27)',
 ;;; `(srfi srfi-27)', `(srfi :27)', and `(srfi :27 random-bits)' as registry
 ;;; aliases.
 
@@ -159,7 +160,8 @@
                       (zero? (+ (list-ref state-values 3)
                                 (list-ref state-values 4)
                                 (list-ref state-values 5))))
-                  (error "illegal degenerate random source state" external-state))
+                  (error "illegal degenerate random source state"
+                    external-state))
               (mrg32k3a-pack-state (list->vector state-values)))
             (error "malformed random source state" external-state))))
 
@@ -461,7 +463,9 @@
          (source (type random-source)
           (description "Random source backing the generated procedure.")))
         (returns (type procedure)
-         (description "Procedure accepting a positive exact range and returning an integer in that range."))
+         (description
+           "Procedure accepting a positive exact range and returning an intege\
+r in that range."))
         (effects allocation state-write))
       ((%random-source-make-integers source)))
 
@@ -471,9 +475,11 @@
          (source (type random-source)
           (description "Random source backing the generated procedure."))
          (unit (type real)
-          (description "Optional precision unit in the open interval `(0, 1)'.")))
+          (description
+            "Optional precision unit in the open interval `(0, 1)'.")))
         (returns (type procedure)
-         (description "Procedure of no arguments returning a real number in `(0, 1)'."))
+         (description
+           "Procedure of no arguments returning a real number in `(0, 1)'."))
         (effects allocation state-write))
       (apply (%random-source-make-reals source) unit))
 

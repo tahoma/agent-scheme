@@ -64,7 +64,8 @@
       (if (symbol? value) (symbol->string value) value))
 
     (define (cli-native-cli--id prefix base)
-      "Return a deterministic record id symbol from PREFIX and the BASE symbol."
+      "Return a deterministic record id symbol from PREFIX and the BASE symbol\
+."
       (string->symbol (string-append prefix "-" (symbol->string base))))
 
     ;;;; Fixture navigation (standard reader only)
@@ -92,7 +93,8 @@
       (call-with-input-file cli-native-cli--fixture-path read))
 
     (define (cli-native-cli--policy-for authority)
-      "Return the declared policy posture symbol for authority class AUTHORITY."
+      "Return the declared policy posture symbol for authority class AUTHORITY\
+."
       (let* ((adapter (cli-native-cli--field-value
                        (cli-native-cli--fixture) 'adapter))
              (entries (cli-native-cli--field-value adapter 'authority)))
@@ -129,7 +131,8 @@
         (grant ,(if grant grant 'none)) (reason ,reason)))
 
     (define (cli-native-cli--event id session kind source payload)
-      "Build the adapter-event datum with ID for SESSION carrying KIND, SOURCE,"
+      "Build the adapter-event datum with ID for SESSION carrying KIND, SOURCE\
+,"
       "and PAYLOAD at the fixed adapter timestamp."
       `(adapter-event
         (id ,id) (adapter native-cli-daemon) (session ,session)
@@ -160,8 +163,10 @@
 
     (define (cli-native-cli--error kind session request-id decision-id message
                                    irritants handle domain operation condition)
-      "Build an adapter-error datum.  HANDLE, DOMAIN, OPERATION, and CONDITION"
-      "are appended only when non-#f so a liveness denial can carry the nested"
+      "Build an adapter-error datum.  HANDLE, DOMAIN, OPERATION, and CONDITION\
+"
+      "are appended only when non-#f so a liveness denial can carry the nested\
+"
       "capability-error condition."
       (append
        `(adapter-error
@@ -178,7 +183,8 @@
     (define (cli-native-cli--resolve options spec)
       "Resolve the decision for OPTIONS against operation SPEC and return an"
       "alist with `status' (`approved' or `denied'), `reason', and optionally"
-      "`error-kind', `grant', and `prompt'.  The liveness gate runs first, so a"
+      "`error-kind', `grant', and `prompt'.  The liveness gate runs first, so \
+a"
       "non-live handle is denied before any prompt posture or host operation."
       (let* ((authority (list-ref spec 5))
              (policy (cli-native-cli--policy-for authority))
@@ -279,7 +285,8 @@
               (cli-native-cli--error
                kind session request-id decision-id
                (string-append (cli-native-cli--text reason) " denied in "
-                              (cli-native-cli--opt options 'mode "cli") " mode")
+                              (cli-native-cli--opt options 'mode "cli")
+                              " mode")
                (cli-native-cli--irritants options)
                (and liveness handle)
                (and liveness domain)
@@ -293,13 +300,16 @@
         (list 3 (list request decision error-datum audit) '())))
 
     (define (cli-native-cli--stderr-file request-id)
-      "Compose the temporary path that backs a request's captured child stderr."
+      "Compose the temporary path that backs a request's captured child stderr\
+."
       (string-append
        (or (get-environment-variable "TMPDIR") "/tmp")
        "/consent-native-cli-" (symbol->string request-id) ".stderr"))
 
-    (define (cli-native-cli--run-events request-id session source prompt mode run)
-      "Build the streaming events for an approved process-run from the host run"
+    (define (cli-native-cli--run-events request-id session source prompt mode
+      run)
+      "Build the streaming events for an approved process-run from the host ru\
+n"
       "result RUN (EXIT STDOUT STDERR) plus any approval PROMPT."
       (let ((exit (car run)) (stdout (cadr run)) (stderr (list-ref run 2)))
         (append
@@ -324,7 +334,8 @@
                 (cli-native-cli--id "event-exit" request-id) session
                 'process-exit source `(exit-status ,exit))))))
 
-    (define (cli-native-cli--approve options spec request decision-id resolution)
+    (define (cli-native-cli--approve options spec request decision-id
+      resolution)
       "Return (EXIT RECORDS PROMPTS) for an approved request, performing the"
       "real host operation for SPEC's subcommand."
       (let* ((subcommand (cli-native-cli--opt options 'subcommand #f))
@@ -358,8 +369,9 @@
                           request-id session source prompt mode run))))
          ((string=? subcommand "process-signal")
           (let* ((signal-name (cli-native-cli--opt options 'signal "TERM"))
-                 ;; Background a child, signal it, and reap it: the reaped status
-                 ;; (128 + signal number) is a real signal-terminated exit.  The
+                 ;; Background a child, signal it, and reap it: the reaped
+                 ;; status
+                 ;; (128 + signal number) is a real signal-terminated exit. The
                  ;; shell's job-control note is not surfaced as a stdout event.
                  (run (cli-host-run
                        "/bin/sh"
@@ -394,10 +406,14 @@
 
     (define (cli-native-cli-execute options)
       "Execute the request described by OPTIONS and return"
-      "(EXIT RECORDS PROMPTS).  RECORDS is the Scheme-readable boundary record"
-      "stream; PROMPTS is the list of approval prompt summaries that belong on"
-      "the diagnostic stream, never on the record stream or a host-backed stdin"
-      "port.  Performs the real host operation through (cli process-host) only"
+      "(EXIT RECORDS PROMPTS).  RECORDS is the Scheme-readable boundary record\
+"
+      "stream; PROMPTS is the list of approval prompt summaries that belong on\
+"
+      "the diagnostic stream, never on the record stream or a host-backed stdi\
+n"
+      "port.  Performs the real host operation through (cli process-host) only\
+"
       "after the request is approved."
       #((parameters
          (options (type list)
@@ -421,14 +437,16 @@
                  (request-id (cli-native-cli--field-value request 'id))
                  (decision-id (cli-native-cli--id "dec" request-id))
                  (resolution (cli-native-cli--resolve options spec)))
-            (if (eq? (cli-native-cli--opt resolution 'status 'denied) 'approved)
+            (if (eq? (cli-native-cli--opt resolution 'status 'denied)
+              'approved)
                 (cli-native-cli--approve options spec request decision-id
                                          resolution)
                 (cli-native-cli--deny options spec request decision-id
                                       resolution))))))
 
     (define (cli-native-cli--environment-pair assignment)
-      "Split a NAME=VALUE assignment into the (NAME . VALUE) pair the host shim"
+      "Split a NAME=VALUE assignment into the (NAME . VALUE) pair the host shi\
+m"
       "expects; a bare NAME maps to an empty value."
       (let loop ((index 0))
         (cond
@@ -479,7 +497,8 @@
               options
               (let ((flag (car items)))
                 (cond
-                 ((string=? flag "--mode") (put 'mode (cadr items) (cddr items)))
+                 ((string=? flag "--mode") (put 'mode (cadr items) (cddr
+                   items)))
                  ((string=? flag "--execution")
                   (put 'execution (cadr items) (cddr items)))
                  ((string=? flag "--session")

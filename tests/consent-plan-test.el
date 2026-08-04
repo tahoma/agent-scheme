@@ -1,4 +1,4 @@
-;;; consent-plan-test.el --- First-class planning library tests  -*- lexical-binding: t; -*-
+;;; consent-plan-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

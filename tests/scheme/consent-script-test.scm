@@ -53,7 +53,8 @@
  'shebang-env-line '(portable core)
 (test-equal 'shebang-env-line
              #t
-             (cli-script-shebang-line? "#!/usr/bin/env consent-scheme --script")))
+             (cli-script-shebang-line?
+               "#!/usr/bin/env consent-scheme --script")))
 (testing-registry-case
  'shebang-absolute-path '(portable core)
 (test-equal 'shebang-absolute-path
@@ -125,7 +126,8 @@
 ;;;; End-to-end reader behavior
 
 ;; The stripped polyglot reads to exactly the one program form; the `#| |#'
-;; block comment that hides the `exec' line from Scheme is skipped by the reader.
+;; block comment that hides the `exec' line from Scheme is skipped by the
+;; reader.
 (testing-registry-case
  'polyglot-reads-to-one-form '(portable core)
 (test-equal 'polyglot-reads-to-one-form

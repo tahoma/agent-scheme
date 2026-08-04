@@ -74,7 +74,8 @@
       (test-assert 'pseudo-randomize-stream-changed-stream (not (= x1 y1))))))
 
 (define (check-mrg32k3a-state)
-  "Run the deterministic MRG32k3a state checks from upstream `check-mrg32k3a'."
+  "Run the deterministic MRG32k3a state checks from upstream `check-mrg32k3a'.\
+"
   (let* ((s (make-random-source))
          (state1 (random-source-state-ref s))
          (rand (random-source-make-reals s)))

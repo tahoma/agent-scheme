@@ -107,7 +107,8 @@
 
     (define (budget-datum options)
       "Return the declared budget datum derived from OPTIONS."
-      "The job reports its declared ceilings here; a completed job reports the"
+      "The job reports its declared ceilings here; a completed job reports the\
+"
       "consumed counts in its result's `budget' field, so a consumer reads"
       "remaining headroom as declared minus used per dimension."
       (list 'budget
@@ -205,7 +206,8 @@
          (store (type consent-job-store)
           (description "Job store to mutate."))
          (session (type (or symbol list))
-          (description ("Session id or session datum associated with the job.")))
+          (description
+            ("Session id or session datum associated with the job.")))
          (form . "Scheme form or source datum to evaluate.")
          (options (type list)
           (description
@@ -283,9 +285,11 @@
          (id (type symbol)
           (description "Job id symbol."))
          (options (type list)
-          (description ("Association list; `after` skips events already seen."))))
+          (description
+            ("Association list; `after` skips events already seen."))))
         (returns (type list)
-         (description ("List of yield events recorded after the requested offset.")))
+         (description
+           ("List of yield events recorded after the requested offset.")))
         (effects state-read error))
       (let ((after (option-ref options 'after 0))
             (yields (job-record-yields (require-job store id))))

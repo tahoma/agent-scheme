@@ -41,23 +41,28 @@ esac
 # R7RS: their import closure reaches runtime-virtual library names or the
 # host-adapter primitive layer that only exists inside the Consent runtime, not
 # on the bare host. They are exercised through the runtime instead. Keep this
-# list explicit so a newly added library that depends on such a module fails the
-# gate loudly (forcing either a host-loadable design or a documented entry here)
+# list explicit so a newly added library that depends on such a module fails
+# the
+# gate loudly (forcing either a host-loadable design or a documented entry
+# here)
 # rather than being silently skipped.
 #   (agent diagnostics) (agent diff) (agent test) -> import (agent io)
 #   (agent models)                                -> imports (agent reflect)
-#                                                    and (agent models primitive)
-#   (consent capability)                          -> imports (consent capability primitive)
+# and (agent models primitive)
+# (consent capability) -> imports (consent capability primitive)
 is_excluded() {
   case "$1" in
-    "(agent diagnostics)"|"(agent diff)"|"(agent test)"|"(agent models)"|"(consent capability)")
+    "(agent diagnostics)"|"(agent diff)"|"(agent test)"|\
+      "(agent models)"|"(consent capability)")
       return 0 ;;
     *) return 1 ;;
   esac
 }
 
 if ! command -v "$guile" >/dev/null 2>&1; then
-  printf '%s\n' "lint-portable: Guile ($guile) is not available; skipping the portable warnings gate."
+  printf '%s%s\n' \
+    "lint-portable: Guile ($guile) is not available; " \
+    'skipping the portable warnings gate.'
   exit 0
 fi
 
@@ -81,7 +86,8 @@ find "$scheme_dir/stdlib" -name '*.sld' | sort | while IFS= read -r sld; do
 done
 
 # Root manifest files are deliberately named `manifest.sld` at the top of a
-# manifest root, while bare R7RS hosts derive `(manifest index)` lookup from the
+# manifest root, while bare R7RS hosts derive `(manifest index)` lookup from
+# the
 # library name. Mirror only the lookup path in the throwaway build tree.
 root_manifest="$scheme_dir/manifest.sld"
 if [ -r "$root_manifest" ]; then
@@ -112,8 +118,10 @@ fi
 } > "$driver"
 
 # Pin the gated warning classes. `unused-toplevel`, `unused-module`,
-# `shadowed-toplevel`, and `non-idempotent-definition` are deliberately omitted:
-# the project registers internal helpers and primitives through runtime dispatch
+# `shadowed-toplevel`, and `non-idempotent-definition` are deliberately
+# omitted:
+# the project registers internal helpers and primitives through runtime
+# dispatch
 # tables that Guile's per-module static analysis cannot see, so those classes
 # fire hundreds of false positives on the library bodies and cannot gate
 # cleanly. The retained set is the high-signal subset the issue targets --
@@ -149,16 +157,23 @@ set -e
 cat "$output_file"
 
 if [ "$status" -ne 0 ]; then
-  printf '%s\n' 'lint-portable: Guile failed to load the portable libraries (see output above).' >&2
+  printf '%s%s\n' \
+    'lint-portable: Guile failed to load the portable libraries ' \
+    '(see output above).' >&2
   rm -rf "$build_dir"
   exit 1
 fi
 
 if grep -q 'warning:' "$output_file"; then
-  printf '%s\n' 'lint-portable: portable libraries produced compiler warnings under Guile (treated as errors).' >&2
+  warning_message='lint-portable: portable libraries produced compiler '
+  warning_message="${warning_message}warnings under Guile (treated as errors)."
+  printf '%s\n' \
+    "$warning_message" >&2
   rm -rf "$build_dir"
   exit 1
 fi
 
 rm -rf "$build_dir"
-printf '%s\n' 'lint-portable: portable libraries compiled clean under the Guile warnings-as-errors gate.'
+printf '%s%s\n' \
+  'lint-portable: portable libraries compiled clean under the Guile ' \
+  'warnings-as-errors gate.'

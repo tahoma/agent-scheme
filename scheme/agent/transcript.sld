@@ -175,7 +175,8 @@
           (loop (cdr rest) (cons (car rest) result))))))
 
     (define (make-transcript-event kind fields)
-      "Create a transcript event with deterministic defaults for missing fields."
+      "Create a transcript event with deterministic defaults for missing field\
+s."
       #((parameters
          (kind (type symbol)
           (description "Transcript event kind symbol."))
@@ -402,7 +403,8 @@
           ("Raw events, summary strings, or generated fixture cases"
             "for EVENTS.")))
         (effects pure)
-        (see-also transcript-raw-view transcript-summary-view transcript-event->fixture-case))
+        (see-also transcript-raw-view transcript-summary-view
+          transcript-event->fixture-case))
       (cond
        ((eq? format 'scheme-datum)
         (transcript-raw-view events))

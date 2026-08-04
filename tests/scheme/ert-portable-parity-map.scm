@@ -655,7 +655,8 @@
        live-git-repository-adapter)
       (consent-vcs-test-emacs-vcs-push-intent-is-authorized-without-live-remote
        emacs-remote-intent-adapter)
-      (consent-vcs-test-emacs-vcs-fetch-and-pull-intents-authorized-without-live-remote
+     ;; readability-allow: external-identifier -- Parity key stays intact.
+     (consent-vcs-test-emacs-vcs-fetch-and-pull-intents-authorized-without-live-remote
        emacs-remote-intent-adapter)
       (consent-vcs-test-emacs-vcs-push-redacts-credentialed-remote-input
        emacs-redaction-adapter)

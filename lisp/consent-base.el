@@ -1,11 +1,11 @@
-;;; consent-base.el --- R7RS base registry and bootstrap metadata  -*- lexical-binding: t; -*-
+;;; consent-base.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
 ;; Primitive registry, portable prelude discovery, and primitive manifest
-;; metadata for `(scheme base)'.  The registry is loadable without the evaluator
+;; metadata for `(scheme base)'. The registry is loadable without the evaluator
 ;; backend so tooling can inspect binding metadata independently.
 
 ;;; Code:
@@ -238,25 +238,32 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
 
 (defconst consent--base-primitive-documentation-table
   '(("*"
-     "Return the product of all numeric arguments, or 1 when called with no arguments."
+     "Return the product of all numeric arguments, or 1 when called with no\
+ arguments."
      ((numbers (list-of number) "Numeric factors to multiply."))
      (number "The numeric product."))
     ("+"
-     "Return the sum of all numeric arguments, or 0 when called with no arguments."
+     "Return the sum of all numeric arguments, or 0 when called with no\
+ arguments."
      ((numbers (list-of number) "Numeric addends to sum."))
      (number "The numeric sum."))
     ("-"
-     "Return the negation of one number, or subtract each later number from the first."
-     ((numbers (list-of number) "One or more numeric minuend/subtrahend values."))
+     "Return the negation of one number, or subtract each later number from\
+ the first."
+     ((numbers (list-of number)
+       "One or more numeric minuend/subtrahend values."))
      (number "The numeric negation or difference."))
     ("/"
-     "Return the reciprocal of one number, or divide the first by each later number."
-     ((numbers (list-of number) "One or more numeric dividend/divisor values."))
+     "Return the reciprocal of one number, or divide the first by each later\
+ number."
+     ((numbers (list-of number)
+       "One or more numeric dividend/divisor values."))
      (number "The numeric reciprocal or quotient."))
     ("<" "Return #t when the numeric arguments are strictly increasing."
      ((numbers (list-of real) "Real numbers to compare."))
      (boolean "Whether the numbers are strictly increasing."))
-    ("<=" "Return #t when the numeric arguments are monotonically nondecreasing."
+    ("<="
+      "Return #t when the numeric arguments are monotonically nondecreasing."
      ((numbers (list-of real) "Real numbers to compare."))
      (boolean "Whether the numbers are monotonically nondecreasing."))
     ("=" "Return #t when all numeric arguments are numerically equal."
@@ -265,24 +272,30 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     (">" "Return #t when the numeric arguments are strictly decreasing."
      ((numbers (list-of real) "Real numbers to compare."))
      (boolean "Whether the numbers are strictly decreasing."))
-    (">=" "Return #t when the numeric arguments are monotonically nonincreasing."
+    (">="
+      "Return #t when the numeric arguments are monotonically nonincreasing."
      ((numbers (list-of real) "Real numbers to compare."))
      (boolean "Whether the numbers are monotonically nonincreasing."))
     ("apply"
-     "Call a procedure with leading arguments followed by the final list argument."
+     "Call a procedure with leading arguments followed by the final list\
+ argument."
      ((proc procedure "Procedure to call.")
-      (arguments (list-of any) "Leading arguments followed by the final list."))
+      (arguments (list-of any)
+        "Leading arguments followed by the final list."))
      (any "Values returned by PROC."))
-    ("binary-port?" "Return #t when an object is a binary input or output port."
+    ("binary-port?"
+      "Return #t when an object is a binary input or output port."
      ((obj any "Object to test."))
      (boolean "Whether OBJ is a binary port."))
-    ("boolean=?" "Return #t when all boolean arguments have the same truth value."
+    ("boolean=?"
+      "Return #t when all boolean arguments have the same truth value."
      ((booleans (list-of boolean) "Boolean values to compare."))
      (boolean "Whether all booleans have the same truth value."))
     ("boolean?" "Return #t when an object is either #t or #f."
      ((obj any "Object to test."))
      (boolean "Whether OBJ is a boolean."))
-    ("bytevector" "Return a newly allocated bytevector containing the given byte values."
+    ("bytevector"
+      "Return a newly allocated bytevector containing the given byte values."
      ((bytes (list-of byte) "Byte values for the new bytevector."))
      (bytevector "A newly allocated bytevector."))
     ("bytevector-append"
@@ -294,7 +307,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
       (start exact-non-negative-integer "Inclusive start index.")
       (end exact-non-negative-integer "Exclusive end index."))
      (bytevector "A newly allocated bytevector slice."))
-    ("bytevector-copy!" "Copy bytes from one bytevector slice into another in place."
+    ("bytevector-copy!"
+      "Copy bytes from one bytevector slice into another in place."
      ((to bytevector "Destination bytevector.")
       (at exact-non-negative-integer "Destination start index.")
       (from bytevector "Source bytevector.")
@@ -308,7 +322,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      ((bytevector bytevector "Bytevector to read.")
       (k exact-non-negative-integer "Zero-based bytevector index."))
      (byte "The byte at index K."))
-    ("bytevector-u8-set!" "Store an unsigned byte at a zero-based bytevector index."
+    ("bytevector-u8-set!"
+      "Store an unsigned byte at a zero-based bytevector index."
      ((bytevector bytevector "Bytevector to mutate.")
       (k exact-non-negative-integer "Zero-based bytevector index.")
       (byte byte "Byte value to store."))
@@ -325,7 +340,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      ((port port "Port passed to PROC and then closed.")
       (proc procedure "Procedure to call with PORT."))
      (any "Values returned by PROC."))
-    ("call-with-values" "Call a producer and pass all produced values to a consumer."
+    ("call-with-values"
+      "Call a producer and pass all produced values to a consumer."
      ((producer procedure "Zero-argument producer procedure.")
       (consumer procedure "Consumer procedure receiving producer values."))
      (any "Values returned by CONSUMER."))
@@ -378,7 +394,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ("complex?" "Return #t when an object is a complex number."
      ((obj any "Object to test."))
      (boolean "Whether OBJ is a complex number."))
-    ("cons" "Return a newly allocated pair whose car and cdr are the arguments."
+    ("cons"
+      "Return a newly allocated pair whose car and cdr are the arguments."
      ((obj1 any "Value for the new pair's car.")
       (obj2 any "Value for the new pair's cdr."))
      (pair "A newly allocated pair."))
@@ -394,7 +411,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      "Return or dynamically replace the current textual output port."
      ((port textual-output-port "Optional replacement output port."))
      (textual-output-port "The current textual output port."))
-    ("dynamic-wind" "Call before, thunk, and after around dynamic extent changes."
+    ("dynamic-wind"
+      "Call before, thunk, and after around dynamic extent changes."
      ((before procedure "Zero-argument procedure called on entry.")
       (thunk procedure "Zero-argument procedure whose values are returned.")
       (after procedure "Zero-argument procedure called on exit."))
@@ -403,28 +421,33 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      ((obj1 any "First object to compare.")
       (obj2 any "Second object to compare."))
      (boolean "Whether the objects are the same under `eq?`."))
-    ("equal?" "Return #t when two objects have recursively equivalent contents."
+    ("equal?"
+      "Return #t when two objects have recursively equivalent contents."
      ((obj1 any "First object to compare.")
       (obj2 any "Second object to compare."))
      (boolean "Whether the objects are recursively equivalent."))
-    ("eqv?" "Return #t when two objects are equivalent under R7RS `eqv?` rules."
+    ("eqv?"
+      "Return #t when two objects are equivalent under R7RS `eqv?` rules."
      ((obj1 any "First object to compare.")
       (obj2 any "Second object to compare."))
      (boolean "Whether the objects are equivalent under `eqv?`."))
     ("eof-object" "Return the distinguished end-of-file object."
      ()
      (eof-object "An end-of-file object."))
-    ("eof-object?" "Return #t when an object is the distinguished end-of-file object."
+    ("eof-object?"
+      "Return #t when an object is the distinguished end-of-file object."
      ((obj any "Object to test."))
      (boolean "Whether OBJ is an end-of-file object."))
     ("error" "Raise a non-continuable error object with optional irritants."
      ((message string "Error message string.")
       (irritants (list-of any) "Additional error irritants."))
      (never "This procedure does not return."))
-    ("error-object-irritants" "Return the irritants carried by an error object."
+    ("error-object-irritants"
+      "Return the irritants carried by an error object."
      ((error-object error-object "Error object to inspect."))
      (list "The error object's irritants."))
-    ("error-object-message" "Return the message string carried by an error object."
+    ("error-object-message"
+      "Return the message string carried by an error object."
      ((error-object error-object "Error object to inspect."))
      (string "The error object's message."))
     ("error-object?" "Return #t when an object is an error object."
@@ -433,7 +456,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ("denominator" "Return a rational number's positive denominator."
      ((q rational "Rational number to inspect."))
      (integer "The denominator in lowest terms."))
-    ("exact" "Return an exact representation of a number when one is available."
+    ("exact"
+      "Return an exact representation of a number when one is available."
      ((z number "Number to convert."))
      (number "An exact representation of Z."))
     ("exact-integer-sqrt"
@@ -478,7 +502,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ("gcd" "Return the greatest common divisor, or 0 with no arguments."
      ((integers (list-of integer) "Integer arguments."))
      (integer "The non-negative greatest common divisor."))
-    ("get-output-bytevector" "Return accumulated bytes from an output bytevector port."
+    ("get-output-bytevector"
+      "Return accumulated bytes from an output bytevector port."
      ((port binary-output-port "Output bytevector port to drain."))
      (bytevector "Accumulated output bytes."))
     ("get-output-string" "Return accumulated text from an output string port."
@@ -505,7 +530,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ("lcm" "Return the least common multiple, or 1 with no arguments."
      ((integers (list-of integer) "Integer arguments."))
      (integer "The non-negative least common multiple."))
-    ("list->string" "Return a newly allocated string containing list characters."
+    ("list->string"
+      "Return a newly allocated string containing list characters."
      ((list (list-of char) "List of characters."))
      (string "A newly allocated string."))
     ("list->vector" "Return a newly allocated vector containing list elements."
@@ -550,7 +576,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ("numerator" "Return the numerator of a rational number in lowest terms."
      ((q rational "Rational number to inspect."))
      (integer "The numerator in lowest terms."))
-    ("open-input-bytevector" "Return a binary input port reading from a bytevector."
+    ("open-input-bytevector"
+      "Return a binary input port reading from a bytevector."
      ((bytevector bytevector "Bytevector backing the input port."))
      (binary-input-port "A binary input port."))
     ("open-input-string" "Return a textual input port reading from a string."
@@ -559,7 +586,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ("open-output-bytevector" "Return a binary output port accumulating bytes."
      ()
      (binary-output-port "A binary output bytevector port."))
-    ("open-output-string" "Return a textual output port accumulating characters."
+    ("open-output-string"
+      "Return a textual output port accumulating characters."
      ()
      (textual-output-port "A textual output string port."))
     ("output-port-open?" "Return #t when an output port is still open."
@@ -604,7 +632,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      ((k exact-non-negative-integer "Maximum number of bytes to read.")
       (port binary-input-port "Binary input port to read."))
      ((or bytevector eof-object) "Bytes read, or an end-of-file object."))
-    ("read-bytevector!" "Read bytes from a binary input port into a bytevector."
+    ("read-bytevector!"
+      "Read bytes from a binary input port into a bytevector."
      ((bytevector bytevector "Destination bytevector.")
       (port binary-input-port "Binary input port to read.")
       (start exact-non-negative-integer "Inclusive destination start index.")
@@ -645,7 +674,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      ((pair pair "Pair to mutate.")
       (obj any "New cdr value."))
      (unspecified "The unspecified value."))
-    ("string" "Return a newly allocated string containing the given characters."
+    ("string"
+      "Return a newly allocated string containing the given characters."
      ((chars (list-of char) "Characters for the new string."))
      (string "A newly allocated string."))
     ("string->list" "Return a list containing characters from a string slice."
@@ -665,12 +695,14 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
       (start exact-non-negative-integer "Inclusive start index.")
       (end exact-non-negative-integer "Exclusive end index."))
      (bytevector "A UTF-8 encoded bytevector."))
-    ("string->vector" "Return a vector containing characters from a string slice."
+    ("string->vector"
+      "Return a vector containing characters from a string slice."
      ((string string "String to copy from.")
       (start exact-non-negative-integer "Inclusive start index.")
       (end exact-non-negative-integer "Exclusive end index."))
      ((vector-of char) "A newly allocated vector of characters."))
-    ("string-append" "Return a newly allocated string containing each argument."
+    ("string-append"
+      "Return a newly allocated string containing each argument."
      ((strings (list-of string) "Strings to concatenate."))
      (string "A newly allocated concatenated string."))
     ("string-copy" "Return a newly allocated copy of a string slice."
@@ -678,7 +710,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
       (start exact-non-negative-integer "Inclusive start index.")
       (end exact-non-negative-integer "Exclusive end index."))
      (string "A newly allocated string slice."))
-    ("string-copy!" "Copy characters from one string slice into another in place."
+    ("string-copy!"
+      "Copy characters from one string slice into another in place."
      ((to string "Destination string.")
       (at exact-non-negative-integer "Destination start index.")
       (from string "Source string.")
@@ -735,7 +768,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ("symbol?" "Return #t when an object is a symbol."
      ((obj any "Object to test."))
      (boolean "Whether OBJ is a symbol."))
-    ("textual-port?" "Return #t when an object is a textual input or output port."
+    ("textual-port?"
+      "Return #t when an object is a textual input or output port."
      ((obj any "Object to test."))
      (boolean "Whether OBJ is a textual port."))
     ("truncate" "Return the integer nearest to zero for a real number."
@@ -769,12 +803,14 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
       (start exact-non-negative-integer "Inclusive start index.")
       (end exact-non-negative-integer "Exclusive end index."))
      (list "A newly allocated list."))
-    ("vector->string" "Return a string containing characters from a vector slice."
+    ("vector->string"
+      "Return a string containing characters from a vector slice."
      ((vector (vector-of char) "Vector of characters to copy from.")
       (start exact-non-negative-integer "Inclusive start index.")
       (end exact-non-negative-integer "Exclusive end index."))
      (string "A newly allocated string."))
-    ("vector-append" "Return a newly allocated vector containing each argument."
+    ("vector-append"
+      "Return a newly allocated vector containing each argument."
      ((vectors (list-of vector) "Vectors to concatenate."))
      (vector "A newly allocated concatenated vector."))
     ("vector-copy" "Return a newly allocated copy of a vector slice."
@@ -782,7 +818,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
       (start exact-non-negative-integer "Inclusive start index.")
       (end exact-non-negative-integer "Exclusive end index."))
      (vector "A newly allocated vector slice."))
-    ("vector-copy!" "Copy elements from one vector slice into another in place."
+    ("vector-copy!"
+      "Copy elements from one vector slice into another in place."
      ((to vector "Destination vector.")
       (at exact-non-negative-integer "Destination start index.")
       (from vector "Source vector.")
@@ -1103,7 +1140,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
            (cdr target)))))
        (t
         (consent--eval-error
-         "prelude define target must be an identifier or function signature"))))))
+         "prelude define target must be an identifier or function\
+ signature"))))))
 
 (defun consent-base-prelude-binding-specs ()
   "Return discoverable metadata for portable prelude bindings."
@@ -1122,43 +1160,81 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
 
 (defconst consent--standard-primitive-documentation-table
   '((("(scheme file)" . "delete-file")
-     . "Delete the file at PATH, subject to the file-system capability policy.")
+     .
+       "Delete the file at PATH, subject to the file-system capability\
+ policy.")
     (("(scheme file)" . "file-exists?")
-     . "Return #t when PATH names an existing file, subject to the file-system capability policy.")
+     .
+       "Return #t when PATH names an existing file, subject to the file-system\
+ capability policy.")
     (("(scheme file)" . "call-with-input-file")
-     . "Open PATH for textual input, call PROC with the port, and close the port afterward.")
+     .
+       "Open PATH for textual input, call PROC with the port, and close the\
+ port afterward.")
     (("(scheme file)" . "call-with-output-file")
-     . "Open PATH for textual output, call PROC with the port, and close the port afterward.")
+     .
+       "Open PATH for textual output, call PROC with the port, and close the\
+ port afterward.")
     (("(scheme file)" . "open-binary-input-file")
-     . "Open PATH as a binary input port, subject to the file-system capability policy.")
+     .
+       "Open PATH as a binary input port, subject to the file-system\
+ capability policy.")
     (("(scheme file)" . "open-binary-output-file")
-     . "Open PATH as a binary output port, subject to the file-system capability policy.")
+     .
+       "Open PATH as a binary output port, subject to the file-system\
+ capability policy.")
     (("(scheme file)" . "open-input-file")
-     . "Open PATH as a textual input port, subject to the file-system capability policy.")
+     .
+       "Open PATH as a textual input port, subject to the file-system\
+ capability policy.")
     (("(scheme file)" . "open-output-file")
-     . "Open PATH as a textual output port, subject to the file-system capability policy.")
+     .
+       "Open PATH as a textual output port, subject to the file-system\
+ capability policy.")
     (("(scheme file)" . "with-input-from-file")
-     . "Evaluate THUNK with the current input port temporarily bound to PATH's textual input port.")
+     .
+       "Evaluate THUNK with the current input port temporarily bound to PATH's\
+ textual input port.")
     (("(scheme file)" . "with-output-to-file")
-     . "Evaluate THUNK with the current output port temporarily bound to PATH's textual output port.")
+     .
+       "Evaluate THUNK with the current output port temporarily bound to\
+ PATH's textual output port.")
     (("(scheme load)" . "load")
-     . "Read and evaluate Scheme source from PATH, subject to the file-system capability policy.")
+     .
+       "Read and evaluate Scheme source from PATH, subject to the\
+ file-system capability policy.")
     (("(scheme process-context)" . "command-line")
-     . "Return script invocation arguments, or the process command line when process-environment access is allowed.")
+     .
+       "Return script invocation arguments, or the process command line when\
+ process-environment access is allowed.")
     (("(scheme process-context)" . "emergency-exit")
-     . "Request immediate process termination, denied by default by the process policy.")
+     .
+       "Request immediate process termination, denied by default by the\
+ process policy.")
     (("(scheme process-context)" . "exit")
-     . "Request orderly process termination, denied by default by the process policy.")
+     .
+       "Request orderly process termination, denied by default by the\
+ process policy.")
     (("(scheme process-context)" . "get-environment-variable")
-     . "Return one environment variable value, subject to process-environment policy.")
+     .
+       "Return one environment variable value, subject to\
+ process-environment policy.")
     (("(scheme process-context)" . "get-environment-variables")
-     . "Return environment variable bindings, subject to process-environment policy.")
+     .
+       "Return environment variable bindings, subject to process-environment\
+ policy.")
     (("(scheme repl)" . "interaction-environment")
-     . "Return the current session interaction environment when REPL access is allowed.")
+     .
+       "Return the current session interaction environment when REPL access is\
+ allowed.")
     (("(scheme time)" . "current-jiffy")
-     . "Return the current clock reading as an integer jiffy count, subject to the clock capability policy.")
+     .
+       "Return the current clock reading as an integer jiffy count, subject to\
+ the clock capability policy.")
     (("(scheme time)" . "current-second")
-     . "Return the current time as a real number of seconds since the Unix epoch, subject to the clock capability policy.")
+     .
+       "Return the current time as a real number of seconds since the Unix\
+ epoch, subject to the clock capability policy.")
     (("(scheme time)" . "jiffies-per-second")
      . "Return the number of jiffies per second used by `current-jiffy`."))
   "User-facing documentation for standard host-capability primitives.")
@@ -1171,54 +1247,67 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
 (defconst consent--standard-primitive-manifest-specs
   '((:name "delete-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook consent--primitive-delete-file
+     :required-capability file-system :emacs-hook
+       consent--primitive-delete-file
      :portable-hook primitive-delete-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "file-exists?" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook consent--primitive-file-exists?
+     :required-capability file-system :emacs-hook
+       consent--primitive-file-exists?
      :portable-hook primitive-file-exists? :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "call-with-input-file" :library "(scheme file)" :minimum-arity 2
      :maximum-arity 2 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook consent--primitive-call-with-input-file
-     :portable-hook primitive-call-with-input-file :emitter-hook capability-file
+     :required-capability file-system :emacs-hook
+       consent--primitive-call-with-input-file
+     :portable-hook primitive-call-with-input-file :emitter-hook
+       capability-file
      :policy deny :test-categories (file policy))
     (:name "call-with-output-file" :library "(scheme file)" :minimum-arity 2
      :maximum-arity 2 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook consent--primitive-call-with-output-file
-     :portable-hook primitive-call-with-output-file :emitter-hook capability-file
+     :required-capability file-system :emacs-hook
+       consent--primitive-call-with-output-file
+     :portable-hook primitive-call-with-output-file :emitter-hook
+       capability-file
      :policy deny :test-categories (file policy))
     (:name "open-binary-input-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
      :required-capability file-system
      :emacs-hook consent--primitive-open-binary-input-file
-     :portable-hook primitive-open-binary-input-file :emitter-hook capability-file
+     :portable-hook primitive-open-binary-input-file :emitter-hook
+       capability-file
      :policy deny :test-categories (file policy))
     (:name "open-binary-output-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
      :required-capability file-system
      :emacs-hook consent--primitive-open-binary-output-file
-     :portable-hook primitive-open-binary-output-file :emitter-hook capability-file
+     :portable-hook primitive-open-binary-output-file :emitter-hook
+       capability-file
      :policy deny :test-categories (file policy))
     (:name "open-input-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook consent--primitive-open-input-file
+     :required-capability file-system :emacs-hook
+       consent--primitive-open-input-file
      :portable-hook primitive-open-input-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "open-output-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook consent--primitive-open-output-file
+     :required-capability file-system :emacs-hook
+       consent--primitive-open-output-file
      :portable-hook primitive-open-output-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "with-input-from-file" :library "(scheme file)" :minimum-arity 2
      :maximum-arity 2 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook consent--primitive-with-input-from-file
-     :portable-hook primitive-with-input-from-file :emitter-hook capability-file
+     :required-capability file-system :emacs-hook
+       consent--primitive-with-input-from-file
+     :portable-hook primitive-with-input-from-file :emitter-hook
+       capability-file
      :policy deny :test-categories (file policy))
     (:name "with-output-to-file" :library "(scheme file)" :minimum-arity 2
      :maximum-arity 2 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook consent--primitive-with-output-to-file
+     :required-capability file-system :emacs-hook
+       consent--primitive-with-output-to-file
      :portable-hook primitive-with-output-to-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "load" :library "(scheme load)" :minimum-arity 1
@@ -1228,17 +1317,21 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      :policy deny :test-categories (load file policy))
     (:name "command-line" :library "(scheme process-context)" :minimum-arity 0
      :maximum-arity nil :source host-capability :effect host-process
-     :required-capability process-environment :emacs-hook consent--primitive-command-line
+     :required-capability process-environment :emacs-hook
+       consent--primitive-command-line
      :portable-hook primitive-command-line :emitter-hook capability-process
      :policy deny :test-categories (process policy))
-    (:name "emergency-exit" :library "(scheme process-context)" :minimum-arity 0
+    (:name "emergency-exit" :library "(scheme process-context)" :minimum-arity
+      0
      :maximum-arity nil :source host-capability :effect host-process
-     :required-capability process-environment :emacs-hook consent--policy-denied-primitive
+     :required-capability process-environment :emacs-hook
+       consent--policy-denied-primitive
      :portable-hook policy-denied-primitive :emitter-hook capability-process
      :policy deny :test-categories (process policy))
     (:name "exit" :library "(scheme process-context)" :minimum-arity 0
      :maximum-arity nil :source host-capability :effect host-process
-     :required-capability process-environment :emacs-hook consent--policy-denied-primitive
+     :required-capability process-environment :emacs-hook
+       consent--policy-denied-primitive
      :portable-hook policy-denied-primitive :emitter-hook capability-process
      :policy deny :test-categories (process policy))
     (:name "get-environment-variable" :library "(scheme process-context)"
@@ -1255,7 +1348,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      :policy deny :test-categories (process policy))
     (:name "interaction-environment" :library "(scheme repl)" :minimum-arity 0
      :maximum-arity 0 :source host-capability :effect host-repl
-     :required-capability repl :emacs-hook consent--primitive-interaction-environment
+     :required-capability repl :emacs-hook
+       consent--primitive-interaction-environment
      :portable-hook primitive-interaction-environment
      :emitter-hook capability-repl
      :policy session :test-categories (repl policy session))
@@ -1361,7 +1455,8 @@ capability, interpreter hooks, emitter hint, policy, and test categories."
     name function minimum-arity maximum-arity)))
 
 (defun consent-make-base-environment ()
-  "Return a fresh environment with kernel and prelude `(scheme base)' bindings."
+  "Return a fresh environment with kernel and prelude `(scheme base)'\
+ bindings."
   (let ((environment (consent-make-empty-environment)))
     (dolist (entry consent--base-primitive-registry)
       (consent--define-primitive

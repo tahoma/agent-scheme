@@ -793,7 +793,8 @@
       (numeric-backend-accumulator-limit backend))
 
     (define (small-add-accelerator backend left right)
-      "Add LEFT and RIGHT with checked profile-safe host fixnums, or return #f."
+      "Add LEFT and RIGHT with checked profile-safe host fixnums, or return #f\
+."
       (let* ((limit (backend-small-accelerator-limit backend))
              (left-small (integer->small backend left limit))
              (right-small (integer->small backend right limit)))
@@ -979,7 +980,8 @@
           (else (error "unknown owned rational rounding mode" mode)))))
 
     (define (integer-power-small backend base exponent)
-      "Raise small nonnegative BASE to host integer EXPONENT as owned integer."
+      "Raise small nonnegative BASE to host integer EXPONENT as owned integer.\
+"
       (integer-power backend
                      (integer-from-small backend base)
                      (integer-from-small backend exponent)))
@@ -1691,7 +1693,8 @@
 
     (define (consent-numeric backend operation . arguments)
       "Apply owned numeric OPERATION under BACKEND to ARGUMENTS."
-      "This internal runtime interface centralizes exact limbs, rationals, and"
+      "This internal runtime interface centralizes exact limbs, rationals, and\
+"
       "binary64 tuples. Unsupported operations raise an error."
       #((parameters
          (backend (type numeric-backend)

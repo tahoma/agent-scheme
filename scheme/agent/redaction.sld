@@ -326,7 +326,8 @@
          (reason (type string)
           (description "Human-readable reason for withholding DATUM.")))
         (returns (type local-only)
-         (description "A `local-only` wrapper datum carrying REASON and DATUM."))
+         (description
+           "A `local-only` wrapper datum carrying REASON and DATUM."))
         (effects state-write))
       (remember! (make-local-only-record reason))
       (list 'local-only
@@ -337,7 +338,8 @@
       "Return recent redaction records as a Scheme-readable datum."
       #((parameters
          (options (type list)
-          (description ("Reserved option list for future filtering or pagination."))))
+          (description
+            ("Reserved option list for future filtering or pagination."))))
         (returns (type redaction-log)
          (description
           ("A `redaction-log` datum containing recent redaction"

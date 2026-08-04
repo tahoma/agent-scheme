@@ -1,12 +1,12 @@
-;;; conformance-cases.scm --- Shared reader, evaluator, and R7RS fixture cases for Consent Scheme
+;;; conformance-cases.scm --- Shared Consent Scheme conformance cases
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-
-;; This file is intentionally Scheme-readable data. Test code may read it during
-;; bootstrap, and the Consent Scheme reader should eventually own that job.
+;;;
+;;; Version 2 uses structured source and expected datums by default.
+;;; Exact lexical inputs remain text; substantial programs use files.
 
 (consent-fixture-suite
-  (version 1)
+  (version 2)
   (cases
     ((id reader-boolean-literals)
      (kind r7rs-conformance)
@@ -17,9 +17,13 @@
      (oracle shared)
      (options ())
      (description "Boolean literals read as canonical booleans.")
-     (source "#t")
-     (expect (value "#t")))
 
+     (source
+       (text "#t"))
+     (expect
+       (value
+         #t))
+)
     ((id reader-long-boolean-literal)
      (kind r7rs-conformance)
      (phase read)
@@ -29,9 +33,13 @@
      (oracle shared)
      (options ())
      (description "Long boolean literals read as canonical booleans.")
-     (source "#false")
-     (expect (value "#f")))
 
+     (source
+       (text "#false"))
+     (expect
+       (value
+         #f))
+)
     ((id reader-bytevector-literal)
      (kind r7rs-conformance)
      (phase read)
@@ -41,9 +49,13 @@
      (oracle shared)
      (options ())
      (description "Bytevector literals read as bytevector datums.")
-     (source "#u8(0 127 255)")
-     (expect (value "#u8(0 127 255)")))
 
+     (source
+       (text "#u8(0 127 255)"))
+     (expect
+       (value
+         #u8(0 127 255)))
+)
     ((id reader-bytevector-byte-range-error)
      (kind r7rs-conformance)
      (phase read)
@@ -52,10 +64,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Bytevector literal elements outside the byte range signal reader errors.")
-     (source "#u8(256)")
-     (expect (error)))
+     (description
+       "Bytevector literal elements outside the byte range signal reader \
+errors.")
 
+     (source
+       (text "#u8(256)"))
+     (expect
+       (condition
+         (category read-error)))
+)
     ((id reader-character-literal)
      (kind r7rs-conformance)
      (phase read)
@@ -65,9 +83,13 @@
      (oracle shared)
      (options ())
      (description "Character literals read as character datums.")
-     (source "#\\space")
-     (expect (value "#\\space")))
 
+     (source
+       (text "#\\space"))
+     (expect
+       (value
+         #\space))
+)
     ((id reader-character-unicode-scalar)
      (kind r7rs-conformance)
      (phase read)
@@ -76,10 +98,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Hex character literals preserve Unicode scalar identity and canonical external writing.")
-     (source "#\\x3bb")
-     (expect (value "#\\λ")))
+     (description
+       "Hex character literals preserve Unicode scalar identity and canonical \
+external writing.")
 
+     (source
+       (text "#\\x3bb"))
+     (expect
+       (value
+         #\λ))
+)
     ((id reader-character-supplementary-scalar)
      (kind r7rs-conformance)
      (phase read)
@@ -88,10 +116,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Supplementary-plane character literals preserve scalar identity and printable external writing.")
-     (source "#\\x1f642")
-     (expect (value "#\\🙂")))
+     (description
+       "Supplementary-plane character literals preserve scalar identity and \
+printable external writing.")
 
+     (source
+       (text "#\\x1f642"))
+     (expect
+       (value
+         #\🙂))
+)
     ((id reader-character-invalid-surrogate)
      (kind r7rs-conformance)
      (phase read)
@@ -102,10 +136,16 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "Character literals reject surrogate code points outside the Unicode scalar range.")
-     (source "#\\xd800")
-     (expect (error)))
+     (description
+       "Character literals reject surrogate code points outside the Unicode \
+scalar range.")
 
+     (source
+       (text "#\\xd800"))
+     (expect
+       (condition
+         (category read-error)))
+)
     ((id reader-character-invalid-surrogate-end)
      (kind r7rs-conformance)
      (phase read)
@@ -116,10 +156,15 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "Character literals reject the upper endpoint of the surrogate range.")
-     (source "#\\xdfff")
-     (expect (error)))
+     (description
+       "Character literals reject the upper endpoint of the surrogate range.")
 
+     (source
+       (text "#\\xdfff"))
+     (expect
+       (condition
+         (category read-error)))
+)
     ((id reader-character-invalid-out-of-range)
      (kind r7rs-conformance)
      (phase read)
@@ -130,10 +175,15 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "Character literals reject values above the Unicode scalar range.")
-     (source "#\\x110000")
-     (expect (error)))
+     (description
+       "Character literals reject values above the Unicode scalar range.")
 
+     (source
+       (text "#\\x110000"))
+     (expect
+       (condition
+         (category read-error)))
+)
     ((id reader-character-malformed-hex)
      (kind r7rs-conformance)
      (phase read)
@@ -142,10 +192,15 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Malformed hexadecimal character names signal reader errors.")
-     (source "#\\xzz")
-     (expect (error)))
+     (description
+        "Malformed hexadecimal character names signal reader errors.")
 
+     (source
+       (text "#\\xzz"))
+     (expect
+       (condition
+         (category read-error)))
+)
     ((id reader-character-folded-name)
      (kind r7rs-conformance)
      (phase read)
@@ -156,10 +211,16 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "Consent's fold-case reader mode applies to its canonical character names.")
-     (source "#!fold-case #\\Space")
-     (expect (value "#\\space")))
+     (description
+       "Consent's fold-case reader mode applies to its canonical character \
+names.")
 
+     (source
+       (text "#!fold-case #\\Space"))
+     (expect
+       (value
+         #\space))
+)
     ((id reader-symbol-case-directive)
      (kind r7rs-conformance)
      (phase read)
@@ -169,9 +230,13 @@
      (oracle shared)
      (options ())
      (description "Case-folding directives affect subsequent symbols.")
-     (source "#!fold-case Consent-Scheme")
-     (expect (value "consent-scheme")))
 
+     (source
+       (text "#!fold-case Consent-Scheme"))
+     (expect
+       (value
+         consent-scheme))
+)
     ((id reader-no-fold-case-directive)
      (kind r7rs-conformance)
      (phase read)
@@ -180,10 +245,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The no-fold-case directive restores the default identifier case behavior.")
-     (source "#!fold-case #!no-fold-case Consent-Scheme")
-     (expect (value "Consent-Scheme")))
+     (description
+       "The no-fold-case directive restores the default identifier case \
+behavior.")
 
+     (source
+       (text "#!fold-case #!no-fold-case Consent-Scheme"))
+     (expect
+       (value
+         Consent-Scheme))
+)
     ((id reader-string-line-continuation)
      (kind r7rs-conformance)
      (phase read)
@@ -192,10 +263,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "String line continuations elide the escaped newline and intraline whitespace.")
-     (source "\"a\\\n  b\"")
-     (expect (value "\"ab\"")))
+     (description
+       "String line continuations elide the escaped newline and intraline \
+whitespace.")
 
+     (source
+       (text "\"a\\\n  b\""))
+     (expect
+       (value
+         "ab"))
+)
     ((id reader-number-radix-prefix)
      (kind r7rs-conformance)
      (phase read)
@@ -205,9 +282,13 @@
      (oracle shared)
      (options ())
      (description "Radix-prefixed numeric tokens read as numeric datums.")
-     (source "#x2a")
-     (expect (value "42")))
 
+     (source
+       (text "#x2a"))
+     (expect
+       (value
+         42))
+)
     ((id reader-dotted-list)
      (kind r7rs-conformance)
      (phase read)
@@ -217,9 +298,13 @@
      (oracle shared)
      (options ())
      (description "Dotted lists read as proper pair chains with a final tail.")
-     (source "(alpha beta . gamma)")
-     (expect (value "(alpha beta . gamma)")))
 
+     (source
+       (text "(alpha beta . gamma)"))
+     (expect
+       (value
+         (alpha beta . gamma)))
+)
     ((id reader-vector-literal)
      (kind r7rs-conformance)
      (phase read)
@@ -229,9 +314,13 @@
      (oracle shared)
      (options ())
      (description "Vector literals read as vector datums.")
-     (source "#(1 alpha \"ok\")")
-     (expect (value "#(1 alpha \"ok\")")))
 
+     (source
+       (text "#(1 alpha \"ok\")"))
+     (expect
+       (value
+         #(1 alpha "ok")))
+)
     ((id reader-abbreviation-forms)
      (kind r7rs-conformance)
      (phase read)
@@ -241,9 +330,13 @@
      (oracle shared)
      (options ())
      (description "Reader abbreviations expand to their list forms.")
-     (source "`(,alpha ,@beta)")
-     (expect (value "(quasiquote ((unquote alpha) (unquote-splicing beta)))")))
 
+     (source
+       (text "`(,alpha ,@beta)"))
+     (expect
+       (value
+         (quasiquote ((unquote alpha) (unquote-splicing beta)))))
+)
     ((id reader-comments-and-datum-comments)
      (kind r7rs-conformance)
      (phase read)
@@ -252,10 +345,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Line, block, datum comments, and directives are intertoken space.")
-     (source "; skip\n#| block #| nested |# done |# #;discard #!fold-case FOO")
-     (expect (value "foo")))
+     (description
+       "Line, block, datum comments, and directives are intertoken space.")
 
+     (source
+       (text
+         "; skip\n#| block #| nested |# done |# #;discard #!fold-case FOO"))
+     (expect
+       (value
+         foo))
+)
     ((id reader-escaped-identifier)
      (kind r7rs-conformance)
      (phase read)
@@ -264,18 +363,28 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (provenance
-      (inspired-by "Chibi Scheme tests/r7rs-tests.scm and Gauche tests/symcase.scm")
-      (source-url "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests.scm")
-      (source-url "https://github.com/shirok/Gauche/blob/master/tests/symcase.scm")
-      (license "BSD-style")
-      (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (license-url "https://github.com/shirok/Gauche/blob/master/COPYING")
-      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
-     (description "Vertical-bar identifiers preserve escaped delimiter characters.")
-     (source "|consent\\x2d;scheme|")
-     (expect (value "consent-scheme")))
+     (provenance (inspired-by
+       "Chibi Scheme tests/r7rs-tests.scm and Gauche tests/symcase.scm")
+       (source-url
 
+          "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests\
+.scm\
+") (source-url
+       "https://github.com/shirok/Gauche/blob/master/tests/symcase.scm")
+       (license "BSD-style") (license-url
+       "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
+       (license-url "https://github.com/shirok/Gauche/blob/master/COPYING")
+       (review-note
+       "Consent Scheme-owned rewrite; no third-party test text copied."))
+     (description
+       "Vertical-bar identifiers preserve escaped delimiter characters.")
+
+     (source
+       (text "|consent\\x2d;scheme|"))
+     (expect
+       (value
+         consent-scheme))
+)
     ((id reader-numeric-exactness-before-radix)
      (kind r7rs-conformance)
      (phase read)
@@ -285,9 +394,13 @@
      (oracle shared)
      (options ())
      (description "An exactness prefix may precede a numeric radix prefix.")
-     (source "#e#x2a")
-     (expect (value "42")))
 
+     (source
+       (text "#e#x2a"))
+     (expect
+       (value
+         42))
+)
     ((id reader-numeric-radix-before-exactness)
      (kind r7rs-conformance)
      (phase read)
@@ -297,9 +410,13 @@
      (oracle shared)
      (options ())
      (description "A numeric radix prefix may precede an exactness prefix.")
-     (source "#x#e2a")
-     (expect (value "42")))
 
+     (source
+       (text "#x#e2a"))
+     (expect
+       (value
+         42))
+)
     ((id reader-numeric-duplicate-prefix-error)
      (kind r7rs-conformance)
      (phase read)
@@ -308,10 +425,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Conflicting exactness prefixes are rejected as malformed numeric syntax.")
-     (source "#e#i1")
-     (expect (error)))
+     (description
+       "Conflicting exactness prefixes are rejected as malformed numeric \
+syntax.")
 
+     (source
+       (text "#e#i1"))
+     (expect
+       (condition
+         (category read-error)))
+)
     ((id reader-numeric-like-peculiar-identifier)
      (kind r7rs-conformance)
      (phase read)
@@ -320,10 +443,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "A dot-led peculiar identifier is not misclassified as a malformed decimal.")
-     (source ".e1")
-     (expect (value ".e1")))
+     (description
+       "A dot-led peculiar identifier is not misclassified as a malformed \
+decimal.")
 
+     (source
+       (text ".e1"))
+     (expect
+       (value
+         .e1))
+)
     ((id reader-numeric-nondecimal-rectangular)
      (kind r7rs-conformance)
      (phase read)
@@ -332,10 +461,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Nondecimal rectangular literals parse each component in the prefixed radix.")
-     (source "#xE-1i")
-     (expect (value "14-1i")))
+     (description
+       "Nondecimal rectangular literals parse each component in the prefixed \
+radix.")
 
+     (source
+       (text "#xE-1i"))
+     (expect
+       (value
+         14-1i))
+)
     ((id primitive-procedure-call)
      (kind r7rs-conformance)
      (phase eval)
@@ -345,9 +480,14 @@
      (oracle shared)
      (options ())
      (description "Primitive procedure calls evaluate operator and operands.")
-     (source "(+ 1 2)")
-     (expect (value "3")))
 
+     (source
+       (form
+         (+ 1 2)))
+     (expect
+       (value
+         3))
+)
     ((id numeric-exact-rational-arithmetic)
      (kind r7rs-conformance)
      (phase eval)
@@ -357,9 +497,14 @@
      (oracle shared)
      (options ())
      (description "Exact rational arithmetic remains exact and reduced.")
-     (source "(list (/ 3 4 5) (+ 1/2 1/3) (* 2/3 9/4))")
-     (expect (value "(3/20 5/6 3/2)")))
 
+     (source
+       (form
+         (list (/ 3 4 5) (+ 1/2 1/3) (* 2/3 9/4))))
+     (expect
+       (value
+         (3/20 5/6 3/2)))
+)
     ((id numeric-exactness-conversions)
      (kind r7rs-conformance)
      (phase eval)
@@ -369,9 +514,15 @@
      (oracle shared)
      (options ())
      (description "Exact and inexact conversions are explicit and printable.")
-     (source "(list (exact? #e1.5) (inexact? #i3/2) (exact (inexact 42)) (number->string (inexact 3/2)))")
-     (expect (value "(#t #t 42 \"1.5\")")))
 
+     (source
+       (form
+         (list (exact? 3/2) (inexact? 1.5) (exact (inexact 42))
+               (number->string (inexact 3/2)))))
+     (expect
+       (value
+         (#t #t 42 "1.5")))
+)
     ((id numeric-radix-string-conversions)
      (kind r7rs-conformance)
      (phase eval)
@@ -380,10 +531,17 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Number string conversion honors supported R7RS radix arguments.")
-     (source "(list (number->string 42 16) (string->number \"2a\" 16) (string->number \"101\" 2))")
-     (expect (value "(\"2a\" 42 5)")))
+     (description
+       "Number string conversion honors supported R7RS radix arguments.")
 
+     (source
+       (form
+         (list (number->string 42 16) (string->number "2a" 16)
+               (string->number "101" 2))))
+     (expect
+       (value
+         ("2a" 42 5)))
+)
     ((id numeric-rationalize-tolerance)
      (kind r7rs-conformance)
      (phase eval)
@@ -392,10 +550,17 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "rationalize returns a simplest rational within the requested tolerance.")
-     (source "(list (rationalize #e.3 1/10) (rationalize 1/3 1/100))")
-     (expect (value "(1/3 1/3)")))
+     (description
+       "rationalize returns a simplest rational within the requested \
+tolerance.")
 
+     (source
+       (form
+         (list (rationalize 3/10 1/10) (rationalize 1/3 1/100))))
+     (expect
+       (value
+         (1/3 1/3)))
+)
     ((id numeric-exact-integer-sqrt-large)
      (kind r7rs-conformance)
      (phase eval)
@@ -404,16 +569,27 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (provenance
-      (inspired-by "Chibi Scheme tests/r7rs-tests.scm exact-integer-sqrt coverage")
-      (source-url "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests.scm")
-      (license "BSD-style")
-      (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
-     (description "exact-integer-sqrt handles a large exact power with zero remainder.")
-     (source "(call-with-values (lambda () (exact-integer-sqrt (expt 2 60))) list)")
-     (expect (value "(1073741824 0)")))
+     (provenance (inspired-by
+       "Chibi Scheme tests/r7rs-tests.scm exact-integer-sqrt coverage")
+       (source-url
 
+          "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests\
+.scm\
+") (license "BSD-style") (license-url
+       "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
+       (review-note
+       "Consent Scheme-owned rewrite; no third-party test text copied."))
+     (description
+       "exact-integer-sqrt handles a large exact power with zero remainder.")
+
+     (source
+       (form
+         (call-with-values (lambda () (exact-integer-sqrt (expt 2 60)))
+           list)))
+     (expect
+       (value
+         (1073741824 0)))
+)
     ((id numeric-complex-rectangular-arithmetic)
      (kind r7rs-conformance)
      (phase eval)
@@ -423,9 +599,14 @@
      (oracle shared)
      (options ())
      (description "Rectangular complex literals participate in arithmetic.")
-     (source "(+ 1+2i 3/4-1/2i)")
-     (expect (value "7/4+3/2i")))
 
+     (source
+       (form
+         (+ 1+2i 3/4-1/2i)))
+     (expect
+       (value
+         7/4+3/2i))
+)
     ((id numeric-inexact-special-values)
      (kind r7rs-conformance)
      (phase eval)
@@ -434,10 +615,19 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Inexact infinities and NaNs are recognized by the inexact library.")
-     (source "(import (scheme inexact)) (list (real? +inf.0) (rational? +inf.0) (infinite? +inf.0) (nan? +nan.0) (= +nan.0 +nan.0))")
-     (expect (value "(#t #f #t #t #f)")))
+     (description
+       "Inexact infinities and NaNs are recognized by the inexact library.")
 
+     (source
+       (forms
+         (import (scheme inexact))
+         (list (real? +inf.0) (rational? +inf.0) (infinite? +inf.0) (nan?
+                                                                     +nan.0) (=
+              +nan.0 +nan.0))))
+     (expect
+       (value
+         (#t #f #t #t #f)))
+)
     ((id numeric-polar-special-values)
      (kind r7rs-conformance)
      (phase eval)
@@ -446,10 +636,19 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Polar complex operations preserve canonical infinity and NaN components.")
-     (source "(import (scheme complex)) (list +inf.0i (make-polar +inf.0 0) (make-polar 1 +inf.0) (make-polar +nan.0 0))")
-     (expect (value "(0+inf.0i +inf.0+nan.0i +nan.0+nan.0i +nan.0+nan.0i)")))
+     (description
+       "Polar complex operations preserve canonical infinity and NaN \
+components.")
 
+     (source
+       (forms
+         (import (scheme complex))
+         (list 0+inf.0i (make-polar +inf.0 0) (make-polar 1 +inf.0)
+               (make-polar +nan.0 0))))
+     (expect
+       (value
+         (0+inf.0i +inf.0+nan.0i +nan.0+nan.0i +nan.0+nan.0i)))
+)
     ((id numeric-exact-integer-growth)
      (kind r7rs-conformance)
      (phase eval)
@@ -458,10 +657,19 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Exact integer arithmetic grows well beyond a machine word without coercion.")
-     (source "(list (expt 2 256) (+ (expt 2 256) 1))")
-     (expect (value "(115792089237316195423570985008687907853269984665640564039457584007913129639936 115792089237316195423570985008687907853269984665640564039457584007913129639937)")))
+     (description
+       "Exact integer arithmetic grows well beyond a machine word without \
+coercion.")
 
+     (source
+       (form
+         (list (expt 2 256) (+ (expt 2 256) 1))))
+     (expect
+       (value
+         (#x10000000000000000000000000000000000000000000000000000000000000000
+            ;; readability-allow: contiguous-datum -- Exact integer is atomic.
+            #x10000000000000000000000000000000000000000000000000000000000000001)))
+)
     ((id numeric-rational-reduction-growth)
      (kind r7rs-conformance)
      (phase eval)
@@ -470,10 +678,18 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Rational reduction removes a common factor larger than a machine word.")
-     (source "(/ (* 21 (expt 2 200)) (* 35 (expt 2 200)))")
-     (expect (value "3/5")))
+     (description
 
+        "Rational reduction removes a common factor larger than a machine word\
+.")
+
+     (source
+       (form
+         (/ (* 21 (expt 2 200)) (* 35 (expt 2 200)))))
+     (expect
+       (value
+         3/5))
+)
     ((id numeric-exactness-conversion-boundary)
      (kind r7rs-conformance)
      (phase eval)
@@ -482,10 +698,20 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Exact and inexact conversion crosses integers, rationals, and decimals canonically.")
-     (source "(list (exact #i3/2) (inexact #e3/2) (exact (inexact #e.125)) (number->string (inexact #e3/2)))")
-     (expect (value "(3/2 1.5 1/8 \"1.5\")")))
+     (description
 
+        "Exact and inexact conversion crosses integers, rationals, and decimal\
+s \
+canonically.")
+
+     (source
+       (form
+         (list (exact 1.5) (inexact 3/2) (exact (inexact 1/8))
+               (number->string (inexact 3/2)))))
+     (expect
+       (value
+         (3/2 1.5 1/8 "1.5")))
+)
     ((id numeric-mixed-exact-inexact-ordering)
      (kind r7rs-conformance)
      (phase eval)
@@ -494,10 +720,20 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Mixed comparisons retain distinctions beyond binary64 precision.")
-     (source "(let* ((base (expt 2 100)) (rounded (inexact base)) (next (+ base 1))) (list (= next rounded) (> next rounded) (= base rounded)))")
-     (expect (value "(#f #t #t)")))
+     (description
+       "Mixed comparisons retain distinctions beyond binary64 precision.")
 
+     (source
+       (form
+         (let* ((base (expt 2 100)) (rounded (inexact base)) (next (+ base
+                                                                      1)))
+            (list (= next rounded) (> next rounded) (= base
+
+              rounded)))))
+     (expect
+       (value
+         (#f #t #t)))
+)
     ((id numeric-inexact-edge-arithmetic)
      (kind r7rs-conformance)
      (phase eval)
@@ -506,10 +742,20 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Infinity and NaN arithmetic and complex classification normalize across hosts.")
-     (source "(import (scheme inexact)) (list (+ +inf.0 -inf.0) (* +inf.0 -1.0) (/ +inf.0 +inf.0) (finite? 1.0+2.0i) (nan? 1.0+nan.0i))")
-     (expect (value "(+nan.0 -inf.0 +nan.0 #t #t)")))
+     (description
+       "Infinity and NaN arithmetic and complex classification normalize \
+across hosts.")
 
+     (source
+       (forms
+         (import (scheme inexact))
+         (list (+ +inf.0 -inf.0) (* +inf.0 -1.0) (/ +inf.0 +inf.0) (finite?
+                                                                    1.0+2.0i)
+            (nan? 1.0+nan.0i))))
+     (expect
+       (value
+         (+nan.0 -inf.0 +nan.0 #t #t)))
+)
     ((id numeric-binary64-rounding-boundaries)
      (kind r7rs-conformance)
      (phase eval)
@@ -518,10 +764,27 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Exact conversion and arithmetic round binary64 boundary cases to nearest, ties to even.")
-     (source "(list (number->string (inexact (/ 1 (expt 2 1075)))) (number->string (inexact (/ 3 (expt 2 1076)))) (number->string (inexact (/ (- (expt 2 53) 1) (expt 2 1075)))) (number->string (inexact 9007199254740993)) (number->string (+ 1.0 (inexact (/ 1 (expt 2 53))))) (number->string (+ 1.0 (inexact (/ 3 (expt 2 53))))))")
-     (expect (value "(\"0.0\" \"5e-324\" \"2.2250738585072014e-308\" \"9007199254740992.0\" \"1.0\" \"1.0000000000000004\")")))
+     (description
+       "Exact conversion and arithmetic round binary64 boundary cases to \
+nearest, ties to even.")
 
+     (source
+       (form
+         (list (number->string (inexact (/ 1 (expt 2 1075))))
+               (number->string (inexact (/ 3 (expt 2 1076)))) (number->string
+                                                               (inexact (/ (-
+              (expt 2 53) 1) (expt 2 1075)))) (number->string
+
+              (inexact 9007199254740993)) (number->string (+ 1.0
+
+              (inexact (/ 1 (expt 2 53))))) (number->string (+
+
+              1.0 (inexact (/ 3 (expt 2 53))))))))
+     (expect
+       (value
+         ("0.0" "5e-324" "2.2250738585072014e-308" "9007199254740992.0"
+          "1.0" "1.0000000000000004")))
+)
     ((id numeric-complex-division)
      (kind r7rs-conformance)
      (phase eval)
@@ -530,10 +793,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Rectangular complex division preserves exact reduced components.")
-     (source "(/ 1+2i 3-4i)")
-     (expect (value "-1/5+2/5i")))
+     (description
+       "Rectangular complex division preserves exact reduced components.")
 
+     (source
+       (form
+         (/ 1+2i 3-4i)))
+     (expect
+       (value
+         -1/5+2/5i))
+)
     ((id numeric-complex-operation-matrix)
      (kind r7rs-conformance)
      (phase eval)
@@ -542,10 +811,22 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Exact rectangular complex arithmetic preserves reduced components across every basic operation.")
-     (source "(import (scheme complex)) (let ((left 3+4i) (right -2+5i)) (list (+ left right) (- left right) (* left right) (/ left right) (real-part left) (imag-part left) (= left (make-rectangular 3 4))))")
-     (expect (value "(1+9i 5-1i -26+7i 14/29-23/29i 3 4 #t)")))
+     (description
+       "Exact rectangular complex arithmetic preserves reduced components \
+across every basic operation.")
 
+     (source
+       (forms
+         (import (scheme complex))
+         (let ((left 3+4i) (right -2+5i)) (list (+ left right) (- left
+                                                                  right) (*
+              left right) (/ left right) (real-part left) (imag-part
+
+              left) (= left (make-rectangular 3 4))))))
+     (expect
+       (value
+         (1+9i 5-1i -26+7i 14/29-23/29i 3 4 #t)))
+)
     ((id numeric-complex-polar-geometry)
      (kind r7rs-conformance)
      (phase eval)
@@ -554,10 +835,28 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Polar construction, magnitude, and angle agree within a cross-libm tolerance.")
-     (source "(import (scheme complex) (scheme inexact)) (let* ((epsilon 1e-12) (pi (* 4.0 (atan 1.0))) (value (make-polar 2.0 (/ pi 6.0)))) (list (< (abs (- (real-part value) 1.7320508075688772)) epsilon) (< (abs (- (imag-part value) 1.0)) epsilon) (< (abs (- (magnitude value) 2.0)) epsilon) (< (abs (- (angle 1.0+1.0i) (/ pi 4.0))) epsilon)))")
-     (expect (value "(#t #t #t #t)")))
+     (description
+       "Polar construction, magnitude, and angle agree within a cross-libm \
+tolerance.")
 
+     (source
+       (forms
+         (import (scheme complex) (scheme inexact))
+         (let* ((epsilon 1e-12) (pi (* 4.0 (atan 1.0))) (value (make-polar
+                                                                2.0 (/ pi
+              6.0)))) (list (< (abs (- (real-part value)
+
+              1.7320508075688772)) epsilon) (< (abs (- (imag-part value)
+
+              1.0)) epsilon) (< (abs (- (magnitude value) 2.0))
+
+              epsilon) (< (abs (- (angle 1.0+1.0i) (/ pi 4.0)))
+
+              epsilon)))))
+     (expect
+       (value
+         (#t #t #t #t)))
+)
     ((id numeric-transcendental-accuracy-matrix)
      (kind r7rs-conformance)
      (phase eval)
@@ -566,10 +865,34 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Temporary transcendental accelerators satisfy representative identities within a cross-libm tolerance.")
-     (source "(import (scheme inexact)) (let* ((epsilon 1e-12) (pi (* 4.0 (atan 1.0)))) (list (< (abs (- (sin (/ pi 6.0)) 0.5)) epsilon) (< (abs (- (cos (/ pi 3.0)) 0.5)) epsilon) (< (abs (- (tan (/ pi 4.0)) 1.0)) epsilon) (< (abs (- (exp (log 2.0)) 2.0)) epsilon) (< (abs (- (asin 0.5) (/ pi 6.0))) epsilon) (< (abs (- (acos 0.5) (/ pi 3.0))) epsilon) (< (abs (- (atan 1.0) (/ pi 4.0))) epsilon) (< (abs (- (* (sqrt 2.0) (sqrt 2.0)) 2.0)) epsilon)))")
-     (expect (value "(#t #t #t #t #t #t #t #t)")))
+     (description
+       "Temporary transcendental accelerators satisfy representative \
+identities within a cross-libm tolerance.")
 
+     (source
+       (forms
+         (import (scheme inexact))
+         (let* ((epsilon 1e-12) (pi (* 4.0 (atan 1.0)))) (list (< (abs (-
+                                                                        (sin (/
+              pi 6.0)) 0.5)) epsilon) (< (abs (- (cos (/ pi 3.0)) 0.5))
+
+              epsilon) (< (abs (- (tan (/ pi 4.0)) 1.0)) epsilon) (< (abs
+
+              (- (exp (log 2.0)) 2.0)) epsilon) (< (abs (- (asin
+
+              0.5) (/ pi 6.0))) epsilon) (< (abs (- (acos 0.5)
+
+              (/ pi 3.0))) epsilon) (< (abs (- (atan
+
+              1.0) (/ pi 4.0))) epsilon) (< (abs (- (*
+
+              (sqrt 2.0) (sqrt 2.0)) 2.0))
+
+              epsilon)))))
+     (expect
+       (value
+         (#t #t #t #t #t #t #t #t)))
+)
     ((id numeric-transcendental-domain-boundaries)
      (kind r7rs-conformance)
      (phase eval)
@@ -578,10 +901,24 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Square root, logarithm, and two-argument arctangent honor principal domain boundaries.")
-     (source "(import (scheme complex) (scheme inexact)) (let* ((epsilon 1e-12) (pi (* 4.0 (atan 1.0))) (root (sqrt -1.0)) (log-zero (log 0.0))) (list (< (abs (real-part root)) epsilon) (< (abs (- (imag-part root) 1.0)) epsilon) (infinite? log-zero) (< log-zero 0.0) (< (abs (- (atan 0.0 -1.0) pi)) epsilon)))")
-     (expect (value "(#t #t #t #t #t)")))
+     (description
+       "Square root, logarithm, and two-argument arctangent honor principal \
+domain boundaries.")
 
+     (source
+       (forms
+         (import (scheme complex) (scheme inexact))
+         (let* ((epsilon 1e-12) (pi (* 4.0 (atan 1.0))) (root (sqrt -1.0))
+                (log-zero (log 0.0))) (list (< (abs (real-part root)) epsilon)
+              (< (abs (-
+
+              (imag-part root) 1.0)) epsilon) (infinite? log-zero) (< log-zero
+
+              0.0) (< (abs (- (atan 0.0 -1.0) pi)) epsilon)))))
+     (expect
+       (value
+         (#t #t #t #t #t)))
+)
     ((id numeric-compiled-hot-path-smoke)
      (kind r7rs-conformance)
      (phase eval)
@@ -590,10 +927,19 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "A bounded fixnum and parsed-binary64 loop keeps compiled numeric and dispatch hot paths under test.")
-     (source "(let loop ((remaining 1000) (sum 0.0)) (if (= remaining 0) (= sum 250.0) (loop (- remaining 1) (+ sum 0.25))))")
-     (expect (value "#t")))
+     (description
+       "A bounded fixnum and parsed-binary64 loop keeps compiled numeric and \
+dispatch hot paths under test.")
 
+     (source
+       (form
+         (let loop ((remaining 1000) (sum 0.0)) (if (= remaining 0) (= sum
+                                                                       250.0)
+              (loop (- remaining 1) (+ sum 0.25))))))
+     (expect
+       (value
+         #t))
+)
     ((id numeric-canonical-rendering)
      (kind r7rs-conformance)
      (phase eval)
@@ -602,10 +948,22 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Numeric rendering is canonical for large radix, rational, zero, special, and complex values.")
-     (source "(list (number->string (- (expt 2 128) 1) 16) (number->string (/ (* 3 (expt 2 200)) (* 5 (expt 2 200)))) (number->string -0.0) (number->string +inf.0) (number->string 1/2+3/4i))")
-     (expect (value "(\"ffffffffffffffffffffffffffffffff\" \"3/5\" \"0.0\" \"+inf.0\" \"1/2+3/4i\")")))
+     (description
+       "Numeric rendering is canonical for large radix, rational, zero, \
+special, and complex values.")
 
+     (source
+       (form
+         (list (number->string (- (expt 2 128) 1) 16) (number->string (/ (*
+                                                                          3
+              (expt 2 200)) (* 5 (expt 2 200)))) (number->string 0.0)
+
+            (number->string +inf.0) (number->string 1/2+3/4i))))
+     (expect
+       (value
+         ("ffffffffffffffffffffffffffffffff" "3/5" "0.0" "+inf.0"
+          "1/2+3/4i")))
+)
     ((id derived-let-expression)
      (kind r7rs-conformance)
      (phase eval)
@@ -615,9 +973,14 @@
      (oracle shared)
      (options ())
      (description "Derived binding syntax evaluates lexical bindings.")
-     (source "(let ((x 1) (y 2)) (+ x y))")
-     (expect (value "3")))
 
+     (source
+       (form
+         (let ((x 1) (y 2)) (+ x y))))
+     (expect
+       (value
+         3))
+)
     ((id derived-cond-arrow-literal-binding)
      (kind r7rs-conformance)
      (phase eval)
@@ -627,9 +990,16 @@
      (oracle shared)
      (options ())
      (description "The cond => syntax respects lexical literal binding.")
-     (source "(list (cond ((assv 'b '((a 1) (b 2))) => cadr) (else #f)) (let ((=> #f)) (cond (#t => 'ok))))")
-     (expect (value "(2 ok)")))
 
+     (source
+       (form
+         (list (cond ((assv (quote b) (quote ((a 1) (b 2)))) => cadr) (else
+                                                                       #f))
+            (let ((=> #f)) (cond (#t => (quote ok)))))))
+     (expect
+       (value
+         (2 ok)))
+)
     ((id derived-case-expression)
      (kind r7rs-conformance)
      (phase eval)
@@ -639,9 +1009,16 @@
      (oracle shared)
      (options ())
      (description "The case syntax dispatches by eqv? over datum clauses.")
-     (source "(case (car '(c d)) ((a e i o u) 'vowel) ((c d) 'consonant) (else 'other))")
-     (expect (value "consonant")))
 
+     (source
+       (form
+         (case (car (quote (c d))) ((a e i o u) (quote vowel)) ((c d) (quote
+
+              consonant)) (else (quote other)))))
+     (expect
+       (value
+         consonant))
+)
     ((id derived-do-expression)
      (kind r7rs-conformance)
      (phase eval)
@@ -651,9 +1028,14 @@
      (oracle shared)
      (options ())
      (description "The do syntax expands through nested ellipses.")
-     (source "(do ((i 0 (+ i 1)) (acc 0 (+ acc i))) ((= i 5) acc))")
-     (expect (value "10")))
 
+     (source
+       (form
+         (do ((i 0 (+ i 1)) (acc 0 (+ acc i))) ((= i 5) acc))))
+     (expect
+       (value
+         10))
+)
     ((id derived-quasiquote-expression)
      (kind r7rs-conformance)
      (phase eval)
@@ -662,10 +1044,20 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Quasiquote evaluates unquote and unquote-splicing at the active depth.")
-     (source "(quasiquote (a (unquote (+ 1 2)) (unquote-splicing (list 'b 'c))))")
-     (expect (value "(a 3 b c)")))
+     (description
 
+        "Quasiquote evaluates unquote and unquote-splicing at the active depth\
+.")
+
+     (source
+       (form
+         (quasiquote (a (unquote (+ 1 2)) (unquote-splicing (list (quote b)
+                                                                  (quote
+              c)))))))
+     (expect
+       (value
+         (a 3 b c)))
+)
     ((id syntax-rules-unless)
      (kind r7rs-conformance)
      (phase eval)
@@ -675,9 +1067,16 @@
      (oracle shared)
      (options ())
      (description "A syntax-rules macro expands hygienically with ellipses.")
-     (source "(begin (define-syntax unless (syntax-rules () ((unless test body ...) (if test #f (begin body ...))))) (unless #f 42))")
-     (expect (value "42")))
 
+     (source
+       (form
+         (begin (define-syntax unless (syntax-rules () ((unless test body
+                                                                ...) (if test
+              #f (begin body ...))))) (unless #f 42))))
+     (expect
+       (value
+         42))
+)
     ((id syntax-rules-let-syntax-hygiene)
      (kind r7rs-conformance)
      (phase eval)
@@ -686,10 +1085,19 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "A local syntax-rules macro resolves free template identifiers in its definition scope.")
-     (source "(let ((x 'outer)) (let-syntax ((m (syntax-rules () ((m) x)))) (let ((x 'inner)) (m))))")
-     (expect (value "outer")))
+     (description
+       "A local syntax-rules macro resolves free template identifiers in its \
+definition scope.")
 
+     (source
+       (form
+         (let ((x (quote outer))) (let-syntax ((m (syntax-rules () ((m)
+                                                                    x)))) (let
+              ((x (quote inner))) (m))))))
+     (expect
+       (value
+         outer))
+)
     ((id syntax-rules-letrec-recursive-or)
      (kind r7rs-conformance)
      (phase eval)
@@ -698,16 +1106,32 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (provenance
-      (inspired-by "Chibi Scheme tests/r7rs-tests.scm letrec-syntax coverage")
-      (source-url "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests.scm")
-      (license "BSD-style")
-      (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
-     (description "letrec-syntax supports recursively expanded syntax-rules macros without capturing local temporaries.")
-     (source "(letrec-syntax ((choose (syntax-rules () ((choose) #f) ((choose expr) expr) ((choose expr rest ...) (let ((temp expr)) (if temp temp (choose rest ...))))))) (let ((temp 'program)) (choose #f temp 'unreached)))")
-     (expect (value "program")))
+     (provenance (inspired-by
+       "Chibi Scheme tests/r7rs-tests.scm letrec-syntax coverage") (source-url
 
+          "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests\
+.scm\
+") (license "BSD-style") (license-url
+       "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
+       (review-note
+       "Consent Scheme-owned rewrite; no third-party test text copied."))
+     (description
+       "letrec-syntax supports recursively expanded syntax-rules macros \
+without capturing local temporaries.")
+
+     (source
+       (form
+         (letrec-syntax ((choose (syntax-rules () ((choose) #f) ((choose
+                                                                  expr) expr)
+              ((choose expr rest ...) (let ((temp expr)) (if temp
+
+              temp (choose rest ...))))))) (let ((temp (quote
+
+              program))) (choose #f temp (quote unreached))))))
+     (expect
+       (value
+         program))
+)
     ((id syntax-rules-dotted-pattern-template)
      (kind r7rs-conformance)
      (phase eval)
@@ -717,9 +1141,20 @@
      (oracle shared)
      (options ())
      (description "syntax-rules supports improper patterns and templates.")
-     (source "(begin (define-syntax rest-list (syntax-rules () ((rest-list first . rest) 'rest))) (define-syntax make-pair (syntax-rules () ((make-pair left right) '(left . right)))) (list (rest-list a b c) (make-pair alpha beta)))")
-     (expect (value "((b c) (alpha . beta))")))
 
+     (source
+       (form
+         (begin (define-syntax rest-list (syntax-rules () ((rest-list first
+                                                                      . rest)
+              (quote rest)))) (define-syntax make-pair (syntax-rules
+
+              () ((make-pair left right) (quote (left . right))))) (list
+
+              (rest-list a b c) (make-pair alpha beta)))))
+     (expect
+       (value
+         ((b c) (alpha . beta))))
+)
     ((id syntax-rules-nested-ellipsis)
      (kind r7rs-conformance)
      (phase eval)
@@ -728,10 +1163,19 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "syntax-rules distributes nested ellipsis captures through templates.")
-     (source "(begin (define-syntax echo-groups (syntax-rules () ((echo-groups ((head item ...) ...)) '((head item ...) ...)))) (echo-groups ((a 1 2) (b 3) (c))))")
-     (expect (value "((a 1 2) (b 3) (c))")))
+     (description
+       "syntax-rules distributes nested ellipsis captures through templates.")
 
+     (source
+       (form
+         (begin (define-syntax echo-groups (syntax-rules () ((echo-groups
+                                                              ((head item ...)
+              ...)) (quote ((head item ...) ...)))))
+                (echo-groups ((a 1 2) (b 3) (c))))))
+     (expect
+       (value
+         ((a 1 2) (b 3) (c))))
+)
     ((id syntax-rules-custom-ellipsis)
      (kind r7rs-conformance)
      (phase eval)
@@ -741,9 +1185,16 @@
      (oracle shared)
      (options ())
      (description "syntax-rules accepts a custom ellipsis identifier.")
-     (source "(begin (define-syntax collect (syntax-rules ::: () ((collect item :::) (list item :::)))) (collect 1 2 3))")
-     (expect (value "(1 2 3)")))
 
+     (source
+       (form
+         (begin (define-syntax collect (syntax-rules ::: () ((collect item
+                                                                      :::)
+              (list item :::)))) (collect 1 2 3))))
+     (expect
+       (value
+         (1 2 3)))
+)
     ((id syntax-rules-malformed-template-ellipsis)
      (kind r7rs-conformance)
      (phase eval)
@@ -752,10 +1203,19 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "A repeated pattern variable used without a matching template ellipsis signals an expansion error.")
-     (source "(begin (define-syntax bad (syntax-rules () ((bad x ...) x))) (bad 1 2))")
-     (expect (error)))
+     (description
+       "A repeated pattern variable used without a matching template ellipsis \
+signals an expansion error.")
 
+     (source
+       (form
+         (begin (define-syntax bad (syntax-rules () ((bad x ...) x))) (bad 1
+
+              2))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id syntax-rules-syntax-error)
      (kind r7rs-conformance)
      (phase eval)
@@ -765,9 +1225,16 @@
      (oracle shared)
      (options ())
      (description "A syntax-error template signals an expansion-time error.")
-     (source "(begin (define-syntax bad-use (syntax-rules () ((bad-use x) (syntax-error \"bad macro\" x)))) (bad-use 123))")
-     (expect (error)))
 
+     (source
+       (form
+         (begin (define-syntax bad-use (syntax-rules () ((bad-use x)
+                                                         (syntax-error
+              "bad macro" x)))) (bad-use 123))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id cond-expand-r7rs-feature)
      (kind r7rs-conformance)
      (phase eval)
@@ -777,9 +1244,14 @@
      (oracle shared)
      (options ())
      (description "cond-expand selects statically recognized base features.")
-     (source "(cond-expand (r7rs 'ok) (else 'missing))")
-     (expect (value "ok")))
 
+     (source
+       (form
+         (cond-expand (r7rs (quote ok)) (else (quote missing)))))
+     (expect
+       (value
+         ok))
+)
     ((id library-cond-expand-library-feature)
      (kind r7rs-conformance)
      (phase eval)
@@ -788,10 +1260,24 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Library cond-expand declarations select available imported libraries.")
-     (source "(define-library (consent fixture conditional) (cond-expand ((library (scheme base)) (export answer) (import (scheme base)) (begin (define answer 42))) (else (export answer) (begin (define answer 'missing))))) (import (consent fixture conditional)) answer")
-     (expect (value "42")))
+     (description
+       "Library cond-expand declarations select available imported libraries.")
 
+     (source
+       (forms
+         (define-library (consent fixture conditional) (cond-expand
+                                                        ((library (scheme
+              base)) (export answer) (import (scheme base))
+                                                         (begin (define answer
+              42))) (else (export answer) (begin (define
+
+              answer (quote missing))))))
+         (import (consent fixture conditional))
+         answer))
+     (expect
+       (value
+         42))
+)
     ((id library-import-export)
      (kind r7rs-conformance)
      (phase eval)
@@ -801,9 +1287,18 @@
      (oracle shared)
      (options ())
      (description "A defined library exports a binding imported by a program.")
-     (source "(define-library (consent fixture math) (export answer) (import (scheme base)) (begin (define answer 42))) (import (consent fixture math)) answer")
-     (expect (value "42")))
 
+     (source
+       (forms
+         (define-library (consent fixture math) (export answer) (import
+                                                                 (scheme base))
+            (begin (define answer 42)))
+         (import (consent fixture math))
+         answer))
+     (expect
+       (value
+         42))
+)
     ((id library-exported-macro-scope)
      (kind r7rs-conformance)
      (phase eval)
@@ -812,10 +1307,23 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Exported library macros resolve free template identifiers in the library scope.")
-     (source "(define-library (consent fixture syntax) (export choose) (import (scheme base)) (begin (define default 'library) (define-syntax choose (syntax-rules () ((choose) default))))) (import (scheme base) (consent fixture syntax)) (let ((default 'program)) (choose))")
-     (expect (value "library")))
+     (description
+       "Exported library macros resolve free template identifiers in the \
+library scope.")
 
+     (source
+       (forms
+         (define-library (consent fixture syntax) (export choose) (import
+                                                                   (scheme
+              base)) (begin (define default (quote library))
+
+              (define-syntax choose (syntax-rules () ((choose) default)))))
+         (import (scheme base) (consent fixture syntax))
+         (let ((default (quote program))) (choose))))
+     (expect
+       (value
+         library))
+)
     ((id library-import-modifiers-composed)
      (kind r7rs-conformance)
      (phase eval)
@@ -824,17 +1332,37 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (provenance
-      (inspired-by "Chibi Scheme tests/lib-tests.scm and Racket R7RS import tests")
-      (source-url "https://github.com/ashinn/chibi-scheme/blob/master/tests/lib-tests.scm")
-      (source-url "https://github.com/lexi-lambda/racket-r7rs/tree/master/r7rs-test/tests")
-      (license "Chibi BSD-style; Racket R7RS license file not present in repository")
-      (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
-     (description "Program imports compose only, rename, and prefix modifiers without local-name conflicts.")
-     (source "(define-library (consent fixture mined imports) (export add subtract) (import (scheme base)) (begin (define (add x y) (+ x y)) (define (subtract x y) (- x y)))) (import (only (consent fixture mined imports) add) (prefix (rename (consent fixture mined imports) (subtract minus)) lib-)) (list (add 1 2) (lib-add 3 4) (lib-minus 10 6))")
-     (expect (value "(3 7 4)")))
+     (provenance (inspired-by
+       "Chibi Scheme tests/lib-tests.scm and Racket R7RS import tests")
+       (source-url
+       "https://github.com/ashinn/chibi-scheme/blob/master/tests/lib-tests.scm\
+") (source-url
+       "https://github.com/lexi-lambda/racket-r7rs/tree/master/r7rs-test/tests\
+") (license
+       "Chibi BSD-style; Racket R7RS license file not present in repository")
+       (license-url
+       "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
+       (review-note
+       "Consent Scheme-owned rewrite; no third-party test text copied."))
+     (description
+       "Program imports compose only, rename, and prefix modifiers without \
+local-name conflicts.")
 
+     (source
+       (forms
+         (define-library (consent fixture mined imports) (export add
+                                                                 subtract)
+            (import (scheme base)) (begin (define (add x y) (+ x y))
+
+              (define (subtract x y) (- x y))))
+         (import (only (consent fixture mined imports) add) (prefix (rename
+                                                                     (consent
+              fixture mined imports) (subtract minus)) lib-))
+         (list (add 1 2) (lib-add 3 4) (lib-minus 10 6))))
+     (expect
+       (value
+         (3 7 4)))
+)
     ((id library-imported-binding-immutable)
      (kind r7rs-conformance)
      (phase eval)
@@ -844,9 +1372,15 @@
      (oracle shared)
      (options ())
      (description "Imported bindings cannot be mutated by set!.")
-     (source "(import (scheme base)) (set! + 1)")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         (set! + 1)))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id library-duplicate-export-error)
      (kind r7rs-conformance)
      (phase eval)
@@ -856,9 +1390,16 @@
      (oracle shared)
      (options ())
      (description "Duplicate external export names are rejected.")
-     (source "(define-library (consent fixture duplicate-export) (export value value) (import (scheme base)) (begin (define value 1)))")
-     (expect (error)))
 
+     (source
+       (form
+         (define-library (consent fixture duplicate-export) (export value
+                                                                    value)
+            (import (scheme base)) (begin (define value 1)))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id program-import-after-expression-error)
      (kind r7rs-conformance)
      (phase eval)
@@ -870,9 +1411,17 @@
      (oracle-reason implementation-dependent)
      (options ())
      (description "Program import declarations must precede body expressions.")
-     (source "(import (scheme base)) 1 (import (scheme cxr)) 'ok")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         1
+         (import (scheme cxr))
+         (quote ok)))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id library-include-policy-denied)
      (kind r7rs-conformance)
      (phase eval)
@@ -883,10 +1432,23 @@
      (oracle-eligibility policy-gated)
      (oracle-reason host-policy)
      (options ())
-     (description "Library include declarations are denied unless host file policy allows the path.")
-     (source "(define-library (consent fixture conformance include) (export answer) (import (scheme base)) (include \"fixtures/r7rs/include-body.scm\"))")
-     (expect (error)))
+     (description
 
+        "Library include declarations are denied unless host file policy allow\
+s \
+the path.")
+
+     (source
+       (form
+         (define-library (consent fixture conformance include) (export
+                                                                answer) (import
+              (scheme base)) (include
+
+              "fixtures/r7rs/include-body.scm"))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id library-include-ci-policy-denied)
      (kind r7rs-conformance)
      (phase eval)
@@ -897,10 +1459,21 @@
      (oracle-eligibility policy-gated)
      (oracle-reason host-policy)
      (options ())
-     (description "Library include-ci declarations are denied unless host file policy allows the path.")
-     (source "(define-library (consent fixture conformance include-ci) (export mixedanswer) (import (scheme base)) (include-ci \"fixtures/r7rs/include-ci-body.scm\"))")
-     (expect (error)))
+     (description
+       "Library include-ci declarations are denied unless host file policy \
+allows the path.")
 
+     (source
+       (form
+         (define-library (consent fixture conformance include-ci) (export
+                                                                   mixedanswer)
+            (import (scheme base)) (include-ci
+
+              "fixtures/r7rs/include-ci-body.scm"))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id proper-tail-recursion-loop)
      (kind r7rs-conformance)
      (phase eval)
@@ -910,9 +1483,15 @@
      (oracle shared)
      (options ())
      (description "A tail-recursive loop runs in constant continuation space.")
-     (source "(let loop ((n 1000) (acc 0)) (if (= n 0) acc (loop (- n 1) (+ acc 1))))")
-     (expect (value "1000")))
 
+     (source
+       (form
+         (let loop ((n 1000) (acc 0)) (if (= n 0) acc (loop (- n 1) (+ acc
+                                                                       1))))))
+     (expect
+       (value
+         1000))
+)
     ((id multiple-values-direct)
      (kind r7rs-conformance)
      (phase eval)
@@ -922,9 +1501,15 @@
      (oracle shared)
      (options ())
      (description "A program can return multiple values.")
-     (source "(values 1 2)")
-     (expect (values ("1" "2"))))
 
+     (source
+       (form
+         (values 1 2)))
+     (expect
+       (values
+         1
+         2))
+)
     ((id multiple-values-call-with-values)
      (kind r7rs-conformance)
      (phase eval)
@@ -934,9 +1519,14 @@
      (oracle shared)
      (options ())
      (description "call-with-values passes producer values to a consumer.")
-     (source "(call-with-values (lambda () (values 1 2)) list)")
-     (expect (value "(1 2)")))
 
+     (source
+       (form
+         (call-with-values (lambda () (values 1 2)) list)))
+     (expect
+       (value
+         (1 2)))
+)
     ((id multiple-values-let-values)
      (kind r7rs-conformance)
      (phase eval)
@@ -945,10 +1535,21 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "let-values and let*-values bind producer results to lexical variables.")
-     (source "(let ((a 'a) (b 'b) (x 'x) (y 'y)) (let*-values (((a b) (values x y)) ((x y) (values a b))) (list a b x y)))")
-     (expect (value "(x y x y)")))
+     (description
 
+        "let-values and let*-values bind producer results to lexical variables\
+.")
+
+     (source
+       (form
+         (let ((a (quote a)) (b (quote b)) (x (quote x)) (y (quote y)))
+           (let*-values (((a b) (values x y)) ((x y) (values a b))) (list a b x
+
+              y)))))
+     (expect
+       (value
+         (x y x y)))
+)
     ((id multiple-values-define-values)
      (kind r7rs-conformance)
      (phase eval)
@@ -957,10 +1558,18 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "define-values creates multiple definitions from one producer.")
-     (source "(define-values (root remainder) (exact-integer-sqrt 17)) (define-values rest (values 'a 'b)) (list root remainder rest)")
-     (expect (value "(4 1 (a b))")))
+     (description
+       "define-values creates multiple definitions from one producer.")
 
+     (source
+       (forms
+         (define-values (root remainder) (exact-integer-sqrt 17))
+         (define-values rest (values (quote a) (quote b)))
+         (list root remainder rest)))
+     (expect
+       (value
+         (4 1 (a b))))
+)
     ((id exceptions-guard-raise)
      (kind r7rs-conformance)
      (phase eval)
@@ -969,10 +1578,16 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "guard catches a raised object and evaluates the matching clause.")
-     (source "(guard (exn (else 'caught)) (raise 'boom))")
-     (expect (value "caught")))
+     (description
+       "guard catches a raised object and evaluates the matching clause.")
 
+     (source
+       (form
+         (guard (exn (else (quote caught))) (raise (quote boom)))))
+     (expect
+       (value
+         caught))
+)
     ((id exceptions-error-object-accessors)
      (kind r7rs-conformance)
      (phase eval)
@@ -981,18 +1596,31 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (provenance
-      (inspired-by "Gauche tests/error.scm and Chibi Scheme tests/r7rs-tests.scm")
-      (source-url "https://github.com/shirok/Gauche/blob/master/tests/error.scm")
-      (source-url "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests.scm")
-      (license "BSD-style")
-      (license-url "https://github.com/shirok/Gauche/blob/master/COPYING")
-      (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
-     (description "guard can inspect R7RS error object messages and irritants.")
-     (source "(guard (exn ((error-object? exn) (list (error-object-message exn) (error-object-irritants exn)))) (error \"bad input\" 'alpha 7))")
-     (expect (value "(\"bad input\" (alpha 7))")))
+     (provenance (inspired-by
+       "Gauche tests/error.scm and Chibi Scheme tests/r7rs-tests.scm")
+       (source-url
+       "https://github.com/shirok/Gauche/blob/master/tests/error.scm")
+       (source-url
 
+          "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests\
+.scm\
+") (license "BSD-style") (license-url
+       "https://github.com/shirok/Gauche/blob/master/COPYING") (license-url
+       "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
+       (review-note
+       "Consent Scheme-owned rewrite; no third-party test text copied."))
+     (description
+        "guard can inspect R7RS error object messages and irritants.")
+
+     (source
+       (form
+         (guard (exn ((error-object? exn) (list (error-object-message exn)
+                                                (error-object-irritants exn))))
+            (error "bad input" (quote alpha) 7))))
+     (expect
+       (value
+         ("bad input" (alpha 7))))
+)
     ((id exceptions-guard-primitive-error)
      (kind r7rs-conformance)
      (phase eval)
@@ -1003,10 +1631,17 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "guard catches the condition a primitive raises for an invalid argument.")
-     (source "(guard (exn (else 'caught)) (car 5))")
-     (expect (value "caught")))
+     (description
+       "guard catches the condition a primitive raises for an invalid \
+argument.")
 
+     (source
+       (form
+         (guard (exn (else (quote caught))) (car 5))))
+     (expect
+       (value
+         caught))
+)
     ((id exceptions-guard-primitive-error-object)
      (kind r7rs-conformance)
      (phase eval)
@@ -1017,10 +1652,20 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "the condition a primitive raises satisfies error-object? inside guard.")
-     (source "(guard (exn ((error-object? exn) 'error-object) (else 'other)) (vector-ref (vector 1) 5))")
-     (expect (value "error-object")))
+     (description
 
+        "the condition a primitive raises satisfies error-object? inside guard\
+.")
+
+     (source
+       (form
+         (guard (exn ((error-object? exn) (quote error-object)) (else (quote
+                                                                       other)))
+            (vector-ref (vector 1) 5))))
+     (expect
+       (value
+         error-object))
+)
     ((id exceptions-raise-continuable)
      (kind r7rs-conformance)
      (phase eval)
@@ -1029,10 +1674,18 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "raise-continuable returns the handler's value to the raise site.")
-     (source "(with-exception-handler (lambda (exn) 42) (lambda () (+ (raise-continuable 'warning) 23)))")
-     (expect (value "65")))
+     (description
+       "raise-continuable returns the handler's value to the raise site.")
 
+     (source
+       (form
+         (with-exception-handler (lambda (exn) 42) (lambda () (+
+
+              (raise-continuable (quote warning)) 23)))))
+     (expect
+       (value
+         65))
+)
     ((id exceptions-dynamic-wind-unwind)
      (kind r7rs-conformance)
      (phase eval)
@@ -1041,10 +1694,24 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "dynamic-wind after thunks run while guard handles a raised exception.")
-     (source "(let ((path '())) (guard (exn (else (reverse path))) (dynamic-wind (lambda () (set! path (cons 'before path))) (lambda () (set! path (cons 'during path)) (raise 'boom)) (lambda () (set! path (cons 'after path))))))")
-     (expect (value "(before during after)")))
+     (description
+       "dynamic-wind after thunks run while guard handles a raised exception.")
 
+     (source
+       (form
+         (let ((path (quote ()))) (guard (exn (else (reverse path)))
+                                         (dynamic-wind (lambda () (set! path
+              (cons (quote before) path)))
+                                             (lambda () (set! path (cons (quote
+              during) path)) (raise (quote
+
+              boom))) (lambda () (set! path (cons (quote after)
+
+              path))))))))
+     (expect
+       (value
+         (before during after)))
+)
     ((id continuations-escape)
      (kind r7rs-conformance)
      (phase eval)
@@ -1054,9 +1721,14 @@
      (oracle shared)
      (options ())
      (description "call/cc captures an escape continuation.")
-     (source "(call/cc (lambda (escape) (+ 1 (escape 42))))")
-     (expect (value "42")))
 
+     (source
+       (form
+         (call/cc (lambda (escape) (+ 1 (escape 42))))))
+     (expect
+       (value
+         42))
+)
     ((id continuations-higher-order-escape)
      (kind r7rs-conformance)
      (phase eval)
@@ -1065,18 +1737,32 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (provenance
-      (inspired-by "Gauche tests/continuation.scm and Chibi Scheme tests/r7rs-tests.scm")
-      (source-url "https://github.com/shirok/Gauche/blob/master/tests/continuation.scm")
-      (source-url "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests.scm")
-      (license "BSD-style")
-      (license-url "https://github.com/shirok/Gauche/blob/master/COPYING")
-      (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
-     (description "A continuation captured inside a higher-order traversal can escape to the surrounding expression.")
-     (source "(call/cc (lambda (return) (for-each (lambda (x) (if (= x 3) (return x) #f)) '(1 2 3 4)) #f))")
-     (expect (value "3")))
+     (provenance (inspired-by
+       "Gauche tests/continuation.scm and Chibi Scheme tests/r7rs-tests.scm")
+       (source-url
+       "https://github.com/shirok/Gauche/blob/master/tests/continuation.scm")
+       (source-url
 
+          "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests\
+.scm\
+") (license "BSD-style") (license-url
+       "https://github.com/shirok/Gauche/blob/master/COPYING") (license-url
+       "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
+       (review-note
+       "Consent Scheme-owned rewrite; no third-party test text copied."))
+     (description
+       "A continuation captured inside a higher-order traversal can escape to \
+the surrounding expression.")
+
+     (source
+       (form
+         (call/cc (lambda (return) (for-each (lambda (x) (if (= x 3) (return
+                                                                      x) #f))
+              (quote (1 2 3 4))) #f))))
+     (expect
+       (value
+         3))
+)
     ((id continuations-dynamic-wind-exit)
      (kind r7rs-conformance)
      (phase eval)
@@ -1085,10 +1771,25 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "dynamic-wind runs its after thunk when an escape continuation exits its extent.")
-     (source "(let ((path '())) (define (add tag) (set! path (cons tag path))) (call/cc (lambda (escape) (dynamic-wind (lambda () (add 'before)) (lambda () (add 'during) (escape 'done)) (lambda () (add 'after))))) (reverse path))")
-     (expect (value "(before during after)")))
+     (description
+       "dynamic-wind runs its after thunk when an escape continuation exits \
+its extent.")
 
+     (source
+       (form
+         (let ((path (quote ()))) (define (add tag) (set! path (cons tag
+                                                                     path)))
+            (call/cc (lambda (escape) (dynamic-wind (lambda () (add
+
+              (quote before))) (lambda () (add (quote during)) (escape
+
+              (quote done))) (lambda () (add (quote after))))))
+                                                                     (reverse
+              path))))
+     (expect
+       (value
+         (before during after)))
+)
     ((id continuations-reenter-after-return)
      (kind r7rs-conformance)
      (phase eval)
@@ -1097,10 +1798,21 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "A continuation stored by call/cc can be invoked after its original call returns.")
-     (source "(let ((again #f)) (let ((value (call/cc (lambda (k) (set! again k) 'first)))) (if (eq? value 'first) (again 'second) value)))")
-     (expect (value "second")))
+     (description
+       "A continuation stored by call/cc can be invoked after its original \
+call returns.")
 
+     (source
+       (form
+         (let ((again #f)) (let ((value (call/cc (lambda (k) (set! again k)
+                                                         (quote first))))) (if
+              (eq? value (quote first)) (again (quote
+
+              second)) value)))))
+     (expect
+       (value
+         second))
+)
     ((id continuations-repeated-invocation)
      (kind r7rs-conformance)
      (phase eval)
@@ -1110,9 +1822,20 @@
      (oracle shared)
      (options ())
      (description "A captured continuation can be invoked repeatedly.")
-     (source "(let ((again #f) (seen '())) (let ((value (call/cc (lambda (k) (set! again k) 'start)))) (set! seen (cons value seen)) (if (< (length seen) 3) (again (length seen)) (reverse seen))))")
-     (expect (value "(start 1 2)")))
 
+     (source
+       (form
+         (let ((again #f) (seen (quote ()))) (let ((value (call/cc (lambda
+                                                                       (k)
+              (set! again k) (quote start))))) (set! seen (cons value
+
+              seen)) (if (< (length seen) 3) (again (length seen))
+
+              (reverse seen))))))
+     (expect
+       (value
+         (start 1 2)))
+)
     ((id continuations-dynamic-wind-reentry)
      (kind r7rs-conformance)
      (phase eval)
@@ -1121,10 +1844,43 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "dynamic-wind runs before thunks when a captured continuation re-enters completed extents.")
-     (source "(let ((again #f) (outside #f) (path '())) (define (add tag) (set! path (cons tag path))) (call/cc (lambda (escape) (set! outside escape) (dynamic-wind (lambda () (add 'before-outer)) (lambda () (dynamic-wind (lambda () (add 'before-inner)) (lambda () (call/cc (lambda (k) (set! again k) 'captured)) (add 'during-inner) (outside 'escaped)) (lambda () (add 'after-inner)))) (lambda () (add 'after-outer))))) (if again (let ((resume again)) (set! again #f) (resume 'resumed)) (reverse path)))")
-     (expect (value "(before-outer before-inner during-inner after-inner after-outer before-outer before-inner during-inner after-inner after-outer)")))
+     (description
 
+        "dynamic-wind runs before thunks when a captured continuation re-enter\
+s \
+completed extents.")
+
+     (source
+       (form
+         (let ((again #f) (outside #f) (path (quote ()))) (define (add tag)
+                                                            (set! path (cons
+              tag path))) (call/cc (lambda (escape) (set!
+
+              outside escape) (dynamic-wind (lambda () (add (quote
+
+              before-outer))) (lambda () (dynamic-wind (lambda ()
+
+              (add (quote before-inner))) (lambda ()
+
+              (call/cc (lambda (k) (set! again k) (quote
+
+              captured))) (add (quote during-inner))
+
+              (outside (quote escaped))) (lambda ()
+
+              (add (quote after-inner)))))
+
+              (lambda () (add (quote after-outer)))))) (if again
+
+              (let ((resume again)) (set! again #f) (resume
+
+              (quote resumed))) (reverse path)))))
+     (expect
+       (value
+         (before-outer before-inner during-inner after-inner after-outer
+                       before-outer before-inner during-inner after-inner
+            after-outer)))
+)
     ((id continuations-multiple-values)
      (kind r7rs-conformance)
      (phase eval)
@@ -1133,10 +1889,20 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Continuations deliver multiple values to call-with-values consumers.")
-     (source "(let ((again #f)) (call-with-values (lambda () (call/cc (lambda (k) (set! again k) (values 1 2)))) (lambda (a b) (if (= a 1) (again 3 4) (list a b)))))")
-     (expect (value "(3 4)")))
+     (description
+       "Continuations deliver multiple values to call-with-values consumers.")
 
+     (source
+       (form
+         (let ((again #f)) (call-with-values (lambda () (call/cc (lambda (k)
+                                                                   (set! again
+              k) (values 1 2)))) (lambda (a b) (if (= a 1) (again 3
+
+              4) (list a b)))))))
+     (expect
+       (value
+         (3 4)))
+)
     ((id continuations-let-values-multiple-values)
      (kind r7rs-conformance)
      (phase eval)
@@ -1145,10 +1911,19 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Continuations deliver multiple values to let-values binding continuations.")
-     (source "(let ((again #f)) (let-values (((a b) (call/cc (lambda (k) (set! again k) (values 1 2))))) (if (= a 1) (again 3 4) (list a b))))")
-     (expect (value "(3 4)")))
+     (description
+       "Continuations deliver multiple values to let-values binding \
+continuations.")
 
+     (source
+       (form
+         (let ((again #f)) (let-values (((a b) (call/cc (lambda (k) (set!
+                                                                     again k)
+              (values 1 2))))) (if (= a 1) (again 3 4) (list a b))))))
+     (expect
+       (value
+         (3 4)))
+)
     ((id continuations-let*-values-multiple-values)
      (kind r7rs-conformance)
      (phase eval)
@@ -1157,10 +1932,21 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Continuations deliver multiple values to let*-values binding continuations.")
-     (source "(let ((again #f)) (let*-values (((a b) (call/cc (lambda (k) (set! again k) (values 1 2)))) ((c) (+ a b))) (if (= a 1) (again 3 4) (list a b c))))")
-     (expect (value "(3 4 7)")))
+     (description
+       "Continuations deliver multiple values to let*-values binding \
+continuations.")
 
+     (source
+       (form
+         (let ((again #f)) (let*-values (((a b) (call/cc (lambda (k) (set!
+                                                                      again k)
+              (values 1 2)))) ((c) (+ a b))) (if (= a 1) (again 3
+
+              4) (list a b c))))))
+     (expect
+       (value
+         (3 4 7)))
+)
     ((id core-data-vector-ref)
      (kind r7rs-conformance)
      (phase eval)
@@ -1170,9 +1956,14 @@
      (oracle shared)
      (options ())
      (description "Vector literals and vector-ref expose indexed values.")
-     (source "(vector-ref '#(a b c) 1)")
-     (expect (value "b")))
 
+     (source
+       (form
+         (vector-ref (quote #(a b c)) 1)))
+     (expect
+       (value
+         b))
+)
     ((id reader-datum-label-cycle)
      (kind r7rs-conformance)
      (phase read)
@@ -1182,9 +1973,12 @@
      (oracle shared)
      (options ())
      (description "Datum labels read circular structure.")
-     (source "#1=(a . #1#)")
-     (expect (value "#0=(a . #0#)")))
 
+     (source
+       (text "#1=(a . #1#)"))
+     (expect
+       (serialized-value "#0=(a . #0#)"))
+)
     ((id core-data-record-type)
      (kind r7rs-conformance)
      (phase eval)
@@ -1193,10 +1987,21 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "define-record-type creates constructors, predicates, accessors, and mutators.")
-     (source "(define-record-type <pare> (kons x y) pare? (x kar set-kar!) (y kdr))\n(let ((p (kons 1 2))) (set-kar! p 3) (list (pare? p) (pare? (cons 1 2)) (kar p) (kdr p)))")
-     (expect (value "(#t #f 3 2)")))
+     (description
+       "define-record-type creates constructors, predicates, accessors, and \
+mutators.")
 
+     (source
+       (forms
+         (define-record-type <pare> (kons x y) pare? (x kar set-kar!) (y
+                                                                       kdr))
+         (let ((p (kons 1 2))) (set-kar! p 3) (list (pare? p) (pare? (cons 1
+                                                                           2))
+              (kar p) (kdr p)))))
+     (expect
+       (value
+         (#t #f 3 2)))
+)
     ((id core-data-circular-equal)
      (kind r7rs-conformance)
      (phase eval)
@@ -1205,10 +2010,15 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "equal? terminates on circular data and compares unfoldings.")
-     (source "(let ((left '#1=(a b . #1#)) (right '#2=(a b a b . #2#))) (equal? left right))")
-     (expect (value "#t")))
+     (description
+        "equal? terminates on circular data and compares unfoldings.")
 
+     (source
+       (file "programs/circular-equality.scm"))
+     (expect
+       (value
+         #t))
+)
     ((id core-data-owned-symbol-identity)
      (kind r7rs-conformance)
      (phase eval)
@@ -1217,10 +2027,29 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Reader, string conversion, and macro-introduced symbols share portable identity.")
-     (source "(let* ((quoted 'portable) (converted (string->symbol \"portable\"))) (list (symbol? quoted) (symbol=? quoted converted) (eq? quoted converted) (eqv? quoted converted) (equal? quoted converted) (let-syntax ((introduce (syntax-rules () ((_ ) 'portable)))) (eq? (introduce) converted))))")
-     (expect (value "(#t #t #t #t #t #t)")))
+     (description
 
+        "Reader, string conversion, and macro-introduced symbols share portabl\
+e \
+identity.")
+
+     (source
+       (form
+         (let* ((quoted (quote portable)) (converted (string->symbol
+                                                      "portable"))) (list
+              (symbol? quoted) (symbol=? quoted converted)
+                                                                          (eq?
+              quoted converted) (eqv? quoted converted) (equal? quoted
+
+              converted) (let-syntax ((introduce (syntax-rules () ((_)
+
+              (quote portable))))) (eq? (introduce)
+
+              converted))))))
+     (expect
+       (value
+         (#t #t #t #t #t #t)))
+)
     ((id core-data-eof-object)
      (kind r7rs-conformance)
      (phase eval)
@@ -1230,9 +2059,14 @@
      (oracle shared)
      (options ())
      (description "EOF objects satisfy eof-object?.")
-     (source "(eof-object? (eof-object))")
-     (expect (value "#t")))
 
+     (source
+       (form
+         (eof-object? (eof-object))))
+     (expect
+       (value
+         #t))
+)
     ((id standard-library-case-lambda)
      (kind r7rs-conformance)
      (phase eval)
@@ -1242,9 +2076,15 @@
      (oracle shared)
      (options ())
      (description "The case-lambda library dispatches procedures by arity.")
-     (source "(import (scheme base) (scheme case-lambda))\n((case-lambda ((x) x) ((x y) (+ x y))) 1 2)")
-     (expect (value "3")))
 
+     (source
+       (forms
+         (import (scheme base) (scheme case-lambda))
+         ((case-lambda ((x) x) ((x y) (+ x y))) 1 2)))
+     (expect
+       (value
+         3))
+)
     ((id standard-library-case-lambda-rest)
      (kind r7rs-conformance)
      (phase eval)
@@ -1253,10 +2093,18 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The case-lambda library supports variadic and dotted clause formals.")
-     (source "(import (scheme base) (scheme case-lambda))\n(list ((case-lambda ((x) x) ((x y . rest) (list x y rest))) 1 2 3) ((case-lambda (all all)) 'a 'b))")
-     (expect (value "((1 2 (3)) (a b))")))
+     (description
+       "The case-lambda library supports variadic and dotted clause formals.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme case-lambda))
+         (list ((case-lambda ((x) x) ((x y . rest) (list x y rest))) 1 2 3)
+               ((case-lambda (all all)) (quote a) (quote b)))))
+     (expect
+       (value
+         ((1 2 (3)) (a b))))
+)
     ((id standard-library-char-upcase)
      (kind r7rs-conformance)
      (phase eval)
@@ -1266,9 +2114,15 @@
      (oracle shared)
      (options ())
      (description "The char library provides character case operations.")
-     (source "(import (scheme base) (scheme char))\n(char-upcase #\\a)")
-     (expect (value "#\\A")))
 
+     (source
+       (forms
+         (import (scheme base) (scheme char))
+         (char-upcase #\a)))
+     (expect
+       (value
+         #\A))
+)
     ((id standard-library-char-foldcase)
      (kind r7rs-conformance)
      (phase eval)
@@ -1277,10 +2131,22 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The char library provides predicates, digit values, and case-insensitive comparisons.")
-     (source "(import (scheme base) (scheme char))\n(list (char-foldcase #\\A) (char-alphabetic? #\\A) (char-numeric? #\\9) (char-whitespace? #\\space) (digit-value #\\9) (char-ci=? #\\A #\\a) (string-upcase \"Az\"))")
-     (expect (value "(#\\a #t #t #t 9 #t \"AZ\")")))
+     (description
+       "The char library provides predicates, digit values, and \
+case-insensitive comparisons.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme char))
+         (list (char-foldcase #\A) (char-alphabetic? #\A) (char-numeric?
+                                                           #\9)
+            (char-whitespace? #\space) (digit-value #\9) (char-ci=? #\A
+
+              #\a) (string-upcase "Az"))))
+     (expect
+       (value
+         (#\a #t #t #t 9 #t "AZ")))
+)
     ((id core-data-character-scalar-model)
      (kind r7rs-conformance)
      (phase eval)
@@ -1289,10 +2155,26 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Character construction, conversion, equivalence, and ordering use Unicode scalar values.")
-     (source "(import (scheme base))\n(let ((maximum (integer->char #x10ffff)) (lambda-character (integer->char #x3bb))) (list (char? maximum) (char->integer maximum) (eqv? lambda-character (integer->char #x3bb)) (char<? #\\A lambda-character) (string<? \"A\" (string lambda-character))))")
-     (expect (value "(#t 1114111 #t #t #t)")))
+     (description
+       "Character construction, conversion, equivalence, and ordering use \
+Unicode scalar values.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (let ((maximum (integer->char 1114111)) (lambda-character
+                                                  (integer->char 955))) (list
+              (char? maximum) (char->integer maximum)
+
+              (eqv? lambda-character (integer->char 955)) (char<? #\A
+
+              lambda-character) (string<? "A" (string
+
+              lambda-character))))))
+     (expect
+       (value
+         (#t 1114111 #t #t #t)))
+)
     ((id core-data-character-invalid-surrogate)
      (kind r7rs-conformance)
      (phase eval)
@@ -1303,10 +2185,18 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "integer->char rejects surrogate code points outside the owned scalar range.")
-     (source "(import (scheme base))\n(integer->char #xd800)")
-     (expect (error)))
+     (description
+       "integer->char rejects surrogate code points outside the owned scalar \
+range.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (integer->char 55296)))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id core-data-character-invalid-scalar-matrix)
      (kind r7rs-conformance)
      (phase eval)
@@ -1317,10 +2207,22 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "Owned character construction rejects negative, surrogate, out-of-range, non-integer, and inexact values.")
-     (source "(import (scheme base))\n(define (raises? thunk) (guard (condition (else #t)) (thunk) #f))\n(let loop ((values (list -1 #xd800 #xdfff #x110000 1/2 1.0 \"1\" #f))) (or (null? values) (and (raises? (lambda () (integer->char (car values)))) (loop (cdr values)))))")
-     (expect (value "#t")))
+     (description
+       "Owned character construction rejects negative, surrogate, \
+out-of-range, non-integer, and inexact values.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (define (raises? thunk) (guard (condition (else #t)) (thunk) #f))
+         (let loop ((values (list -1 55296 57343 1114112 1/2 1.0 "1" #f)))
+           (or (null? values) (and (raises? (lambda () (integer->char (car
+
+              values)))) (loop (cdr values)))))))
+     (expect
+       (value
+         #t))
+)
     ((id core-data-character-string-port-boundaries)
      (kind r7rs-conformance)
      (phase eval)
@@ -1329,10 +2231,68 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Owned BMP, supplementary, and maximum characters cross string, vector, and textual-port boundaries without host identity leaks.")
-     (source "(import (scheme base))\n(let* ((codes '(0 #x3bb #x20ac #x1f642 #x10ffff)) (characters (map integer->char codes)) (text (list->string characters)) (copy (string-copy text)) (vector (string->vector text)) (in (open-input-string text)) (out (open-output-string)) (peeked (peek-char in)) (read-back (read-char in))) (string-set! copy 1 (integer->char #x20ac)) (write-char (integer->char #x1f642) out) (list (char->integer (string-ref text 3)) (map char->integer (string->list text)) (map char->integer (vector->list vector)) (map char->integer (string->list (vector->string vector))) (map char->integer (string->list copy)) (char->integer peeked) (char->integer read-back) (map char->integer (string->list (get-output-string out)))))")
-     (expect (value "(128578 (0 955 8364 128578 1114111) (0 955 8364 128578 1114111) (0 955 8364 128578 1114111) (0 8364 8364 128578 1114111) 0 0 (128578))")))
+     (description
 
+        "Owned BMP, supplementary, and maximum characters cross string, vector\
+, \
+and textual-port boundaries without host identity leaks.")
+
+     (source
+       (forms
+         (import (scheme base))
+         (let* ((codes (quote (0 955 8364 128578 1114111))) (characters (map
+
+              integer->char codes)) (text (list->string characters)) (copy
+
+              (string-copy text)) (vector (string->vector text)) (in
+
+              (open-input-string text)) (out
+
+              (open-output-string)) (peeked (peek-char in))
+
+              (read-back (read-char in))) (string-set! copy 1
+
+              (integer->char 8364)) (write-char
+
+              (integer->char 128578) out) (list
+
+              (char->integer (string-ref text
+
+              3)) (map char->integer
+
+              (string->list text)) (map
+
+              char->integer
+
+              (vector->list vector))
+
+              (map char->integer (string->list
+
+              (vector->string vector)))
+
+              (map char->integer (string->list
+
+              copy)) (char->integer
+
+              peeked) (char->integer
+
+              read-back) (map
+
+              char->integer
+
+              (string->list
+
+              (get-output-string
+
+              out)))))))
+     (expect
+       (value
+         (128578 (0 955 8364 128578 1114111) (0 955 8364 128578 1114111) (0
+                                                                          955
+              8364 128578 1114111) (0 8364 8364 128578 1114111) 0 0
+
+            (128578))))
+)
     ((id core-data-character-comparison-matrix)
      (kind r7rs-conformance)
      (phase eval)
@@ -1341,10 +2301,38 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Base character and string comparisons cover true, false, equality, and variadic scalar-order cases.")
-     (source "(import (scheme base))\n(list (char=? #\\A (integer->char #x41) #\\A) (char=? #\\A #\\B) (char<? #\\A #\\B #\\C) (char<? #\\A #\\A) (char>? #\\C #\\B #\\A) (char>? #\\C #\\C) (char<=? #\\A #\\A #\\B) (char<=? #\\B #\\A) (char>=? #\\C #\\C #\\B #\\A) (char>=? #\\A #\\B) (string=? \"A\" \"A\" \"A\") (string=? \"A\" \"B\") (string<? \"A\" \"B\" \"C\") (string<? \"A\" \"A\") (string>? \"C\" \"B\" \"A\") (string>? \"C\" \"C\") (string<=? \"A\" \"A\" \"B\") (string<=? \"B\" \"A\") (string>=? \"C\" \"C\" \"B\" \"A\") (string>=? \"A\" \"B\"))")
-     (expect (value "(#t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f)")))
+     (description
 
+        "Base character and string comparisons cover true, false, equality, an\
+d \
+variadic scalar-order cases.")
+
+     (source
+       (forms
+         (import (scheme base))
+         (list (char=? #\A (integer->char 65) #\A) (char=? #\A #\B) (char<?
+                                                                     #\A #\B
+              #\C) (char<? #\A #\A) (char>? #\C #\B #\A) (char>? #\C
+
+              #\C) (char<=? #\A #\A #\B) (char<=? #\B #\A) (char>=? #\C
+
+              #\C #\B #\A) (char>=? #\A #\B) (string=? "A" "A"
+
+              "A") (string=? "A" "B") (string<? "A" "B"
+
+              "C") (string<? "A" "A") (string>? "C" "B"
+
+              "A") (string>? "C" "C") (string<=?
+
+              "A" "A" "B") (string<=? "B" "A")
+
+            (string>=? "C" "C" "B" "A")
+
+            (string>=? "A" "B"))))
+     (expect
+       (value
+         (#t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f)))
+)
     ((id standard-library-char-owned-unicode-profile)
      (kind r7rs-conformance)
      (phase eval)
@@ -1353,10 +2341,28 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The owned profile classifies representative Greek letters, decimal digit blocks, and Unicode whitespace without host tables.")
-     (source "(import (scheme base) (scheme char))\n(list (char-alphabetic? (integer->char #x3bb)) (char-lower-case? (integer->char #x3bb)) (char-upper-case? (integer->char #x39b)) (char-numeric? (integer->char #x664)) (digit-value (integer->char #x664)) (digit-value (integer->char #xae6)) (char-whitespace? (integer->char #x3000)) (char-alphabetic? (integer->char #xea6)))")
-     (expect (value "(#t #t #t #t 4 0 #t #f)")))
+     (description
+       "The owned profile classifies representative Greek letters, decimal \
+digit blocks, and Unicode whitespace without host tables.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme char))
+         (list (char-alphabetic? (integer->char 955)) (char-lower-case?
+                                                       (integer->char 955))
+            (char-upper-case? (integer->char 923))
+                                                       (char-numeric?
+              (integer->char 1636)) (digit-value
+
+              (integer->char 1636)) (digit-value (integer->char 2790))
+
+            (char-whitespace? (integer->char 12288)) (char-alphabetic?
+
+              (integer->char 3750)))))
+     (expect
+       (value
+         (#t #t #t #t 4 0 #t #f)))
+)
     ((id standard-library-char-owned-classification-tables)
      (kind r7rs-conformance)
      (phase eval)
@@ -1367,10 +2373,17 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "Every scalar in the finite bootstrap alphabetic tables and representative excluded neighbors follows the documented owned profile.")
-     (source "(import (scheme base) (scheme char))\n(define (range lower upper) (let loop ((value upper) (result '())) (if (< value lower) result (loop (- value 1) (cons value result)))))\n(define (all? predicate values) (or (null? values) (and (predicate (car values)) (all? predicate (cdr values)))))\n(define (codes-satisfy? predicate codes) (all? (lambda (code) (predicate (integer->char code))) codes))\n(let* ((upper (append (range #x41 #x5a) (range #xc0 #xd6) (range #xd8 #xde) '(#x130 #x178 #x1e9e) (range #x391 #x3a1) (range #x3a3 #x3ab))) (lower (append (range #x61 #x7a) (range #xe0 #xf6) (range #xf8 #xff) '(#xaa #xb5 #xba #x131) (range #x3b1 #x3c1) (range #x3c2 #x3cb))) (outside '(#x40 #x5b #x60 #x7b #xa9 #xab #xb9 #xbb #xd7 #x370 #x3a2 #x3ac #x1f642))) (list (codes-satisfy? char-upper-case? upper) (codes-satisfy? char-lower-case? lower) (codes-satisfy? char-alphabetic? (append upper lower)) (all? (lambda (code) (let ((character (integer->char code))) (and (not (char-upper-case? character)) (not (char-lower-case? character)) (not (char-alphabetic? character))))) outside)))")
-     (expect (value "(#t #t #t #t)")))
+     (description
+       "Every scalar in the finite bootstrap alphabetic tables and \
+representative excluded neighbors follows the documented owned profile.\
+")
 
+     (source
+       (file "programs/character-classification-tables.scm"))
+     (expect
+       (value
+         (#t #t #t #t)))
+)
     ((id standard-library-char-owned-digit-whitespace-tables)
      (kind r7rs-conformance)
      (phase eval)
@@ -1381,10 +2394,16 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "Every decimal digit and whitespace scalar in the bootstrap tables, plus their excluded neighbors, is fixture-covered.")
-     (source "(import (scheme base) (scheme char))\n(define (range lower upper) (let loop ((value upper) (result '())) (if (< value lower) result (loop (- value 1) (cons value result)))))\n(define (all? predicate values) (or (null? values) (and (predicate (car values)) (all? predicate (cdr values)))))\n(let ((zeros '(#x30 #x660 #x6f0 #x966 #x9e6 #xa66 #xae6)) (digit-neighbors '(#x2f #x3a #x65f #x66a #x6ef #x6fa #x965 #x970 #x9e5 #x9f0 #xa65 #xa70 #xae5 #xaf0)) (spaces '(#x9 #xa #xb #xc #xd #x20 #x85 #xa0 #x1680 #x2000 #x2001 #x2002 #x2003 #x2004 #x2005 #x2006 #x2007 #x2008 #x2009 #x200a #x2028 #x2029 #x202f #x205f #x3000)) (space-neighbors '(#x8 #xe #x1f #x21 #x84 #x86 #x9f #xa1 #x167f #x1681 #x1fff #x200b #x2027 #x202a #x202e #x2030 #x205e #x2060 #x2fff #x3001))) (list (all? (lambda (zero) (all? (lambda (value) (let ((character (integer->char (+ zero value)))) (and (char-numeric? character) (= (digit-value character) value)))) (range 0 9))) zeros) (all? (lambda (code) (let ((character (integer->char code))) (and (not (char-numeric? character)) (not (digit-value character))))) digit-neighbors) (all? (lambda (code) (char-whitespace? (integer->char code))) spaces) (all? (lambda (code) (not (char-whitespace? (integer->char code)))) space-neighbors)))")
-     (expect (value "(#t #t #t #t)")))
+     (description
+       "Every decimal digit and whitespace scalar in the bootstrap tables, \
+plus their excluded neighbors, is fixture-covered.")
 
+     (source
+       (file "programs/character-digit-whitespace-tables.scm"))
+     (expect
+       (value
+         (#t #t #t #t)))
+)
     ((id standard-library-char-owned-case-mappings)
      (kind r7rs-conformance)
      (phase eval)
@@ -1393,10 +2412,29 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Simple character and full string case mappings follow the documented bootstrap profile.")
-     (source "(import (scheme base) (scheme char))\n(list (char->integer (char-upcase (integer->char #x3c2))) (char->integer (char-foldcase (integer->char #x3c2))) (map char->integer (string->list (string-upcase (string (integer->char #xdf))))) (map char->integer (string->list (string-downcase (string (integer->char #x130))))) (map char->integer (string->list (string-foldcase (string (integer->char #x1e9e))))))")
-     (expect (value "(931 963 (83 83) (105 775) (115 115))")))
+     (description
+       "Simple character and full string case mappings follow the documented \
+bootstrap profile.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme char))
+         (list (char->integer (char-upcase (integer->char 962)))
+               (char->integer (char-foldcase (integer->char 962))) (map
+
+              char->integer (string->list (string-upcase (string
+
+              (integer->char 223))))) (map char->integer (string->list
+
+              (string-downcase (string (integer->char 304))))) (map
+
+              char->integer (string->list (string-foldcase
+
+              (string (integer->char 7838))))))))
+     (expect
+       (value
+         (931 963 (83 83) (105 775) (115 115))))
+)
     ((id standard-library-char-owned-case-tables)
      (kind r7rs-conformance)
      (phase eval)
@@ -1407,10 +2445,19 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason implementation-dependent)
      (options ())
-     (description "Every finite simple mapping plus all documented full string expansions follows the owned case tables.")
-     (source "(import (scheme base) (scheme char))\n(define (range lower upper) (let loop ((value upper) (result '())) (if (< value lower) result (loop (- value 1) (cons value result)))))\n(define (pairs lower upper delta) (map (lambda (code) (cons code (+ code delta))) (range lower upper)))\n(define (all? predicate values) (or (null? values) (and (predicate (car values)) (all? predicate (cdr values)))))\n(define (matches? mapper mappings) (all? (lambda (pair) (= (char->integer (mapper (integer->char (car pair)))) (cdr pair))) mappings))\n(let ((up (append (pairs #x61 #x7a -32) (pairs #xe0 #xf6 -32) (pairs #xf8 #xfe -32) '((#xff . #x178) (#xb5 . #x39c) (#xdf . #x1e9e) (#x131 . #x49)) (pairs #x3b1 #x3c1 -32) '((#x3c2 . #x3a3)) (pairs #x3c3 #x3cb -32))) (down (append (pairs #x41 #x5a 32) (pairs #xc0 #xd6 32) (pairs #xd8 #xde 32) '((#x130 . #x69) (#x178 . #xff) (#x1e9e . #xdf)) (pairs #x391 #x3a1 32) (pairs #x3a3 #x3ab 32)))) (list (matches? char-upcase up) (matches? char-downcase down) (map (lambda (code) (char->integer (char-foldcase (integer->char code)))) '(#x3c2 #x130 #x1e9e)) (map char->integer (string->list (string-upcase (string (integer->char #xdf))))) (map char->integer (string->list (string-downcase (string (integer->char #x130))))) (map char->integer (string->list (string-foldcase (list->string (map integer->char '(#xdf #x1e9e #x130)))))) (map (lambda (code) (char->integer (char-upcase (integer->char code)))) '(#x20ac #x1f642))))")
-     (expect (value "(#t #t (963 304 223) (83 83) (105 775) (115 115 115 115 105 775) (8364 128578))")))
+     (description
 
+        "Every finite simple mapping plus all documented full string expansion\
+s \
+follows the owned case tables.")
+
+     (source
+       (file "programs/character-case-tables.scm"))
+     (expect
+       (value
+         (#t #t (963 304 223) (83 83) (105 775) (115 115 115 115 105 775)
+             (8364 128578))))
+)
     ((id standard-library-char-comparison-matrix)
      (kind r7rs-conformance)
      (phase eval)
@@ -1419,10 +2466,52 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Every character-ci and string-ci export covers true, false, variadic, expansion, prefix, and non-normalizing behavior.")
-     (source "(import (scheme base) (scheme char))\n(let ((sharp-s (string (integer->char #xdf))) (capital-sharp-s (string (integer->char #x1e9e))) (precomposed (string (integer->char #xe9))) (decomposed (string #\\e (integer->char #x301)))) (list (char-ci=? #\\A #\\a #\\A) (char-ci=? #\\A #\\B) (char-ci<? #\\A #\\b #\\C) (char-ci<? #\\A #\\a) (char-ci>? #\\C #\\b #\\A) (char-ci>? #\\C #\\C) (char-ci<=? #\\A #\\a #\\B) (char-ci<=? #\\B #\\A) (char-ci>=? #\\C #\\c #\\B #\\a) (char-ci>=? #\\A #\\B) (string-ci=? sharp-s \"SS\" capital-sharp-s) (string-ci=? \"A\" \"B\") (string-ci<? \"A\" \"b\" \"C\") (string-ci<? \"A\" \"a\") (string-ci>? \"C\" \"b\" \"A\") (string-ci>? \"C\" \"c\") (string-ci<=? \"A\" \"a\" \"B\") (string-ci<=? \"B\" \"A\") (string-ci>=? \"C\" \"c\" \"B\" \"a\") (string-ci>=? \"A\" \"B\") (string-ci=? precomposed decomposed)))")
-     (expect (value "(#t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f #f)")))
+     (description
+       "Every character-ci and string-ci export covers true, false, variadic, \
+expansion, prefix, and non-normalizing behavior.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme char))
+         (let ((sharp-s (string (integer->char 223))) (capital-sharp-s
+                                                       (string (integer->char
+              7838))) (precomposed (string
+
+              (integer->char 233))) (decomposed (string #\e (integer->char
+
+              769)))) (list (char-ci=? #\A #\a #\A) (char-ci=? #\A
+
+              #\B) (char-ci<? #\A #\b #\C) (char-ci<? #\A #\a)
+
+              (char-ci>? #\C #\b #\A) (char-ci>? #\C #\C)
+
+              (char-ci<=? #\A #\a #\B) (char-ci<=? #\B #\A)
+
+              (char-ci>=? #\C #\c #\B #\a) (char-ci>=? #\A
+
+              #\B) (string-ci=? sharp-s "SS"
+
+              capital-sharp-s) (string-ci=? "A" "B")
+
+              (string-ci<? "A" "b" "C") (string-ci<?
+
+              "A" "a") (string-ci>? "C" "b" "A")
+
+              (string-ci>? "C" "c") (string-ci<=? "A"
+
+              "a" "B") (string-ci<=? "B" "A")
+
+              (string-ci>=? "C" "c" "B" "a")
+
+              (string-ci>=? "A" "B")
+
+              (string-ci=? precomposed
+
+              decomposed)))))
+     (expect
+       (value
+         (#t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f #t #f #f)))
+)
     ((id standard-library-cxr-cadr)
      (kind r7rs-conformance)
      (phase eval)
@@ -1432,9 +2521,15 @@
      (oracle shared)
      (options ())
      (description "The cxr library provides composed list accessors.")
-     (source "(import (scheme base) (scheme cxr))\n(cadr '(a b c))")
-     (expect (value "b")))
 
+     (source
+       (forms
+         (import (scheme base) (scheme cxr))
+         (cadr (quote (a b c)))))
+     (expect
+       (value
+         b))
+)
     ((id standard-library-cxr-cadddr)
      (kind r7rs-conformance)
      (phase eval)
@@ -1443,10 +2538,17 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The cxr library provides three- and four-level composed accessors.")
-     (source "(import (scheme base) (scheme cxr))\n(cadddr '(a b c d e))")
-     (expect (value "d")))
+     (description
+       "The cxr library provides three- and four-level composed accessors.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme cxr))
+         (cadddr (quote (a b c d e)))))
+     (expect
+       (value
+         d))
+)
     ((id standard-library-lazy-force)
      (kind r7rs-conformance)
      (phase eval)
@@ -1456,9 +2558,15 @@
      (oracle shared)
      (options ())
      (description "The lazy library forces delayed expressions once.")
-     (source "(import (scheme base) (scheme lazy))\n(force (delay (+ 1 2)))")
-     (expect (value "3")))
 
+     (source
+       (forms
+         (import (scheme base) (scheme lazy))
+         (force (delay (+ 1 2)))))
+     (expect
+       (value
+         3))
+)
     ((id standard-library-write-display)
      (kind r7rs-conformance)
      (phase eval)
@@ -1467,10 +2575,18 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The write library can render values to an output string port.")
-     (source "(import (scheme base) (scheme write))\n(let ((out (open-output-string))) (display \"ok\" out) (get-output-string out))")
-     (expect (value "\"ok\"")))
+     (description
+       "The write library can render values to an output string port.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme write))
+         (let ((out (open-output-string))) (display "ok" out)
+              (get-output-string out))))
+     (expect
+       (value
+         "ok"))
+)
     ((id standard-library-write-shared)
      (kind r7rs-conformance)
      (phase eval)
@@ -1480,9 +2596,17 @@
      (oracle shared)
      (options ())
      (description "write-shared labels shared pair structure.")
-     (source "(import (scheme base) (scheme write))\n(let ((x (list 'a))) (let ((out (open-output-string))) (write-shared (list x x) out) (get-output-string out)))")
-     (expect (value "\"(#0=(a) #0#)\"")))
 
+     (source
+       (forms
+         (import (scheme base) (scheme write))
+         (let ((x (list (quote a)))) (let ((out (open-output-string)))
+                                       (write-shared (list x x) out)
+              (get-output-string out)))))
+     (expect
+       (value
+         "(#0=(a) #0#)"))
+)
     ((id standard-library-write-simple)
      (kind r7rs-conformance)
      (phase eval)
@@ -1491,10 +2615,19 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "write-simple renders acyclic datums without sharing labels.")
-     (source "(import (scheme base) (scheme write))\n(let ((out (open-output-string))) (write-simple '#(1 \"x\") out) (get-output-string out))")
-     (expect (value "\"#(1 \\\"x\\\")\"")))
+     (description
+        "write-simple renders acyclic datums without sharing labels.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme write))
+         (let ((out (open-output-string))) (write-simple (quote #(1 "x"))
+                                                         out)
+            (get-output-string out))))
+     (expect
+       (value
+         "#(1 \"x\")"))
+)
     ((id standard-library-write-circular)
      (kind r7rs-conformance)
      (phase eval)
@@ -1504,9 +2637,13 @@
      (oracle shared)
      (options ())
      (description "write labels circular pair structure.")
-     (source "(import (scheme base) (scheme write))\n(let ((out (open-output-string))) (write '#1=(a . #1#) out) (get-output-string out))")
-     (expect (value "\"#0=(a . #0#)\"")))
 
+     (source
+       (file "programs/write-circular.scm"))
+     (expect
+       (value
+         "#0=(a . #0#)"))
+)
     ((id standard-library-read-string-port)
      (kind r7rs-conformance)
      (phase eval)
@@ -1515,10 +2652,23 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The read library reads Consent Scheme datums from input string ports.")
-     (source "(import (scheme base) (scheme read) (scheme write))\n(let ((in (open-input-string \"(alpha 1) \")) (out (open-output-string))) (write (read in) out) (write-char (read-char in) out) (list (get-output-string out) (eof-object? (read in))))")
-     (expect (value "(\"(alpha 1) \" #t)")))
+     (description
+       "The read library reads Consent Scheme datums from input string ports.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme read) (scheme write))
+         (let ((in (open-input-string "(alpha 1) ")) (out
+                                                      (open-output-string)))
+            (write (read in) out) (write-char
+
+              (read-char in) out) (list (get-output-string out)
+
+              (eof-object? (read in))))))
+     (expect
+       (value
+         ("(alpha 1) " #t)))
+)
     ((id standard-library-read-write-roundtrip)
      (kind r7rs-conformance)
      (phase eval)
@@ -1527,18 +2677,32 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (provenance
-      (inspired-by "Chibi Scheme tests/r7rs-tests.scm and Gauche tests/io.scm")
-      (source-url "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests.scm")
-      (source-url "https://github.com/shirok/Gauche/blob/master/tests/io.scm")
-      (license "BSD-style")
-      (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (license-url "https://github.com/shirok/Gauche/blob/master/COPYING")
-      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
-     (description "A datum written to an output string port can be read back from an input string port.")
-     (source "(import (scheme base) (scheme read) (scheme write))\n(let ((out (open-output-string))) (write '(alpha \"beta\" 3) out) (read (open-input-string (get-output-string out))))")
-     (expect (value "(alpha \"beta\" 3)")))
+     (provenance (inspired-by
+       "Chibi Scheme tests/r7rs-tests.scm and Gauche tests/io.scm") (source-url
 
+          "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests\
+.scm\
+") (source-url
+       "https://github.com/shirok/Gauche/blob/master/tests/io.scm") (license
+       "BSD-style") (license-url
+       "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
+       (license-url "https://github.com/shirok/Gauche/blob/master/COPYING")
+       (review-note
+       "Consent Scheme-owned rewrite; no third-party test text copied."))
+     (description
+       "A datum written to an output string port can be read back from an \
+input string port.")
+
+     (source
+       (forms
+         (import (scheme base) (scheme read) (scheme write))
+         (let ((out (open-output-string))) (write (quote (alpha "beta" 3))
+                                                  out) (read (open-input-string
+              (get-output-string out))))))
+     (expect
+       (value
+         (alpha "beta" 3)))
+)
     ((id standard-library-owned-symbol-roundtrip)
      (kind r7rs-conformance)
      (phase eval)
@@ -1547,10 +2711,27 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "Writing and reading an escaped symbol preserves its portable identity.")
-     (source "(import (scheme base) (scheme read) (scheme write))\n(let* ((symbol (string->symbol \"K. Harper, M.D.\")) (out (open-output-string))) (write symbol out) (let ((read-back (read (open-input-string (get-output-string out))))) (list (get-output-string out) (symbol? read-back) (eq? symbol read-back))))")
-     (expect (value "(\"|K. Harper, M.D.|\" #t #t)")))
+     (description
 
+        "Writing and reading an escaped symbol preserves its portable identity\
+.")
+
+     (source
+       (forms
+         (import (scheme base) (scheme read) (scheme write))
+         (let* ((symbol (string->symbol "K. Harper, M.D.")) (out
+
+              (open-output-string))) (write symbol out) (let ((read-back (read
+
+              (open-input-string (get-output-string out))))) (list
+
+              (get-output-string out) (symbol? read-back) (eq?
+
+              symbol read-back))))))
+     (expect
+       (value
+         ("|K. Harper, M.D.|" #t #t)))
+)
     ((id standard-library-bytevector-ports)
      (kind r7rs-conformance)
      (phase eval)
@@ -1559,10 +2740,24 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "In-memory bytevector ports read and write binary bytes without host access.")
-     (source "(import (scheme base))\n(let ((in (open-input-bytevector #u8(1 2 3))) (out (open-output-bytevector))) (write-u8 (read-u8 in) out) (write-bytevector (read-bytevector 4 in) out) (list (eof-object? (read-u8 in)) (get-output-bytevector out)))")
-     (expect (value "(#t #u8(1 2 3))")))
+     (description
+       "In-memory bytevector ports read and write binary bytes without host \
+access.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (let ((in (open-input-bytevector #u8(1 2 3))) (out
+
+              (open-output-bytevector))) (write-u8 (read-u8 in) out)
+                                                        (write-bytevector
+              (read-bytevector 4 in) out) (list (eof-object?
+
+              (read-u8 in)) (get-output-bytevector out)))))
+     (expect
+       (value
+         (#t #u8(1 2 3))))
+)
     ((id standard-library-read-bytevector-partial)
      (kind r7rs-conformance)
      (phase eval)
@@ -1571,10 +2766,22 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "read-bytevector! writes a partial binary read into the requested bytevector range.")
-     (source "(import (scheme base))\n(let ((target (bytevector 9 9 9 9)) (in (open-input-bytevector #u8(1 2)))) (list (read-bytevector! target in 1 4) target (eof-object? (read-bytevector! target in))))")
-     (expect (value "(2 #u8(9 1 2 9) #t)")))
+     (description
+       "read-bytevector! writes a partial binary read into the requested \
+bytevector range.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (let ((target (bytevector 9 9 9 9)) (in (open-input-bytevector
+                                                  #u8(1 2)))) (list
+              (read-bytevector! target in 1 4) target
+
+              (eof-object? (read-bytevector! target in))))))
+     (expect
+       (value
+         (2 #u8(9 1 2 9) #t)))
+)
     ((id standard-library-write-string-range-newline)
      (kind r7rs-conformance)
      (phase eval)
@@ -1583,10 +2790,19 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "write-string range arguments and newline write to explicit string output ports.")
-     (source "(import (scheme base))\n(let ((out (open-output-string))) (write-string \"agent\" out 1 4) (newline out) (get-output-string out))")
-     (expect (value "\"gen\\n\"")))
+     (description
+       "write-string range arguments and newline write to explicit string \
+output ports.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (let ((out (open-output-string))) (write-string "agent" out 1 4)
+              (newline out) (get-output-string out))))
+     (expect
+       (value
+         "gen\n"))
+)
     ((id standard-library-base-features-utf8)
      (kind r7rs-conformance)
      (phase eval)
@@ -1595,10 +2811,20 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The base library exposes feature discovery and UTF-8 bytevector conversions.")
-     (source "(import (scheme base))\n(let ((bytes (string->utf8 \"agent\"))) (list (pair? (memq 'r7rs (features))) bytes (utf8->string bytes 1 4)))")
-     (expect (value "(#t #u8(97 103 101 110 116) \"gen\")")))
+     (description
+       "The base library exposes feature discovery and UTF-8 bytevector \
+conversions.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (let ((bytes (string->utf8 "agent"))) (list (pair? (memq (quote
+                                                                   r7rs)
+              (features))) bytes (utf8->string bytes 1 4)))))
+     (expect
+       (value
+         (#t #u8(97 103 101 110 116) "gen")))
+)
     ((id standard-library-base-utf8-unicode-scalars)
      (kind r7rs-conformance)
      (phase eval)
@@ -1607,10 +2833,30 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "UTF-8 conversion round-trips every one- through four-byte boundary and both sides of the surrogate gap.")
-     (source "(import (scheme base))\n(let* ((codes '(0 #x7f #x80 #x7ff #x800 #xd7ff #xe000 #xffff #x10000 #x10ffff)) (text (list->string (map integer->char codes))) (bytes (string->utf8 text))) (list bytes (map char->integer (string->list (utf8->string bytes)))))")
-     (expect (value "(#u8(0 127 194 128 223 191 224 160 128 237 159 191 238 128 128 239 191 191 240 144 128 128 244 143 191 191) (0 127 128 2047 2048 55295 57344 65535 65536 1114111))")))
+     (description
 
+        "UTF-8 conversion round-trips every one- through four-byte boundary an\
+d \
+both sides of the surrogate gap.")
+
+     (source
+       (forms
+         (import (scheme base))
+         (let* ((codes (quote (0 127 128 2047 2048 55295 57344 65535 65536
+                                 1114111))) (text (list->string (map
+              integer->char codes))) (bytes
+
+              (string->utf8 text))) (list bytes (map char->integer
+
+              (string->list (utf8->string bytes)))))))
+     (expect
+       (value
+         (#u8(0 127 194 128 223 191 224 160 128 237 159 191 238 128 128 239
+                191 191 240 144 128 128 244 143 191 191) (0 127 128 2047 2048
+              55295 57344
+                                                            65535 65536
+              1114111))))
+)
     ((id standard-library-base-utf8-range-slices)
      (kind r7rs-conformance)
      (phase eval)
@@ -1619,10 +2865,27 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "UTF-8 range arguments handle multibyte character boundaries and empty string and bytevector slices.")
-     (source "(import (scheme base))\n(let* ((text (list->string (map integer->char '(#x41 #x3bb #x20ac #x1f642 #x5a)))) (bytes (string->utf8 text)) (middle (string->utf8 text 1 4))) (list middle (map char->integer (string->list (utf8->string bytes 1 10))) (utf8->string bytes 3 3) (string->utf8 text 2 2)))")
-     (expect (value "(#u8(206 187 226 130 172 240 159 153 130) (955 8364 128578) \"\" #u8())")))
+     (description
+       "UTF-8 range arguments handle multibyte character boundaries and empty \
+string and bytevector slices.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (let* ((text (list->string (map integer->char (quote (65 955 8364
+                                                                  128578
+              90))))) (bytes (string->utf8 text)) (middle (string->utf8
+
+              text 1 4))) (list middle (map char->integer
+
+              (string->list (utf8->string bytes 1 10)))
+
+              (utf8->string bytes 3 3) (string->utf8 text 2 2)))))
+     (expect
+       (value
+         (#u8(206 187 226 130 172 240 159 153 130) (955 8364 128578) ""
+             #u8())))
+)
     ((id standard-library-base-utf8-rejects-split-range-start)
      (kind r7rs-conformance)
      (phase eval)
@@ -1631,10 +2894,18 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "UTF-8 decoding rejects a range that starts inside a multibyte sequence.")
-     (source "(import (scheme base))\n(utf8->string #u8(65 206 187 226 130 172 240 159 153 130 90) 2 10)")
-     (expect (error)))
+     (description
+       "UTF-8 decoding rejects a range that starts inside a multibyte \
+sequence.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(65 206 187 226 130 172 240 159 153 130 90) 2 10)))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-split-range-end)
      (kind r7rs-conformance)
      (phase eval)
@@ -1643,10 +2914,17 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "UTF-8 decoding rejects a range that ends inside a multibyte sequence.")
-     (source "(import (scheme base))\n(utf8->string #u8(65 206 187 226 130 172 240 159 153 130 90) 1 2)")
-     (expect (error)))
+     (description
+       "UTF-8 decoding rejects a range that ends inside a multibyte sequence.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(65 206 187 226 130 172 240 159 153 130 90) 1 2)))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-stray-continuation)
      (kind r7rs-conformance)
      (phase eval)
@@ -1655,10 +2933,17 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "UTF-8 decoding rejects a continuation byte without a leading byte.")
-     (source "(import (scheme base))\n(utf8->string #u8(128))")
-     (expect (error)))
+     (description
+       "UTF-8 decoding rejects a continuation byte without a leading byte.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(128))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-truncated-two-byte)
      (kind r7rs-conformance)
      (phase eval)
@@ -1668,9 +2953,15 @@
      (oracle shared)
      (options ())
      (description "UTF-8 decoding rejects a truncated two-byte sequence.")
-     (source "(import (scheme base))\n(utf8->string #u8(194))")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(194))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-truncated-three-byte)
      (kind r7rs-conformance)
      (phase eval)
@@ -1680,9 +2971,15 @@
      (oracle shared)
      (options ())
      (description "UTF-8 decoding rejects a truncated three-byte sequence.")
-     (source "(import (scheme base))\n(utf8->string #u8(224 160))")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(224 160))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-truncated-four-byte)
      (kind r7rs-conformance)
      (phase eval)
@@ -1692,9 +2989,15 @@
      (oracle shared)
      (options ())
      (description "UTF-8 decoding rejects a truncated four-byte sequence.")
-     (source "(import (scheme base))\n(utf8->string #u8(240 144 128))")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(240 144 128))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-bad-two-byte-continuation)
      (kind r7rs-conformance)
      (phase eval)
@@ -1704,9 +3007,15 @@
      (oracle shared)
      (options ())
      (description "UTF-8 decoding rejects a malformed two-byte continuation.")
-     (source "(import (scheme base))\n(utf8->string #u8(194 32))")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(194 32))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-bad-three-byte-continuation)
      (kind r7rs-conformance)
      (phase eval)
@@ -1715,10 +3024,17 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "UTF-8 decoding rejects a malformed three-byte continuation.")
-     (source "(import (scheme base))\n(utf8->string #u8(225 128 32))")
-     (expect (error)))
+     (description
+        "UTF-8 decoding rejects a malformed three-byte continuation.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(225 128 32))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-bad-four-byte-continuation)
      (kind r7rs-conformance)
      (phase eval)
@@ -1728,9 +3044,15 @@
      (oracle shared)
      (options ())
      (description "UTF-8 decoding rejects a malformed four-byte continuation.")
-     (source "(import (scheme base))\n(utf8->string #u8(241 128 128 32))")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(241 128 128 32))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-overlong-three-byte)
      (kind r7rs-conformance)
      (phase eval)
@@ -1740,9 +3062,15 @@
      (oracle shared)
      (options ())
      (description "UTF-8 decoding rejects a three-byte overlong encoding.")
-     (source "(import (scheme base))\n(utf8->string #u8(224 128 128))")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(224 128 128))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-overlong-four-byte)
      (kind r7rs-conformance)
      (phase eval)
@@ -1752,9 +3080,15 @@
      (oracle shared)
      (options ())
      (description "UTF-8 decoding rejects a four-byte overlong encoding.")
-     (source "(import (scheme base))\n(utf8->string #u8(240 128 128 128))")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(240 128 128 128))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-surrogate-end)
      (kind r7rs-conformance)
      (phase eval)
@@ -1763,10 +3097,17 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "UTF-8 decoding rejects the upper endpoint of the surrogate range.")
-     (source "(import (scheme base))\n(utf8->string #u8(237 191 191))")
-     (expect (error)))
+     (description
+       "UTF-8 decoding rejects the upper endpoint of the surrogate range.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(237 191 191))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-above-maximum)
      (kind r7rs-conformance)
      (phase eval)
@@ -1776,9 +3117,15 @@
      (oracle shared)
      (options ())
      (description "UTF-8 decoding rejects an encoding above U+10FFFF.")
-     (source "(import (scheme base))\n(utf8->string #u8(244 144 128 128))")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(244 144 128 128))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-high-leading-byte)
      (kind r7rs-conformance)
      (phase eval)
@@ -1787,10 +3134,17 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "UTF-8 decoding rejects leading bytes above the four-byte range.")
-     (source "(import (scheme base))\n(utf8->string #u8(245 128 128 128))")
-     (expect (error)))
+     (description
+       "UTF-8 decoding rejects leading bytes above the four-byte range.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(245 128 128 128))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-invalid-leading-byte)
      (kind r7rs-conformance)
      (phase eval)
@@ -1799,10 +3153,17 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "UTF-8 decoding rejects a byte that cannot begin any sequence.")
-     (source "(import (scheme base))\n(utf8->string #u8(255))")
-     (expect (error)))
+     (description
+       "UTF-8 decoding rejects a byte that cannot begin any sequence.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(255))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-overlong)
      (kind r7rs-conformance)
      (phase eval)
@@ -1811,10 +3172,18 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "UTF-8 decoding rejects overlong encodings instead of accepting host replacement behavior.")
-     (source "(import (scheme base))\n(utf8->string #u8(192 128))")
-     (expect (error)))
+     (description
+       "UTF-8 decoding rejects overlong encodings instead of accepting host \
+replacement behavior.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(192 128))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-base-utf8-rejects-surrogate)
      (kind r7rs-conformance)
      (phase eval)
@@ -1824,9 +3193,15 @@
      (oracle shared)
      (options ())
      (description "UTF-8 decoding rejects encoded surrogate code points.")
-     (source "(import (scheme base))\n(utf8->string #u8(237 160 128))")
-     (expect (error)))
 
+     (source
+       (forms
+         (import (scheme base))
+         (utf8->string #u8(237 160 128))))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-current-output-port)
      (kind r7rs-conformance)
      (phase eval)
@@ -1837,10 +3212,18 @@
      (oracle-eligibility policy-gated)
      (oracle-reason host-policy)
      (options ())
-     (description "Current output ports expose default textual output only after host/session policy exists.")
-     (source "(import (scheme base))\n(output-port? (current-output-port))")
-     (expect (value "#t")))
+     (description
+       "Current output ports expose default textual output only after \
+host/session policy exists.")
 
+     (source
+       (forms
+         (import (scheme base))
+         (output-port? (current-output-port))))
+     (expect
+       (value
+         #t))
+)
     ((id standard-library-eval-environment)
      (kind r7rs-conformance)
      (phase eval)
@@ -1849,10 +3232,18 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The eval library evaluates Scheme expressions in explicit library environments.")
-     (source "(import (scheme base) (scheme eval))\n(eval '(* 7 3) (environment '(scheme base)))")
-     (expect (value "21")))
+     (description
+       "The eval library evaluates Scheme expressions in explicit library \
+environments.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme eval))
+         (eval (quote (* 7 3)) (environment (quote (scheme base))))))
+     (expect
+       (value
+         21))
+)
     ((id standard-library-inexact-transcendentals)
      (kind r7rs-conformance)
      (phase eval)
@@ -1861,10 +3252,18 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The inexact library exports representative real-valued transcendental procedures.")
-     (source "(import (scheme inexact))\n(list (sqrt 9) (sin 0) (cos 0) (tan 0) (exp 0) (log 1))")
-     (expect (value "(3.0 0.0 1.0 0.0 1.0 0.0)")))
+     (description
+       "The inexact library exports representative real-valued transcendental \
+procedures.")
 
+     (source
+       (forms
+         (import (scheme inexact))
+         (list (sqrt 9) (sin 0) (cos 0) (tan 0) (exp 0) (log 1))))
+     (expect
+       (value
+         (3.0 0.0 1.0 0.0 1.0 0.0)))
+)
     ((id standard-library-load-policy-denied)
      (kind r7rs-conformance)
      (phase eval)
@@ -1875,10 +3274,17 @@
      (oracle-eligibility policy-gated)
      (oracle-reason host-policy)
      (options ())
-     (description "The load library denies host file loading unless policy allows it.")
-     (source "(import (scheme base) (scheme load))\n(load \"fixtures/r7rs/include-body.scm\")")
-     (expect (error)))
+     (description
+       "The load library denies host file loading unless policy allows it.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme load))
+         (load "fixtures/r7rs/include-body.scm")))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-file-exists-policy)
      (kind r7rs-conformance)
      (phase eval)
@@ -1889,10 +3295,17 @@
      (oracle-eligibility policy-gated)
      (oracle-reason host-policy)
      (options ())
-     (description "The file library is available only through host file policy.")
-     (source "(import (scheme base) (scheme file))\n(file-exists? \"fixtures/r7rs/conformance-cases.scm\")")
-     (expect (value "#t")))
+     (description
+       "The file library is available only through host file policy.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme file))
+         (file-exists? "fixtures/r7rs/conformance-cases.scm")))
+     (expect
+       (value
+         #t))
+)
     ((id standard-library-process-context-policy-denied)
      (kind r7rs-conformance)
      (phase eval)
@@ -1903,10 +3316,18 @@
      (oracle-eligibility policy-gated)
      (oracle-reason host-policy)
      (options ())
-     (description "The process-context library imports but denies process access unless policy allows it.")
-     (source "(import (scheme base) (scheme process-context))\n(command-line)")
-     (expect (error)))
+     (description
+       "The process-context library imports but denies process access unless \
+policy allows it.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme process-context))
+         (command-line)))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-time-policy-denied)
      (kind r7rs-conformance)
      (phase eval)
@@ -1917,10 +3338,18 @@
      (oracle-eligibility policy-gated)
      (oracle-reason host-policy)
      (options ())
-     (description "The time library imports but denies host time access unless policy allows it.")
-     (source "(import (scheme base) (scheme time))\n(current-second)")
-     (expect (error)))
+     (description
+       "The time library imports but denies host time access unless policy \
+allows it.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme time))
+         (current-second)))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-time-clock-grant)
      (kind r7rs-conformance)
      (phase eval)
@@ -1930,18 +3359,23 @@
      (oracle shared)
      (oracle-eligibility policy-gated)
      (oracle-reason host-policy)
-     (options
-      ((capability-grants
-        ((capability-grant
-          (id fixture-clock-grant)
-          (domain clock)
-          (operations read)
-          (scope (clock system))
-          (expires never))))))
-     (description "The time library returns R7RS-shaped clock values when a clock grant authorizes host observation.")
-     (source "(import (scheme base) (scheme time))\n(list (real? (current-second))\n      (exact-integer? (current-jiffy))\n      (exact-integer? (jiffies-per-second))\n      (> (jiffies-per-second) 0))")
-     (expect (value "(#t #t #t #t)")))
+     (options ((capability-grants ((capability-grant (id fixture-clock-grant)
+       (domain clock) (operations read) (scope (clock system)) (expires
+       never))))))
+     (description
+       "The time library returns R7RS-shaped clock values when a clock grant \
+authorizes host observation.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme time))
+         (list (real? (current-second)) (exact-integer? (current-jiffy))
+               (exact-integer? (jiffies-per-second)) (> (jiffies-per-second)
+              0))))
+     (expect
+       (value
+         (#t #t #t #t)))
+)
     ((id standard-library-repl-policy-denied)
      (kind r7rs-conformance)
      (phase eval)
@@ -1952,10 +3386,18 @@
      (oracle-eligibility policy-gated)
      (oracle-reason host-policy)
      (options ())
-     (description "The repl library imports but denies interaction-environment unless session policy allows it.")
-     (source "(import (scheme base) (scheme repl))\n(interaction-environment)")
-     (expect (error)))
+     (description
+       "The repl library imports but denies interaction-environment unless \
+session policy allows it.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme repl))
+         (interaction-environment)))
+     (expect
+       (condition
+         (category evaluation-error)))
+)
     ((id standard-library-repl-interaction-environment)
      (kind r7rs-conformance)
      (phase eval)
@@ -1966,10 +3408,19 @@
      (oracle-eligibility policy-gated)
      (oracle-reason host-policy)
      (options ((session-id repl-main)))
-     (description "The repl library returns a mutable interaction environment inside an authorized session context.")
-     (source "(import (scheme base) (scheme eval) (scheme repl))\n(eval '(define repl-value 42) (interaction-environment))\nrepl-value")
-     (expect (value "42")))
+     (description
+       "The repl library returns a mutable interaction environment inside an \
+authorized session context.")
 
+     (source
+       (forms
+         (import (scheme base) (scheme eval) (scheme repl))
+         (eval (quote (define repl-value 42)) (interaction-environment))
+         repl-value))
+     (expect
+       (value
+         42))
+)
     ((id standard-library-r5rs-aliases)
      (kind r7rs-conformance)
      (phase eval)
@@ -1978,10 +3429,18 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The r5rs compatibility library imports practical base bindings and exactness aliases.")
-     (source "(import (scheme r5rs))\n(list (+ 1 2) (exact->inexact 3) (inexact->exact 3.0))")
-     (expect (value "(3 3.0 3)")))
+     (description
+       "The r5rs compatibility library imports practical base bindings and \
+exactness aliases.")
 
+     (source
+       (forms
+         (import (scheme r5rs))
+         (list (+ 1 2) (exact->inexact 3) (inexact->exact 3.0))))
+     (expect
+       (value
+         (3 3.0 3)))
+)
     ((id reader-comments-read-all)
      (kind agent-specific)
      (phase read-all)
@@ -1993,9 +3452,14 @@
      (oracle-reason agent-specific)
      (options ())
      (description "The shared reader corpus can compare multiple read datums.")
-     (source "; ignore\n#| nested #| comment |# done |#\n1 #;(skip me) 2")
-     (expect (values ("1" "2"))))
 
+     (source
+       (text "; ignore\n#| nested #| comment |# done |#\n1 #;(skip me) 2"))
+     (expect
+       (values
+         1
+         2))
+)
     ((id reader-list-limit-error)
      (kind agent-specific)
      (phase read)
@@ -2006,10 +3470,17 @@
      (oracle-eligibility not-oracle-eligible)
      (oracle-reason resource-limit)
      (options ((max-list-length 2)))
-     (description "The shared reader corpus can pass options and compare expected errors.")
-     (source "(1 2 3)")
-     (expect (error)))
+     (description
 
+        "The shared reader corpus can pass options and compare expected errors\
+.")
+
+     (source
+       (text "(1 2 3)"))
+     (expect
+       (condition
+         (category read-error)))
+)
     ((id eval-multiple-values-result)
      (kind agent-specific)
      (phase eval-result)
@@ -2021,5 +3492,13 @@
      (oracle-reason agent-result-record)
      (options ())
      (description "The shared evaluator corpus can compare result datums.")
-     (source "(values 1 2)")
-     (expect (result "(evaluation-result (status values) (values (1 2)) (events ()) (budget (steps-used 5) (host-calls 1)))")))))
+
+     (source
+       (form
+         (values 1 2)))
+     (expect
+       (result
+         (evaluation-result (status values) (values (1 2)) (events ())
+                            (budget (steps-used 5) (host-calls 1)))))
+)
+  ))

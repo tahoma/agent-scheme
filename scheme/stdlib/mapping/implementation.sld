@@ -91,7 +91,8 @@
       #((parameters
          (left (type any) (description "First provider candidate."))
          (right (type any) (description "Second provider candidate.")))
-        (returns (type boolean) (description "Whether providers are identical."))
+        (returns (type boolean) (description
+          "Whether providers are identical."))
         (effects pure))
       (eq? left right))
 
@@ -176,9 +177,11 @@
          (comparator (type comparator)
           (description "Comparator controlling the mapping keys."))
          (args (type list)
-          (description "Alternating keys and values used to initialize the mapping.")))
+          (description
+            "Alternating keys and values used to initialize the mapping.")))
         (returns (type mapping)
-         (description "An ordered mapping containing the supplied associations."))
+         (description
+           "An ordered mapping containing the supplied associations."))
         (effects allocation error procedure-call))
       (assume (comparator? comparator))
       (apply mapping-with-provider
@@ -226,7 +229,8 @@
          (comparator (type comparator)
           (description "Comparator controlling the mapping keys.")))
         (returns (type mapping)
-         (description "An ordered mapping built from the generated associations."))
+         (description
+           "An ordered mapping built from the generated associations."))
         (effects allocation error procedure-call))
       (assume (procedure? stop?))
       (assume (procedure? mapper))
@@ -359,7 +363,8 @@
          (args (type list)
           (description "Alternating keys and values to adjoin when absent.")))
         (returns (type mapping)
-         (description "Mapping containing original and newly absent associations."))
+         (description
+           "Mapping containing original and newly absent associations."))
         (effects allocation error procedure-call))
       (assume (mapping? mapping))
       (let loop ((args args)
@@ -408,7 +413,8 @@
          (value (type any)
           (description "Replacement value.")))
         (returns (type mapping)
-         (description "Mapping with KEY replaced when it was already present."))
+         (description
+           "Mapping with KEY replaced when it was already present."))
         (effects allocation error procedure-call))
       (assume (mapping? mapping))
       (receive (mapping obj)
@@ -596,7 +602,8 @@
     (define mapping-pop! mapping-pop)
 
     (define (mapping-search mapping key failure success)
-      "Search MAPPING for KEY and return an edited mapping plus callback result."
+      "Search MAPPING for KEY and return an edited mapping plus callback resul\
+t."
       #((parameters
          (mapping (type mapping)
           (description "Ordered mapping to search."))
@@ -606,7 +613,8 @@
           (description "Procedure receiving insert and ignore continuations."))
          (success (type procedure)
           (description
-           "Procedure receiving key, value, update, and remove continuations.")))
+           "Procedure receiving key, value, update, and remove \
+continuations.")))
         (returns (type any)
          (description "Two values: the edited mapping and callback result."))
         (effects allocation error procedure-call))
@@ -657,7 +665,8 @@
          (failure (type procedure)
           (description "Thunk called when no association matches.")))
         (returns (type any)
-         (description "Matching key and value as values, or FAILURE's result."))
+         (description
+           "Matching key and value as values, or FAILURE's result."))
         (effects error procedure-call))
       (assume (procedure? predicate))
       (assume (mapping? mapping))
@@ -769,7 +778,8 @@
       "Return a mapping of PROC over MAPPING using COMPARATOR for new keys."
       #((parameters
          (proc (type procedure)
-          (description "Procedure accepting a key and value and returning two values."))
+          (description
+            "Procedure accepting a key and value and returning two values."))
          (comparator (type comparator)
           (description "Comparator controlling the result keys."))
          (mapping (type mapping)
@@ -885,14 +895,16 @@
     (define mapping-remove! mapping-remove)
 
     (define (mapping-partition predicate mapping)
-      "Partition MAPPING by PREDICATE and return matching and removed mappings."
+      "Partition MAPPING by PREDICATE and return matching and removed mappings\
+."
       #((parameters
          (predicate (type procedure)
           (description "Procedure accepting a key and value."))
          (mapping (type mapping)
           (description "Ordered mapping to partition.")))
         (returns (type any)
-         (description "Two values: matching mapping and non-matching mapping."))
+         (description
+           "Two values: matching mapping and non-matching mapping."))
         (effects allocation error procedure-call))
       (assume (procedure? predicate))
       (assume (mapping? mapping))
@@ -1105,7 +1117,8 @@
          (mappings (type list)
           (description "Additional ordered mappings to compare.")))
         (returns (type boolean)
-         (description "Whether each mapping is a proper submapping of the next."))
+         (description
+           "Whether each mapping is a proper submapping of the next."))
         (effects error procedure-call))
       (assume (mapping? mapping))
       (let loop ((left mapping) (rest mappings))
@@ -1516,7 +1529,8 @@
                   (%make-mapping comparator provider tree>=)
                   (%make-mapping comparator provider tree>)))))
 
-    (define (mapping-catenate comparator mapping1 pivot-key pivot-value mapping2)
+    (define (mapping-catenate comparator mapping1 pivot-key pivot-value
+      mapping2)
       "Return MAPPING1, pivot association, and MAPPING2 as one mapping."
       #((parameters
          (comparator (type comparator)
@@ -1565,7 +1579,8 @@
       "Return a mapping from monotone PROC over MAPPING."
       #((parameters
          (proc (type procedure)
-          (description "Procedure accepting key and value and returning two values."))
+          (description
+            "Procedure accepting key and value and returning two values."))
          (comparator (type comparator)
           (description "Comparator controlling the result keys."))
          (mapping (type mapping)

@@ -1,4 +1,4 @@
-;;; consent-task.el --- Task lifecycle records and transitions  -*- lexical-binding: t; -*-
+;;; consent-task.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -72,7 +72,8 @@
                         expected-outcome))
     (agent-observation . (id task source kind value redactions audit))
     (agent-decision . (id task step observed-state selected-action reason
-                          policy-input model-input rules-input verifier-result))
+                          policy-input model-input rules-input
+                            verifier-result))
     (task-pause . (task state observed-state intended-next-action
                         capability-gate model-route approval-status
                         verifier-result pause-reason))

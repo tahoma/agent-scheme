@@ -77,7 +77,8 @@
        (ieee-float -3.4e38)
        (else %property-testing-min-exact)))
 
-    ;; Maximum size for random bytevector, list, string, symbol, and vector data.
+    ;; Maximum size for random bytevector, list, string, symbol, and vector
+    ;; data.
     (define %property-testing-max-size 1001)
 
     ;; Maximum character supported by integer->char for this host.
@@ -157,7 +158,8 @@
       "Return one generated argument from each generator in GENERATORS."
       (map (lambda (generator) (generator)) generators))
 
-    (define (%property-testing-record-arguments! runner arguments iteration runs)
+    (define (%property-testing-record-arguments! runner arguments iteration
+      runs)
       "Record property-test ARGUMENTS, ITERATION, and RUNS on RUNNER."
       (test-result-set! runner 'property-test-arguments arguments)
       (test-result-set! runner 'property-test-iteration iteration)
@@ -219,7 +221,8 @@
       "Return a generator of symbols."
       #((parameters)
         (returns (type procedure)
-         (description "Generator yielding symbols made from generated strings."))
+         (description
+           "Generator yielding symbols made from generated strings."))
         (effects allocation state-write))
       (gmap string->symbol (string-generator)))
 
@@ -346,7 +349,8 @@
       "Return a generator of exact integer complex numbers."
       #((parameters)
         (returns (type procedure)
-         (description "Generator yielding exact complex numbers with integer parts."))
+         (description
+           "Generator yielding exact complex numbers with integer parts."))
         (effects allocation state-write error))
       (cond-expand
        (exact-complex
@@ -581,7 +585,8 @@
        (lambda (thunk)
          (test-assert (thunk)))))
 
-    (define (%property-testing-assert-error error-type property generators runs)
+    (define (%property-testing-assert-error error-type property generators
+      runs)
       "Assert PROPERTY raises ERROR-TYPE over RUNS generated argument tuples."
       (%property-testing-test
        property
@@ -657,7 +662,8 @@
        generators
        (%property-testing-run-count maybe-runs)))
 
-    (define (test-property-error-type error-type property generators . maybe-runs)
+    (define (test-property-error-type error-type property generators .
+      maybe-runs)
       "Assert PROPERTY raises ERROR-TYPE over generated values."
       #((parameters
          (error-type . "Expected SRFI 64 error type descriptor.")

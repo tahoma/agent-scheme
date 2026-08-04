@@ -1,4 +1,4 @@
-;;; consent-eval-test.el --- R7RS evaluator kernel tests  -*- lexical-binding: t; -*-
+;;; consent-eval-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -20,7 +20,8 @@
    (consent-eval-source source nil options)))
 
 (defun consent-eval-test--result-external (source &optional options)
-  "Evaluate SOURCE and return the external representation of its result record."
+  "Evaluate SOURCE and return the external representation of its result\
+ record."
   (consent-result->external
    (consent-eval-source-result source nil options)))
 
@@ -115,7 +116,8 @@ than raising, which keeps the allow path deterministic."
     "#f")))
 
 (ert-deftest consent-eval-test-program-input-stream ()
-  "Program input connects current-input-port only under a stdin-backed port grant.
+  "Program input connects current-input-port only under a stdin-backed port\
+ grant.
 A `:program-input-reader' plus an active `port'/`read' grant scoped to `stdin'
 lets `read-line'/`read-char'/`read' draw from the program input; without the
 grant the read fails closed exactly as an unconnected current input port does,
@@ -178,10 +180,12 @@ checks."
                      "\"a\""))
       (should (= pulls 1)))
     ;; An unbounded reader would hang here if the port drained eagerly; reading
-    ;; a bounded number of lines completes because refills stop at each newline.
+    ;; a bounded number of lines completes because refills stop at each
+    ;; newline.
     (should (equal (consent-eval-test--external
                     "(list (read-line) (read-line) (read-line))"
-                    (append (list :program-input-reader (lambda () "x\n")) grants))
+                    (append (list :program-input-reader (lambda () "x\n"))
+                      grants))
                    "(\"x\" \"x\" \"x\")"))
     ;; A datum split across chunks is assembled by refilling until the recovery
     ;; reader sees a complete form.
@@ -194,10 +198,12 @@ checks."
 
 (ert-deftest consent-eval-test-program-output-streams ()
   "Program output/error connect only under a stdout/stderr-backed port grant.
-A granted writer receives each write flushed through immediately (write-through,
+A granted writer receives each write flushed through immediately\
+ (write-through,
 not buffered to end of program); an ungranted writer fails closed; an unbounded
 write loop stays bounded by the host-callback budget; and `current-error-port'
-fails closed without a grant.  Parity twin of the portable program-output checks."
+fails closed without a grant.  Parity twin of the portable program-output\
+ checks."
   (let ((out-grant '((capability-grant
                       (id program-output) (domain port)
                       (operations write flush close) (scope (backing stdout))
@@ -216,7 +222,8 @@ fails closed without a grant.  Parity twin of the portable program-output checks
        "(import (scheme write)) (display \"hi\") (newline)" nil
        (list :program-output-writer writer :capability-grants out-grant))
       (should (equal text "hi\n"))
-      ;; display and newline flush separately: write-through, not buffer-to-EOF.
+      ;; display and newline flush separately: write-through, not
+      ;; buffer-to-EOF.
       (should (= flushes 2)))
     ;; Ungranted output: a writer offered but no grant -> fails closed.
     (should-error
@@ -228,7 +235,8 @@ fails closed without a grant.  Parity twin of the portable program-output checks
     (should-error
      (consent-eval-source
       "(import (scheme base) (scheme write))
-       (let loop ((i 0)) (if (< i 50) (progn (display \"y\") (loop (+ i 1)))))" nil
+       (let loop ((i 0)) (if (< i 50) (progn (display \"y\") (loop (+ i 1)))))"
+         nil
       (list :program-output-writer (lambda (_chunk) nil)
             :max-host-callbacks 5 :capability-grants out-grant))
      :type 'consent-eval-error)
@@ -364,7 +372,8 @@ the portable `program-binary-input-read-u8' check."
              (consent-program-input-from-bytevector [104 105])
              :capability-grants grants))
       "(104 105 #t)"))
-    ;; peek-u8 does not advance the cursor; read-u8 then returns the peeked byte.
+    ;; peek-u8 does not advance the cursor; read-u8 then returns the peeked
+    ;; byte.
     (should
      (equal
       (consent-eval-test--external
@@ -398,8 +407,10 @@ the portable `program-binary-input-read-u8' check."
 
 (ert-deftest consent-eval-test-program-binary-input-streaming ()
   "Binary program input is pulled from a host byte reader thunk on demand.
-A `:program-input-byte-reader' yields the next bytevector chunk (or nil at end of
-stream), so a read consumes only as many bytes as it needs and an unbounded byte
+A `:program-input-byte-reader' yields the next bytevector chunk (or nil at end\
+ of
+stream), so a read consumes only as many bytes as it needs and an unbounded\
+ byte
 stream never drains up front.  Parity twin of the portable
 `program-binary-input-stream-read-u8' checks."
   (let ((grants '(:capability-grants
@@ -417,15 +428,18 @@ stream never drains up front.  Parity twin of the portable
                       (append (list :program-input-byte-reader reader) grants))
                      "10"))
       (should (= pulls 1)))
-    ;; An unbounded reader would hang here if the port drained eagerly; reading a
-    ;; bounded number of bytes completes because refills stop once a byte buffers.
+    ;; An unbounded reader would hang here if the port drained eagerly; reading
+    ;; a
+    ;; bounded number of bytes completes because refills stop once a byte
+    ;; buffers.
     (should (equal (consent-eval-test--external
                     "(let ((port (current-input-port)))
                        (list (read-u8 port) (read-u8 port) (read-u8 port)))"
                     (append (list :program-input-byte-reader (lambda () [120]))
                             grants))
                    "(120 120 120)"))
-    ;; A read-bytevector spanning multiple chunks refills until count bytes buffer.
+    ;; A read-bytevector spanning multiple chunks refills until count bytes
+    ;; buffer.
     (let* ((chunks (list [1 2] [3] [4 5]))
            (reader (lambda () (and chunks (pop chunks)))))
       (should (equal (consent-eval-test--external
@@ -436,8 +450,10 @@ stream never drains up front.  Parity twin of the portable
 (ert-deftest consent-eval-test-program-binary-output-streams ()
   "Binary program output/error connect only under a stdout/stderr-backed grant.
 A granted byte writer receives each write flushed through immediately
-(write-through, not buffered to end of program); an ungranted writer fails closed;
-an unbounded write loop stays bounded by the host-callback budget.  Parity twin of
+(write-through, not buffered to end of program); an ungranted writer fails\
+ closed;
+an unbounded write loop stays bounded by the host-callback budget.  Parity\
+ twin of
 the portable binary program-output checks."
   (let ((out-grant '((capability-grant
                       (id program-output) (domain port)
@@ -487,14 +503,16 @@ the portable binary program-output checks."
 (ert-deftest consent-eval-test-let-empty-bindings-and-char-literals ()
   "Evaluate `let' with empty bindings and delimiter character literals.
 Regression: the syntax-rules matcher must match ((name val) ...) against ();
-the reader must read #\\( #\\| etc. literally; char->integer must yield a number."
+the reader must read #\\( #\\| etc. literally; char->integer must yield a\
+ number."
   (should (equal (consent-eval-test--external "(let () 5)") "5"))
   (should (equal (consent-eval-test--external
                   "(let () (define x 6) (* x 7))")
                  "42"))
   (should (equal (consent-eval-test--external "(char->integer #\\()") "40"))
   (should (equal (consent-eval-test--external "(char->integer #\\|)") "124"))
-  (should (equal (consent-eval-test--external "(+ 1 (char->integer #\\a))") "98")))
+  (should (equal (consent-eval-test--external "(+ 1 (char->integer #\\a))")
+    "98")))
 
 (ert-deftest consent-eval-test-variables-definitions-and-calls ()
   "Evaluate top-level definitions, variable references, and calls."
@@ -773,7 +791,8 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
                      (lambda (text) text))"
      '(:boundary-contract-checking t :docstring-retention full)))))
 
-(ert-deftest consent-eval-test-boundary-contract-checking-reports-stripped-metadata ()
+(ert-deftest
+  consent-eval-test-boundary-contract-checking-reports-stripped-metadata ()
   "Checking mode reports when rich contract metadata has been stripped."
   (let ((result
          (consent-eval-test--result-external
@@ -893,7 +912,8 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
                     (set! again #f)
                     (resume 'resumed))
                 (reverse path)))")
-          "(before-outer before-inner during-inner after-inner after-outer before-outer before-inner during-inner after-inner after-outer)"))
+          "(before-outer before-inner during-inner after-inner after-outer\
+ before-outer before-inner during-inner after-inner after-outer)"))
   (should
    (equal (consent-eval-test--external
            "(let ((again #f))
@@ -1132,7 +1152,8 @@ baseline rather than retaining the entered frame."
                    baseline-winds))))
 
 (ert-deftest consent-eval-test-reentrant-continuation-restores-current-error ()
-  "Re-invoking a continuation captured inside a handler restores `current-error'.
+  "Re-invoking a continuation captured inside a handler restores\
+ `current-error'.
 A continuation snapshots the dynamic state at capture time, so re-entering
 a handler must reinstate that handler's condition -- not whatever condition
 is current at the point of re-invocation.  The probe captures a continuation

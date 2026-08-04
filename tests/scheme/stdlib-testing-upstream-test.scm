@@ -121,13 +121,13 @@
      r
      (lambda (runner count expected-count)
        (error (string-append "bad count " (number->string count)
-			     " but expected "
-			     (number->string expected-count)))))
+                             " but expected "
+                             (number->string expected-count)))))
     (test-runner-on-bad-end-name!
      r
      (lambda (runner begin end)
        (error (string-append "bad end grojup name " end
-			     " but expected " begin))))
+                             " but expected " begin))))
     (test-runner-on-test-end!
      r
      (lambda (runner)
@@ -903,17 +903,17 @@
 ;;; check to make sure the required properties are returned
 
 (test-equal '((result-kind . pass))
-	    (prop-runner
+            (prop-runner
              '(result-kind)
              (lambda ()
                (test-assert #t)))
-	    )
+            )
 
 (test-equal
             '((result-kind . fail)
               (expected-value . 2)
               (actual-value . 3))
-	    (prop-runner
+            (prop-runner
              '(result-kind expected-value actual-value)
              (lambda ()
                (test-equal 2 (+ 1 2)))))
@@ -923,21 +923,21 @@
 (test-begin "9.2. test-result-ref")
 
 (test-equal '(pass)
-	    (on-test-runner
+            (on-test-runner
              (lambda ()
                (test-assert #t))
              (lambda (r)
                (test-result-ref r 'result-kind))))
 
 (test-equal '(pass)
-	    (on-test-runner
+            (on-test-runner
              (lambda ()
                (test-assert #t))
              (lambda (r)
                (test-result-ref r 'result-kind))))
 
 (test-equal '(fail pass)
-	    (on-test-runner
+            (on-test-runner
              (lambda ()
                (test-assert (= 1 2))
                (test-assert (= 1 1)))
@@ -949,7 +949,7 @@
 (test-begin "9.3. test-result-set!")
 
 (test-equal '(100 100)
-	    (on-test-runner
+            (on-test-runner
              (lambda ()
                (test-assert (= 1 2))
                (test-assert (= 1 1)))

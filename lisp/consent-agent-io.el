@@ -1,4 +1,4 @@
-;;; consent-agent-io.el --- Agent event channel primitives  -*- lexical-binding: t; -*-
+;;; consent-agent-io.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

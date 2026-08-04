@@ -20,14 +20,15 @@
 ;;; `task-stop'/`task-pause' receipt, and a Scheme-readable audit trail.  Model
 ;;; routing is recorded intent over the `(agent runner)' provider surface: the
 ;;; provider proposal steps are injected as data, so a stubbed or fake provider
-;;; is enough for the first cut -- no streaming or remote transport is required.
+;;; is enough for the first cut -- no streaming or remote transport is
+;;; required.
 ;;;
 ;;; Consent invariants carried here:
 ;;;
-;;; * Fail closed without authority.  A harness whose current session carries no
+;;; * Fail closed without authority. A harness whose current session carries no
 ;;;   granted authority -- or no current session at all -- refuses to dispatch
 ;;;   and returns a `prompt-result' carrying a Scheme-readable `prompt-error'
-;;;   receipt and an audit record, never touching the runner or any host effect.
+;;; receipt and an audit record, never touching the runner or any host effect.
 ;;; * Determinism (the D7 agent-layer stance).  Selection consults no
 ;;;   wall-clock, host randomness, or live provider, and the runner is
 ;;;   deterministic around policy and state given its injected inputs, so a
@@ -38,12 +39,14 @@
 ;;; so the verbs behave identically in the Emacs REPL and the portable terminal
 ;;; REPL.  The ambient "current harness" is process-local mutable state managed
 ;;; through `current-prompt-harness'/`set-current-prompt-harness!' so a bare
-;;; `(prompt "...")' resolves to a default harness while explicit harnesses keep
+;;; `(prompt "...")' resolves to a default harness while explicit harnesses
+;;; keep
 ;;; the verbs testable and reentrant.
 
 (define-library (agent prompt)
   (export ;; Registry construction and inspection surface, re-exported so the
-          ;; REPL imports one library and `agents' (below) does not collide with
+          ;; REPL imports one library and `agents' (below) does not collide
+          ;; with
           ;; the registry primitive of the same name.
           make-agent
           agent?
@@ -116,7 +119,8 @@
           (only (stdlib list) delete-duplicates)
           (agent runner)
           ;; The registry exports `agents', which this library re-purposes as a
-          ;; harness-taking discovery verb; rename the registry primitive so both
+          ;; harness-taking discovery verb; rename the registry primitive so
+          ;; both
           ;; names coexist in the body.
           (rename (agent registry)
                   (agents registry-agents)))
@@ -144,7 +148,8 @@
       (and (pair? datum) (eq? (car datum) tag)))
 
     (define (tail-option tail)
-      "Return the leading options alist from a variadic TAIL, or the empty list."
+      "Return the leading options alist from a variadic TAIL, or the empty lis\
+t."
       (if (pair? tail) (car tail) '()))
 
     (define (non-empty-list? value)
@@ -256,9 +261,11 @@
           authority
           (and authority #t)))
 
-    ;; Harness container: a registry to select from, the current default session
+    ;; Harness container: a registry to select from, the current default
+    ;; session
     ;; id the verbs dispatch into, authority for that session, and a defaults
-    ;; alist of runner options (provider, policy, verifier, budgets, ...) merged
+    ;; alist of runner options (provider, policy, verifier, budgets, ...)
+    ;; merged
     ;; under per-call options. This is mutable host/session state, so it is a
     ;; record rather than a serializable datum; the agents, selections, and
     ;; results it produces remain tagged lists.
@@ -271,7 +278,8 @@
       (defaults harness-defaults set-harness-defaults!))
 
     (define (make-prompt-harness . maybe-options)
-      "Return a prompt harness over a registry, default session, and authority."
+      "Return a prompt harness over a registry, default session, and authority\
+."
       #((parameters
          (maybe-options (type list)
           (description
@@ -385,7 +393,8 @@
     (define ambient-harness #f)
 
     (define (current-prompt-harness)
-      "Return the process-local current harness, creating a default one lazily."
+      "Return the process-local current harness, creating a default one lazily\
+."
       #((parameters)
         (returns (type prompt-harness)
          (description
@@ -416,7 +425,8 @@
       (set! ambient-harness #f))
 
     (define (harness-or-current maybe-harness)
-      "Return the explicit harness from MAYBE-HARNESS, or the ambient harness."
+      "Return the explicit harness from MAYBE-HARNESS, or the ambient harness.\
+"
       (if (and (pair? maybe-harness) (prompt-harness? (car maybe-harness)))
           (car maybe-harness)
           (current-prompt-harness)))
@@ -433,14 +443,16 @@
           default))
 
     (define (resolve-budget harness agent options key budget-name default)
-      "Resolve a runner budget from per-call OPTIONS, the agent budget, or DEFAULT."
+      "Resolve a runner budget from per-call OPTIONS, the agent budget, or DEF\
+AULT."
       (let ((explicit (merged-option harness options key 'unset)))
         (if (eq? explicit 'unset)
             (budget-field (agent-budget agent) budget-name default)
             explicit)))
 
     (define (make-audit kind fields)
-      "Return a Scheme-readable `prompt-audit' record of KIND carrying FIELDS."
+      "Return a Scheme-readable `prompt-audit' record of KIND carrying FIELDS.\
+"
       (cons 'prompt-audit (cons (list 'kind kind) fields)))
 
     (define (authority-audit-fields authority)
@@ -474,7 +486,8 @@
     (define (authority-denial-message authority)
       "Return the denial message for missing AUTHORITY."
       (if (eq? (authority-origin authority) 'noninteractive)
-          "noninteractive prompt requires preloaded authority; refusing to dispatch"
+          "noninteractive prompt requires preloaded authority; refusing to dis\
+patch"
           "no granted session authority; refusing to dispatch"))
 
     (define (authority-granted-audit authority session)
@@ -489,9 +502,12 @@
           '()))
 
     (define (selection-context goal session extra options)
-      "Build the selection context alist from GOAL, SESSION, EXTRA, and OPTIONS."
-      "EXTRA (the role/model forced by `prompt-role'/`prompt-model') is placed"
-      "first so it wins over any same-named OPTIONS cell, because `select-agent'"
+      "Build the selection context alist from GOAL, SESSION, EXTRA, and OPTION\
+S."
+      "EXTRA (the role/model forced by `prompt-role'/`prompt-model') is placed\
+"
+      "first so it wins over any same-named OPTIONS cell, because `select-agen\
+t'"
       "reads the first matching cell."
       (append extra
               (let ((agent (option-ref options 'agent 'unset)))
@@ -505,7 +521,8 @@
             (list 'provider (merged-option harness options 'provider '()))
             (list 'policy (merged-option harness options 'policy '()))
             (list 'effects (merged-option harness options 'effects '()))
-            (list 'verifier (merged-option harness options 'verifier 'insufficient))
+            (list 'verifier (merged-option harness options 'verifier
+              'insufficient))
             (list 'operations (merged-option harness options 'operations '()))
             (list 'control (merged-option harness options 'control '()))
             (list 'observation
@@ -517,12 +534,14 @@
             (list 'max-pure-cost (resolve-budget harness agent options
                                                  'max-pure-cost 'max-pure-cost
                                                  100000))
-            (list 'id-prefix (merged-option harness options 'id-prefix 'prompt))))
+            (list 'id-prefix (merged-option harness options 'id-prefix
+              'prompt))))
 
     (define (make-prompt-result status agent selection session run receipt
                                 state completion transcript observations
                                 budget audit)
-      "Return a Scheme-readable `prompt-result' bundling one dispatch outcome."
+      "Return a Scheme-readable `prompt-result' bundling one dispatch outcome.\
+"
       (let ((role (if (agent? agent) (agent-role agent) 'none))
             (model (if (agent? agent) (agent-model agent) 'none))
             (agent-id-value (if (agent? agent) (agent-id agent) 'none)))
@@ -589,14 +608,16 @@
           (dispatch harness goal session selection options)))))
 
     (define (agent-of selection)
-      "Return SELECTION's chosen agent datum, or #f when nothing was selected."
+      "Return SELECTION's chosen agent datum, or #f when nothing was selected.\
+"
       (let ((agent (agent-selection-agent selection)))
         (if (agent? agent) agent #f)))
 
     (define (dispatch harness goal session selection options)
       "Run AGENT (from SELECTION) on GOAL and assemble the prompt-result."
       (let* ((agent (agent-of selection))
-             (run (run-task goal (runner-options harness agent session options)))
+             (run (run-task goal (runner-options harness agent session
+               options)))
              (authority (harness-authority harness))
              (audit (append
                      (authority-granted-audit authority session)
@@ -646,7 +667,8 @@
        args))
 
     (define (prompt . args)
-      "Prompt the automatically chosen agent at a goal in the current session."
+      "Prompt the automatically chosen agent at a goal in the current session.\
+"
       #((parameters
          (args (type list)
           (description
@@ -689,7 +711,8 @@
                         (list (list 'role role))
                         options)
             (error
-             "prompt-role expects role/goal/options or harness/role/goal/options"
+             "prompt-role expects role/goal/options or harness/role/goal/optio\
+ns"
              harness role goal options))))
        args))
 
@@ -735,7 +758,8 @@
                         (list (list 'model model))
                         options)
             (error
-             "prompt-model expects model/goal/options or harness/model/goal/options"
+             "prompt-model expects model/goal/options or harness/model/goal/op\
+tions"
              harness model goal options))))
        args))
 
@@ -801,7 +825,8 @@
            ("Rest-argument list containing zero or one explicit"
              "`prompt-harness'; empty defaults to the ambient harness."))))
         (returns (type list)
-         (description ("A list of distinct role symbols in registration order.")))
+         (description
+           ("A list of distinct role symbols in registration order.")))
         (effects state-read)
         (see-also agents models prompt-role))
       (apply roles-dispatch maybe-harness))
@@ -1009,7 +1034,8 @@
          (result (type prompt-result)
           (description "A `prompt-result' record.")))
         (returns (type list)
-         (description ("A list of `agent-observation' datums in execution order.")))
+         (description
+           ("A list of `agent-observation' datums in execution order.")))
         (effects pure))
       (record-field-value result 'observations '()))
 

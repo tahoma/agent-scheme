@@ -1,12 +1,13 @@
-;;; consent-redaction.el --- Secrets and redaction policy  -*- lexical-binding: t; -*-
+;;; consent-redaction.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
 ;; Secrets, local-only context, and redaction decisions are represented as
-;; Scheme-readable datums.  This module is host-neutral policy plumbing: callers
-;; at persistence, audit, provider, and skill boundaries decide when to apply it.
+;; Scheme-readable datums. This module is host-neutral policy plumbing: callers
+;; at persistence, audit, provider, and skill boundaries decide when to apply
+;; it.
 
 ;;; Code:
 

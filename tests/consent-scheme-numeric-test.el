@@ -1,4 +1,4 @@
-;;; consent-scheme-numeric-test.el --- Portable numeric source checks  -*- lexical-binding: t; -*-
+;;; consent-scheme-numeric-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -15,7 +15,8 @@
 (require 'scheme)
 
 (defun consent-scheme-numeric-test--definition-source (file name)
-  "Return the complete Scheme definition of NAME from repository-relative FILE."
+  "Return the complete Scheme definition of NAME from repository-relative\
+ FILE."
   (with-temp-buffer
     (insert-file-contents
      (expand-file-name file consent--test-target-root))

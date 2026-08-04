@@ -1,4 +1,4 @@
-;;; consent-docstring-metadata-doc-test.el --- Docstring metadata doc checks  -*- lexical-binding: t; -*-
+;;; consent-docstring-metadata-doc-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -55,15 +55,18 @@
                  "return comments as datums"
                  "Internal definitions come first"
                  "At least one non-metadata body expression must remain"
-	                 "A string or rich property record in final position"
-	                 "Adjacent simple strings in metadata position"
-	                 "\"Return the arithmetic sum of XS. XS must be a list of numbers.\""
-	                 "#((documentation ."
-	                 "Parameter and return descriptors"
-	                 "`(type any)` is the top type"
-	                 "`returns` may appear at most once"
-	                 "The simple string form and rich property form may appear together"
-                 "Procedures with no body-literal documentation still expose their signature"
+                         "A string or rich property record in final position"
+                         "Adjacent simple strings in metadata position"
+                         "\"Return the arithmetic sum of XS. XS must be a list\
+ of numbers.\""
+                         "#((documentation ."
+                         "Parameter and return descriptors"
+                         "`(type any)` is the top type"
+                         "`returns` may appear at most once"
+                         "The simple string form and rich property form may\
+ appear together"
+                 "Procedures with no body-literal documentation still expose\
+ their signature"
                  "procedure shorthand `define`"
                  "`lambda` expressions"
                  "`case-lambda` clause body"
@@ -89,11 +92,11 @@
                  "Guile's procedure-property"
                  "influence, but the fields"
                  "#301 implements simple string docstrings"
-	                 "#303 implements rich documentation property records"
-	                 "#344 adds manifest-backed primitive documentation"
-	                 "#304 preserves documentation metadata"
-	                 "#325 adds evaluator docstring retention modes"
-	                 "#604 adds typed parameter and return descriptors"))
+                         "#303 implements rich documentation property records"
+                         "#344 adds manifest-backed primitive documentation"
+                         "#304 preserves documentation metadata"
+                         "#325 adds evaluator docstring retention modes"
+                         "#604 adds typed parameter and return descriptors"))
         (should (string-match-p (regexp-quote needle) doc))))))
 
 ;;; consent-docstring-metadata-doc-test.el ends here

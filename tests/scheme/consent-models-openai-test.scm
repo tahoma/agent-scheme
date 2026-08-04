@@ -3,7 +3,7 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; These tests exercise the pure JSON/protocol projection used by the portable
-;;; Scheme model transport.  They deliberately inspect decoded JSON structure so
+;;; Scheme model transport. They deliberately inspect decoded JSON structure so
 ;;; nested model-tool schemas cannot collapse silently before reaching a live
 ;;; endpoint.
 

@@ -194,10 +194,12 @@
                     (eof-object? u)
                     (not (char=? slash #\\))
                     (not (char=? u #\u)))
-                (json-fail "High surrogate must be followed by a low surrogate."))
+                (json-fail
+                  "High surrogate must be followed by a low surrogate."))
             (let ((low (json-read-hex4 port)))
               (if (not (and (<= #xdc00 low) (<= low #xdfff)))
-                  (json-fail "High surrogate must be followed by a low surrogate."))
+                  (json-fail
+                    "High surrogate must be followed by a low surrogate."))
               (integer->char
                (+ #x10000
                   (+ (* (- code #xd800) #x400)
@@ -377,7 +379,8 @@
                     (values (eof-object)))
                    (else
                     (json-fail
-                     "Expected comma or close bracket in JSON array.")))))))))))
+                     "Expected comma or close bracket in JSON \
+array.")))))))))))
 
     ;; Read a JSON object into an alist with symbol keys.
     (define (json-read-object port depth read-value)
@@ -424,7 +427,8 @@
                           (entries (eof-object)))
                          (else
                           (json-fail
-                           "Expected comma or close brace in JSON object."))))))))))))))
+                           "Expected comma or close brace in JSON \
+object."))))))))))))))
 
     ;; Read one complete JSON value from PORT.
     (define (json-read-from-port port eof-allowed?)
@@ -539,7 +543,8 @@
            ("Optional textual input port. The current input port is"
             "used when omitted."))))
         (returns (type procedure)
-         (description "Thunk returning the next decoded JSON sequence value."))
+         (description "Thunk returning the next decoded JSON sequence value.")
+           )
         (effects port-io error))
       (apply json-sequence-read-dispatch maybe-port))
 
@@ -548,7 +553,8 @@
       "Fold over a decoded JSON value using SRFI 180-style callbacks."
       #((parameters
          (proc (type procedure)
-          (description "Callback applied to scalar and completed containers."))
+          (description "Callback applied to scalar and completed containers.")
+            )
          (array-start (type procedure)
           (description "Callback that starts array accumulation."))
          (array-end (type procedure)

@@ -1,10 +1,11 @@
-;;; consent-repl-test.el --- Native REPL session UX tests  -*- lexical-binding: t; -*-
+;;; consent-repl-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
-;; Focused coverage for the Emacs-native Consent Scheme REPL/session UX over the
+;; Focused coverage for the Emacs-native Consent Scheme REPL/session UX over
+;; the
 ;; existing session runtime.
 
 ;;; Code:

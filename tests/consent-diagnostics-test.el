@@ -1,4 +1,4 @@
-;;; consent-diagnostics-test.el --- Diagnostic datum and adapter tests  -*- lexical-binding: t; -*-
+;;; consent-diagnostics-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -86,7 +86,8 @@
        (diagnostic-range diagnostic)
        (diagnostics-snapshot-status snapshot)
        (length (diagnostics-snapshot-diagnostics snapshot)))")
-    "(#t #t error \"Unbound identifier\" (diagnostic-range (start 3) (end 9) (line 1) (column 3) (end-line 1) (end-column 9)) ok 1)")))
+    "(#t #t error \"Unbound identifier\" (diagnostic-range (start 3) (end 9)\
+ (line 1) (column 3) (end-line 1) (end-column 9)) ok 1)")))
 
 (ert-deftest consent-diagnostics-test-agent-diagnostics-yields-events ()
   "Portable diagnostic snapshots can be yielded as Scheme-readable event data."
@@ -184,7 +185,8 @@
             (procedure? diagnostic-at))")
     "(#t #t #t)")))
 
-(ert-deftest consent-diagnostics-test-buffer-diagnostics-normalizes-backend-data ()
+(ert-deftest
+  consent-diagnostics-test-buffer-diagnostics-normalizes-backend-data ()
   "Buffer diagnostics normalize mocked backend observations into datums."
   (let ((consent-diagnostics-buffer-function
          (lambda (buffer _context)

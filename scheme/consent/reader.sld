@@ -158,7 +158,8 @@
     ;; Read names from owned and bootstrap symbols.
     (define reader-datum-symbol-name consent-host-symbol-name)
 
-    ;; Current number of retained source metadata entries in the portable table.
+    ;; Current number of retained source metadata entries in the portable
+    ;; table.
     (define consent-source-metadata-entry-count 0)
 
     (define (consent-source-metadata-count)
@@ -184,7 +185,8 @@
       (kind consent-number-kind)
       (value consent-number-value-field))
 
-    ;; One fixed profile backs the portable runtime. White-box tests instantiate
+    ;; One fixed profile backs the portable runtime. White-box tests
+    ;; instantiate
     ;; alternate profiles directly through `(consent numeric)'.
     (define numeric-backend consent-default-numeric-backend)
     ;; Bound checked host-integer conversions to this backend's direct range.
@@ -203,7 +205,8 @@
         (returns
          (type
           (or owned-integer owned-rational owned-binary64 string pair))
-         (description "Opaque integer, rational, binary64, or component payload."))
+         (description
+           "Opaque integer, rational, binary64, or component payload."))
         (effects error))
       (if (consent-number? datum)
           (consent-number-value-field datum)
@@ -219,8 +222,10 @@
 
     (define (consent-number-value datum)
       "Return DATUM through the checked bootstrap host-adapter seam."
-      "Core numeric code uses `consent-number-owned-value`; this compatibility"
-      "accessor is limited to small metadata integers, finite host-math inputs,"
+      "Core numeric code uses `consent-number-owned-value`; this compatibility\
+"
+      "accessor is limited to small metadata integers, finite host-math inputs\
+,"
       "and legacy tests. It refuses to manufacture a host bignum."
       #((parameters
          (datum (type (or consent-number number))
@@ -244,7 +249,8 @@
         (owned-numeric 'binary64->host (consent-number-value-field datum)))
        ((consent-number? datum) (consent-number-value-field datum))
        ((number? datum) datum)
-       (else (error "consent-number-value expected a canonical number" datum))))
+       (else (error "consent-number-value expected a canonical number"
+         datum))))
 
     ;; Portable record metadata belongs to Consent Scheme, not the host record
     ;; system, so evaluator-created records remain printable datums.
@@ -255,15 +261,18 @@
       (fields consent-record-type-fields))
 
     ;; Portable record instances pair Consent Scheme record metadata with field
-    ;; storage that the evaluator owns and may mutate through generated setters.
+    ;; storage that the evaluator owns and may mutate through generated
+    ;; setters.
     (define-record-type <consent-record>
       (consent-make-record type fields)
       consent-record?
       (type consent-record-type)
       (fields consent-record-fields))
 
-    ;; Datum-label records hold placeholders while resolving shared and circular
-    ;; datum syntax; FILLED guards references to labels before their value lands.
+    ;; Datum-label records hold placeholders while resolving shared and
+    ;; circular
+    ;; datum syntax; FILLED guards references to labels before their value
+    ;; lands.
     (define-record-type <datum-label>
       (make-datum-label id filled value)
       datum-label?
@@ -272,11 +281,13 @@
       (value datum-label-value set-datum-label-value!))
 
     ;; Structured reader condition raised in recovery mode.  KIND is one of
-    ;; `invalid` (genuine syntax error), `incomplete` (a valid prefix that needs
+    ;; `invalid` (genuine syntax error), `incomplete` (a valid prefix that
+    ;; needs
     ;; more input, such as an unterminated list at end of input), or `limit` (a
-    ;; resource budget was exceeded).  OFFSET is the source position at the point
+    ;; resource budget was exceeded). OFFSET is the source position at the
+    ;; point
     ;; of failure.  PENDING snapshots the reader's open-construct stack at the
-    ;; raise, innermost first; it is meaningful for `incomplete` conditions.  In
+    ;; raise, innermost first; it is meaningful for `incomplete` conditions. In
     ;; the default raise-on-error mode these conditions are never constructed;
     ;; reader errors stay plain `error` objects.
     (define-record-type <reader-condition>
@@ -289,7 +300,8 @@
       (pending reader-condition-pending))
 
     ;; Recovery read result for a whole source: a partial datum list plus the
-    ;; ordered diagnostics and recovery spans collected along the way.  STATUS is
+    ;; ordered diagnostics and recovery spans collected along the way. STATUS
+    ;; is
     ;; `complete` when the source was fully consumed or `incomplete` when the
     ;; trailing region is a valid prefix awaiting more input.
     (define-record-type <consent-recovery-result>
@@ -320,14 +332,16 @@
     (define char-page (integer->char 12))
 
     (define (consent-integer->radix-string integer radix)
-      "Exported writer helper used by the reader, evaluator, and tests whenever"
+      "Exported writer helper used by the reader, evaluator, and tests wheneve\
+r"
       "Consent Scheme needs canonical integer text independent of host"
       "formatting."
       #((parameters
          (integer (type exact-integer)
           (description "Owned or bootstrap host integer to render."))
          (radix (type exact-integer)
-          (description ("Numeric base from 2 through 16 for the digit conversion."))))
+          (description
+            ("Numeric base from 2 through 16 for the digit conversion."))))
         (returns (type string)
          (description
           ("A string of RADIX digits for INTEGER, with a leading minus"
@@ -401,8 +415,10 @@
                                        consent-default-maximum-list-length)
                          (option-count options 'max-vector-length
                                        consent-default-maximum-vector-length)
-                         (option-count options 'max-bytevector-length
-                                       consent-default-maximum-bytevector-length)
+                         (option-count
+                          options
+                          'max-bytevector-length
+                          consent-default-maximum-bytevector-length)
                          (option-count options 'max-string-size
                                        consent-default-maximum-string-size)
                          (option-count options 'max-total-nodes
@@ -503,7 +519,8 @@
           . ("Datum to associate source metadata with; ignored unless it"
              "has stable identity."))
          (source (type (or source-metadata boolean))
-          (description ("Source metadata to attach, or #f to attach nothing.")))
+          (description
+            ("Source metadata to attach, or #f to attach nothing.")))
          (maybe-limit (type list)
           (description
            ("Optional maximum retained source metadata entries allowed"
@@ -519,7 +536,9 @@
                      consent-default-maximum-source-metadata
                      (car maybe-limit))))
             (if (>= consent-source-metadata-entry-count limit)
-                (error "consent datum limit error: source metadata count exceeds maximum source metadata"
+                (error
+                  "consent datum limit error: source metadata count exceeds ma\
+ximum source metadata"
                        consent-source-metadata-entry-count
                        limit))
             (set! consent-source-metadata
@@ -547,7 +566,8 @@
         (if cell (cdr cell) #f)))
 
     (define (consent-copy-datum-source! target source . maybe-overwrite)
-      "Copy source metadata from SOURCE to TARGET, preserving existing metadata"
+      "Copy source metadata from SOURCE to TARGET, preserving existing metadat\
+a"
       "by default."
       #((parameters
          (target . "Datum to receive copied source metadata.")
@@ -575,12 +595,14 @@
                                  (cons kind (reader-pending-stack reader))))
 
     (define (pop-pending! reader)
-      "Mark the innermost open construct closed after its delimiter is consumed."
+      "Mark the innermost open construct closed after its delimiter is consume\
+d."
       (set-reader-pending-stack! reader
                                  (cdr (reader-pending-stack reader))))
 
     (define (raise-reader-condition reader kind prefix message irritants)
-      "Raise a reader failure as a structured condition under recovery mode, or"
+      "Raise a reader failure as a structured condition under recovery mode, o\
+r"
       "as the historical plain error otherwise."
       (if (reader-recovery reader)
           (raise (make-reader-condition kind
@@ -613,7 +635,8 @@
                               message irritants))
 
     (define (limit-error reader message . irritants)
-      "Raise a datum resource-limit error annotated with the current source offset."
+      "Raise a datum resource-limit error annotated with the current source of\
+fset."
       (raise-reader-condition reader 'limit
                               "consent datum limit error at offset "
                               message irritants))
@@ -639,7 +662,8 @@
       (>= (reader-position reader) (reader-length reader)))
 
     (define (peek reader . maybe-offset)
-      "Return the source character at the current cursor plus an optional offset."
+      "Return the source character at the current cursor plus an optional offs\
+et."
       (let* ((offset (if (null? maybe-offset) 0 (car maybe-offset)))
              (index (+ (reader-position reader) offset)))
         (if (< index (reader-length reader))
@@ -652,7 +676,8 @@
        (vector->list (reader-characters reader) start end)))
 
     (define (advance! reader . maybe-count)
-      "Move the reader cursor forward by one character or the requested count."
+      "Move the reader cursor forward by one character or the requested count.\
+"
       (let ((count (if (null? maybe-count) 1 (car maybe-count))))
         (set-reader-position! reader (+ (reader-position reader) count))))
 
@@ -755,7 +780,8 @@
         (reader-error reader "unknown reader directive"))))
 
     (define (skip-intertoken-space! reader depth)
-      "Skip whitespace, comments, directives, and datum comments between datums."
+      "Skip whitespace, comments, directives, and datum comments between \
+datums."
       (let loop ()
         (cond
          ((whitespace? (peek reader))
@@ -860,7 +886,8 @@
            (owned-numeric 'integer-from-small exponent))))
 
     (define (normalize-rational-pair numerator denominator)
-      "Normalize a rational numerator and denominator to canonical sign and gcd."
+      "Normalize a rational numerator and denominator to canonical sign and gc\
+d."
       (owned-numeric 'rational-normalize numerator denominator))
 
     (define (consent-make-canonical-integer value . rest)
@@ -902,7 +929,8 @@
              owned)))))
 
     (define (host-inexact-special-kind value)
-      "Classify a host-accelerated inexact value at the canonical ingress seam."
+      "Classify a host-accelerated inexact value at the canonical ingress seam\
+."
       (cond
        ((not (= value value)) "+nan.0")
        ((= value (/ 1.0 0.0)) "+inf.0")
@@ -983,9 +1011,11 @@
       "Canonical-record components are unwrapped to their host payloads."
       #((parameters
          (raw-numerator (type (or exact-integer consent-number))
-          (description ("Numerator as a host integer or canonical number record.")))
+          (description
+            ("Numerator as a host integer or canonical number record.")))
          (raw-denominator (type (or exact-integer consent-number))
-          (description ("Denominator as a host integer or canonical number record.")))
+          (description
+            ("Denominator as a host integer or canonical number record.")))
          (rest (type list)
           (description
            ("Optional exactness symbol followed by an optional radix"
@@ -1049,7 +1079,8 @@
          (real (type consent-number)
           (description "Canonical number record for the real component."))
          (imaginary (type consent-number)
-          (description ("Canonical number record for the imaginary component."))))
+          (description
+            ("Canonical number record for the imaginary component."))))
         (returns (type consent-number)
          (description
           ("A canonical complex number record pairing REAL and"
@@ -1074,7 +1105,8 @@
       "ordinary numbers."
       #((parameters
          (number (type consent-number)
-          (description ("Value to test; only a canonical number record can be zero."))))
+          (description
+            ("Value to test; only a canonical number record can be zero."))))
         (returns (type boolean)
          (description
           ("#t when NUMBER is a canonical integer, rational, decimal,"
@@ -1102,7 +1134,8 @@
       "Public predicate for negative real Consent Scheme number records."
       #((parameters
          (number (type consent-number)
-          (description ("Canonical Consent Scheme number record to test for sign."))))
+          (description
+            ("Canonical Consent Scheme number record to test for sign."))))
         (returns (type boolean)
          (description
           ("#t when NUMBER is a negative integer, rational, decimal,"
@@ -1123,7 +1156,8 @@
        (else #f)))
 
     (define (consent-number-abs number)
-      "Public helper that returns the absolute value of an Consent Scheme number record."
+      "Public helper that returns the absolute value of an Consent Scheme numb\
+er record."
       #((parameters
          (number (type consent-number)
           (description
@@ -1433,7 +1467,8 @@
             (owned-numeric 'binary64-from-rational pair))))
 
     (define (number->reader-float number)
-      "Convert a Consent number through the reader's temporary polar-math seam."
+      "Convert a Consent number through the reader's temporary polar-math seam\
+."
       (cond
        ((eq? (consent-number-kind number) 'integer)
         (owned-numeric
@@ -1460,7 +1495,8 @@
        (else 0.0)))
 
     (define (parse-real-number-body reader token body exactness radix)
-      "Parse the body of a real-number token into the reader's numeric record."
+      "Parse the body of a real-number token into the reader's numeric record.\
+"
       (let ((lower (string-foldcase body)))
         (cond
          ((or (string=? lower "+inf.0")
@@ -1534,7 +1570,8 @@
                         split))))))
 
     (define (parse-complex-number-body reader token body exactness radix)
-      "Parse a complex-number token into rectangular or polar numeric records."
+      "Parse a complex-number token into rectangular or polar numeric records.\
+"
       (let ((lower (string-foldcase body)))
         (cond
          ((string-suffix? "i" lower)
@@ -1697,7 +1734,8 @@
             (advance! reader))
            (else
             (reader-incomplete reader
-                               "expected line ending in string continuation")))
+                               "expected line ending in string continuation"))
+                    )
           (let loop-trailing ()
             (if (intraline-whitespace? (peek reader))
                 (begin
@@ -1756,7 +1794,8 @@
             (let ((escaped (peek reader)))
               (cond
                ((not escaped)
-                (reader-incomplete reader "unterminated vertical symbol escape"))
+                (reader-incomplete reader "unterminated vertical symbol \
+escape"))
                ((char=? escaped #\x)
                 (advance! reader)
                 (set! result (cons (read-hex-escape reader) result))
@@ -1839,7 +1878,8 @@
          (else #f))))
 
     (define (character-name-start? char)
-      "Report whether CHAR (an ASCII letter) can begin a named or #\\x hex literal."
+      "Report whether CHAR (an ASCII letter) can begin a named or #\\x hex \
+literal."
       (and char
            (or (and (char<=? #\a char) (char<=? char #\z))
                (and (char<=? #\A char) (char<=? char #\Z)))))
@@ -1854,7 +1894,8 @@
             ;; Any non-letter first character — including delimiters and
             ;; bracket/pipe characters like #\( #\) #\[ #\] #\| — is taken
             ;; literally per the R7RS grammar #\<any character>. read-token
-            ;; would refuse these (delimiter or reserved), so take it directly.
+            ;; would refuse these (delimiter or reserved), so take the
+            ;; character directly.
             (begin
               (advance! reader)
               (consent-host-character->character first))
@@ -1938,7 +1979,8 @@
            (else
             (let ((saved (reader-position reader)))
               ;; A period is dotted-tail syntax only when it is a delimited
-              ;; token.  Otherwise restore the cursor and classify it normally.
+              ;; token. Otherwise restore the cursor and classify it
+              ;; normally.
               (if (and (char=? (peek reader) #\.)
                        (begin
                          (advance! reader)
@@ -1952,7 +1994,8 @@
                     (if (not (and (peek reader)
                                   (char=? (peek reader) #\))))
                         (reader-error reader
-                                      "expected closing parenthesis after dotted tail"))
+                                      "expected closing parenthesis after \
+dotted tail"))
                     (advance! reader)
                     (pop-pending! reader)
                     (note-node! reader)
@@ -2220,7 +2263,8 @@
 
     (define (consent-read source . maybe-options)
       "Read one datum from SOURCE, enforce complete input consumption, and"
-      "validate the resulting host data against Consent Scheme resource limits."
+      "validate the resulting host data against Consent Scheme resource \
+limits."
       #((parameters
          (source (type (or string port))
           (description
@@ -2278,8 +2322,10 @@
                             datums)))))))
 
     (define (consent-read-from-string-at source position . maybe-options)
-      "Incremental read entry point for ports and REPL-like callers; the cdr of"
-      "the result is the next source offset no matter which datum was returned."
+      "Incremental read entry point for ports and REPL-like \
+callers; the cdr of"
+      "the result is the next source offset no matter which datum was returned\
+."
       #((parameters
          (source (type string)
           (description "Source string to read one datum from."))
@@ -2288,7 +2334,8 @@
            ("Nonnegative offset within SOURCE at which to begin"
              "reading.")))
          (maybe-options (type list)
-          (description ("Optional reader options alist supplying budget overrides."))))
+          (description
+            ("Optional reader options alist supplying budget overrides."))))
         (returns (type pair)
          (description
           ("A pair whose car is the read datum (or the end-of-file"
@@ -2324,7 +2371,8 @@
 
     (define (consent-resync-to-next-form source position)
       "Form-level batch resync strategy: return the offset of the next"
-      "top-level form strictly after POSITION.  A top-level form is anchored to"
+      "top-level form strictly after POSITION.  A top-level form is anchored t\
+o"
       "a line start whose first character is neither whitespace nor a closing"
       "parenthesis; when none remains, return the end of SOURCE.  This is the"
       "default recovery resync strategy; callers may supply their own (for"
@@ -2332,9 +2380,11 @@
       "option."
       #((parameters
          (source (type string)
-          (description ("Source string being scanned for the next top-level form.")))
+          (description
+            ("Source string being scanned for the next top-level form.")))
          (position (type exact-integer)
-          (description ("Offset after which to search for the next top-level form."))))
+          (description
+            ("Offset after which to search for the next top-level form."))))
         (returns (type exact-integer)
          (description
           ("The offset of the next line-anchored top-level form"
@@ -2353,7 +2403,8 @@
            (else (loop (+ index 1)))))))
 
     (define (render-irritant value)
-      "Render one reader-error irritant as stable text for a diagnostic reason."
+      "Render one reader-error irritant as stable text for a diagnostic reason\
+."
       (cond
        ((string? value) value)
        ((reader-datum-symbol? value) (reader-datum-symbol-name value))
@@ -2382,16 +2433,20 @@
         (list 'diagnostic-range
               (list 'start (consent-make-canonical-integer start))
               (list 'end (consent-make-canonical-integer end))
-              (list 'line (consent-make-canonical-integer (car start-position)))
-              (list 'column (consent-make-canonical-integer (cdr start-position)))
-              (list 'end-line (consent-make-canonical-integer (car end-position)))
+              (list 'line (consent-make-canonical-integer (car
+                start-position)))
+              (list 'column (consent-make-canonical-integer (cdr
+                start-position)))
+              (list 'end-line (consent-make-canonical-integer (car
+                end-position)))
               (list 'end-column
                     (consent-make-canonical-integer (cdr end-position))))))
 
     (define (recovery-diagnostic source-id kind reason range)
       "Build a Scheme-readable diagnostic datum for a recovery event.  The"
       "shape matches `(agent diagnostics)` `make-diagnostic`; KIND (`invalid`"
-      "or `incomplete`) rides in the metadata so every host adapter consumes it"
+      "or `incomplete`) rides in the metadata so every host adapter consumes i\
+t"
       "identically."
       (list 'diagnostic
             (list 'severity 'error)
@@ -2405,8 +2460,10 @@
                         (list 'phase 'read)))))
 
     (define (recovery-span kind reason range text)
-      "Build a recovery span datum recording one skipped or incomplete region. "
-      "TEXT preserves the source bytes so recovery never silently drops input;"
+      "Build a recovery span datum recording one skipped or incomplete region. \
+"
+      "TEXT preserves the source bytes so recovery never silently drops input;\
+"
       "the range vocabulary is shared with comment trivia and CST recovery"
       "nodes."
       (list 'recovery-span
@@ -2440,9 +2497,11 @@
           (lambda ()
             (cons 'value (thunk)))))))
 
-    (define (build-failure-step reader resync line-starts source-id start condition)
+    (define (build-failure-step reader resync line-starts source-id start
+      condition)
       "Build the <consent-recovery-step> for a reader failure anchored at"
-      "START.  Incomplete input rewinds to START and carries the open-construct"
+      "START.  Incomplete input rewinds to START and carries the open-construc\
+t"
       "stack; a genuine error advances past the malformed region via RESYNC"
       "with guaranteed forward progress."
       (let ((kind (reader-condition-kind condition))
@@ -2470,8 +2529,10 @@
 
     (define (recover-step! reader resync line-starts source-id options)
       "Read one form in recovery mode and return a <consent-recovery-step>. "
-      "Leading trivia is skipped first so a malformed region is anchored at the"
-      "datum start, not at preceding whitespace; trivia-level failures (such as"
+      "Leading trivia is skipped first so a malformed region is anchored at th\
+e"
+      "datum start, not at preceding whitespace; trivia-level failures (such a\
+s"
       "an unterminated block comment) are anchored where the trivia began."
       ;; A prior step that unwound mid-construct leaves stale open-construct
       ;; entries behind; each step starts from a balanced cursor, so reset.
@@ -2506,7 +2567,8 @@
                                     start (cdr read-outcome))))))))
 
     (define (recovery-reader source options)
-      "Create a recovery-mode reader over SOURCE, forcing the recovery flag on."
+      "Create a recovery-mode reader over SOURCE, forcing the recovery flag on\
+."
       (reader-from-source source (cons (cons 'recovery #t) options)))
 
     (define (consent-read-recover source . maybe-options)
@@ -2514,7 +2576,8 @@
       "ordered diagnostics list and recovery spans instead of aborting on the"
       "first malformed form.  The result's STATUS is `incomplete` when the"
       "trailing region is a valid prefix awaiting more input, otherwise"
-      "`complete`.  The resync point is caller-selectable through the `resync`"
+      "`complete`.  The resync point is caller-selectable through the `resync`\
+"
       "option (defaulting to `consent-resync-to-next-form`)."
       #((parameters
          (source (type string)
@@ -2562,11 +2625,15 @@
                     (cons (consent-recovery-step-diagnostic step) diagnostics)
                     (cons (consent-recovery-step-span step) spans))))))))
 
-    (define (consent-read-recover-from-string-at source position . maybe-options)
+    (define (consent-read-recover-from-string-at source position .
+      maybe-options)
       "Recovery-aware single-form read for interactive and streaming callers"
-      "(REPL, editor adapters).  Returns a <consent-recovery-step> whose STATUS"
-      "is `datum`, `invalid`, `incomplete`, or `eof`, and whose NEXT offset is"
-      "where the caller should resume.  Incomplete input is surfaced as its own"
+      "(REPL, editor adapters).  Returns a <consent-recovery-step> whose STATU\
+S"
+      "is `datum`, `invalid`, `incomplete`, or `eof`, and whose NEXT offset is\
+"
+      "where the caller should resume.  Incomplete input is surfaced as its ow\
+n"
       "status so auto-indent and continuation prompts never confuse a valid"
       "prefix with a syntax error."
       #((parameters
@@ -2608,7 +2675,9 @@
        (+ (validation-node-count validation) 1))
       (if (> (validation-node-count validation)
              (validation-maximum-total-nodes validation))
-          (error "consent datum limit error: datum node count exceeds maximum total nodes"
+          (error
+            "consent datum limit error: datum node count exceeds maximum total \
+nodes"
                  (validation-maximum-total-nodes validation))))
 
     (define (validate-datum datum options validation depth seen)
@@ -2618,7 +2687,8 @@
       (if (> depth
              (option-count options 'max-depth
                          consent-default-maximum-depth))
-          (error "consent datum limit error: datum depth exceeds maximum depth"
+          (error "consent datum limit error: datum depth exceeds maximum depth\
+"
                  depth))
       (cond
        ((or (boolean? datum)
@@ -2630,7 +2700,9 @@
         (if (> (string-length datum)
                (option-count options 'max-string-size
                            consent-default-maximum-string-size))
-            (error "consent datum limit error: string size exceeds maximum string size"
+            (error
+              "consent datum limit error: string size exceeds maximum string s\
+ize"
                    (option-count options 'max-string-size
                                consent-default-maximum-string-size)))
         (validation-note-node! validation))
@@ -2638,7 +2710,9 @@
         (if (> (bytevector-length datum)
                (option-count options 'max-bytevector-length
                            consent-default-maximum-bytevector-length))
-            (error "consent datum limit error: bytevector length exceeds maximum bytevector length"
+            (error
+              "consent datum limit error: bytevector length exceeds maximum by\
+tevector length"
                    (option-count options 'max-bytevector-length
                                consent-default-maximum-bytevector-length)))
         (let loop ((index 0))
@@ -2646,7 +2720,8 @@
               (begin
                 (if (not (let ((byte (bytevector-u8-ref datum index)))
                            (and (integer? byte) (<= 0 byte) (<= byte 255))))
-                    (error "consent reader error: bytevector contains invalid byte"
+                    (error
+                      "consent reader error: bytevector contains invalid byte"
                            (bytevector-u8-ref datum index)))
                 (loop (+ index 1)))))
         (validation-note-node! validation))
@@ -2665,7 +2740,9 @@
                   (if (> next-count
                          (option-count options 'max-list-length
                                      consent-default-maximum-list-length))
-                      (error "consent datum limit error: list length exceeds maximum list length"
+                      (error
+                        "consent datum limit error: list length exceeds maximu\
+m list length"
                              (option-count options 'max-list-length
                                          consent-default-maximum-list-length)))
                   (validation-note-node! validation)
@@ -2691,7 +2768,9 @@
               (if (> (vector-length datum)
                      (option-count options 'max-vector-length
                                  consent-default-maximum-vector-length))
-                  (error "consent datum limit error: vector length exceeds maximum vector length"
+                  (error
+                    "consent datum limit error: vector length exceeds maximum \
+vector length"
                          (option-count options 'max-vector-length
                                      consent-default-maximum-vector-length)))
               (validation-note-node! validation)
@@ -2709,8 +2788,10 @@
                datum))))
 
     (define (consent-validate-datum datum . maybe-options)
-      "Public validation returns DATUM unchanged so callers can place it inline"
-      "in read/evaluate pipelines while still enforcing depth and size budgets."
+      "Public validation returns DATUM unchanged so callers can place it inlin\
+e"
+      "in read/evaluate pipelines while still enforcing depth and size budgets\
+."
       #((parameters
          (datum . "Datum to validate against the resource budgets.")
          (maybe-options (type list)
@@ -3024,17 +3105,23 @@
 
         (scan datum '())
         (if (and (eq? mode 'simple) (not (null? cyclic)))
-            (error "consent reader error: write-simple cannot render circular datum"))
+            (error
+              "consent reader error: write-simple cannot render circular datum\
+"))
         (render datum)))
 
     (define (consent--render-limit-ref limits key)
-      "Return the host-integer ceiling for KEY in the LIMITS alist, or #f when"
+      "Return the host-integer ceiling for KEY in the LIMITS alist, or #f when\
+"
       "KEY is absent.  A ceiling may arrive as a host integer (the usual"
-      "interactive default) or as a Consent number record (when LIMITS came from"
+      "interactive default) or as a Consent number record (when LIMITS came fr\
+om"
       "evaluated Consent data, such as a `render-limits' option read on a"
-      "self-hosted host); since the bounded renderer's depth/length/size counters"
+      "self-hosted host); since the bounded renderer's depth/length/size count\
+ers"
       "are host integers, a number record is normalized through"
-      "`consent-number-value' so the host comparisons do not compare an integer"
+      "`consent-number-value' so the host comparisons do not compare an intege\
+r"
       "against a record and raise."
       (let ((entry (and (pair? limits) (assq key limits))))
         (and entry
@@ -3045,8 +3132,10 @@
 
     (define (consent-datum->external-bounded datum limits . maybe-mode+display)
       "Render DATUM as external text bounded by LIMITS so a deep, long, or"
-      "cyclic value renders in bounded time and space with the `...' truncation"
-      "marker instead of wedging an interactive loop or flooding output (#508)."
+      "cyclic value renders in bounded time and space with the `...' truncatio\
+n"
+      "marker instead of wedging an interactive loop or flooding output (#508)\
+."
       #((parameters
          (datum . "Datum to render for an interactive display surface.")
          (limits (type list)
@@ -3061,7 +3150,8 @@
              "once reached, so rendering is bounded in time as well as"
              "space).")))
          (maybe-mode+display (type list)
-          (description ("Optional `consent-datum->external' mode and display flag."))))
+          (description
+            ("Optional `consent-datum->external' mode and display flag."))))
         (returns (type string)
          (description
           ("Bounded external text: each elided depth/length/size point"
@@ -3072,9 +3162,11 @@
             "characters, and records render identically to the"
             "canonical writer.")))
         (effects pure))
-      ;; The canonical writer stays unbounded for the capture/round-trip surface;
+      ;; The canonical writer stays unbounded for the capture/round-trip
+      ;; surface;
       ;; this bound is the interactive display path only.
-      (let ((mode (if (pair? maybe-mode+display) (car maybe-mode+display) 'write))
+      (let ((mode (if (pair? maybe-mode+display) (car maybe-mode+display)
+        'write))
             (displayp (if (and (pair? maybe-mode+display)
                                (pair? (cdr maybe-mode+display)))
                           (cadr maybe-mode+display)
@@ -3089,14 +3181,16 @@
             (ancestors '()))
 
         (define (raw-emit! text)
-          "Append TEXT to the output accumulator and charge its length against"
+          "Append TEXT to the output accumulator and charge its length against\
+"
           "the running size counter, without consulting the size ceiling."
           (set! parts (cons text parts))
           (set! used (+ used (string-length text))))
 
         (define (emit! text)
           "Append TEXT under the size ceiling: drop it once overflow is set,"
-          "or emit the marker and set overflow when TEXT would cross SIZE-LIMIT,"
+          "or emit the marker and set overflow when TEXT would cross SIZE-LIMI\
+T,"
           "otherwise append it via `raw-emit!'."
           (cond
            (overflow #t)
@@ -3106,12 +3200,15 @@
            (else (raw-emit! text))))
 
         (define (atom-text value)
-          "Render atomic VALUE through the unbounded writer for identical atom"
-          "text, pre-capping a long string by source prefix so a huge atom does"
+          "Render atomic VALUE through the unbounded writer for identical atom\
+"
+          "text, pre-capping a long string by source prefix so a huge atom doe\
+s"
           "not force the writer to build a huge intermediate before the size"
           "backstop in `emit!' can apply. A borrowed-host binding converts"
           "owned characters in its datum argument to host characters while it"
-          "also converts the limits alist, so normalize that adapter value back"
+          "also converts the limits alist, so normalize that adapter value bac\
+k"
           "to the owned representation before calling the canonical writer."
           (let* ((value
                  (if (and (char? value) (not (consent-character? value)))
@@ -3190,9 +3287,11 @@
               (set! ancestors saved)))))
 
         (define (render-bytevector value depth)
-          "Render bytevector VALUE at nesting DEPTH (over-deep nesting renders"
+          "Render bytevector VALUE at nesting DEPTH (over-deep nesting renders\
+"
           "as the marker), eliding bytes past LENGTH-LIMIT with a trailing"
-          "marker; bytevectors hold no compounds, so no cycle check is needed."
+          "marker; bytevectors hold no compounds, so no cycle check is needed.\
+"
           (cond
            ((and depth-limit (>= depth depth-limit)) (emit! marker))
            (else

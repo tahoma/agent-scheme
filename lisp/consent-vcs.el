@@ -1,4 +1,4 @@
-;;; consent-vcs.el --- Emacs VCS adapter datums  -*- lexical-binding: t; -*-
+;;; consent-vcs.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -1151,7 +1151,8 @@ Return a plist with `:exit' and `:output', or `:status' when Git is missing."
     (cond
      ((and remote-operation
            (string-match-p
-            "\\(authentication\\|permission denied\\|could not read username\\)"
+            "\\(authentication\\|permission denied\\|could not read\
+ username\\)"
             text))
       (consent-vcs-outcome
        'remote-authentication-failed
@@ -1348,7 +1349,8 @@ Return a plist with `:exit' and `:output', or `:status' when Git is missing."
                     (t
                      (consent-vcs-outcome
                       'remote-unavailable
-                      "Live remote VCS operations require explicit live-remote? authority.")))))
+                      "Live remote VCS operations require explicit\
+ live-remote? authority.")))))
               (consent-vcs--finish-mutation
                request decision outcome))))))
       ('unsupported-vcs

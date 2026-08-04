@@ -259,4 +259,5 @@
          (not (equal? (generator->list left 8)
                       (generator->list right 8))))))
 
-(testing-runner-main "Stdlib Property Testing Upstream portable tests" (command-line))
+(testing-runner-main "Stdlib Property Testing Upstream portable tests"
+  (command-line))

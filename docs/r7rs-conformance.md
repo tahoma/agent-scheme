@@ -18,6 +18,39 @@ The ERT harness in
 `kind r7rs-conformance`, validates every conformance fixture, and runs cases
 marked `implemented`.
 
+The corpus uses schema version 2. The corpus text is loaded through the Consent
+reader on both hosts so owned symbols, characters, bytevectors, numbers, and
+other typed expected values are retained rather than normalized by a host
+reader.
+
+### Structured fixture source and expectations
+
+Each case has exactly one structured `source` variant:
+
+| Source | Use |
+| --- | --- |
+| `(text "...")` | Exact lexical input for `read` or `read-all`. |
+| `(form DATUM)` | One structured form for evaluation, expansion, or writing. |
+| `(forms DATUM ...)` | An ordered program fragment with more than one form. |
+| `(file "programs/NAME.scm")` | A substantial program in the fixture program directory. |
+
+Use `text` only when spelling is the behavior under test. Evaluator programs
+must use `form`, `forms`, or `file`; file paths are confined to
+`fixtures/r7rs/programs/`. The runners serialize structured forms or read the
+validated file only at the execution boundary.
+
+Expectations are typed data: `(value DATUM)`, `(values DATUM ...)`,
+`(result DATUM)`, `(condition (category NAME) ...)`,
+`(external-text "...")`, or `(serialized-value "...")`. `external-text` is
+reserved for the write phase. Prefer typed `value` and `values` records over
+strings so exactness, characters, bytevectors, symbols, and compound values
+remain observable.
+
+The migration preserves the 159-case inventory: 129 `eval`, one
+`eval-result`, 28 `read`, and one `read-all` case; expectations remain 120
+single values, two multiple-value records, 36 conditions, and one result
+record.
+
 `make conformance-oracle` runs a separate reference implementation oracle over
 pure shared fixtures. The default adapters target Chibi Scheme through
 `CONSENT_CHIBI` or `chibi-scheme` on `PATH` and Sagittarius through
@@ -194,8 +227,8 @@ operations above do not grant host authority.
 - Add one fixture for each representative behavior before marking a matrix row
   `implemented`.
 - Use stable fixture ids and the shared fixture fields: `kind`, `phase`,
-  `oracle`, `options`, `source`, and `expect` in addition to the conformance
-  metadata fields.
+  `oracle`, `options`, structured `source`, and typed `expect` in addition to
+  the conformance metadata fields.
 - When a fixture is inspired by an external test suite, include a `provenance`
   field with source location, license location, and a review note stating
   whether the fixture is an Consent Scheme-owned rewrite or copied material.
@@ -204,4 +237,5 @@ operations above do not grant host authority.
 - Fixtures marked `pending`, `policy-gated`, or `unavailable` are still loaded
   and shape-checked so they remain easy to find without failing the suite.
 - Keep snippets small. When a behavior needs a larger program, add a named
-  fixture file beside the conformance case and reference it from this matrix.
+  file under `fixtures/r7rs/programs/` and reference it with `(source (file
+  "programs/NAME.scm"))`.

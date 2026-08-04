@@ -1,4 +1,4 @@
-;;; consent-compile-portable-test.el --- Portable executable compile tests  -*- lexical-binding: t; -*-
+;;; consent-compile-portable-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -27,7 +27,8 @@
     (buffer-string)))
 
 ;; Process-global cache of host builds shared by the four full-native-build
-;; tests (#556). Each call to `make compile' for the gambit or racket host takes
+;; tests (#556). Each call to `make compile' for the gambit or racket host
+;; takes
 ;; tens of seconds; the runner-smoke and install/dist tests for a given host
 ;; both exercise the same compiled tree, so the second test in each pair reuses
 ;; the first one's build instead of rebuilding identical artifacts. Entries are
@@ -54,7 +55,8 @@ reuse the cached entry instead of rebuilding.")
           #'consent-compile-portable-test--cleanup-shared-builds)
 
 (defun consent-compile-portable-test--ensure-shared-build (host)
-  "Return the shared build plist for HOST, building once and caching the result.
+  "Return the shared build plist for HOST, building once and caching the\
+ result.
 HOST must be `racket' or `gambit'.  Returns a plist with :build-dir, :status,
 and :output.  The first call for HOST runs `make compile' into a fresh temp
 directory; subsequent calls return the cached entry verbatim, so the build
@@ -118,7 +120,8 @@ Return a plist containing :status and :output."
     (goto-char (point-min))
     (unless
         (re-search-forward
-         "'(consent-version[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\))"
+         (concat "'(consent-version[[:space:]]+\\([0-9]+\\)"
+                 "[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\))")
          nil
          t)
       (error "Could not read target Consent Scheme version datum"))
@@ -145,8 +148,10 @@ Return a plist containing :status and :output."
 (defun consent-compile-portable-test--run-repl (program input)
   "Run compiled PROGRAM's `--repl' with INPUT fed on standard input.
 Return a plist with :status and :output, where :output is the program-output
-stream (stdout) only; the interaction record stream (stderr) is discarded so the
-assertion covers stream separation as well as the command.  Runs under `--chrome
+stream (stdout) only; the interaction record stream (stderr) is discarded so\
+ the
+assertion covers stream separation as well as the command.  Runs under\
+ `--chrome
 silent', the chrome whose job is exactly raw program output on stdout: the
 default `comment' chrome instead owns program output and renders it on the
 control channel, so stdout would be empty there (see the
@@ -201,10 +206,12 @@ stream rendered through `--chrome datum'; stdout is discarded."
   (plist-get result :output))
 
 (defun consent-compile-portable-test--assert-gated-script (runner)
-  "Assert RUNNER's --script runs through the Consent interpreter, not host load.
+  "Assert RUNNER's --script runs through the Consent interpreter, not host\
+ load.
 A pure script evaluates and exits 0, but an ungranted, confirm-gated file write
 is denied and leaves no file -- the discriminator that would fail if --script
-regressed to host execution (the host would create the file). Together these are
+regressed to host execution (the host would create the file). Together these\
+ are
 a positive/negative control: the interpreter selectively gates rather than
 failing closed on everything."
   (let ((ok-script (make-temp-file "consent-script-ok-" nil ".scm"))
@@ -218,7 +225,8 @@ failing closed on everything."
             (insert "(import (scheme base))\n"
                     "(define (smoke-sq n) (* n n))\n"
                     "(if (not (= (smoke-sq 6) 36))\n"
-                    "    (error \"consent --script smoke computed the wrong value\"))\n"))
+                    "    (error \"consent --script smoke computed the wrong\
+ value\"))\n"))
           (should
            (equal
             (consent-compile-portable-test--status
@@ -277,10 +285,12 @@ failing closed on everything."
      (regexp-quote "#<error-exception")
       (consent-compile-portable-test--output result)))))
 
-(defun consent-compile-portable-test--assert-host-run-timeout-option-diagnostics
+(defun
+  consent-compile-portable-test--assert-host-run-timeout-option-diagnostics
     (runner)
   "Assert RUNNER's `--host-run' preserves numeric transport options."
-  (let ((probe-script (make-temp-file "consent-timeout-option-probe-" nil ".scm")))
+  (let ((probe-script (make-temp-file "consent-timeout-option-probe-" nil
+    ".scm")))
     (unwind-protect
         (progn
           (with-temp-file probe-script
@@ -351,7 +361,8 @@ failing closed on everything."
             (should
              (string-match-p
               (regexp-quote
-               "Generate a shared fixture case from EVENT when replay permits it.")
+               "Generate a shared fixture case from EVENT when replay\
+ permits it.")
               (consent-compile-portable-test--output result)))
             (should
              (string-match-p
@@ -611,7 +622,8 @@ failing closed on everything."
 (defun consent-compile-portable-test--exercise-distribution (host build-dir)
   "Exercise `make install', `uninstall', and `dist' for HOST.
 BUILD-DIR holds a freshly built executable under HOST.  Stages an install into
-a throwaway DESTDIR without writing to the real system, round-trips the man-page
+a throwaway DESTDIR without writing to the real system, round-trips the\
+ man-page
 and binary install, uninstalls, and packages a versioned tarball."
   (let* ((version-string (consent-compile-portable-test--version-string))
          (dest-dir (make-temp-file "consent-install-dest-" t))

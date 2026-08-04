@@ -51,7 +51,8 @@
          (values (type list)
           (description "Zero or more Scheme-readable field values.")))
         (returns (type pair)
-         (description ("A field pair whose car is NAME and whose cdr is VALUES.")))
+         (description
+           ("A field pair whose car is NAME and whose cdr is VALUES.")))
         (effects pure))
       (cons name values))
 
@@ -223,7 +224,8 @@
          (context-host-callbacks context)))))
 
     (define (context-events context)
-      "Return policy and event-channel events in the order they were recorded."
+      "Return policy and event-channel events in the order they were recorded.\
+"
       (reverse (context-audit-events context)))
 
     ;; Maximum current-frame binding names included in debugger conditions.
@@ -397,7 +399,8 @@
       (if (debugger-field-value binding 'procedure-documentation) #t #f))
 
     (define (debugger-select-frame-bindings bindings)
-      "Return BINDINGS with documented procedures preserved before truncation."
+      "Return BINDINGS with documented procedures preserved before truncation.\
+"
       (let loop ((rest bindings) (documented '()) (plain '()))
         (cond
          ((null? rest)
@@ -545,7 +548,8 @@
            ("Evaluation context used for current frame and restart"
              "metadata."))))
         (returns (type condition)
-         (description "A `condition` datum for debugger and result consumers."))
+         (description
+           "A `condition` datum for debugger and result consumers."))
         (effects state-read))
       (let* ((message (condition-message condition))
              (type (debugger-condition-type condition message))
@@ -603,9 +607,11 @@
       #((parameters
          (value . "Runtime value returned by evaluation.")
          (context (type eval-context)
-          (description ("Evaluation context containing events and budget counters."))))
+          (description
+            ("Evaluation context containing events and budget counters."))))
         (returns (type evaluation-result)
-         (description "An `evaluation-result` datum with status ok or values."))
+         (description
+           "An `evaluation-result` datum with status ok or values."))
         (effects state-read))
       (if (multiple-values? value)
           (list 'evaluation-result
@@ -670,7 +676,8 @@
             (else #f))))
 
     (define (consent-result->external result)
-      "Render an evaluation-result datum using the reader/writer external form."
+      "Render an evaluation-result datum using the reader/writer external form\
+."
       #((parameters
          (result (type evaluation-result)
           (description "Public evaluation-result datum.")))

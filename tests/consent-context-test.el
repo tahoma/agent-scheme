@@ -1,4 +1,4 @@
-;;; consent-context-test.el --- Current context library tests  -*- lexical-binding: t; -*-
+;;; consent-context-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -56,7 +56,8 @@
             :conversation-summary "User asked for issue #28."))))
     (should (string-match-p
              (regexp-quote
-              "(request-context (request-id req-28) (request \"add current context library\"))")
+              "(request-context (request-id req-28) (request \"add current\
+ context library\"))")
              external))
     (should (string-match-p
              (regexp-quote

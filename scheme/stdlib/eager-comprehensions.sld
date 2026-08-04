@@ -402,10 +402,10 @@
           (let (ob ... ib-let ...) oc ...)
           lbs
           (let ((ne1?-value ne1?))
-	    (and ne1?-value
-		 (let (ib-save ...)
-		   ic ...
-		   test)))
+            (and ne1?-value
+                 (let (ib-save ...)
+                   ic ...
+                   test)))
           (let (ib-restore ...))
           ne2?
           lss))))

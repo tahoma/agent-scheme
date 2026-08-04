@@ -1,4 +1,4 @@
-;;; consent-session.el --- Session lifecycle and snapshots  -*- lexical-binding: t; -*-
+;;; consent-session.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -6,7 +6,8 @@
 
 ;; Consent Scheme sessions are host-managed runtime records exposed as
 ;; Scheme-readable datums.  This module owns lifecycle state, snapshot/fork
-;; records, registry lookup, and handle cleanup; evaluator entry points layer on
+;; records, registry lookup, and handle cleanup; evaluator entry points layer
+;; on
 ;; top from `consent-eval'.
 
 ;;; Code:

@@ -1,4 +1,4 @@
-;;; consent-budget-test.el --- Comprehensive evaluation budget tests  -*- lexical-binding: t; -*-
+;;; consent-budget-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -45,6 +45,7 @@
                           "(value-nodes-used " "(max-value-nodes 10000000)"
                           "(source-metadata-used "
                           (format "(max-source-metadata %s)"
+;; readability-allow: external-identifier -- Existing helper stays intact.
                                   (consent-budget-test--expected-max-source-metadata))
                           "(interned-symbols-used "
                           "(max-interned-symbols 1000000)"
@@ -154,12 +155,14 @@ The stub advances 100 milliseconds per reading."
    (equal "#t"
           (consent-budget-test--value
            (concat "(import (scheme base) (agent reflect))"
-                   " (budget-exhausted? '(condition (type budget-exhausted)))"))))
+                   " (budget-exhausted? '(condition (type\
+ budget-exhausted)))"))))
   (should
    (equal "#f"
           (consent-budget-test--value
            (concat "(import (scheme base) (agent reflect))"
-                   " (budget-exhausted? '(condition (type evaluation-error)))"))))
+                   " (budget-exhausted? '(condition (type\
+ evaluation-error)))"))))
   (should
    (equal "#t"
           (consent-budget-test--value
@@ -167,7 +170,8 @@ The stub advances 100 milliseconds per reading."
                    " (budget-exhausted?"
                    "   '(evaluation-result (status error)"
                    "      (error (condition"
-                   "               (condition (type budget-exhausted))))))")))))
+                   "               (condition (type\
+ budget-exhausted))))))")))))
 
 (ert-deftest consent-budget-test-budget-yield-emits-ledger ()
   "`budget-yield' emits the current ledger as an observable yield event."

@@ -1,4 +1,4 @@
-;;; consent-parity.el --- Emacs/portable dual-core parity bridge  -*- lexical-binding: t; -*-
+;;; consent-parity.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -6,29 +6,35 @@
 
 ;; Cross-implementation parity bridge for the irreducible dual core.
 ;;
-;; `docs/architecture.md' ("First-Class Portable Scheme") requires architectural
+;; `docs/architecture.md' ("First-Class Portable Scheme") requires
+;; architectural
 ;; parity between the Emacs-hosted core (`lisp/consent-*.el') and the portable
 ;; core (`scheme/consent/*.sld').  This bridge turns that prose rule into an
 ;; executable gate: it runs the shared fixture corpus through both in-repo
 ;; implementations and reports any case whose normalized result differs between
 ;; the two cores.
 ;;
-;; Scope is the dual core only -- the layers each host must implement in its own
+;; Scope is the dual core only -- the layers each host must implement in its
+;; own
 ;; language (reader, evaluator, macro, runtime).  Libraries that are
 ;; single-sourced from a portable `.sld' and loaded by both bootstraps cannot
 ;; diverge from themselves, so cases that import them fall out of scope.  The
-;; single-sourced set is read from the manifest-backed source-library inventory,
-;; so a newly single-sourced library drops out of the parity scope automatically
+;; single-sourced set is read from the manifest-backed source-library
+;; inventory,
+;; so a newly single-sourced library drops out of the parity scope
+;; automatically
 ;; as the migration proceeds.
 ;;
 ;; The Emacs-hosted result for each case is computed exactly as the Emacs
 ;; conformance gate computes it (`consent-test-fixture-actual').  The portable
-;; result is produced by `tests/scheme/consent-parity-emit.scm' running under an
+;; result is produced by `tests/scheme/consent-parity-emit.scm' running under
+;; an
 ;; external R7RS host, which emits one Scheme-readable `(parity-actual ID
 ;; PAYLOAD)' record per case using the same normalization as the portable
-;; fixture runner.  Because each side already matches the corpus `expect' field,
+;; fixture runner. Because each side already matches the corpus `expect' field,
 ;; the gate is green by construction for today's corpus; its value is
-;; forward-looking, catching future Emacs/portable drift the per-side gates miss
+;; forward-looking, catching future Emacs/portable drift the per-side gates
+;; miss
 ;; (notably in the `expand', `eval-result', and `error' phases that have no
 ;; external reference oracle).
 
@@ -46,7 +52,7 @@
   "Repository-relative path to the portable parity emitter program.")
 
 (defconst consent-parity-runnable-phases
-  '(read read-all expand eval eval-result error)
+  '(read read-all expand eval eval-result error write)
   "Fixture phases the parity gate executes on both cores.")
 
 (defconst consent-parity-hosts
@@ -86,13 +92,13 @@ diverge from itself."
   "Return non-nil when CASE is in scope for the dual-core parity gate."
   (let ((phase (consent-test-fixture-field case 'phase))
         (status (consent-test-fixture-field case 'status))
-        (oracle (consent-test-fixture-field case 'oracle))
-        (source (consent-test-fixture-field case 'source)))
+        (oracle (consent-test-fixture-field case 'oracle)))
     (and (eq oracle 'shared)
          (eq status 'implemented)
          (memq phase consent-parity-runnable-phases)
          (condition-case nil
-             (consent-parity--dual-core-source-p source)
+             (consent-parity--dual-core-source-p
+              (consent-test-fixture-source-text case))
            (error t)))))
 
 (defun consent-parity-cases ()
@@ -105,9 +111,22 @@ diverge from itself."
 (defun consent-parity--emacs-key (actual)
   "Return a host-comparable parity key for an Emacs ACTUAL plist."
   (pcase (plist-get actual :status)
-    ('value (list 'value (plist-get actual :value)))
-    ('values (cons 'values (plist-get actual :values)))
-    ('result (list 'result (plist-get actual :value)))
+    ('value
+     (list
+      'value
+      (consent-datum->external (plist-get actual :value))))
+    ('values
+     (cons
+      'values
+      (mapcar
+       #'consent-datum->external
+       (plist-get actual :values))))
+    ('result
+     (list
+      'result
+      (consent-result->external (plist-get actual :value))))
+    ('external-text
+     (list 'external-text (plist-get actual :value)))
     ('error (list 'error))
     (status (list 'unknown status))))
 
@@ -117,6 +136,7 @@ diverge from itself."
     (`(value ,value) (list 'value value))
     (`(values ,values) (cons 'values values))
     (`(result ,value) (list 'result value))
+    (`(external-text ,value) (list 'external-text value))
     (`(error) (list 'error))
     (_ (list 'unknown payload))))
 

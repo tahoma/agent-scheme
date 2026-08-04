@@ -2,7 +2,8 @@
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; This library owns `(scheme base)' primitive metadata, prelude discovery, and
+;;; This library owns `(scheme base)' primitive metadata, prelude discovery,
+;;; and
 ;;; base-environment construction hooks without importing the evaluator module.
 
 (define-library (consent base)
@@ -101,7 +102,8 @@
     ;; arities.
     (define base-primitive-registry
       ;; Each entry is `(name implementation minimum-arity maximum-arity)'.
-      ;; A false maximum means the primitive accepts arbitrarily many arguments.
+      ;; A false maximum means the primitive accepts arbitrarily many
+      ;; arguments.
       (list
        (list '* 'primitive* 0 #f)
        (list '+ 'primitive+ 0 #f)
@@ -284,7 +286,8 @@
             (base-primitive-documentation-descriptor (cdr parameter))))
 
     (define (base-primitive-documentation-fields name signature)
-      "Return rich manifest documentation fields for primitive NAME SIGNATURE."
+      "Return rich manifest documentation fields for primitive NAME SIGNATURE.\
+"
       (list
        (cons 'documentation (car signature))
        (cons 'parameters
@@ -297,22 +300,34 @@
 
     ;; Compact per-primitive signatures: name, prose, parameters, and returns.
     (define base-primitive-documentation-table
-      '((* "Return the product of all numeric arguments, or 1 when called with no arguments."
+      '((*
+        "Return the product of all numeric arguments, or 1 when called with no \
+arguments."
          ((numbers (list-of number) "Numeric factors to multiply."))
          (number "The numeric product."))
-        (+ "Return the sum of all numeric arguments, or 0 when called with no arguments."
+        (+
+          "Return the sum of all numeric arguments, or 0 when called with no a\
+rguments."
          ((numbers (list-of number) "Numeric addends to sum."))
          (number "The numeric sum."))
-        (- "Return the negation of one number, or subtract each later number from the first."
-         ((numbers (list-of number) "One or more numeric minuend/subtrahend values."))
+        (-
+          "Return the negation of one number, or subtract each later number fr\
+om the first."
+         ((numbers (list-of number)
+           "One or more numeric minuend/subtrahend values."))
          (number "The numeric negation or difference."))
-        (/ "Return the reciprocal of one number, or divide the first by each later number."
-         ((numbers (list-of number) "One or more numeric dividend/divisor values."))
+        (/
+          "Return the reciprocal of one number, or divide the first by each la\
+ter number."
+         ((numbers (list-of number)
+           "One or more numeric dividend/divisor values."))
          (number "The numeric reciprocal or quotient."))
         (< "Return #t when the numeric arguments are strictly increasing."
          ((numbers (list-of real) "Real numbers to compare."))
          (boolean "Whether the numbers are strictly increasing."))
-        (<= "Return #t when the numeric arguments are monotonically nondecreasing."
+        (<=
+          "Return #t when the numeric arguments are monotonically nondecreasin\
+g."
          ((numbers (list-of real) "Real numbers to compare."))
          (boolean "Whether the numbers are monotonically nondecreasing."))
         (= "Return #t when all numeric arguments are numerically equal."
@@ -321,36 +336,47 @@
         (> "Return #t when the numeric arguments are strictly decreasing."
          ((numbers (list-of real) "Real numbers to compare."))
          (boolean "Whether the numbers are strictly decreasing."))
-        (>= "Return #t when the numeric arguments are monotonically nonincreasing."
+        (>=
+          "Return #t when the numeric arguments are monotonically nonincreasin\
+g."
          ((numbers (list-of real) "Real numbers to compare."))
          (boolean "Whether the numbers are monotonically nonincreasing."))
         (apply
-         "Call a procedure with leading arguments followed by the final list argument."
+         "Call a procedure with leading arguments followed by the final list a\
+rgument."
          ((proc procedure "Procedure to call.")
-          (arguments (list-of any) "Leading arguments followed by the final list."))
+          (arguments (list-of any)
+            "Leading arguments followed by the final list."))
          (any "Values returned by PROC."))
-        (binary-port? "Return #t when an object is a binary input or output port."
+        (binary-port?
+          "Return #t when an object is a binary input or output port."
          ((obj any "Object to test."))
          (boolean "Whether OBJ is a binary port."))
-        (boolean=? "Return #t when all boolean arguments have the same truth value."
+        (boolean=?
+          "Return #t when all boolean arguments have the same truth value."
          ((booleans (list-of boolean) "Boolean values to compare."))
          (boolean "Whether all booleans have the same truth value."))
         (boolean? "Return #t when an object is either #t or #f."
          ((obj any "Object to test."))
          (boolean "Whether OBJ is a boolean."))
-        (bytevector "Return a newly allocated bytevector containing the given byte values."
+        (bytevector
+          "Return a newly allocated bytevector containing the given byte value\
+s."
          ((bytes (list-of byte) "Byte values for the new bytevector."))
          (bytevector "A newly allocated bytevector."))
         (bytevector-append
-         "Return a newly allocated bytevector containing each argument's bytes."
+         "Return a newly allocated bytevector containing each argument's bytes\
+."
          ((bytevectors (list-of bytevector) "Bytevectors to concatenate."))
          (bytevector "A newly allocated concatenated bytevector."))
-        (bytevector-copy "Return a newly allocated copy of a bytevector slice."
+        (bytevector-copy "Return a newly allocated copy of a bytevector slice.\
+"
          ((bytevector bytevector "Bytevector to copy.")
           (start exact-non-negative-integer "Inclusive start index.")
           (end exact-non-negative-integer "Exclusive end index."))
          (bytevector "A newly allocated bytevector slice."))
-        (bytevector-copy! "Copy bytes from one bytevector slice into another in place."
+        (bytevector-copy!
+          "Copy bytes from one bytevector slice into another in place."
          ((to bytevector "Destination bytevector.")
           (at exact-non-negative-integer "Destination start index.")
           (from bytevector "Source bytevector.")
@@ -364,7 +390,8 @@
          ((bytevector bytevector "Bytevector to read.")
           (k exact-non-negative-integer "Zero-based bytevector index."))
          (byte "The byte at index K."))
-        (bytevector-u8-set! "Store an unsigned byte at a zero-based bytevector index."
+        (bytevector-u8-set!
+          "Store an unsigned byte at a zero-based bytevector index."
          ((bytevector bytevector "Bytevector to mutate.")
           (k exact-non-negative-integer "Zero-based bytevector index.")
           (byte byte "Byte value to store."))
@@ -373,15 +400,18 @@
          ((obj any "Object to test."))
          (boolean "Whether OBJ is a bytevector."))
         (call-with-current-continuation
-         "Call a procedure with the current continuation as an escape procedure."
+         "Call a procedure with the current continuation as an escape procedur\
+e."
          ((proc procedure "Procedure that accepts the current continuation."))
          (any "Values delivered to the captured continuation."))
         (call-with-port
-         "Call a procedure with a port and close the port when control leaves it."
+         "Call a procedure with a port and close the port when control leaves \
+it."
          ((port port "Port passed to PROC and then closed.")
           (proc procedure "Procedure to call with PORT."))
          (any "Values returned by PROC."))
-        (call-with-values "Call a producer and pass all produced values to a consumer."
+        (call-with-values
+          "Call a producer and pass all produced values to a consumer."
          ((producer procedure "Zero-argument producer procedure.")
           (consumer procedure "Consumer procedure receiving producer values."))
          (any "Values returned by CONSUMER."))
@@ -415,7 +445,8 @@
         (char>? "Return #t when the characters are strictly decreasing."
          ((chars (list-of char) "Characters to compare."))
          (boolean "Whether the characters are strictly decreasing."))
-        (char-ready? "Return #t when a character can be read without blocking."
+        (char-ready? "Return #t when a character can be read without blocking.\
+"
          ((port textual-input-port "Textual input port to query."))
          (boolean "Whether a character is ready."))
         (char? "Return #t when an object is a character."
@@ -433,50 +464,62 @@
         (complex? "Return #t when an object is a complex number."
          ((obj any "Object to test."))
          (boolean "Whether OBJ is a complex number."))
-        (cons "Return a newly allocated pair whose car and cdr are the arguments."
+        (cons
+          "Return a newly allocated pair whose car and cdr are the arguments."
          ((obj1 any "Value for the new pair's car.")
           (obj2 any "Value for the new pair's cdr."))
          (pair "A newly allocated pair."))
-        (current-error-port "Return or dynamically replace the current textual error output port."
+        (current-error-port
+          "Return or dynamically replace the current textual error output port\
+."
          ((port textual-output-port "Optional replacement error output port."))
          (textual-output-port "The current textual error output port."))
-        (current-input-port "Return or dynamically replace the current textual input port."
+        (current-input-port
+          "Return or dynamically replace the current textual input port."
          ((port textual-input-port "Optional replacement input port."))
          (textual-input-port "The current textual input port."))
-        (current-output-port "Return or dynamically replace the current textual output port."
+        (current-output-port
+          "Return or dynamically replace the current textual output port."
          ((port textual-output-port "Optional replacement output port."))
          (textual-output-port "The current textual output port."))
-        (dynamic-wind "Call before, thunk, and after around dynamic extent changes."
+        (dynamic-wind
+          "Call before, thunk, and after around dynamic extent changes."
          ((before procedure "Zero-argument procedure called on entry.")
-          (thunk procedure "Zero-argument procedure whose values are returned.")
+          (thunk procedure
+            "Zero-argument procedure whose values are returned.")
           (after procedure "Zero-argument procedure called on exit."))
          (any "Values returned by THUNK."))
         (eq? "Return #t when two objects are the same under `eq?` identity."
          ((obj1 any "First object to compare.")
           (obj2 any "Second object to compare."))
          (boolean "Whether the objects are the same under `eq?`."))
-        (equal? "Return #t when two objects have recursively equivalent contents."
+        (equal?
+          "Return #t when two objects have recursively equivalent contents."
          ((obj1 any "First object to compare.")
           (obj2 any "Second object to compare."))
          (boolean "Whether the objects are recursively equivalent."))
-        (eqv? "Return #t when two objects are equivalent under R7RS `eqv?` rules."
+        (eqv?
+          "Return #t when two objects are equivalent under R7RS `eqv?` rules."
          ((obj1 any "First object to compare.")
           (obj2 any "Second object to compare."))
          (boolean "Whether the objects are equivalent under `eqv?`."))
         (eof-object "Return the distinguished end-of-file object."
          ()
          (eof-object "An end-of-file object."))
-        (eof-object? "Return #t when an object is the distinguished end-of-file object."
+        (eof-object?
+          "Return #t when an object is the distinguished end-of-file object."
          ((obj any "Object to test."))
          (boolean "Whether OBJ is an end-of-file object."))
         (error "Raise a non-continuable error object with optional irritants."
          ((message string "Error message string.")
           (irritants (list-of any) "Additional error irritants."))
          (never "This procedure does not return."))
-        (error-object-irritants "Return the irritants carried by an error object."
+        (error-object-irritants
+          "Return the irritants carried by an error object."
          ((error-object error-object "Error object to inspect."))
          (list "The error object's irritants."))
-        (error-object-message "Return the message string carried by an error object."
+        (error-object-message
+          "Return the message string carried by an error object."
          ((error-object error-object "Error object to inspect."))
          (string "The error object's message."))
         (error-object? "Return #t when an object is an error object."
@@ -485,14 +528,17 @@
         (denominator "Return a rational number's positive denominator."
          ((q rational "Rational number to inspect."))
          (integer "The denominator in lowest terms."))
-        (exact "Return an exact representation of a number when one is available."
+        (exact
+          "Return an exact representation of a number when one is available."
          ((z number "Number to convert."))
          (number "An exact representation of Z."))
-        (exact-integer-sqrt "Return the exact integer square root and remainder."
+        (exact-integer-sqrt
+          "Return the exact integer square root and remainder."
          ((k exact-non-negative-integer "Non-negative exact integer."))
          ((values exact-non-negative-integer exact-non-negative-integer)
           "The square root and remainder."))
-        (exact-integer? "Return #t when an object is both exact and an integer."
+        (exact-integer?
+          "Return #t when an object is both exact and an integer."
          ((z number "Number to test."))
          (boolean "Whether Z is an exact integer."))
         (exact? "Return #t when a number is represented exactly."
@@ -529,10 +575,12 @@
         (gcd "Return the greatest common divisor, or 0 with no arguments."
          ((integers (list-of integer) "Integer arguments."))
          (integer "The non-negative greatest common divisor."))
-        (get-output-bytevector "Return accumulated bytes from an output bytevector port."
+        (get-output-bytevector
+          "Return accumulated bytes from an output bytevector port."
          ((port binary-output-port "Output bytevector port to drain."))
          (bytevector "Accumulated output bytes."))
-        (get-output-string "Return accumulated text from an output string port."
+        (get-output-string
+          "Return accumulated text from an output string port."
          ((port textual-output-port "Output string port to drain."))
          (string "Accumulated output text."))
         (inexact "Return an inexact representation of a number."
@@ -556,10 +604,12 @@
         (lcm "Return the least common multiple, or 1 with no arguments."
          ((integers (list-of integer) "Integer arguments."))
          (integer "The non-negative least common multiple."))
-        (list->string "Return a newly allocated string containing list characters."
+        (list->string
+          "Return a newly allocated string containing list characters."
          ((list (list-of char) "List of characters."))
          (string "A newly allocated string."))
-        (list->vector "Return a newly allocated vector containing list elements."
+        (list->vector
+          "Return a newly allocated vector containing list elements."
          ((list list "List whose elements become vector elements."))
          (vector "A newly allocated vector."))
         (list? "Return #t when an object is a proper list."
@@ -598,19 +648,24 @@
         (number? "Return #t when an object is a number."
          ((obj any "Object to test."))
          (boolean "Whether OBJ is a number."))
-        (numerator "Return the numerator of a rational number in lowest terms."
+        (numerator "Return the numerator of a rational number in lowest terms.\
+"
          ((q rational "Rational number to inspect."))
          (integer "The numerator in lowest terms."))
-        (open-input-bytevector "Return a binary input port reading from a bytevector."
+        (open-input-bytevector
+          "Return a binary input port reading from a bytevector."
          ((bytevector bytevector "Bytevector backing the input port."))
          (binary-input-port "A binary input port."))
-        (open-input-string "Return a textual input port reading from a string."
+        (open-input-string "Return a textual input port reading from a string.\
+"
          ((string string "String backing the input port."))
          (textual-input-port "A textual input port."))
-        (open-output-bytevector "Return a binary output port accumulating bytes."
+        (open-output-bytevector
+          "Return a binary output port accumulating bytes."
          ()
          (binary-output-port "A binary output bytevector port."))
-        (open-output-string "Return a textual output port accumulating characters."
+        (open-output-string
+          "Return a textual output port accumulating characters."
          ()
          (textual-output-port "A textual output string port."))
         (output-port-open? "Return #t when an output port is still open."
@@ -624,7 +679,8 @@
          (boolean "Whether OBJ is a pair."))
         (peek-char "Return the next character without consuming it."
          ((port textual-input-port "Textual input port to inspect."))
-         ((or char eof-object) "The next character, or an end-of-file object."))
+         ((or char eof-object)
+           "The next character, or an end-of-file object."))
         (peek-u8 "Return the next byte without consuming it."
          ((port binary-input-port "Binary input port to inspect."))
          ((or byte eof-object) "The next byte, or an end-of-file object."))
@@ -655,16 +711,19 @@
          ((k exact-non-negative-integer "Maximum number of bytes to read.")
           (port binary-input-port "Binary input port to read."))
          ((or bytevector eof-object) "Bytes read, or an end-of-file object."))
-        (read-bytevector! "Read bytes from a binary input port into a bytevector."
+        (read-bytevector!
+          "Read bytes from a binary input port into a bytevector."
          ((bytevector bytevector "Destination bytevector.")
           (port binary-input-port "Binary input port to read.")
-          (start exact-non-negative-integer "Inclusive destination start index.")
+          (start exact-non-negative-integer
+            "Inclusive destination start index.")
           (end exact-non-negative-integer "Exclusive destination end index."))
          ((or exact-non-negative-integer eof-object)
           "Number of bytes read, or an end-of-file object."))
         (read-char "Read and consume one character from a textual input port."
          ((port textual-input-port "Textual input port to read."))
-         ((or char eof-object) "The next character, or an end-of-file object."))
+         ((or char eof-object)
+           "The next character, or an end-of-file object."))
         (read-error? "Return #t when an object is an error caused by reading."
          ((obj any "Object to test."))
          (boolean "Whether OBJ is a read error object."))
@@ -672,7 +731,8 @@
          ((port textual-input-port "Textual input port to read."))
          ((or string eof-object) "The next line, or an end-of-file object."))
         (read-string "Read up to a requested number of characters."
-         ((k exact-non-negative-integer "Maximum number of characters to read.")
+         ((k exact-non-negative-integer
+           "Maximum number of characters to read.")
           (port textual-input-port "Textual input port to read."))
          ((or string eof-object) "Characters read, or an end-of-file object."))
         (read-u8 "Read and consume one byte from a binary input port."
@@ -696,15 +756,18 @@
          ((pair pair "Pair to mutate.")
           (obj any "New cdr value."))
          (unspecified "The unspecified value."))
-        (string "Return a newly allocated string containing the given characters."
+        (string
+          "Return a newly allocated string containing the given characters."
          ((chars (list-of char) "Characters for the new string."))
          (string "A newly allocated string."))
-        (string->list "Return a list containing characters from a string slice."
+        (string->list
+          "Return a list containing characters from a string slice."
          ((string string "String to copy from.")
           (start exact-non-negative-integer "Inclusive start index.")
           (end exact-non-negative-integer "Exclusive end index."))
          ((list-of char) "A newly allocated list of characters."))
-        (string->number "Parse a number from a string, optionally using a radix."
+        (string->number
+          "Parse a number from a string, optionally using a radix."
          ((string string "String to parse.")
           (radix exact-integer "Optional radix: 2, 8, 10, or 16."))
          ((or number boolean) "The parsed number, or #f."))
@@ -716,12 +779,14 @@
           (start exact-non-negative-integer "Inclusive start index.")
           (end exact-non-negative-integer "Exclusive end index."))
          (bytevector "A UTF-8 encoded bytevector."))
-        (string->vector "Return a vector containing characters from a string slice."
+        (string->vector
+          "Return a vector containing characters from a string slice."
          ((string string "String to copy from.")
           (start exact-non-negative-integer "Inclusive start index.")
           (end exact-non-negative-integer "Exclusive end index."))
          ((vector-of char) "A newly allocated vector of characters."))
-        (string-append "Return a newly allocated string containing each argument."
+        (string-append
+          "Return a newly allocated string containing each argument."
          ((strings (list-of string) "Strings to concatenate."))
          (string "A newly allocated concatenated string."))
         (string-copy "Return a newly allocated copy of a string slice."
@@ -729,7 +794,8 @@
           (start exact-non-negative-integer "Inclusive start index.")
           (end exact-non-negative-integer "Exclusive end index."))
          (string "A newly allocated string slice."))
-        (string-copy! "Copy characters from one string slice into another in place."
+        (string-copy!
+          "Copy characters from one string slice into another in place."
          ((to string "Destination string.")
           (at exact-non-negative-integer "Destination start index.")
           (from string "Source string.")
@@ -786,7 +852,8 @@
         (symbol? "Return #t when an object is a symbol."
          ((obj any "Object to test."))
          (boolean "Whether OBJ is a symbol."))
-        (textual-port? "Return #t when an object is a textual input or output port."
+        (textual-port?
+          "Return #t when an object is a textual input or output port."
          ((obj any "Object to test."))
          (boolean "Whether OBJ is a textual port."))
         (truncate "Return the integer nearest to zero for a real number."
@@ -820,12 +887,14 @@
           (start exact-non-negative-integer "Inclusive start index.")
           (end exact-non-negative-integer "Exclusive end index."))
          (list "A newly allocated list."))
-        (vector->string "Return a string containing characters from a vector slice."
+        (vector->string
+          "Return a string containing characters from a vector slice."
          ((vector (vector-of char) "Vector of characters to copy from.")
           (start exact-non-negative-integer "Inclusive start index.")
           (end exact-non-negative-integer "Exclusive end index."))
          (string "A newly allocated string."))
-        (vector-append "Return a newly allocated vector containing each argument."
+        (vector-append
+          "Return a newly allocated vector containing each argument."
          ((vectors (list-of vector) "Vectors to concatenate."))
          (vector "A newly allocated concatenated vector."))
         (vector-copy "Return a newly allocated copy of a vector slice."
@@ -833,7 +902,8 @@
           (start exact-non-negative-integer "Inclusive start index.")
           (end exact-non-negative-integer "Exclusive end index."))
          (vector "A newly allocated vector slice."))
-        (vector-copy! "Copy elements from one vector slice into another in place."
+        (vector-copy!
+          "Copy elements from one vector slice into another in place."
          ((to vector "Destination vector.")
           (at exact-non-negative-integer "Destination start index.")
           (from vector "Source vector.")
@@ -865,7 +935,8 @@
          ((values (list-of any) "Values to deliver to the continuation."))
          (values "The supplied arguments as multiple values."))
         (with-exception-handler
-         "Call a thunk with an exception handler installed for its dynamic extent."
+         "Call a thunk with an exception handler installed for its dynamic ext\
+ent."
          ((handler procedure "One-argument exception handler.")
           (thunk procedure "Zero-argument thunk to call."))
          (any "Values returned by THUNK."))
@@ -1021,7 +1092,8 @@
                      (base-primitive-documentation name))))))
 
     (define (consent-base-primitive-names)
-      "Primitive metadata is exported for tests and future conformance reports;"
+      "Primitive metadata is exported for tests and future conformance reports\
+;"
       "it describes the kernel surface without exposing implementation"
       "closures."
       #((parameters)
@@ -1049,7 +1121,8 @@
                    (base-assq 'effect spec)))
            (map base-primitive-manifest-spec base-primitive-registry)))
 
-    ;; Prelude source paths are the only host-files read during base environment
+    ;; Prelude source paths are the only host-files read during base
+    ;; environment
     ;; construction; they support project-root and library-path test layouts.
     (define consent-base-prelude-load-paths
       ;; Portable Scheme tests may run from the project root or with the
@@ -1057,7 +1130,8 @@
       '("scheme/consent/base-prelude.scm"
         "consent/base-prelude.scm"))
 
-    ;; Syntax prelude paths mirror value prelude loading so derived syntax stays
+    ;; Syntax prelude paths mirror value prelude loading so derived syntax
+    ;; stays
     ;; portable source, not embedded host data.
     (define consent-base-syntax-load-paths
       '("scheme/consent/base-syntax.scm"
@@ -1105,7 +1179,8 @@
          (port (type port)
           (description "Open textual input port to drain to end of file.")))
         (returns (type string)
-         (description ("A string containing every character read from the port.")))
+         (description
+           ("A string containing every character read from the port.")))
         (effects state-read allocation))
       (let loop ((chars '()))
         (let ((char (read-char port)))
@@ -1121,7 +1196,8 @@
            ("Open textual input port whose contents are read and"
              "parsed."))))
         (returns (type list)
-         (description ("A list of every datum parsed from the port's contents.")))
+         (description
+           ("A list of every datum parsed from the port's contents.")))
         (effects state-read allocation))
       (consent-read-all (read-port-string port)))
 
@@ -1168,7 +1244,8 @@
                     (and embedded (cons relative-path embedded))))))))
 
     (define (resolve-source-text relative-path default-paths)
-      "Return runtime source TEXT for logical RELATIVE-PATH, or #f when none is found."
+      "Return runtime source TEXT for logical RELATIVE-PATH, or #f when none i\
+s found."
       #((parameters
          (relative-path (type string)
           (description "Logical path of the source resource to resolve."))
@@ -1210,7 +1287,8 @@
            (car maybe-table))))
 
     (define (base-syntax-forms . maybe-table)
-      "Syntax prelude forms are cached separately because they install into the"
+      "Syntax prelude forms are cached separately because they install into th\
+e"
       "current syntax environment, not the value environment."
       #((parameters
          (maybe-table (type list)
@@ -1317,7 +1395,8 @@
            form)))))
 
     (define (consent-base-prelude-binding-specs)
-      "Prelude binding specs identify derived procedures separately from kernel"
+      "Prelude binding specs identify derived procedures separately from kerne\
+l"
       "primitives so tests can catch accidental boundary movement."
       #((parameters)
         (returns (type list)
@@ -1354,23 +1433,30 @@
     (define standard-primitive-documentation-table
       (list
        (list '(scheme file) 'delete-file
-             "Delete the file at PATH, subject to the file-system capability policy.")
+             "Delete the file at PATH, subject to the file-system capability p\
+olicy.")
        (list '(scheme file) 'file-exists?
              (string-append
               "Return #t when PATH names an existing file, subject to the "
               "file-system capability policy."))
        (list '(scheme file) 'call-with-input-file
-             "Open PATH for textual input, call PROC with the port, and close the port afterward.")
+             "Open PATH for textual input, call PROC with the port, and close \
+the port afterward.")
        (list '(scheme file) 'call-with-output-file
-             "Open PATH for textual output, call PROC with the port, and close the port afterward.")
+             "Open PATH for textual output, call PROC with the port, and close \
+the port afterward.")
        (list '(scheme file) 'open-binary-input-file
-             "Open PATH as a binary input port, subject to the file-system capability policy.")
+             "Open PATH as a binary input port, subject to the file-system cap\
+ability policy.")
        (list '(scheme file) 'open-binary-output-file
-             "Open PATH as a binary output port, subject to the file-system capability policy.")
+             "Open PATH as a binary output port, subject to the file-system ca\
+pability policy.")
        (list '(scheme file) 'open-input-file
-             "Open PATH as a textual input port, subject to the file-system capability policy.")
+             "Open PATH as a textual input port, subject to the file-system ca\
+pability policy.")
        (list '(scheme file) 'open-output-file
-             "Open PATH as a textual output port, subject to the file-system capability policy.")
+             "Open PATH as a textual output port, subject to the file-system c\
+apability policy.")
        (list '(scheme file) 'with-input-from-file
              (string-append
               "Evaluate THUNK with the current input port temporarily bound "
@@ -1388,15 +1474,20 @@
               "Return script invocation arguments, or the process command "
               "line when process-environment access is allowed."))
        (list '(scheme process-context) 'emergency-exit
-             "Request immediate process termination, denied by default by the process policy.")
+             "Request immediate process termination, denied by default by the \
+process policy.")
        (list '(scheme process-context) 'exit
-             "Request orderly process termination, denied by default by the process policy.")
+             "Request orderly process termination, denied by default by the pr\
+ocess policy.")
        (list '(scheme process-context) 'get-environment-variable
-             "Return one environment variable value, subject to process-environment policy.")
+             "Return one environment variable value, subject to process-enviro\
+nment policy.")
        (list '(scheme process-context) 'get-environment-variables
-             "Return environment variable bindings, subject to process-environment policy.")
+             "Return environment variable bindings, subject to process-environ\
+ment policy.")
        (list '(scheme repl) 'interaction-environment
-             "Return the current session interaction environment when REPL access is allowed.")
+             "Return the current session interaction environment when REPL acc\
+ess is allowed.")
        (list '(scheme time) 'current-jiffy
              (string-append
               "Return the current clock reading as an integer jiffy count, "
@@ -1406,7 +1497,8 @@
               "Return the current time as a real number of seconds since the "
               "Unix epoch, subject to the clock capability policy."))
        (list '(scheme time) 'jiffies-per-second
-             "Return the number of jiffies per second used by `current-jiffy`.")))
+             "Return the number of jiffies per second used by `current-jiffy`.\
+")))
 
     (define (primitive-documentation-lookup table library name)
       "Return manifest documentation in TABLE for LIBRARY and NAME."
@@ -1666,7 +1758,8 @@
              (list 'test-categories '(time policy clock)))))
 
     (define (standard-primitive-manifest-spec spec)
-      "Add shared backend policy-path metadata to host-effecting standard specs."
+      "Add shared backend policy-path metadata to host-effecting standard spec\
+s."
       (append spec
               (list (list 'backend-effect-path 'shared-capability-request)
                     (list 'policy-category 'standard-host-effect))
@@ -1721,7 +1814,8 @@
       "Install a primitive procedure binding into ENVIRONMENT."
       #((parameters
          (environment (type environment)
-          (description ("Target environment to receive the primitive binding.")))
+          (description
+            ("Target environment to receive the primitive binding.")))
          (name (type symbol)
           (description "Symbol under which the primitive is bound."))
          (function (type procedure)
@@ -1752,7 +1846,8 @@
       #((parameters
          (maybe-table (type list)
           (description
-           "Optional singleton symbol table used to own environment bindings.")))
+           "Optional singleton symbol table used to own environment \
+bindings.")))
         (returns
          . ("A fresh environment populated with kernel primitives and"
             "derived base definitions."))
@@ -1777,7 +1872,8 @@
                                    (consent-intern-symbol
                                     table
                                     (host-symbol->string (car (car rest))))
-                                   (base-primitive-implementation (second (car rest)))
+                                   (base-primitive-implementation (second (car
+                              rest)))
                                    (third (car rest))
                                    (fourth (car rest)))
                 (loop (cdr rest)))))))

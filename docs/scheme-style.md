@@ -7,6 +7,29 @@ and `.scm` files under `scheme/`, `tests/scheme/`, and `fixtures/r7rs/`.
 Prefer the local style around the code being changed, and avoid formatting-only
 churn outside the definitions needed for the current work.
 
+## Width and embedded source
+
+Use 80 columns as the soft limit and 100 as the hard limit. Break forms at
+syntactic boundaries and keep identifiers intact. An atomic value between the
+limits needs the classified local annotation documented in
+[Narrow-Width Readability](readability.md); no source line may exceed the hard
+limit.
+
+Represent embedded Scheme as Scheme data when its lexical spelling is not
+under test. Use a `form` for one datum, `forms` for a program fragment, and a
+named `.scm` file for a substantial program. Keep `text` for reader-sensitive
+input whose exact characters are the subject of the test. Materialize
+structured data with the Consent writer only at the execution boundary.
+
+When a string must wrap without changing its value, use an R7RS string
+continuation at a word boundary:
+
+```scheme
+(define message
+  "The logical value continues without gaining a newline or extra \
+    indentation.")
+```
+
 ## Definition Shape
 
 Use procedure definition syntax for procedures:

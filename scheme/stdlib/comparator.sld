@@ -117,7 +117,8 @@
       (error "hashing not supported" x))
 
     (define (make-comparator type-test equality ordering hash)
-      "Return a comparator from type, equality, ordering, and hash procedures."
+      "Return a comparator from type, equality, ordering, and hash procedures.\
+"
       #((parameters
          (type-test (type (or procedure boolean))
           (description
@@ -491,7 +492,8 @@
       "Return pair equality over CAR-COMPARATOR and CDR-COMPARATOR."
       (lambda (a b)
         (and ((comparator-equality-predicate car-comparator) (car a) (car b))
-             ((comparator-equality-predicate cdr-comparator) (cdr a) (cdr b)))))
+             ((comparator-equality-predicate cdr-comparator) (cdr a) (cdr
+               b)))))
 
     (define (make-pair<? car-comparator cdr-comparator)
       "Return lexicographic pair ordering over two component comparators."
@@ -575,7 +577,8 @@
               (acc (elem-hash (head obj)))
               (loop (tail obj))))))))
 
-    (define (make-list-comparator element-comparator type-test empty? head tail)
+    (define (make-list-comparator element-comparator type-test empty? head
+      tail)
       "Return a comparator for list-like sequences."
       #((parameters
          (element-comparator (type comparator)
@@ -692,7 +695,8 @@
       "Register COMPARATOR as an extension for default comparators."
       #((parameters
          (comparator (type comparator)
-          (description "Comparator to add to the default-comparator registry.")))
+          (description
+            "Comparator to add to the default-comparator registry.")))
         (returns . ("An unspecified value after updating the registry."))
         (effects state-write))
       (set! default-comparator-registry
@@ -765,7 +769,8 @@
         ((5) (symbol<? a b))
         ((6) (complex<? a b))
         ((7)
-         ((make-vector<? (make-default-comparator) vector? vector-length vector-ref)
+         ((make-vector<? (make-default-comparator) vector? vector-length
+           vector-ref)
           a b))
         ((8)
          ((make-vector<? (byte-comparator)
@@ -799,7 +804,8 @@
          ((make-vector-hash (byte-comparator)
                             bytevector? bytevector-length bytevector-u8-ref)
           obj))
-        (else (comparator-hash (registered-comparator (object-type obj)) obj))))
+        (else (comparator-hash (registered-comparator (object-type obj))
+          obj))))
 
     (define (default-ordering a b)
       "Return whether A precedes B under the default comparator."

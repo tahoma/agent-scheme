@@ -38,7 +38,8 @@
       "Return #t when CODE lies in the inclusive LOWER..UPPER range."
       (and (<= lower code) (<= code upper)))
 
-    (define (code-in-either-range? code first-low first-high second-low second-high)
+    (define (code-in-either-range? code first-low first-high second-low
+      second-high)
       "Return #t when CODE lies in either supplied inclusive range."
       (or (code-in-range? code first-low first-high)
           (code-in-range? code second-low second-high)))
@@ -78,7 +79,8 @@
       "Report whether CHARACTER has the owned Unicode Uppercase property."
       #((parameters
          (character (type character) (description "Character to classify.")))
-        (returns (type boolean) (description "Whether CHARACTER is uppercase."))
+        (returns (type boolean) (description
+          "Whether CHARACTER is uppercase."))
         (effects pure))
       (let ((code (char->integer character)))
         (or (ascii-upper-code? code)
@@ -89,7 +91,8 @@
       "Report whether CHARACTER has the owned Unicode Lowercase property."
       #((parameters
          (character (type character) (description "Character to classify.")))
-        (returns (type boolean) (description "Whether CHARACTER is lowercase."))
+        (returns (type boolean) (description
+          "Whether CHARACTER is lowercase."))
         (effects pure))
       (let ((code (char->integer character)))
         (or (ascii-lower-code? code)
@@ -144,7 +147,8 @@
       "Report whether CHARACTER has the Unicode White_Space property."
       #((parameters
          (character (type character) (description "Character to classify.")))
-        (returns (type boolean) (description "Whether CHARACTER is whitespace."))
+        (returns (type boolean) (description
+          "Whether CHARACTER is whitespace."))
         (effects pure))
       (if (memv (char->integer character) whitespace-codes) #t #f))
 

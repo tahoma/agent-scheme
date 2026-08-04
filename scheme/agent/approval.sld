@@ -170,7 +170,8 @@
          (id (type symbol)
           (description "Approval request id symbol.")))
         (returns (type (or symbol boolean))
-         (description ("The approval status symbol, or #f when ID is unknown.")))
+         (description
+           ("The approval status symbol, or #f when ID is unknown.")))
         (effects state-read))
       (let ((record (approval-store-ref store id)))
         (if record (record-status record) #f)))
@@ -231,7 +232,8 @@
          (store (type consent-approval-store)
           (description "Approval store to inspect.")))
         (returns (type (list-of approval-request))
-         (description ("List of approval request datums whose status is pending.")))
+         (description
+           ("List of approval request datums whose status is pending.")))
         (effects state-read))
       (let loop ((records (store-records store)) (result '()))
         (cond

@@ -6,9 +6,10 @@
 ;;; goal into a running task: it creates an `(agent task)' record, walks it
 ;;; deterministically through `observing', `planning', and `acting', routes a
 ;;; (fake but shape-correct) model provider request, reads model proposals
-;;; through the `(agent proposal)' boundary, gates host effects through a policy
+;;; through the `(agent proposal)' boundary, gates host effects through a
+;;; policy
 ;;; decision, and stops or pauses with an inspectable `task-stop'/`task-pause'
-;;; receipt.  The loop is deterministic around policy and state transitions even
+;;; receipt. The loop is deterministic around policy and state transitions even
 ;;; though model output is nondeterministic: all nondeterministic inputs
 ;;; (provider responses, policy decisions, the verifier verdict, control
 ;;; directives) are injected as data so a run is replayable and cross-host
@@ -23,8 +24,10 @@
 ;;; `complete'.  Both are documented in docs/control-loop.md.
 ;;;
 ;;; The library is host-neutral and single-sourced like `(agent registry)': the
-;;; Emacs interpreter and the portable hosts load this same Scheme source.  It is
-;;; deliberately small -- one observation, one plan, a bounded acting loop, fake
+;;; Emacs interpreter and the portable hosts load this same Scheme source. It
+;;; is
+;;; deliberately small -- one observation, one plan, a bounded acting loop,
+;;; fake
 ;;; providers, and no persistence, scheduling, parallelism, streaming UI, or
 ;;; provider matrix.  Those expansions are tracked as follow-up issues in
 ;;; docs/control-loop.md.
@@ -47,7 +50,8 @@
           (agent proposal))
   (begin
     (define (option-ref options key default)
-      "Return KEY from OPTIONS, or DEFAULT when KEY is absent.  OPTIONS entries"
+      "Return KEY from OPTIONS, or DEFAULT when KEY is absent.  OPTIONS entrie\
+s"
       "may be dotted alist cells or two-element option records."
       (let ((cell (assq key options)))
         (if cell
@@ -177,7 +181,8 @@
             (set! events
                   (cons (make-transcript-event
                          kind
-                         (cons (list 'id (make-id id-prefix "ev" event-counter))
+                         (cons (list 'id (make-id id-prefix "ev"
+                           event-counter))
                                (cons (list 'session session) fields)))
                         events)))
           (define (record-observation! source kind value)
@@ -189,7 +194,8 @@
                          task-id source kind value '())
                         observations)))
           (define (record-step! step-id attempt selected-action)
-            "Append an agent-step and the agent-decision that selected ACTION."
+            "Append an agent-step and the agent-decision that selected ACTION.\
+"
             (set! steps
                   (cons (make-agent-step step-id task-id goal
                                          (list (list 'state 'acting)
@@ -260,7 +266,8 @@
                                             (list 'status 'pending))))))
               plan))
           (define (perform-effects requests rest)
-            "Perform approved REQUESTS as fake effects, then continue the loop."
+            "Perform approved REQUESTS as fake effects, then continue the loop\
+."
             (if (any-failed? requests effect-status)
                 (finish-stop 'failed 'condition-failed
                              (list (list 'observed-state 'action-failed)))
@@ -279,7 +286,8 @@
                    requests)
                   (continue-loop rest))))
           (define (resolve-requests requests rest)
-            "Route REQUESTS through policy and dispatch on the governing status."
+            "Route REQUESTS through policy and dispatch on the governing statu\
+s."
             (let* ((decision (governing-decision requests))
                    (status (car decision))
                    (request (cdr decision)))
@@ -296,11 +304,13 @@
                        (list (list 'operation (request-operation request))))
                 (finish-pause 'blocked 'waiting-for-user-input
                               (list (list 'capability-gate request)
-                                    (list 'observed-state 'awaiting-user-input))))
+                                    (list 'observed-state
+                              'awaiting-user-input))))
                ((eq? status 'host-pending)
                 (finish-pause 'waiting-for-host 'host-effect-timeout
                               (list (list 'capability-gate request)
-                                    (list 'observed-state 'host-effect-pending))))
+                                    (list 'observed-state
+                              'host-effect-pending))))
                ((or (eq? status 'authority-missing) (eq? status 'stale))
                 (finish-pause 'blocked 'authority-unavailable
                               (list (list 'capability-gate request)
@@ -372,7 +382,8 @@
                     stop)
                   (finish-pause 'blocked 'insufficient-evidence
                                 (list (list 'verifier-result verifier-result)
-                                      (list 'observed-state 'goal-unverified))))))
+                                      (list 'observed-state
+                              'goal-unverified))))))
           (define (dispatch spec rest)
             "Dispatch the acting step on proposal SPEC."
             (cond
@@ -390,7 +401,8 @@
              (else
               (finish-stop 'failed 'condition-failed
                            (list (list 'observed-state
-                                       (list 'unknown-proposal (car spec))))))))
+                                       (list 'unknown-proposal (car
+                              spec))))))))
           (define (drive provider-rest attempt)
             "Run one bounded acting iteration over PROVIDER-REST."
             (cond
@@ -399,7 +411,8 @@
                            (list (list 'observed-state 'cancelled))))
              ((>= used-steps max-steps)
               (finish-stop 'failed 'budget-exhausted
-                           (list (list 'observed-state 'step-budget-exhausted))))
+                           (list (list 'observed-state
+                             'step-budget-exhausted))))
              ((null? provider-rest)
               (finish-pause 'blocked 'insufficient-evidence
                             (list (list 'observed-state 'no-proposal))))
@@ -465,7 +478,8 @@
       #((parameters
          (datum . "Value to inspect."))
         (returns (type boolean)
-         (description ("#t when DATUM is tagged as a `task-run'; otherwise #f.")))
+         (description
+           ("#t when DATUM is tagged as a `task-run'; otherwise #f.")))
         (effects pure))
       (and (pair? datum) (eq? (car datum) 'task-run)))
 
@@ -540,7 +554,8 @@
          (run (type task-run)
           (description "A `task-run' record.")))
         (returns (type (list-of agent-observation))
-         (description ("A list of `agent-observation' datums in execution order.")))
+         (description
+           ("A list of `agent-observation' datums in execution order.")))
         (effects pure))
       (record-field-value run 'observations '()))
 
@@ -550,7 +565,8 @@
          (run (type task-run)
           (description "A `task-run' record.")))
         (returns (type (list-of transcript-event))
-         (description ("A list of `transcript-event' datums in emission order.")))
+         (description
+           ("A list of `transcript-event' datums in emission order.")))
         (effects pure))
       (record-field-value run 'transcript '()))
 

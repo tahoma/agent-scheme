@@ -1,4 +1,4 @@
-;;; consent-helper.el --- Reusable helper artifacts  -*- lexical-binding: t; -*-
+;;; consent-helper.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -6,7 +6,8 @@
 
 ;; The source-loaded `(agent helper)' library owns canonical helper, artifact,
 ;; and skill-candidate datums.  This host adapter keeps session/project
-;; subject mapping, persistence, policy gates, helper evaluation, memory writes,
+;; subject mapping, persistence, policy gates, helper evaluation, memory
+;; writes,
 ;; and tracked project file effects.
 
 ;;; Code:
@@ -358,7 +359,8 @@
 
 (defun consent-helper--maybe-load-file-record
     (scope subject library-name)
-  "Load helper record for SCOPE, SUBJECT, and LIBRARY-NAME from disk if present."
+  "Load helper record for SCOPE, SUBJECT, and LIBRARY-NAME from disk if\
+ present."
   (when-let ((file (consent-helper--storage-file
                     scope library-name subject)))
     (when (file-readable-p file)
@@ -366,7 +368,8 @@
         (unless (consent-helper--record-kind-p
                  record "agent-helper-library")
           (signal 'consent-helper-error
-                  (list (format "helper file does not contain a helper record: %s"
+                  (list (format
+                    "helper file does not contain a helper record: %s"
                                 file))))
         (consent-helper--source-call
          "helper-store-record!"
@@ -553,7 +556,9 @@ HELPER-OR-LIBRARY may be a helper record or a library name."
   (unless (consent-helper--record-kind-p
            candidate "agent-skill-candidate")
     (signal 'consent-helper-error
-            (list "skill candidate export expects an agent-skill-candidate datum")))
+            (list
+              "skill candidate export expects an agent-skill-candidate\
+ datum")))
   (let* ((name (consent-helper-record-field candidate "name"))
          (target-directory
           (file-name-as-directory (expand-file-name export-directory)))

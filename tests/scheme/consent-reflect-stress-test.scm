@@ -322,7 +322,8 @@
                             (any-kind? reflect-matches 'library)
                             (not (null? library-hits))))"
                         '((docstring-retention . full))
-                        "(documented \"Return the needle value for discovery tests.\" found-binding #f #t)"))
+                        "(documented \"Return the needle value for discovery t\
+ests.\" found-binding #f #t)"))
 
 (testing-registry-case
  'reflect-binding-libraries-crosswalk '(portable core)
@@ -356,7 +357,8 @@
                              (define (adhoc-needle x)
                                \"Return X from an ad-hoc library.\"
                                x)))
-                         (import (scheme base) (agent reflect) (adhoc scratch))
+                         (import (scheme base) (agent reflect) (adhoc scratch)\
+)
                          (define (field datum name)
                            (cadr (assq name (cdr datum))))
                          (define (library-present? libraries name)

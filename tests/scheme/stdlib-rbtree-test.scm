@@ -144,7 +144,8 @@
                    (loop (cdr operations)
                          next
                          next-model
-                         (and consistent? (equal? (tree-items next) next-model))
+                         (and consistent? (equal? (tree-items next)
+                           next-model))
                          (cons status statuses)))))
               (call-with-values
                (lambda () (tree-remove-key tree (operation-key operation)))
@@ -154,7 +155,8 @@
                    (loop (cdr operations)
                          next
                          next-model
-                         (and consistent? (equal? (tree-items next) next-model))
+                         (and consistent? (equal? (tree-items next)
+                           next-model))
                          (cons status statuses))))))))))
 
 (define (run-deletion-sequence keys)
@@ -201,7 +203,8 @@
 (testing-registry-case
  'inserts-report-status '(portable stdlib)
 (test-equal 'inserts-report-status
-             '(inserted ((1 . one) (2 . two) (3 . three) (4 . four) (5 . five)))
+             '(inserted ((1 . one) (2 . two) (3 . three) (4 . four) (5 .
+               five)))
              (call-with-values
         (lambda () (tree-insert/update tree 5 'five))
         (lambda (next status)
@@ -244,8 +247,10 @@
                (tree-fold/reverse (lambda (key value acc) 'called) 'seed empty)
                (let ((gen (tree-generator empty)))
                  (eof-object? (gen)))
-               (tree-key-successor integer-comparator empty 1 (lambda () 'none))
-               (tree-key-predecessor integer-comparator empty 1 (lambda () 'none))
+               (tree-key-successor integer-comparator empty 1 (lambda ()
+                 'none))
+               (tree-key-predecessor integer-comparator empty 1 (lambda ()
+                 'none))
                (call-with-values
                 (lambda ()
                   (tree-search integer-comparator
@@ -260,10 +265,12 @@
  'successor-and-predecessor '(portable stdlib)
 (test-equal 'successor-and-predecessor
              '(3 2 none none)
-             (list (tree-key-successor integer-comparator tree 2 (lambda () 'none))
+             (list (tree-key-successor integer-comparator tree 2 (lambda ()
+               'none))
              (tree-key-predecessor integer-comparator tree 3 (lambda () 'none))
              (tree-key-successor integer-comparator tree 4 (lambda () 'none))
-             (tree-key-predecessor integer-comparator tree 1 (lambda () 'none)))))
+             (tree-key-predecessor integer-comparator tree 1 (lambda ()
+               'none)))))
 
 (testing-registry-case
  'successor-and-predecessor-gaps '(portable stdlib)
@@ -272,12 +279,18 @@
              (let ((gap-tree
               (pairs->tree integer-comparator
                            '((1 . one) (3 . three) (5 . five)))))
-         (list (tree-key-successor integer-comparator gap-tree 2 (lambda () 'none))
-               (tree-key-predecessor integer-comparator gap-tree 4 (lambda () 'none))
-               (tree-key-successor integer-comparator gap-tree 0 (lambda () 'none))
-               (tree-key-predecessor integer-comparator gap-tree 6 (lambda () 'none))
-               (tree-key-successor integer-comparator gap-tree 5 (lambda () 'none))
-               (tree-key-predecessor integer-comparator gap-tree 1 (lambda () 'none))))))
+         (list (tree-key-successor integer-comparator gap-tree 2 (lambda ()
+           'none))
+               (tree-key-predecessor integer-comparator gap-tree 4 (lambda ()
+                 'none))
+               (tree-key-successor integer-comparator gap-tree 0 (lambda ()
+                 'none))
+               (tree-key-predecessor integer-comparator gap-tree 6 (lambda ()
+                 'none))
+               (tree-key-successor integer-comparator gap-tree 5 (lambda ()
+                 'none))
+               (tree-key-predecessor integer-comparator gap-tree 1 (lambda ()
+                 'none))))))
 
 (testing-registry-case
  'for-each-visits-in-key-order '(portable stdlib)
@@ -449,7 +462,8 @@
  'operation-sequence-matches-sorted-model '(portable stdlib)
 (test-equal 'operation-sequence-matches-sorted-model
              '(#t
-         (inserted inserted inserted inserted inserted inserted inserted updated
+         (inserted inserted inserted inserted inserted inserted inserted
+           updated
                    two inserted eight one missing inserted)
          ((3 . three) (4 . four) (5 . FIVE) (6 . six)
           (7 . seven) (9 . nine)))

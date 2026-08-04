@@ -1,4 +1,4 @@
-;;; consent-script-test.el --- Executable-script handling tests  -*- lexical-binding: t; -*-
+;;; consent-script-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -35,7 +35,8 @@
 
 (ert-deftest consent-script-test-recognizes-shebang-lines ()
   "Recognize `#!' followed by `/' or whitespace as a shebang."
-  (should (consent-script-shebang-line-p "#!/usr/bin/env consent-scheme --script"))
+  (should (consent-script-shebang-line-p
+    "#!/usr/bin/env consent-scheme --script"))
   (should (consent-script-shebang-line-p "#!/bin/sh\n"))
   (should (consent-script-shebang-line-p "#! /bin/sh\n"))
   (should (consent-script-shebang-line-p "#!\tfoo\n")))
@@ -72,7 +73,7 @@
     (unwind-protect
         (should (equal (consent-value->external
                         (consent-script-run-file path))
-	                       "\"hi world\""))
+                               "\"hi world\""))
       (delete-file path))))
 
 (ert-deftest consent-script-test-run-file-normalizes-command-line ()
@@ -92,7 +93,8 @@
 (ert-deftest consent-script-test-run-file-reports-line-numbers ()
   "Keep datum line numbers aligned with the file despite the stripped shebang."
   (let ((source (consent-script-source-from-file
-                 (consent-script-test--write consent-script-test--sh-polyglot))))
+                 (consent-script-test--write
+                   consent-script-test--sh-polyglot))))
     ;; The polyglot's program form is on line 5 of the original file; the strip
     ;; preserves that by leaving a blank first line in place of the shebang.
     (should (string-prefix-p "\n#|" source))))
@@ -100,11 +102,13 @@
 ;;;; Fail-closed policy posture
 
 (ert-deftest consent-script-test-run-file-fails-closed ()
-  "Deny a confirm-gated action in a script with a Scheme-readable audit record."
+  "Deny a confirm-gated action in a script with a Scheme-readable audit\
+ record."
   (let ((path (consent-script-test--write
                (concat "#!/usr/bin/env consent-scheme --script\n"
                        "(import (scheme base) (scheme file))\n"
-                       "(file-exists? \"fixtures/r7rs/conformance-cases.scm\")\n"))))
+                       "(file-exists?\
+ \"fixtures/r7rs/conformance-cases.scm\")\n"))))
     (unwind-protect
         (progn
           (consent-audit-clear)
@@ -113,8 +117,10 @@
           (should
            (seq-find
             (lambda (entry)
-              (and (string-match-p (regexp-quote "(category standard-host-effect)") entry)
-                   (string-match-p (regexp-quote "(operation \"file-exists?\")") entry)
+              (and (string-match-p (regexp-quote
+                "(category standard-host-effect)") entry)
+                   (string-match-p (regexp-quote
+                     "(operation \"file-exists?\")") entry)
                    (string-match-p (regexp-quote "(decision denied)") entry)))
             (mapcar #'consent-result->external
                     (consent-audit-recent-entries)))))

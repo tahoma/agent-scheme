@@ -1,4 +1,4 @@
-;;; consent-skill.el --- Agent Skills interop helpers  -*- lexical-binding: t; -*-
+;;; consent-skill.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -230,7 +230,8 @@ OPTIONS may include `:name', `:trust', `:trust-scope', and `:context'."
 ;;;###autoload
 (defun consent-skill-script-execution-request
     (directory script-path &optional options)
-  "Authorize bundled SCRIPT-PATH from skill DIRECTORY and return a request datum.
+  "Authorize bundled SCRIPT-PATH from skill DIRECTORY and return a request\
+ datum.
 OPTIONS may include `:skill-name' and `:context'.  This helper does
 not execute the script; it records the policy decision and returns
 the concrete host path for the caller that owns process execution."

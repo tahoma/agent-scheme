@@ -1,4 +1,4 @@
-;;; consent-capability-environment-doc-test.el --- Capability design doc checks  -*- lexical-binding: t; -*-
+;;; consent-capability-environment-doc-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

@@ -15,7 +15,8 @@
         (stdlib testing))
 
 ;; Shared reader behavior runs through consent-fixture-test.scm. This file
-;; keeps portable reader API and bootstrap invariants close to the R7RS library.
+;; keeps portable reader API and bootstrap invariants close to the R7RS
+;; library.
 
 ;; Read SOURCE through the portable reader and compare its external form.
 (define (check-external name source expected)
@@ -113,7 +114,8 @@
               #x20
               (consent-character-code folded))))
 
-;; Character writer fixtures cover named, printable, Unicode, and control forms.
+;; Character writer fixtures cover named, printable, Unicode, and control
+;; forms.
 (define character-writer-cases
   '(("character-writer-space" "#\\space" "#\\space")
     ("character-writer-tab" "#\\tab" "#\\tab")
@@ -518,7 +520,8 @@
              (consent-recovery-step-status datum-step))
   (test-equal 'step-datum-external
              "(a b)"
-             (consent-datum->external (consent-recovery-step-datum datum-step)))
+             (consent-datum->external (consent-recovery-step-datum
+               datum-step)))
   (test-equal 'step-invalid-status
              'invalid
              (consent-recovery-step-status invalid-step))
@@ -589,7 +592,8 @@
 
 ;; Recovery terminates on pathological input instead of looping forever.  A
 ;; long run of closers collapses to one skipped region; a nested run of openers
-;; under the depth limit is a single incomplete prefix; and many malformed lines
+;; under the depth limit is a single incomplete prefix; and many malformed
+;; lines
 ;; each make forward progress instead of wedging the driver.
 (testing-registry-case
  'recover-pathological-closers '(portable core)
@@ -610,7 +614,8 @@
              (consent-recovery-result-status junk-lines))
   (test-equal 'recover-pathological-junk-progress
              #t
-             (= (length (consent-recovery-result-diagnostics junk-lines)) 200))))
+             (= (length (consent-recovery-result-diagnostics junk-lines))
+               200))))
 
 ;; The default raise-on-error path is unchanged for existing callers.
 (testing-registry-case
@@ -629,7 +634,8 @@
 ;;;;
 ;;;; This file is also run self-hosted (consent --host-run on the compiled and
 ;;;; gambit-native hosts), where the consent evaluator interprets these forms.
-;;;; Datum-label structures (`#0=...'/`#0#') are deliberately NOT exercised here:
+;;;; Datum-label structures (`#0=...'/`#0#') are deliberately NOT exercised
+;;;; here:
 ;;;; the self-hosted reader does not reconstruct the shared eq?-identity a
 ;;;; datum-label cycle needs, so neither the canonical writer nor the bounded
 ;;;; renderer can resolve such a cycle self-hosted.  Cycle and shared-structure
@@ -646,39 +652,48 @@
 ;; A length ceiling shows the first L elements then the marker.
 (testing-registry-case
  'bounded-length '(portable core)
-(check-bounded 'bounded-length "(1 2 3 4 5 6 7 8)" '((length . 4)) "(1 2 3 4 ...)"))
+(check-bounded 'bounded-length "(1 2 3 4 5 6 7 8)" '((length . 4))
+  "(1 2 3 4 ...)"))
 ;; A depth ceiling elides the over-deep nesting with the marker.
 (testing-registry-case
  'bounded-depth '(portable core)
-(check-bounded 'bounded-depth "(1 (2 (3 (4 5))))" '((depth . 2)) "(1 (2 ...))"))
+(check-bounded 'bounded-depth "(1 (2 (3 (4 5))))" '((depth . 2))
+  "(1 (2 ...))"))
 ;; Vectors honor the length ceiling too.
 (testing-registry-case
  'bounded-vector '(portable core)
-(check-bounded 'bounded-vector "#(10 20 30 40)" '((length . 2)) "#(10 20 ...)"))
+(check-bounded 'bounded-vector "#(10 20 30 40)" '((length . 2))
+  "#(10 20 ...)"))
 ;; Bytevectors honor the length ceiling.
 (testing-registry-case
  'bounded-bytevector '(portable core)
-(check-bounded 'bounded-bytevector "#u8(1 2 3 4 5)" '((length . 3)) "#u8(1 2 3 ...)"))
+(check-bounded 'bounded-bytevector "#u8(1 2 3 4 5)" '((length . 3))
+  "#u8(1 2 3 ...)"))
 ;; The total-size ceiling is a hard backstop that stops the walk mid-structure.
 (testing-registry-case
  'bounded-size '(portable core)
-(check-bounded 'bounded-size "(100 200 300 400 500)" '((size . 14)) "(100 200 300 ..."))
-;; A long string atom is pre-capped so a huge atom cannot escape the size bound.
+(check-bounded 'bounded-size "(100 200 300 400 500)" '((size . 14))
+  "(100 200 300 ..."))
+;; A long string atom is pre-capped so a huge atom cannot escape the size
+;; bound.
 (testing-registry-case
  'bounded-size-string '(portable core)
 (test-equal 'bounded-size-string
              "..."
-             (consent-datum->external-bounded "abcdefghijklmnop" '((size . 6)))))
+             (consent-datum->external-bounded "abcdefghijklmnop" '((size .
+               6)))))
 ;; Owned character atoms cross the compiled renderer boundary without host
 ;; conversion, just like the unbounded writer.
 (testing-registry-case
  'bounded-character '(portable core)
 (check-bounded 'bounded-character "#\\A" '() "#\\A"))
-;; With no ceilings, bounded output equals the canonical writer for acyclic data.
+;; With no ceilings, bounded output equals the canonical writer for acyclic
+;; data.
 (testing-registry-case
  'bounded-no-limit-matches '(portable core)
 (test-equal 'bounded-no-limit-matches
              (consent-datum->external (consent-read "(1 (2 3) #(4 5) \"s\")"))
-             (consent-datum->external-bounded (consent-read "(1 (2 3) #(4 5) \"s\")") '())))
+             (consent-datum->external-bounded (consent-read
+               "(1 (2 3) #(4 5) \"s\")") '())))
 
 (testing-runner-main "Consent Reader portable tests" (command-line))

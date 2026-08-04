@@ -1,4 +1,4 @@
-;;; consent-script.el --- Executable Consent Scheme script handling  -*- lexical-binding: t; -*-
+;;; consent-script.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -18,7 +18,7 @@
 ;; every other `#!'-token keep their reader-token meaning everywhere else.
 ;;
 ;; `consent-script-run-file' is the Emacs batch equivalent of the runtime's
-;; `--script FILE'.  It evaluates the script through `consent-eval-source', so a
+;; `--script FILE'. It evaluates the script through `consent-eval-source', so a
 ;; script inherits the noninteractive fail-closed policy posture: confirm-gated
 ;; actions are denied unless covered by an explicit grant, a policy file, or a
 ;; preloaded approval, and no raw host objects are exposed to script values.
@@ -49,7 +49,8 @@ character such as in `#!fold-case', is not a shebang."
 (defun consent-script-strip-shebang (source)
   "Return SOURCE with a leading executable-script shebang line removed.
 When SOURCE begins with a shebang (see `consent-script-shebang-line-p'), the
-shebang text is consumed up to but not including its terminating newline, so the
+shebang text is consumed up to but not including its terminating newline, so\
+ the
 remaining source keeps that newline as a blank first line and every later datum
 keeps its original line number.  A shebang with no trailing newline yields the
 empty string.  SOURCE without a shebang is returned unchanged, leaving

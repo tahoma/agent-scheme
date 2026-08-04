@@ -112,7 +112,8 @@
          ((or (string=? (car rest) "--select")
               (string=? (car rest) "--report")
               (string=? (car rest) "--rerun-failed"))
-          (if (null? (cdr rest)) (error "missing test runner option value" (car rest)))
+          (if (null? (cdr rest)) (error "missing test runner option value" (car
+            rest)))
           (cond
            ((string=? (car rest) "--select")
             (loop (cddr rest) (testing-runner-read (cadr rest))
@@ -174,7 +175,8 @@
              (let loop ((rest testing-registry-cases) (result '()))
                (cond
                 ((null? rest) (reverse result))
-                ((selector (car rest)) (loop (cdr rest) (cons (car rest) result)))
+                ((selector (car rest)) (loop (cdr rest) (cons (car rest)
+                  result)))
                 (else (loop (cdr rest) result))))))
         (write
          (list 'testing-runner-list
@@ -307,7 +309,8 @@
     (define (testing-runner-plan-main arguments)
       "Resolve a Scheme test plan and write selected program paths."
       #((parameters
-         (arguments (type list) (description "Command line including program.")))
+         (arguments (type list) (description
+           "Command line including program.")))
         (returns (type unspecified) (description "Unspecified value."))
         (effects environment-read file-read port-io error))
       (guard (condition
@@ -343,12 +346,14 @@
       "Run SUITE from command-line ARGUMENTS and complete with batch status."
       #((parameters
          (suite (type object) (description "Suite name."))
-         (arguments (type list) (description "Command line including program.")))
+         (arguments (type list) (description
+           "Command line including program.")))
         (returns (type unspecified)
          (description
           ("Does not return during ordinary process execution; returns"
             "zero inside a compiled host-run interaction.")))
-        (effects process-exit state-read state-write file-read file-write port-io error))
+        (effects process-exit state-read state-write file-read file-write
+          port-io error))
       (let ((status
              (guard (condition
                      (else

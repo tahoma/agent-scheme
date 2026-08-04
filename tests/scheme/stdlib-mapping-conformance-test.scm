@@ -6,7 +6,8 @@
 ;;; Adapted from the upstream SRFI 146 `srfi/146/test.sld` tests at
 ;;; https://github.com/scheme-requests-for-implementation/srfi-146.
 ;;; The original tests use SRFI 64; this file keeps the ordered-mapping
-;;; assertions in a portable harness so direct Consent Scheme hosts can exercise
+;;; assertions in a portable harness so direct Consent Scheme hosts can
+;;; exercise
 ;;; the adapted `(stdlib mapping)' library broadly.
 
 (import (scheme base)
@@ -72,7 +73,8 @@
   (test-assert 'predicate-contains (mapping-contains? mapping1 'b))
   (test-assert 'predicate-missing (not (mapping-contains? mapping1 'z)))
   (test-assert 'predicate-disjoint (mapping-disjoint? mapping1 mapping3))
-  (test-assert 'predicate-not-disjoint (not (mapping-disjoint? mapping1 mapping2)))))
+  (test-assert 'predicate-not-disjoint (not (mapping-disjoint? mapping1
+    mapping2)))))
 
 (testing-registry-case
  'ref-found '(portable stdlib)
@@ -85,10 +87,12 @@
              (raises? (lambda () (mapping-ref mapping1 'd))))
   (test-equal 'ref-success
              4
-             (mapping-ref mapping1 'b (lambda () #f) (lambda (value) (* value value))))
+             (mapping-ref mapping1 'b (lambda () #f) (lambda (value) (* value
+               value))))
   (test-equal 'ref/default-found 3 (mapping-ref/default mapping1 'c 42))
   (test-equal 'ref/default-missing 42 (mapping-ref/default mapping1 'd 42))
-  (test-equal 'key-comparator default-comparator (mapping-key-comparator mapping1))))
+  (test-equal 'key-comparator default-comparator (mapping-key-comparator
+    mapping1))))
 
 (testing-registry-case
  'adjoin-existing '(portable stdlib)
@@ -112,11 +116,13 @@
   (test-equal 'replace-missing
              #f
              (mapping-ref/default (mapping-replace mapping1 'd 4) 'd #f))
-  (test-equal 'replace-present 6 (mapping-ref (mapping-replace mapping1 'c 6) 'c))
+  (test-equal 'replace-present 6 (mapping-ref (mapping-replace mapping1 'c 6)
+    'c))
   (test-equal 'replace!-alias
              '((a . 1) (b . 2) (c . 6))
              (mapping->alist (mapping-replace! mapping1 'c 6)))
-  (test-equal 'delete 42 (mapping-ref/default (mapping-delete mapping1 'b) 'b 42))
+  (test-equal 'delete 42 (mapping-ref/default (mapping-delete mapping1 'b) 'b
+    42))
   (test-equal 'delete!-alias
              '((b . 2))
              (mapping->alist (mapping-delete! mapping1 'a 'c)))
@@ -155,10 +161,12 @@
                       'd))
   (test-equal 'update-missing-without-failure-raises
              #t
-             (raises? (lambda () (mapping-update mapping1 'd (lambda (value) value)))))
+             (raises? (lambda () (mapping-update mapping1 'd (lambda (value)
+               value)))))
   (test-equal 'update!-alias
              3
-             (mapping-ref (mapping-update! mapping1 'b (lambda (value) (+ value 1)))
+             (mapping-ref (mapping-update! mapping1 'b (lambda (value) (+ value
+               1)))
                       'b))
   (test-equal 'update/default 16 (mapping-ref mapping4 'd))
   (test-equal 'update!/default-alias
@@ -256,7 +264,8 @@
                                (lambda (seed) (+ seed 1))
                                1
                                integer-comparator)))
-  (test-equal 'mapping-unfold '((1 . 1) (2 . 4) (3 . 9)) (mapping->alist unfolded))
+  (test-equal 'mapping-unfold '((1 . 1) (2 . 4) (3 . 9)) (mapping->alist
+    unfolded))
   (test-equal 'mapping/ordered
              '((1 . one) (2 . two) (3 . three))
              (mapping->alist ordered))
@@ -279,7 +288,8 @@
             (mapping-find (lambda (key value)
                             (and (eq? key 'b) (= value 2)))
                           mapping1
-                          (lambda () (error "should not have been invoked"))))))
+                          (lambda () (error
+                            "should not have been invoked"))))))
   (test-equal 'find-missing
              '(42)
              (values-list
@@ -287,7 +297,8 @@
             (mapping-find (lambda (key value) (eq? key 'd))
                           mapping1
                           (lambda () 42)))))
-  (test-equal 'count 2 (mapping-count (lambda (key value) (>= value 2)) mapping1))
+  (test-equal 'count 2 (mapping-count (lambda (key value) (>= value 2))
+    mapping1))
   (test-assert 'any-present
              (mapping-any? (lambda (key value) (= value 3)) mapping1))
   (test-assert 'any-missing
@@ -460,7 +471,8 @@
              (mapping-ref (mapping-intersection mapping1 mapping4) 'c))
   (test-equal 'intersection-removed
              42
-             (mapping-ref/default (mapping-intersection mapping1 mapping5) 'b 42))
+             (mapping-ref/default (mapping-intersection mapping1 mapping5) 'b
+               42))
   (test-equal 'intersection!-alias
              '((a . 1) (c . 3))
              (mapping->alist (mapping-intersection! mapping1 mapping5)))
@@ -494,10 +506,12 @@
              (map mapping-max-key (list mapping1 mapping2 mapping3 mapping4)))
   (test-equal 'min-value
              '(1 1 1 1)
-             (map mapping-min-value (list mapping1 mapping2 mapping3 mapping4)))
+             (map mapping-min-value (list mapping1 mapping2 mapping3
+               mapping4)))
   (test-equal 'max-value
              '(3 4 5 6)
-             (map mapping-max-value (list mapping1 mapping2 mapping3 mapping4)))
+             (map mapping-max-value (list mapping1 mapping2 mapping3
+               mapping4)))
   (test-assert 'min-key-empty-raises
              (raises? (lambda () (mapping-min-key mapping0))))
   (test-assert 'max-key-empty-raises
@@ -522,17 +536,21 @@
   (test-equal 'key-successor-edge
              'none
              (mapping-key-successor mapping4 'f (lambda () 'none)))
-  (test-equal 'range=present '(4) (mapping-values (mapping-range= mapping4 'd)))
+  (test-equal 'range=present '(4) (mapping-values (mapping-range= mapping4
+    'd)))
   (test-equal 'range=absent '() (mapping-values (mapping-range= mapping4 'z)))
   (test-equal 'range< '(1 2 3) (mapping-values (mapping-range< mapping4 'd)))
-  (test-equal 'range<= '(1 2 3 4) (mapping-values (mapping-range<= mapping4 'd)))
+  (test-equal 'range<= '(1 2 3 4) (mapping-values (mapping-range<= mapping4
+    'd)))
   (test-equal 'range> '(5 6) (mapping-values (mapping-range> mapping4 'd)))
   (test-equal 'range>= '(4 5 6) (mapping-values (mapping-range>= mapping4 'd)))
   (test-equal 'range=! '(4) (mapping-values (mapping-range=! mapping4 'd)))
   (test-equal 'range<! '(1 2 3) (mapping-values (mapping-range<! mapping4 'd)))
-  (test-equal 'range<=! '(1 2 3 4) (mapping-values (mapping-range<=! mapping4 'd)))
+  (test-equal 'range<=! '(1 2 3 4) (mapping-values (mapping-range<=! mapping4
+    'd)))
   (test-equal 'range>! '(5 6) (mapping-values (mapping-range>! mapping4 'd)))
-  (test-equal 'range>=! '(4 5 6) (mapping-values (mapping-range>=! mapping4 'd)))
+  (test-equal 'range>=! '(4 5 6) (mapping-values (mapping-range>=! mapping4
+    'd)))
   (test-equal 'split
              '((1 2 3) (1 2 3 4) (4) (4 5 6) (5 6))
              (call-with-values
@@ -641,7 +659,8 @@
                (mapping->alist (mapping-range>= mapping2 3))))
   (test-equal 'set-operations-and-delete
              '(missing ((2 . TWO) (4 . four)) ((1 . one) (3 . three)))
-             (let ((overlap (mapping integer-comparator 2 'TWO 4 'four 9 'nine)))
+             (let ((overlap (mapping integer-comparator 2 'TWO 4 'four 9
+               'nine)))
            (list (mapping-ref/default without-one 1 'missing)
                  (mapping->alist (mapping-intersection mapping2 overlap))
                  (mapping->alist (mapping-difference mapping2 overlap)))))))
@@ -725,4 +744,5 @@
                (mapping-catenate integer-comparator
                                   avl-left 3 30 red-black-right)))))
 
-(testing-runner-main "Stdlib Mapping Conformance portable tests" (command-line))
+(testing-runner-main "Stdlib Mapping Conformance portable tests"
+  (command-line))

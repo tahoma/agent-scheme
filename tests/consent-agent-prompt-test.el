@@ -1,10 +1,11 @@
-;;; consent-agent-prompt-test.el --- REPL agent-harness verb tests  -*- lexical-binding: t; -*-
+;;; consent-agent-prompt-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
-;; Focused coverage for the host-neutral `(agent prompt)' REPL harness evaluated
+;; Focused coverage for the host-neutral `(agent prompt)' REPL harness
+;; evaluated
 ;; through the Emacs Consent interpreter.  The same Scheme source backs the
 ;; portable host shards (tests/scheme/consent-agent-prompt-test.scm), so these
 ;; expectations are the Emacs half of the cross-host parity check for the
@@ -89,7 +90,8 @@
             (cadr (assq 'reason (cdr (prompt-result-receipt result))))
             (map (lambda (entry) (cadr (assq 'kind (cdr entry))))
                  (prompt-result-audit result)))")
-    "(authority-missing #f failed-closed none prompt-error authority-missing (authority-denied))")))
+    "(authority-missing #f failed-closed none prompt-error authority-missing\
+ (authority-denied))")))
 
 (ert-deftest consent-agent-prompt-test-noninteractive-authority-bundle ()
   "A noninteractive prompt dispatch requires explicit preloaded authority."
@@ -120,9 +122,11 @@
                  audit)
             (cadr (assq 'origin (cdr authority-audit)))
             (cadr (assq 'source (cdr authority-audit))))")
-    "(#t selected complete (authority-granted agent-selected model-route) noninteractive grant)")))
+    "(#t selected complete (authority-granted agent-selected model-route)\
+ noninteractive grant)")))
 
-(ert-deftest consent-agent-prompt-test-noninteractive-authority-denies-ambient ()
+(ert-deftest consent-agent-prompt-test-noninteractive-authority-denies-ambient
+  ()
   "A noninteractive prompt without preloaded authority fails closed."
   (should
    (equal
@@ -143,7 +147,8 @@
                  audit)
             (cadr (assq 'origin (cdr authority-audit)))
             (cadr (assq 'source (cdr authority-audit))))")
-    "(authority-missing noninteractive-authority-unavailable (authority-denied) noninteractive none)")))
+    "(authority-missing noninteractive-authority-unavailable\
+ (authority-denied) noninteractive none)")))
 
 (ert-deftest consent-agent-prompt-test-fails-closed-without-session ()
   "Without a current session the harness fails closed before dispatch."
@@ -182,7 +187,8 @@
     (consent-agent-prompt-test--external
      "(import (scheme base) (agent prompt))
       (define registry (make-agent-registry))
-      (register-agent registry (make-agent 'coder-1 '((role coder) (model portable-coder))))
+      (register-agent registry (make-agent 'coder-1 '((role coder) (model\
+ portable-coder))))
       (define harness (make-prompt-harness (list (list 'registry registry))))
       (define result (prompt-model harness 'portable-coder 'build-it))
       (list (prompt-result-status result)
@@ -219,7 +225,8 @@
       (define registry (make-agent-registry))
       (register-agent registry
                       (make-agent 'budgeted
-                                  '((role coder) (budget (budget (max-steps 3))))))
+                                  '((role coder) (budget (budget (max-steps\
+ 3))))))
       (set-default-agent! registry 'budgeted)
       (define harness (make-prompt-harness (list (list 'registry registry))))
       (list (task-field-value (prompt-result-budget (prompt harness 'go))
@@ -236,8 +243,10 @@
     (consent-agent-prompt-test--external
      "(import (scheme base) (agent prompt))
       (define registry (make-agent-registry))
-      (register-agent registry (make-agent 'coder-1 '((role coder) (model m1))))
-      (register-agent registry (make-agent 'reviewer-1 '((role reviewer) (model m1))))
+      (register-agent registry (make-agent 'coder-1 '((role coder) (model\
+ m1))))
+      (register-agent registry (make-agent 'reviewer-1 '((role reviewer)\
+ (model m1))))
       (define harness (make-prompt-harness (list (list 'registry registry))))
       (list (map agent-id (agents harness))
             (roles harness)

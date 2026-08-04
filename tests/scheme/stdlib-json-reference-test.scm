@@ -271,112 +271,228 @@
 (define invalid-exclusions
   '(
     ("n_array_a_invalid_utf8.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_array_comma_after_close.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
-    ("n_array_extra_close.json" . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
+    ("n_array_extra_close.json" .
+      "SRFI 180 json-read consumes one top-level value; this fixture tests tra\
+iling text.")
     ("n_array_invalid_utf8.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_number_invalid-utf-8-in-bigger-int.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_number_invalid-utf-8-in-exponent.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_number_invalid-utf-8-in-int.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_number_real_with_invalid_utf8_after_e.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_object_lone_continuation_byte_in_key_and_trailing_comma.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_object_trailing_comment.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_object_trailing_comment_open.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_object_trailing_comment_slash_open.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_object_trailing_comment_slash_open_incomplete.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_object_with_trailing_garbage.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_string_invalid-utf-8-in-escape.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_string_invalid_utf8_after_escape.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_string_with_trailing_garbage.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_structure_array_trailing_garbage.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_structure_array_with_extra_array_close.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_structure_close_unopened_array.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_structure_double_array.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_structure_incomplete_UTF8_BOM.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_structure_lone-invalid-utf-8.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_structure_number_with_trailing_garbage.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_structure_object_followed_by_closing_object.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_structure_object_with_trailing_garbage.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_structure_open_array_object.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")
     ("n_structure_single_eacute.json"
-     . "Fixture depends on byte decoding before JSON parsing; this corpus uses textual ports.")
+     .
+       "Fixture depends on byte decoding before JSON parsing; this corpus uses \
+textual ports.")
     ("n_structure_trailing_#.json"
-     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")))
+     .
+       "SRFI 180 json-read consumes one top-level value; this fixture tests tr\
+ailing text.")))
 
 ;; Upstream implementation-defined fixtures and their portable classification.
 (define implementation-classifications
   '(
-    ("i_number_double_huge_neg_exp.json" . "Numeric overflow, underflow, or precision is implementation-defined.")
-    ("i_number_huge_exp.json" . "Numeric overflow, underflow, or precision is implementation-defined.")
-    ("i_number_neg_int_huge_exp.json" . "Numeric overflow, underflow, or precision is implementation-defined.")
-    ("i_number_pos_double_huge_exp.json" . "Numeric overflow, underflow, or precision is implementation-defined.")
-    ("i_number_real_neg_overflow.json" . "Numeric overflow, underflow, or precision is implementation-defined.")
-    ("i_number_real_pos_overflow.json" . "Numeric overflow, underflow, or precision is implementation-defined.")
-    ("i_number_real_underflow.json" . "Numeric overflow, underflow, or precision is implementation-defined.")
-    ("i_number_too_big_neg_int.json" . "Numeric overflow, underflow, or precision is implementation-defined.")
-    ("i_number_too_big_pos_int.json" . "Numeric overflow, underflow, or precision is implementation-defined.")
-    ("i_number_very_big_negative_int.json" . "Numeric overflow, underflow, or precision is implementation-defined.")
-    ("i_object_key_lone_2nd_surrogate.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+    ("i_number_double_huge_neg_exp.json" .
+      "Numeric overflow, underflow, or precision is implementation-defined.")
+    ("i_number_huge_exp.json" .
+      "Numeric overflow, underflow, or precision is implementation-defined.")
+    ("i_number_neg_int_huge_exp.json" .
+      "Numeric overflow, underflow, or precision is implementation-defined.")
+    ("i_number_pos_double_huge_exp.json" .
+      "Numeric overflow, underflow, or precision is implementation-defined.")
+    ("i_number_real_neg_overflow.json" .
+      "Numeric overflow, underflow, or precision is implementation-defined.")
+    ("i_number_real_pos_overflow.json" .
+      "Numeric overflow, underflow, or precision is implementation-defined.")
+    ("i_number_real_underflow.json" .
+      "Numeric overflow, underflow, or precision is implementation-defined.")
+    ("i_number_too_big_neg_int.json" .
+      "Numeric overflow, underflow, or precision is implementation-defined.")
+    ("i_number_too_big_pos_int.json" .
+      "Numeric overflow, underflow, or precision is implementation-defined.")
+    ("i_number_very_big_negative_int.json" .
+      "Numeric overflow, underflow, or precision is implementation-defined.")
+    ("i_object_key_lone_2nd_surrogate.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
     ("i_string_1st_surrogate_but_2nd_missing.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
     ("i_string_1st_valid_surrogate_2nd_invalid.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_UTF-16LE_with_BOM.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_UTF-8_invalid_sequence.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_UTF8_surrogate_U+D800.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
+    ("i_string_UTF-16LE_with_BOM.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
+    ("i_string_UTF-8_invalid_sequence.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
+    ("i_string_UTF8_surrogate_U+D800.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
     ("i_string_incomplete_surrogate_and_escape_valid.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
     ("i_string_incomplete_surrogate_pair.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
     ("i_string_incomplete_surrogates_escape_valid.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
     ("i_string_invalid_lonely_surrogate.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_invalid_surrogate.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_invalid_utf-8.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
+    ("i_string_invalid_surrogate.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
+    ("i_string_invalid_utf-8.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
     ("i_string_inverted_surrogates_U+1D11E.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_iso_latin_1.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_lone_second_surrogate.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
+    ("i_string_iso_latin_1.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
+    ("i_string_lone_second_surrogate.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
     ("i_string_lone_utf8_continuation_byte.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_not_in_unicode_range.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
+    ("i_string_not_in_unicode_range.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
     ("i_string_overlong_sequence_2_bytes.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
     ("i_string_overlong_sequence_6_bytes.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
     ("i_string_overlong_sequence_6_bytes_null.json"
-     . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_truncated-utf-8.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_utf16BE_no_BOM.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_string_utf16LE_no_BOM.json" . "Unicode surrogate and byte-decoding behavior is implementation-defined.")
-    ("i_structure_500_nested_arrays.json" . "Deep nesting is covered by the explicit json-nesting-depth-limit test.")
-    ("i_structure_UTF-8_BOM_empty_object.json" . "UTF-8 BOM handling is implementation-defined for textual ports.")))
+     .
+       "Unicode surrogate and byte-decoding behavior is implementation-defined\
+.")
+    ("i_string_truncated-utf-8.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
+    ("i_string_utf16BE_no_BOM.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
+    ("i_string_utf16LE_no_BOM.json" .
+      "Unicode surrogate and byte-decoding behavior is implementation-defined.\
+")
+    ("i_structure_500_nested_arrays.json" .
+      "Deep nesting is covered by the explicit json-nesting-depth-limit test.")
+    ("i_structure_UTF-8_BOM_empty_object.json" .
+      "UTF-8 BOM handling is implementation-defined for textual ports.")))
 
 (define (classified-names classifications)
   "Return the fixture names in CLASSIFICATIONS."

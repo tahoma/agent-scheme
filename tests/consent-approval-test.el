@@ -1,4 +1,4 @@
-;;; consent-approval-test.el --- Approval library tests  -*- lexical-binding: t; -*-
+;;; consent-approval-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

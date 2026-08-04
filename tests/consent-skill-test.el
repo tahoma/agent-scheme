@@ -1,4 +1,4 @@
-;;; consent-skill-test.el --- Agent Skills helper tests  -*- lexical-binding: t; -*-
+;;; consent-skill-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -68,9 +68,13 @@
       (insert "---\n")
       (insert "name: grant-skill\n")
       (insert "description: Grant requesting skill\n")
-      (insert "requested-grants: ((capability-grant (library (emacs buffer edit)) (effect buffer-replace!) (scope (skill grant-skill) (range 1 2)) (expires after-eval)))\n")
+      (insert
+        "requested-grants: ((capability-grant (library (emacs buffer edit))\
+ (effect buffer-replace!) (scope (skill grant-skill) (range 1 2)) (expires\
+ after-eval)))\n")
       (insert "---\n")
-      (insert "# Grant Skill\n\nUse this skill for grant declaration tests.\n"))
+      (insert
+        "# Grant Skill\n\nUse this skill for grant declaration tests.\n"))
     directory))
 
 (defmacro consent-skill-test--with-temp-skill (directory-var &rest body)
@@ -101,7 +105,8 @@
         (should (string-match-p "(name \"example-skill\")" external))
         (should (string-match-p "(trust project-approved)" external))
         (should (string-match-p
-                 (regexp-quote "(instructions (markdown-resource \"SKILL.md\"))")
+                 (regexp-quote
+                   "(instructions (markdown-resource \"SKILL.md\"))")
                  external))
         (should
          (consent-skill-test--audit-entry-matching
@@ -124,7 +129,8 @@
                   (consent-skill-import directory))))
             (should (string-match-p "(agent-skill" external))
             (should (string-match-p "(name \"grant-skill\")" external))
-            (should (string-match-p "(requested-grants ((capability-grant" external))
+            (should (string-match-p "(requested-grants ((capability-grant"
+              external))
             (should (string-match-p "(scope (skill grant-skill) (range 1 2))"
                                     external))
             (should

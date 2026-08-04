@@ -1,4 +1,4 @@
-;;; consent-repl-chrome.el --- Shared REPL chrome model realized as Emacs faces  -*- lexical-binding: t; -*-
+;;; consent-repl-chrome.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -9,7 +9,8 @@
 ;; `(cli repl-chrome)' library (scheme/cli/repl-chrome.sld): it ships the same
 ;; named chromes and the same record-to-role mapping over the cross-host REPL
 ;; interaction contract record vocabulary (docs/repl-interaction-contract.md),
-;; and realizes the shared **semantic roles** as Emacs faces instead of ANSI SGR.
+;; and realizes the shared **semantic roles** as Emacs faces instead of ANSI
+;; SGR.
 ;;
 ;; Chrome is host-specific *presentation* under the #390 contract: the raw
 ;; record stream emitted by `consent-repl-stream' is the canonical,
@@ -19,8 +20,10 @@
 ;; *roles* while each host realizes those roles on its own substrate.
 ;;
 ;; A chrome is a pure function `(render RECORD) -> nil | STRING | SEGMENTS'.
-;; `nil' suppresses the record; a string is emitted verbatim and never faced (so
-;; the `datum' chrome reproduces the raw record stream regardless of styling); a
+;; `nil' suppresses the record; a string is emitted verbatim and never faced
+;; (so
+;; the `datum' chrome reproduces the raw record stream regardless of styling);
+;; a
 ;; list of `(ROLE . TEXT)' segments expresses styling as named semantic roles
 ;; (`furniture', `prompt-session', `prompt-ordinal', `prompt-nesting',
 ;; `result-marker', `result-value', `error-marker', `error-text',
@@ -29,16 +32,21 @@
 ;; `consent-repl-chrome-paint' realizes a chrome result as a propertized
 ;; string, mapping each faced role to a face.
 ;;
-;; Program output is not a record: it rides its own stream, and its presentation
-;; follows a per-chrome policy carried by `consent-repl-chrome-output-formatter'.
-;; The replayable `comment' chrome OWNS program output, rendering each chunk as a
-;; commented (`;;   :: ') line for the control channel where the records live, so
-;; a captured transcript replays it; every other chrome's formatter returns nil,
+;; Program output is not a record: it rides its own stream, and its
+;; presentation
+;; follows a per-chrome policy carried by
+;; `consent-repl-chrome-output-formatter'.
+;; The replayable `comment' chrome OWNS program output, rendering each chunk as
+;; a
+;; commented (`;; :: ') line for the control channel where the records live, so
+;; a captured transcript replays it; every other chrome's formatter returns
+;; nil,
 ;; leaving program output raw on its own stream.
 ;;
 ;; The built-in chromes are ordinary registered procedures over records, not
 ;; special-cased branches, so a future custom chrome (#426) is the same kind of
-;; value.  The `datum' chrome reproduces the raw record stream one datum per line
+;; value. The `datum' chrome reproduces the raw record stream one datum per
+;; line
 ;; and is always reachable, so the canonical surface is never suppressed by the
 ;; active chrome.
 
@@ -125,7 +133,8 @@ them uncolored."
 ;;;; Record field access (the records are the shared cross-host vocabulary)
 
 (defun consent-repl-chrome--kind (record)
-  "Return RECORD's leading tag name string, or nil when RECORD is not a record."
+  "Return RECORD's leading tag name string, or nil when RECORD is not a\
+ record."
   (and (consp record)
        (consent-symbol-p (car record))
        (consent-symbol-name (car record))))
@@ -181,10 +190,13 @@ them uncolored."
 ;;;; Input-echo signal: does the host already echo interaction input?
 
 ;; The portable terminal twin (`cli-repl-chrome-input-echoed?' in
-;; scheme/cli/repl-chrome.sld) carries this signal so the `comment' chrome keeps
-;; exactly one replayable copy of each submission: an interactive TTY echoes the
-;; typed form in cooked mode, so the chrome must suppress its own echo there and
-;; keep echoing when input is piped or redirected.  This dynamic variable is the
+;; scheme/cli/repl-chrome.sld) carries this signal so the `comment' chrome
+;; keeps
+;; exactly one replayable copy of each submission: an interactive TTY echoes
+;; the
+;; typed form in cooked mode, so the chrome must suppress its own echo there
+;; and
+;; keep echoing when input is piped or redirected. This dynamic variable is the
 ;; Emacs twin of that parameter.  Both Emacs entries leave it nil: the batch
 ;; entry (`consent-repl-stream-main') reads piped stdin with no terminal echo,
 ;; and the interactive command renders submitted source into a buffer rather
@@ -198,7 +210,8 @@ captured transcript holds exactly one replayable copy of each form.")
 
 ;;;; Per-turn ordinal for program-output alignment
 
-;; Program output is drained inside the loop, where the active form's ordinal is
+;; Program output is drained inside the loop, where the active form's ordinal
+;; is
 ;; known, but it reaches the chrome's output formatter outside that scope.  The
 ;; host driver binds this around each drain so the `comment' chrome aligns its
 ;; `;;   :: ' output gutter to the same column as that turn's result marker.
@@ -209,7 +222,8 @@ captured transcript holds exactly one replayable copy of each form.")
 ;;;; Comment-chrome alignment
 
 ;; The `comment' chrome right-aligns its result/condition/output/exit markers
-;; and pads its continuation dots to the ready-prompt gutter, so a turn's echoed
+;; and pads its continuation dots to the ready-prompt gutter, so a turn's
+;; echoed
 ;; form, printed output, and value all begin in the same column.  Both widths
 ;; derive from the prompt body -- the `<ordinal>' (lone default session) or
 ;; `<session>:<ordinal>' (named session) between the `#| ' and ` |#' furniture.
@@ -228,7 +242,8 @@ under the first line."
 MARKER (such as `=> ') ends in the column after SESSION/ORDINAL's ready-prompt
 gutter width, so the text after it starts under the echoed form; at least one
 space follows `;;'."
-  (let* ((gutter (+ 7 (consent-repl-chrome--comment-body-width session ordinal)))
+  (let* ((gutter (+ 7 (consent-repl-chrome--comment-body-width session
+    ordinal)))
          (pad (- gutter 2 (length marker))))
     (concat ";;" (make-string (max 1 pad) ?\s))))
 
@@ -240,9 +255,11 @@ The prompt is block-comment furniture; a complete submission is echoed as bare
 source; and each result, condition, exit, and line of program output is its own
 `;;' line comment whose marker right-aligns so the value, text, or printed
 output starts in the same column as the echoed form.  The whole transcript --
-program output included -- is therefore valid Consent Scheme that replays to the
+program output included -- is therefore valid Consent Scheme that replays to\
+ the
 same forms (program output is reformatted by
-`consent-repl-chrome-output-formatter', not rendered here).  The submission echo
+`consent-repl-chrome-output-formatter', not rendered here).  The submission\
+ echo
 is suppressed when `consent-repl-chrome-input-echoed' is non-nil (the host
 already echoes the typed form), so a captured transcript holds exactly one
 replayable copy of each form in both the piped and the interactive case."
@@ -275,8 +292,9 @@ replayable copy of each form in both the piped and the interactive case."
                  (consent-repl-chrome--furniture " |# "))))))
      ((equal kind "repl-submission")
       ;; Echo a whole form as bare code so it replays; leave an incomplete
-      ;; (EOF-truncated) submission unechoed so the stream stays balanced.  When
-      ;; the host already echoes interaction input (an interactive TTY in cooked
+      ;; (EOF-truncated) submission unechoed so the stream stays balanced. When
+      ;; the host already echoes interaction input (an interactive TTY in
+      ;; cooked
       ;; mode), suppress this echo too: the terminal's own echo is the single
       ;; replayable copy, and a second copy would replay the form twice.
       (if (and (consent-repl-chrome--field-true-p record "complete")
@@ -338,7 +356,8 @@ exactly one line and a line lacking a trailing newline still renders."
 (defun consent-repl-chrome--comment-output (text session ordinal)
   "Render program-output TEXT as `;;   :: ' comment-line segments.
 Each output line becomes one newline-terminated comment aligned to SESSION/
-ORDINAL's gutter, so the comment closes before the following result line.  Empty
+ORDINAL's gutter, so the comment closes before the following result line. \
+ Empty
 TEXT yields no segments."
   (let ((pad (consent-repl-chrome--comment-marker-pad session ordinal ":: "))
         (segments nil))
@@ -382,7 +401,8 @@ raw record stream regardless of styling."
 (defun consent-repl-chrome--classic (record)
   "Render RECORD under the `classic' chrome: a familiar terminal-REPL look.
 A `> ' prompt, a `. ' continuation gutter, the whole form echoed as bare source
-\(TTY-gated like the `comment' chrome), and single-column `= '/`! '/`_ ' markers
+\(TTY-gated like the `comment' chrome), and single-column `= '/`! '/`_ '\
+ markers
 on the value, condition, and exit lines.  Unlike `comment', `classic' makes no
 replay claim -- its bare marked lines are not Scheme -- so program output stays
 raw and interleaved, exactly as a real REPL shows it; the markers earn their
@@ -400,7 +420,8 @@ colorless capture."
         (list (consent-repl-chrome--furniture "> "))))
      ((equal kind "repl-submission")
       ;; Echo the whole form as bare source after `> ', so a piped or captured
-      ;; session shows the forms; suppress it when the host already echoes input
+      ;; session shows the forms; suppress it when the host already echoes
+      ;; input
       ;; (#447), so a live TTY does not double-echo.
       (if (and (consent-repl-chrome--field-true-p record "complete")
                (not consent-repl-chrome-input-echoed))
@@ -450,7 +471,8 @@ prompts, submissions, and the exit record suppressed."
 ;;;; The `silent' chrome: suppress every interaction record
 
 (defun consent-repl-chrome--silent (record)
-  "Render RECORD under the `silent' chrome: emit nothing for any record, so only
+  "Render RECORD under the `silent' chrome: emit nothing for any record, so\
+ only
 program output reaches the user."
   (and record nil))
 
@@ -468,7 +490,8 @@ program output reaches the user."
   "Alist mapping chrome name symbols to their render procedures.")
 
 (defun consent-repl-chrome-lookup (name)
-  "Return the chrome procedure registered under NAME (a symbol or string), or nil."
+  "Return the chrome procedure registered under NAME (a symbol or string),\
+ or nil."
   (let* ((symbol (if (stringp name) (intern name) name))
          (entry (assq symbol consent-repl-chrome--registry)))
     (and entry (cdr entry))))
@@ -478,7 +501,8 @@ program output reaches the user."
   (mapcar #'car consent-repl-chrome--registry))
 
 (defun consent-repl-chrome-default-name ()
-  "Return the default chrome name, consistent with the portable terminal default."
+  "Return the default chrome name, consistent with the portable terminal\
+ default."
   'comment)
 
 ;;;; Painter: realize a chrome result as a propertized string
@@ -494,7 +518,8 @@ Apply ROLE's face when APPLY-FACES is non-nil; otherwise return plain text."
       text)))
 
 (defun consent-repl-chrome-paint (result &optional apply-faces)
-  "Realize a chrome RESULT as a string, or nil when RESULT suppresses the record.
+  "Realize a chrome RESULT as a string, or nil when RESULT suppresses the\
+ record.
 RESULT is nil, a plain string, or a list of `(ROLE . TEXT)' segments.  A plain
 string is returned verbatim and never faced; segment faces are applied when
 APPLY-FACES is non-nil, so callers can recover the plain text by omitting it."

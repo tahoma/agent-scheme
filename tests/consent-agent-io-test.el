@@ -1,4 +1,4 @@
-;;; consent-agent-io-test.el --- Agent event channel tests  -*- lexical-binding: t; -*-
+;;; consent-agent-io-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -114,7 +114,8 @@
     (should
      (string-match-p
       (regexp-quote
-       "(events ((log (level info) (message \"starting\") (fields ((scope test))))")
+       "(events ((log (level info) (message \"starting\") (fields ((scope\
+ test))))")
       result))
     (should
      (string-match-p

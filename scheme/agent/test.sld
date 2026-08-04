@@ -483,7 +483,8 @@
       "Run and register TEST-DATUM for SKILL-NAME."
       #((parameters
          (skill-name (type symbol)
-          (description ("Skill name symbol or datum used as the registry key.")))
+          (description
+            ("Skill name symbol or datum used as the registry key.")))
          (test-datum
           . ("Agent Test datum, SRFI 64 event, source test, or existing"
              "result.")))
@@ -516,7 +517,8 @@
          'skill)))
 
     (define (skill-test-run skill-name)
-      "Run registered tests for SKILL-NAME, or tests declared by a skill datum."
+      "Run registered tests for SKILL-NAME, or tests declared by a skill datum\
+."
       #((parameters
          (skill-name (type symbol)
           (description

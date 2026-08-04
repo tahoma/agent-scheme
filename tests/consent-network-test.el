@@ -1,4 +1,4 @@
-;;; consent-network-test.el --- Network capability datum tests  -*- lexical-binding: t; -*-
+;;; consent-network-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -68,7 +68,8 @@
     "(#t denied approved grant-http #t ok)")))
 
 (ert-deftest consent-network-test-grant-scope-denials ()
-  "Network grants restrict host, method, headers, payload, redirects, and sizes."
+  "Network grants restrict host, method, headers, payload, redirects, and\
+ sizes."
   (should
    (equal
     (consent-network-test--external
@@ -126,7 +127,9 @@
         (network-authorize-request too-large (list grant) '())
         'reason
         #f))")
-    "(\"host is outside approved network grant scope\" \"header class is outside approved network grant scope\" \"response size is outside approved network grant scope\")")))
+    "(\"host is outside approved network grant scope\" \"header class is\
+ outside approved network grant scope\" \"response size is outside approved\
+ network grant scope\")")))
 
 (ert-deftest consent-network-test-stream-handle-datum ()
   "Construct network stream and port capability handle datums."
@@ -149,6 +152,10 @@
         'grant-stream
         '((reads 2))
         'open))")
-    "((handle (id h-stream-1) (kind network-stream) (domain network) (request req-stream) (url \"https://api.example.test/events\") (grant grant-stream) (status live)) (port-capability (id p-stream-1) (kind textual-input) (backing network) (operations read close) (grant grant-stream) (limits (reads 2)) (path h-stream-1) (status open)))")))
+    "((handle (id h-stream-1) (kind network-stream) (domain network)\
+ (request req-stream) (url \"https://api.example.test/events\") (grant\
+ grant-stream) (status live)) (port-capability (id p-stream-1) (kind\
+ textual-input) (backing network) (operations read close) (grant\
+ grant-stream) (limits (reads 2)) (path h-stream-1) (status open)))")))
 
 ;;; consent-network-test.el ends here

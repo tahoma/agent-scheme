@@ -233,7 +233,8 @@
  'procedure-generator-of-values '(portable stdlib)
 (test-equal 'procedure-generator-of-values
              '(first second)
-             (let ((procedures (procedure-generator-of (generator 'first 'second))))
+             (let ((procedures (procedure-generator-of (generator 'first
+               'second))))
          (list ((procedures)) ((procedures) 'ignored)))))
 
 (testing-registry-case

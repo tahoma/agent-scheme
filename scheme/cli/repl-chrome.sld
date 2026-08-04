@@ -1,11 +1,13 @@
-;;; repl-chrome.sld --- Pluggable presentation chrome over the REPL record stream
+;;; repl-chrome.sld --- Pluggable presentation chrome over the REPL record
+;;; stream
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; Host/core boundary: this library is the portable, host-neutral chrome layer
 ;;; that turns the cross-host REPL interaction contract record vocabulary
 ;;; (docs/repl-interaction-contract.md) into readable terminal output.  The raw
-;;; record stream emitted by (cli repl-shell) is the canonical, machine-readable
+;;; record stream emitted by (cli repl-shell) is the canonical,
+;;; machine-readable
 ;;; parity surface; chrome is host-specific *presentation* that rides above it.
 ;;;
 ;;; A chrome is a pure procedure `(render record) -> #f | <text> | <segments>'.
@@ -16,14 +18,16 @@
 ;;; `exit-marker', `exit-status', `output-marker', `output-text', and the
 ;;; neutral `submission' role for echoed source).
 ;;; Roles -- never raw ANSI -- are the
-;;; contract a host realizes, so the Emacs renderer (#425) can map the same model
+;;; contract a host realizes, so the Emacs renderer (#425) can map the same
+;;; model
 ;;; to faces.  The terminal substrate here maps roles to ANSI SGR through
 ;;; `cli-repl-chrome-paint'.
 ;;;
 ;;; Program output is not a record: it rides its own stream.  Its presentation
 ;;; follows a per-chrome policy carried by `cli-repl-chrome-output-formatter'.
 ;;; The replayable `comment' chrome OWNS program output: the formatter renders
-;;; each chunk as a commented (`;;   :: '), aligned line for the *control channel*
+;;; each chunk as a commented (`;; :: '), aligned line for the *control
+;;; channel*
 ;;; where the records live, so a captured transcript replays the program output
 ;;; too and stdout stays clean.  Every other chrome's formatter returns #f, and
 ;;; the host wiring then leaves program output raw on stdout.  The engine stays
@@ -82,18 +86,23 @@
       (cons role text))
 
     (define (chrome--furniture text)
-      "Build a neutral furniture segment carrying punctuation/whitespace TEXT."
+      "Build a neutral furniture segment carrying punctuation/whitespace TEXT.\
+"
       (chrome--seg 'furniture text))
 
     ;;;; Input-echo signal: does the host already echo interaction input?
 
-    ;; On an interactive TTY the terminal driver echoes each typed form in cooked
+    ;; On an interactive TTY the terminal driver echoes each typed form in
+    ;; cooked
     ;; mode, so the form is already on screen (and in any `script(1)' capture)
-    ;; before the chrome runs.  The `comment' chrome keeps exactly one replayable
+    ;; before the chrome runs. The `comment' chrome keeps exactly one
+    ;; replayable
     ;; copy of each submission in the control-channel stream, so when the host
-    ;; already echoes input it must *suppress* its own echo (the terminal's echo
-    ;; is the single copy), and when input is piped or redirected -- no terminal
-    ;; echo -- it must keep echoing (the chrome supplies the single copy).  This
+    ;; already echoes input it must *suppress* its own echo (the terminal's
+    ;; echo
+    ;; is the single copy), and when input is piped or redirected -- no
+    ;; terminal
+    ;; echo -- it must keep echoing (the chrome supplies the single copy). This
     ;; parameter carries that host signal to the otherwise pure chrome without
     ;; handing it a live port: the shell binds it from a per-host TTY check
     ;; against stdin.  The default #f is the piped/redirected posture, so a
@@ -103,9 +112,12 @@
 
     ;;;; Per-turn ordinal for program-output alignment
 
-    ;; Program output is drained inside the loop, where the active form's ordinal
-    ;; is known, but it reaches the chrome's output formatter outside that scope.
-    ;; The shell binds this parameter to the current ordinal around each drain so
+    ;; Program output is drained inside the loop, where the active form's
+    ;; ordinal
+    ;; is known, but it reaches the chrome's output formatter outside that
+    ;; scope.
+    ;; The shell binds this parameter to the current ordinal around each drain
+    ;; so
     ;; the `comment' chrome can right-align the `;;   :: ' output gutter to the
     ;; same column as that turn's result marker.  The default 1 is the
     ;; lone-default-session first-turn width.
@@ -119,15 +131,18 @@
       (let ((value (chrome--field record name)))
         (if (and value (integer? value)) value default)))
 
-    ;; The `comment' chrome right-aligns its result/condition/output/exit markers
+    ;; The `comment' chrome right-aligns its result/condition/output/exit
+    ;; markers
     ;; and pads its continuation dots to the ready-prompt gutter, so a turn's
-    ;; echoed form, printed output, and value all begin in the same column.  Both
+    ;; echoed form, printed output, and value all begin in the same column.
+    ;; Both
     ;; widths derive from the prompt body -- the `<ordinal>' (lone default
     ;; session) or `<session>:<ordinal>' (named session) between the `#| ' and
     ;; ` |#' furniture.
     (define (chrome--comment-body-width session ordinal)
       "Character width of the comment prompt body for SESSION at ORDINAL: the"
-      "`<ordinal>' digits alone, or `<session>:<ordinal>' for a named session."
+      "`<ordinal>' digits alone, or `<session>:<ordinal>' for a named session.\
+"
       "The continuation gutter fills this width with dots so continued source"
       "aligns under the first line."
       (+ (if (chrome--anonymous-session? session)
@@ -136,9 +151,12 @@
          (string-length (number->string ordinal))))
 
     (define (chrome--comment-marker-pad session ordinal marker)
-      "Return the `;;'-plus-spaces furniture that right-aligns MARKER (such as"
-      "`=> ') to SESSION/ORDINAL's ready-prompt gutter width, so the text after"
-      "MARKER starts in the same column as the echoed form.  At least one space"
+      "Return the `;;'-plus-spaces furniture that right-aligns MARKER (such as\
+"
+      "`=> ') to SESSION/ORDINAL's ready-prompt gutter width, so the text afte\
+r"
+      "MARKER starts in the same column as the echoed form.  At least one spac\
+e"
       "follows `;;'."
       (let* ((gutter (+ 7 (chrome--comment-body-width session ordinal)))
              (pad (- gutter 2 (string-length marker))))
@@ -147,14 +165,18 @@
     ;;;; The `comment' chrome (default): block-comment furniture, replayable
 
     (define (chrome--comment record)
-      "Render RECORD under the default `comment' chrome.  The prompt is block-"
+      "Render RECORD under the default `comment' chrome.  The prompt is block-\
+"
       "comment furniture; a complete submission is echoed as bare source; and"
-      "each result, condition, exit, and line of program output is its own `;;'"
+      "each result, condition, exit, and line of program output is its own `;;\
+'"
       "line comment whose marker right-aligns so the value, text, or printed"
       "output starts in the same column as the echoed form.  The whole"
       "transcript -- program output included -- is therefore valid Consent"
-      "Scheme that replays to the same forms (program output is reformatted by"
-      "`cli-repl-chrome-output-formatter', not rendered here).  The submission"
+      "Scheme that replays to the same forms (program output is reformatted by\
+"
+      "`cli-repl-chrome-output-formatter', not rendered here).  The submission\
+"
       "echo is suppressed when `cli-repl-chrome-input-echoed?' is true (the"
       "host -- an interactive TTY -- already echoes the typed form), so a"
       "captured transcript holds exactly one replayable copy of each form in"
@@ -165,7 +187,8 @@
           (let ((session (chrome--field record 'session))
                 (ordinal (chrome--field-integer record 'ordinal 1)))
             (if (eq? (chrome--field record 'state) 'continuation)
-                ;; Width-matched alignment dots: a run of `.' exactly as wide as
+                ;; Width-matched alignment dots: a run of `.' exactly as wide
+                ;; as
                 ;; the prompt body, so the gutter equals the ready-prompt width
                 ;; and continued source aligns under the first line.  The
                 ;; open-construct count is dropped here (it stays on the record
@@ -180,7 +203,8 @@
                  (list (chrome--furniture "#| "))
                  (if (chrome--anonymous-session? session)
                      '()
-                     (list (chrome--seg 'prompt-session (symbol->string session))
+                     (list (chrome--seg 'prompt-session (symbol->string
+                       session))
                            (chrome--furniture ":")))
                  (list (chrome--seg 'prompt-ordinal (number->string ordinal))
                        (chrome--furniture " |# "))))))
@@ -188,7 +212,8 @@
           ;; Echo a whole form as bare code so it replays; leave an incomplete
           ;; (EOF-truncated) submission unechoed so the stream stays balanced.
           ;; When the host already echoes interaction input (an interactive TTY
-          ;; in cooked mode), suppress this echo too: the terminal's own echo is
+          ;; in cooked mode), suppress this echo too: the terminal's own echo
+          ;; is
           ;; the single replayable copy, and a second copy would replay twice.
           (if (and (chrome--field record 'complete)
                    (not (cli-repl-chrome-input-echoed?)))
@@ -213,7 +238,8 @@
                   (chrome--seg 'error-text (chrome--display record))
                   (chrome--furniture "\n;;\n"))))
          ((eq? kind 'repl-exit)
-          ;; The exit line aligns from the close `count' and carries no trailing
+          ;; The exit line aligns from the close `count' and carries no
+          ;; trailing
           ;; separator.
           (let ((session (chrome--field record 'session))
                 (count (chrome--field-integer record 'count 1)))
@@ -222,7 +248,8 @@
                   (chrome--seg 'exit-marker "__ ")
                   (chrome--furniture "exit ")
                   (chrome--seg 'exit-status
-                              (symbol->string (or (chrome--field record 'status)
+                              (symbol->string (or (chrome--field record
+                              'status)
                                                   'closed-ok)))
                   (chrome--furniture "\n"))))
          (else #f))))
@@ -230,9 +257,11 @@
     ;;;; Program-output formatting (the `comment' chrome's `;;   :: ' gutter)
 
     (define (chrome--split-output-lines text)
-      "Split program-output TEXT into its lines for per-line comment rendering,"
+      "Split program-output TEXT into its lines for per-line comment rendering\
+,"
       "dropping the empty tail a trailing newline produces so `(display"
-      "\"x\\n\")' yields exactly one line and a line lacking a trailing newline"
+      "\"x\\n\")' yields exactly one line and a line lacking a trailing newlin\
+e"
       "still renders."
       (let ((length (string-length text)))
         (let loop ((start 0) (index 0) (lines '()))
@@ -265,8 +294,10 @@
     (define (cli-repl-chrome-output-formatter name session)
       "Return chrome NAME's program-output formatter bound to SESSION: a"
       "procedure mapping one program-output chunk to control-channel painter"
-      "input, or #f when the chrome keeps program output raw on its own stream."
-      "The replayable `comment' chrome OWNS program output -- this returns its"
+      "input, or #f when the chrome keeps program output raw on its own stream\
+."
+      "The replayable `comment' chrome OWNS program output -- this returns its\
+"
       "`;;   :: ' rendering, aligned to SESSION and the per-turn"
       "`cli-repl-chrome-output-ordinal', for the control channel (where the"
       "records live), so a captured transcript replays the output and stdout"
@@ -302,8 +333,10 @@
 
     (define (chrome--datum record)
       "Render RECORD as the canonical raw datum stream, one datum per line."
-      "Returns a plain string, so the painter never colors it: the datum chrome"
-      "is the byte-for-byte raw record stream regardless of the color setting."
+      "Returns a plain string, so the painter never colors it: the datum chrom\
+e"
+      "is the byte-for-byte raw record stream regardless of the color setting.\
+"
       "The consent writer renders it so canonical number records inside the"
       "contract data come out Scheme-readable (the Emacs twin renders its"
       "stream the same way)."
@@ -312,28 +345,35 @@
     ;;;; The `classic' chrome: `>'/`.' prompts and marked values
 
     (define (chrome--classic record)
-      "Render RECORD under the `classic' chrome: a familiar terminal-REPL look"
-      "with a `> ' prompt, a `. ' continuation gutter, the whole form echoed as"
+      "Render RECORD under the `classic' chrome: a familiar terminal-REPL look\
+"
+      "with a `> ' prompt, a `. ' continuation gutter, the whole form echoed a\
+s"
       "bare source (TTY-gated like the `comment' chrome), and single-column"
-      "`= '/`! '/`_ ' markers on the value, condition, and exit lines.  Unlike"
-      "`comment', `classic' makes no replay claim -- its bare marked lines are"
-      "not Scheme -- so program output stays raw and interleaved, exactly as a"
+      "`= '/`! '/`_ ' markers on the value, condition, and exit lines.  Unlike\
+"
+      "`comment', `classic' makes no replay claim -- its bare marked lines are\
+"
+      "not Scheme -- so program output stays raw and interleaved, exactly as a\
+"
       "real REPL shows it; the markers earn their keep instead by"
       "disambiguating result, condition, and program output in a colorless"
       "capture."
       (let ((kind (chrome--kind record)))
         (cond
          ((eq? kind 'repl-prompt)
-          ;; `> ' and `. ' are both two columns wide, so a continued form's code
+          ;; `> ' and `. ' are both two columns wide, so a continued form's
+          ;; code
           ;; aligns under the first submission's code; `. ' reads as a clean
-          ;; continuation gutter.  The open-construct count is dropped (it stays
+          ;; continuation gutter. The open-construct count is dropped (it stays
           ;; on the record for the `datum' chrome).
           (if (eq? (chrome--field record 'state) 'continuation)
               (list (chrome--furniture ". "))
               (list (chrome--furniture "> "))))
          ((eq? kind 'repl-submission)
           ;; Echo the whole form as bare source after `> ', so a piped or
-          ;; captured session shows the forms; suppress it when the host already
+          ;; captured session shows the forms; suppress it when the host
+          ;; already
           ;; echoes input (#447), so a live TTY does not double-echo.
           (if (and (chrome--field record 'complete)
                    (not (cli-repl-chrome-input-echoed?)))
@@ -377,8 +417,10 @@
     ;;;; The `silent' chrome: suppress every interaction record
 
     (define (chrome--silent record)
-      "Render RECORD under the `silent' chrome: emit nothing for any record, so"
-      "only program output (carried by the shell on the program-output stream)"
+      "Render RECORD under the `silent' chrome: emit nothing for any record, s\
+o"
+      "only program output (carried by the shell on the program-output stream)\
+"
       "reaches the user."
       (and record #f))
 
@@ -395,7 +437,8 @@
             (cons 'silent chrome--silent)))
 
     (define (cli-repl-chrome-lookup name)
-      "Return the chrome procedure registered under NAME (a symbol or string), or #f."
+      "Return the chrome procedure registered under NAME (a symbol or string), \
+or #f."
       #((parameters
          (name (type symbol)
           (description
@@ -411,7 +454,8 @@
         (and entry (cdr entry))))
 
     (define (cli-repl-chrome-names)
-      "Return the list of registered chrome name symbols, in declaration order."
+      "Return the list of registered chrome name symbols, in declaration order\
+."
       #((parameters)
         (returns (type symbol)
          (description
@@ -424,7 +468,8 @@
       "Return the default chrome name."
       #((parameters)
         (returns (type symbol)
-         (description ("The symbol `comment', the name of the default chrome.")))
+         (description
+           ("The symbol `comment', the name of the default chrome.")))
         (effects pure))
       'comment)
 
@@ -497,10 +542,13 @@
 
     (define (cli-repl-chrome-color? mode no-color? tty?)
       "Return whether to colorize for MODE (`auto', `always', or `never')."
-      "`never' is always off and `always' is always on (an explicit override)."
+      "`never' is always off and `always' is always on (an explicit override).\
+"
       "`auto' colorizes only on a TTY with NO_COLOR unset, so output is plain"
-      "when piped or redirected: NO-COLOR? is #t when the NO_COLOR environment"
-      "variable is set, and TTY? is #t when the control channel is a terminal."
+      "when piped or redirected: NO-COLOR? is #t when the NO_COLOR environment\
+"
+      "variable is set, and TTY? is #t when the control channel is a terminal.\
+"
       #((parameters
          (mode (type symbol)
           (description "Color mode symbol: `auto', `always', or `never'."))

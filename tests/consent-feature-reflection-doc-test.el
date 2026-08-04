@@ -1,4 +1,4 @@
-;;; consent-feature-reflection-doc-test.el --- Feature reflection doc checks  -*- lexical-binding: t; -*-
+;;; consent-feature-reflection-doc-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

@@ -18,12 +18,14 @@ permissions:
   issues: write
   pull-requests: write
 
-# Cancel only superseded pull-request runs: a new push to a PR coalesces onto the
-# PR-numbered group and cancels the in-flight run. Pushes to main, scheduled
-# runs, and manual dispatches each get a unique run-id group, so they are never
-# cancelled or coalesced.
+# Cancel only superseded pull-request runs: a new push to a PR coalesces onto
+# the PR-numbered group and cancels the in-flight run. Pushes to main,
+# scheduled runs, and manual dispatches each get a unique run-id group, so they
+# are never cancelled or coalesced.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  group: >-2
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request' &&
+    github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -74,9 +76,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Portable twin of lint-elisp (#421): compile the host-loadable portable
-    # libraries under Guile with static warnings promoted to errors. Guile is the
-    # gate host because it is the only in-CI portable host with a usable `-W`
-    # warning facility; it ships in the bare ubuntu-latest apt universe.
+    # libraries under Guile with static warnings promoted to errors. Guile is
+    # the gate host because it is the only in-CI portable host with a usable
+    # `-W` warning facility; it ships in the bare ubuntu-latest apt universe.
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -93,12 +95,16 @@ jobs:
         run: make lint-portable
 
   test-portable-gambit:
-    name: portable R7RS / Gambit full suite / syntax ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
+    name: >-2
+      portable R7RS / Gambit full suite / syntax ${{
+      matrix.combo.source_metadata }} / docstrings ${{
+      matrix.combo.docstring_retention }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     # Gambit is the canonical portable host: on the per-push lane its suite runs
-    # the canonical on/full combo plus a single fully-stripped off/none de-feature
-    # smoke leg, while its reflection contract/stress shards run on/full only
+    # the canonical on/full combo plus a single fully-stripped off/none
+    # de-feature smoke leg, while its reflection contract/stress shards run
+    # on/full only
     # (#481). The scheduled / workflow_dispatch lane expands the suite back to
     # the full 2×3 syntax/docstring cross-product. The reader/writer/docstring
     # machinery that axis exercises is host-independent, so the other portable
@@ -106,20 +112,42 @@ jobs:
     # test-portable-extra-hosts).
     env:
       CONSENT_GAMBIT_VERSION: "4.9.7"
+# readability-allow: contiguous-datum -- Compiler checksum stays atomic.
       CONSENT_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
-      CONSENT_CI_REFLECT_LOG_FILE: portable-gambit-reflect-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
-      CONSENT_CI_REFLECT_STRESS_LOG_FILE: portable-gambit-reflect-stress-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
-      CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection contract / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
-      CONSENT_CI_REFLECT_STRESS_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection stress / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_CI_REFLECT_LOG_FILE: >-2
+        portable-gambit-reflect-${{ matrix.combo.source_metadata
+        }}-docstrings-${{ matrix.combo.docstring_retention }}.log
+      CONSENT_CI_REFLECT_STRESS_LOG_FILE: >-2
+        portable-gambit-reflect-stress-${{ matrix.combo.source_metadata
+        }}-docstrings-${{ matrix.combo.docstring_retention }}.log
+      CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME: >-2
+        Portable R7RS Gambit reflection contract / source metadata ${{
+        matrix.combo.source_metadata }} / docstrings ${{
+        matrix.combo.docstring_retention }}
+      CONSENT_CI_REFLECT_STRESS_SHARD_SUMMARY_NAME: >-2
+        Portable R7RS Gambit reflection stress / source metadata ${{
+        matrix.combo.source_metadata }} / docstrings ${{
+        matrix.combo.docstring_retention }}
     strategy:
       fail-fast: false
       # Per-push lane: canonical on/full plus a single fully-stripped off/none
       # smoke leg. Scheduled / workflow_dispatch lane: full 2×3 cross.
       matrix:
-        combo: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"on","docstring_retention":"simple"},{"source_metadata":"on","docstring_retention":"none"},{"source_metadata":"off","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"simple"},{"source_metadata":"off","docstring_retention":"none"}]') || fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"none"}]') }}
+        combo: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('[{"source_metadata":"on",
+          "docstring_retention":"full"},{"source_metadata":"on",
+          "docstring_retention":"simple"},{"source_metadata":"on",
+          "docstring_retention":"none"},{"source_metadata":"off",
+          "docstring_retention":"full"},{"source_metadata":"off",
+          "docstring_retention":"simple"},{"source_metadata":"off",
+          "docstring_retention":"none"}]') ||
+          fromJSON('[{"source_metadata":"on","docstring_retention":"full"},
+          {"source_metadata":"off","docstring_retention":"none"}]') }}
 
     steps:
       - name: Check out repository
@@ -129,6 +157,7 @@ jobs:
         id: cache-gambit
         uses: actions/cache@v4
         with:
+# readability-allow: external-identifier -- Cache key expression stays whole.
           path: ${{ runner.tool_cache }}/gambit/${{ env.CONSENT_GAMBIT_VERSION }}
           key: ${{ runner.os }}-gambit-${{ env.CONSENT_GAMBIT_VERSION }}
 
@@ -141,16 +170,21 @@ jobs:
         run: |
           gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${CONSENT_GAMBIT_VERSION}"
           if [ ! -x "${gambit_prefix}/bin/gsi" ]; then
+            gambit_repo_root="https://github.com/gambit/gambit"
+            gambit_archive_root="${gambit_repo_root}/archive/refs/tags"
+
             curl -fsSL \
-              "https://github.com/gambit/gambit/archive/refs/tags/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
+              "${gambit_archive_root}/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
               -o /tmp/gambit.tar.gz
-            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | sha256sum -c -
+            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | \
+              sha256sum -c -
 
             rm -rf /tmp/gambit-src
             mkdir -p /tmp/gambit-src "${gambit_prefix}"
             tar -xzf /tmp/gambit.tar.gz -C /tmp/gambit-src --strip-components=1
             cd /tmp/gambit-src
-            ./configure --prefix="${gambit_prefix}" --enable-single-host --enable-openssl
+            ./configure --prefix="${gambit_prefix}" --enable-single-host \
+              --enable-openssl
             make -j"$(nproc)"
             make install
           fi
@@ -158,50 +192,65 @@ jobs:
           echo "${gambit_prefix}/bin" >> "$GITHUB_PATH"
           "${gambit_prefix}/bin/gsi" -v
           "${gambit_prefix}/bin/gsc" -v
-          "${gambit_prefix}/bin/gsi" -:r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+          "${gambit_prefix}/bin/gsi" -:r7rs -e \
+            '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Run portable R7RS Gambit shard
         shell: bash
         env:
           CONSENT_CI_LOG_DIR: ci-logs
           CONSENT_CI_LOG_PREFIX: portable-gambit-direct
-          CONSENT_CI_LOG_SUFFIX: ${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
+          CONSENT_CI_LOG_SUFFIX: >-2
+            ${{ matrix.combo.source_metadata }}-docstrings-${{
+            matrix.combo.docstring_retention }}
           CONSENT_CI_SHARD_PREFIX: Portable R7RS Gambit
-          CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}"
+          CONSENT_CI_SHARD_SUFFIX: >-2
+             / source metadata ${{ matrix.combo.source_metadata }} / docstrings
+            ${{ matrix.combo.docstring_retention }}
         run: |
           mkdir -p ci-logs
           make test-portable-gambit
 
       - name: Run portable R7RS Gambit reflection stress shard
-        if: ${{ matrix.combo.source_metadata == 'on' && matrix.combo.docstring_retention == 'full' }}
+        if: >-2
+          ${{ matrix.combo.source_metadata == 'on' &&
+          matrix.combo.docstring_retention == 'full' }}
         shell: bash
         run: |
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make test-portable-gambit-reflect-stress 2>&1 | tee "ci-logs/${CONSENT_CI_REFLECT_STRESS_LOG_FILE}"
+          make test-portable-gambit-reflect-stress 2>&1 | tee \
+            "ci-logs/${CONSENT_CI_REFLECT_STRESS_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_REFLECT_STRESS_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-scheme-gambit-host-test-r7rs-reflect-stress$"'
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_REFLECT_STRESS_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' \
+              '"^consent-scheme-gambit-host-test-r7rs-reflect-stress$"'
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_REFLECT_STRESS_LOG_FILE}"
           exit "$status"
 
       - name: Run portable R7RS Gambit reflection contract shard
-        if: ${{ matrix.combo.source_metadata == 'on' && matrix.combo.docstring_retention == 'full' }}
+        if: >-2
+          ${{ matrix.combo.source_metadata == 'on' &&
+          matrix.combo.docstring_retention == 'full' }}
         shell: bash
         run: |
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make test-portable-gambit-reflect 2>&1 | tee "ci-logs/${CONSENT_CI_REFLECT_LOG_FILE}"
+          make test-portable-gambit-reflect 2>&1 | tee \
+            "ci-logs/${CONSENT_CI_REFLECT_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-scheme-gambit-host-test-r7rs-reflect$"'
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' \
+              '"^consent-scheme-gambit-host-test-r7rs-reflect$"'
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_REFLECT_LOG_FILE}"
           exit "$status"
@@ -210,23 +259,36 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-gambit-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
-          path: ci-logs/portable-gambit-direct-*-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
+          name: >-2
+            test-log-portable-gambit-${{ matrix.combo.source_metadata
+            }}-docstrings-${{ matrix.combo.docstring_retention }}
+          path: >-2
+            ci-logs/portable-gambit-direct-*-${{ matrix.combo.source_metadata
+            }}-docstrings-${{ matrix.combo.docstring_retention }}.log
           if-no-files-found: warn
 
       - name: Upload portable Gambit reflection contract shard log
-        if: ${{ always() && matrix.combo.source_metadata == 'on' && matrix.combo.docstring_retention == 'full' }}
+        if: >-2
+          ${{ always() && matrix.combo.source_metadata == 'on' &&
+          matrix.combo.docstring_retention == 'full' }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-gambit-reflect-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
+          name: >-2
+            test-log-portable-gambit-reflect-${{ matrix.combo.source_metadata
+            }}-docstrings-${{ matrix.combo.docstring_retention }}
           path: ci-logs/${{ env.CONSENT_CI_REFLECT_LOG_FILE }}
           if-no-files-found: warn
 
       - name: Upload portable Gambit reflection stress shard log
-        if: ${{ always() && matrix.combo.source_metadata == 'on' && matrix.combo.docstring_retention == 'full' }}
+        if: >-2
+          ${{ always() && matrix.combo.source_metadata == 'on' &&
+          matrix.combo.docstring_retention == 'full' }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-gambit-reflect-stress-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
+          name: >-2
+            test-log-portable-gambit-reflect-stress-${{
+            matrix.combo.source_metadata }}-docstrings-${{
+            matrix.combo.docstring_retention }}
           path: ci-logs/${{ env.CONSENT_CI_REFLECT_STRESS_LOG_FILE }}
           if-no-files-found: warn
 
@@ -247,6 +309,7 @@ jobs:
     timeout-minutes: 15
     env:
       CONSENT_GAMBIT_VERSION: "4.9.7"
+# readability-allow: contiguous-datum -- Compiler checksum stays atomic.
       CONSENT_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
       CONSENT_TEST_SOURCE_METADATA: "on"
       CONSENT_TEST_DOCSTRING_RETENTION: full
@@ -254,7 +317,9 @@ jobs:
       CONSENT_PORTABLE_HOST: gambit
       CONSENT_PORTABLE_PROGRAM: ${{ matrix.case.program }}
       CONSENT_CI_LOG_FILE: portable-gambit-single-${{ matrix.case.slug }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit single-program ${{ matrix.case.label }} / source metadata on / docstrings full
+      CONSENT_CI_SHARD_SUMMARY_NAME: >-2
+        Portable R7RS Gambit single-program ${{ matrix.case.label }} / source
+        metadata on / docstrings full
     strategy:
       fail-fast: false
       matrix:
@@ -289,6 +354,7 @@ jobs:
         id: cache-gambit
         uses: actions/cache@v4
         with:
+# readability-allow: external-identifier -- Cache key expression stays whole.
           path: ${{ runner.tool_cache }}/gambit/${{ env.CONSENT_GAMBIT_VERSION }}
           key: ${{ runner.os }}-gambit-${{ env.CONSENT_GAMBIT_VERSION }}
 
@@ -301,16 +367,21 @@ jobs:
         run: |
           gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${CONSENT_GAMBIT_VERSION}"
           if [ ! -x "${gambit_prefix}/bin/gsi" ]; then
+            gambit_repo_root="https://github.com/gambit/gambit"
+            gambit_archive_root="${gambit_repo_root}/archive/refs/tags"
+
             curl -fsSL \
-              "https://github.com/gambit/gambit/archive/refs/tags/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
+              "${gambit_archive_root}/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
               -o /tmp/gambit.tar.gz
-            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | sha256sum -c -
+            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | \
+              sha256sum -c -
 
             rm -rf /tmp/gambit-src
             mkdir -p /tmp/gambit-src "${gambit_prefix}"
             tar -xzf /tmp/gambit.tar.gz -C /tmp/gambit-src --strip-components=1
             cd /tmp/gambit-src
-            ./configure --prefix="${gambit_prefix}" --enable-single-host --enable-openssl
+            ./configure --prefix="${gambit_prefix}" --enable-single-host \
+              --enable-openssl
             make -j"$(nproc)"
             make install
           fi
@@ -318,7 +389,8 @@ jobs:
           echo "${gambit_prefix}/bin" >> "$GITHUB_PATH"
           "${gambit_prefix}/bin/gsi" -v
           "${gambit_prefix}/bin/gsc" -v
-          "${gambit_prefix}/bin/gsi" -:r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+          "${gambit_prefix}/bin/gsi" -:r7rs -e \
+            '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Run one interpreted Gambit test program
         shell: bash
@@ -326,12 +398,15 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          tools/run-portable-tests.sh 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          tools/run-portable-tests.sh 2>&1 | tee \
+            "ci-logs/${CONSENT_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' "${CONSENT_PORTABLE_PROGRAM}"
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' \
+              "${CONSENT_PORTABLE_PROGRAM}"
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
@@ -350,24 +425,38 @@ jobs:
         run: |
           if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
-              --eval "(require 'consent-ci)" \
-              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --load tools/consent-ci-write-summary.el
           fi
 
   build-gambit-self-host:
-    name: build / Gambit-compiled self-host / syntax ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
+    name: >-2
+      build / Gambit-compiled self-host / syntax ${{
+      matrix.combo.source_metadata }} / docstrings ${{
+      matrix.combo.docstring_retention }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
       CONSENT_GAMBIT_VERSION: "4.9.7"
+# readability-allow: contiguous-datum -- Compiler checksum stays atomic.
       CONSENT_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
     strategy:
       fail-fast: false
       matrix:
-        combo: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"on","docstring_retention":"simple"},{"source_metadata":"on","docstring_retention":"none"},{"source_metadata":"off","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"simple"},{"source_metadata":"off","docstring_retention":"none"}]') || fromJSON('[{"source_metadata":"on","docstring_retention":"full"}]') }}
+        combo: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('[{"source_metadata":"on",
+          "docstring_retention":"full"},{"source_metadata":"on",
+          "docstring_retention":"simple"},{"source_metadata":"on",
+          "docstring_retention":"none"},{"source_metadata":"off",
+          "docstring_retention":"full"},{"source_metadata":"off",
+          "docstring_retention":"simple"},{"source_metadata":"off",
+          "docstring_retention":"none"}]') ||
+          fromJSON('[{"source_metadata":"on","docstring_retention":"full"}]')
+          }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -376,6 +465,7 @@ jobs:
         id: cache-gambit
         uses: actions/cache@v4
         with:
+# readability-allow: external-identifier -- Cache key expression stays whole.
           path: ${{ runner.tool_cache }}/gambit/${{ env.CONSENT_GAMBIT_VERSION }}
           key: ${{ runner.os }}-gambit-${{ env.CONSENT_GAMBIT_VERSION }}
 
@@ -388,15 +478,20 @@ jobs:
         run: |
           gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${CONSENT_GAMBIT_VERSION}"
           if [ ! -x "${gambit_prefix}/bin/gsi" ]; then
+            gambit_repo_root="https://github.com/gambit/gambit"
+            gambit_archive_root="${gambit_repo_root}/archive/refs/tags"
+
             curl -fsSL \
-              "https://github.com/gambit/gambit/archive/refs/tags/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
+              "${gambit_archive_root}/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
               -o /tmp/gambit.tar.gz
-            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | sha256sum -c -
+            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | \
+              sha256sum -c -
             rm -rf /tmp/gambit-src
             mkdir -p /tmp/gambit-src "${gambit_prefix}"
             tar -xzf /tmp/gambit.tar.gz -C /tmp/gambit-src --strip-components=1
             cd /tmp/gambit-src
-            ./configure --prefix="${gambit_prefix}" --enable-single-host --enable-openssl
+            ./configure --prefix="${gambit_prefix}" --enable-single-host \
+              --enable-openssl
             make -j"$(nproc)"
             make install
           fi
@@ -408,7 +503,11 @@ jobs:
           path: |
             build/compile/gambit/src
             build/compile/gambit/incremental
-          key: ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}-${{ matrix.combo.source_metadata }}-${{ matrix.combo.docstring_retention }}
+          key: >-2
+            ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION
+            }}-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}-${{
+            matrix.combo.source_metadata }}-${{
+            matrix.combo.docstring_retention }}
           restore-keys: |
             ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-
 
@@ -418,28 +517,81 @@ jobs:
       - name: Upload Gambit self-host
         uses: actions/upload-artifact@v7
         with:
-          name: gambit-self-host-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
+          name: >-2
+            gambit-self-host-${{ matrix.combo.source_metadata }}-docstrings-${{
+            matrix.combo.docstring_retention }}
           path: build/compile/gambit/bin/consent
           if-no-files-found: error
 
   test-portable-gambit-self-host:
-    name: portable R7RS / Gambit-compiled self-host / ${{ matrix.case.label }} / syntax ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}
+    name: >-2
+      portable R7RS / Gambit-compiled self-host / ${{ matrix.case.label }} /
+      syntax ${{ matrix.case.source_metadata }} / docstrings ${{
+      matrix.case.docstring_retention }}
     needs: build-gambit-self-host
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.case.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.case.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.case.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.case.source_metadata == 'on' &&
+        '250000' || '' }}
       CONSENT_PORTABLE_HOST: gambit-native
       CONSENT_PORTABLE_GROUP: ${{ matrix.case.group }}
-      CONSENT_GAMBIT_NATIVE: ${{ github.workspace }}/build/compile/gambit/bin/consent
-      CONSENT_CI_LOG_FILE: portable-gambit-native-${{ matrix.case.group }}-${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit-compiled self-host ${{ matrix.case.label }} / source metadata ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}
+      CONSENT_GAMBIT_NATIVE: >-2
+        ${{ github.workspace }}/build/compile/gambit/bin/consent
+      CONSENT_CI_LOG_FILE: >-2
+        portable-gambit-native-${{ matrix.case.group }}-${{
+        matrix.case.source_metadata }}-docstrings-${{
+        matrix.case.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: >-2
+        Portable R7RS Gambit-compiled self-host ${{ matrix.case.label }} /
+        source metadata ${{ matrix.case.source_metadata }} / docstrings ${{
+        matrix.case.docstring_retention }}
     strategy:
       fail-fast: false
       matrix:
-        case: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"group":"compiled-random","label":"random-data libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-property","label":"property-testing libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-library","label":"standard libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-runtime","label":"runtime/testing infrastructure","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-agent","label":"agent libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-integration","label":"integration/REPL","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled","label":"exhaustive shard set","source_metadata":"on","docstring_retention":"simple","aggregate":true},{"group":"compiled","label":"exhaustive shard set","source_metadata":"on","docstring_retention":"none","aggregate":true},{"group":"compiled","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"full","aggregate":true},{"group":"compiled","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"simple","aggregate":true},{"group":"compiled","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"none","aggregate":true}]') || fromJSON('[{"group":"compiled-random","label":"random-data libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-property","label":"property-testing libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-library","label":"standard libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-runtime","label":"runtime/testing infrastructure","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-agent","label":"agent libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-integration","label":"integration/REPL","source_metadata":"on","docstring_retention":"full","aggregate":false}]') }}
+        case: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('[{"group":"compiled-random","label":
+          "random-data libraries","source_metadata":"on","docstring_retention":
+          "full","aggregate":false},{"group":"compiled-property","label":
+          "property-testing libraries","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-library","label":"standard
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"compiled-runtime","label":
+          "runtime/testing infrastructure","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-agent","label":"agent libraries","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-integration","label":"integration/REPL","source_metadata":
+          "on","docstring_retention":"full","aggregate":false},{"group":
+          "compiled","label":"exhaustive shard
+          set","source_metadata":"on","docstring_retention":"simple",
+          "aggregate":true},{"group":"compiled","label":"exhaustive shard
+          set","source_metadata":"on","docstring_retention":"none","aggregate":
+          true},{"group":"compiled","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"full","aggregate":
+          true},{"group":"compiled","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"simple",
+          "aggregate":true},{"group":"compiled","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"none","aggregate":
+          true}]') || fromJSON('[{"group":"compiled-random","label":
+          "random-data libraries","source_metadata":"on","docstring_retention":
+          "full","aggregate":false},{"group":"compiled-property","label":
+          "property-testing libraries","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-library","label":"standard
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"compiled-runtime","label":
+          "runtime/testing infrastructure","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-agent","label":"agent libraries","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-integration","label":"integration/REPL","source_metadata":
+          "on","docstring_retention":"full","aggregate":false}]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -452,7 +604,9 @@ jobs:
       - name: Download Gambit self-host
         uses: actions/download-artifact@v8
         with:
-          name: gambit-self-host-${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}
+          name: >-2
+            gambit-self-host-${{ matrix.case.source_metadata }}-docstrings-${{
+            matrix.case.docstring_retention }}
           path: build/compile/gambit/bin
 
       - name: Run Gambit-compiled Scheme-native shard
@@ -467,8 +621,10 @@ jobs:
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' "${CONSENT_PORTABLE_GROUP}"
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' \
+              "${CONSENT_PORTABLE_GROUP}"
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
@@ -480,9 +636,13 @@ jobs:
           CONSENT_PORTABLE_GROUP_SET: compiled
           CONSENT_CI_LOG_DIR: ci-logs
           CONSENT_CI_LOG_PREFIX: portable-gambit-native
-          CONSENT_CI_LOG_SUFFIX: ${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}
+          CONSENT_CI_LOG_SUFFIX: >-2
+            ${{ matrix.case.source_metadata }}-docstrings-${{
+            matrix.case.docstring_retention }}
           CONSENT_CI_SHARD_PREFIX: Portable R7RS Gambit-compiled self-host
-          CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}"
+          CONSENT_CI_SHARD_SUFFIX: >-2
+             / source metadata ${{ matrix.case.source_metadata }} / docstrings
+            ${{ matrix.case.docstring_retention }}
         run: |
           chmod +x "$CONSENT_GAMBIT_NATIVE"
           mkdir -p ci-logs
@@ -492,7 +652,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-gambit-native-${{ matrix.case.group }}-${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}
+          name: >-2
+            test-log-portable-gambit-native-${{ matrix.case.group }}-${{
+            matrix.case.source_metadata }}-docstrings-${{
+            matrix.case.docstring_retention }}
           path: ci-logs/*.log
           if-no-files-found: warn
 
@@ -508,17 +671,31 @@ jobs:
           fi
 
   build-racket-self-host:
-    name: build / Racket-compiled self-host / syntax ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
+    name: >-2
+      build / Racket-compiled self-host / syntax ${{
+      matrix.combo.source_metadata }} / docstrings ${{
+      matrix.combo.docstring_retention }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
     strategy:
       fail-fast: false
       matrix:
-        combo: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"on","docstring_retention":"simple"},{"source_metadata":"on","docstring_retention":"none"},{"source_metadata":"off","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"simple"},{"source_metadata":"off","docstring_retention":"none"}]') || fromJSON('[{"source_metadata":"on","docstring_retention":"full"}]') }}
+        combo: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('[{"source_metadata":"on",
+          "docstring_retention":"full"},{"source_metadata":"on",
+          "docstring_retention":"simple"},{"source_metadata":"on",
+          "docstring_retention":"none"},{"source_metadata":"off",
+          "docstring_retention":"full"},{"source_metadata":"off",
+          "docstring_retention":"simple"},{"source_metadata":"off",
+          "docstring_retention":"none"}]') ||
+          fromJSON('[{"source_metadata":"on","docstring_retention":"full"}]')
+          }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -545,7 +722,10 @@ jobs:
           path: |
             build/compile/racket/src
             build/compile/racket/collections
-          key: ${{ runner.os }}-racket-build-v2-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}-${{ matrix.combo.source_metadata }}-${{ matrix.combo.docstring_retention }}
+          key: >-2
+            ${{ runner.os }}-racket-build-v2-${{ hashFiles('scheme/**',
+            'tools/compile-portable.sh') }}-${{ matrix.combo.source_metadata
+            }}-${{ matrix.combo.docstring_retention }}
           restore-keys: |
             ${{ runner.os }}-racket-build-v2-
 
@@ -555,28 +735,80 @@ jobs:
       - name: Upload Racket self-host
         uses: actions/upload-artifact@v7
         with:
-          name: racket-self-host-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
+          name: >-2
+            racket-self-host-${{ matrix.combo.source_metadata }}-docstrings-${{
+            matrix.combo.docstring_retention }}
           path: build/compile/racket/bin/consent
           if-no-files-found: error
 
   test-portable-racket-self-host:
-    name: portable R7RS / Racket-compiled self-host / ${{ matrix.case.label }} / syntax ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}
+    name: >-2
+      portable R7RS / Racket-compiled self-host / ${{ matrix.case.label }} /
+      syntax ${{ matrix.case.source_metadata }} / docstrings ${{
+      matrix.case.docstring_retention }}
     needs: build-racket-self-host
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.case.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.case.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.case.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.case.source_metadata == 'on' &&
+        '250000' || '' }}
       CONSENT_PORTABLE_HOST: compiled
       CONSENT_PORTABLE_GROUP: ${{ matrix.case.group }}
       CONSENT_COMPILED: ${{ github.workspace }}/build/compile/racket/bin/consent
-      CONSENT_CI_LOG_FILE: portable-compiled-${{ matrix.case.group }}-${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Racket-compiled self-host ${{ matrix.case.label }} / source metadata ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}
+      CONSENT_CI_LOG_FILE: >-2
+        portable-compiled-${{ matrix.case.group }}-${{
+        matrix.case.source_metadata }}-docstrings-${{
+        matrix.case.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: >-2
+        Portable R7RS Racket-compiled self-host ${{ matrix.case.label }} /
+        source metadata ${{ matrix.case.source_metadata }} / docstrings ${{
+        matrix.case.docstring_retention }}
     strategy:
       fail-fast: false
       matrix:
-        case: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"group":"compiled-random","label":"random-data libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-property","label":"property-testing libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-library","label":"standard libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-runtime","label":"runtime/testing infrastructure","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-agent","label":"agent libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-integration","label":"integration/REPL","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled","label":"exhaustive shard set","source_metadata":"on","docstring_retention":"simple","aggregate":true},{"group":"compiled","label":"exhaustive shard set","source_metadata":"on","docstring_retention":"none","aggregate":true},{"group":"compiled","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"full","aggregate":true},{"group":"compiled","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"simple","aggregate":true},{"group":"compiled","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"none","aggregate":true}]') || fromJSON('[{"group":"compiled-random","label":"random-data libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-property","label":"property-testing libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-library","label":"standard libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-runtime","label":"runtime/testing infrastructure","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-agent","label":"agent libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"compiled-integration","label":"integration/REPL","source_metadata":"on","docstring_retention":"full","aggregate":false}]') }}
+        case: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('[{"group":"compiled-random","label":
+          "random-data libraries","source_metadata":"on","docstring_retention":
+          "full","aggregate":false},{"group":"compiled-property","label":
+          "property-testing libraries","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-library","label":"standard
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"compiled-runtime","label":
+          "runtime/testing infrastructure","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-agent","label":"agent libraries","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-integration","label":"integration/REPL","source_metadata":
+          "on","docstring_retention":"full","aggregate":false},{"group":
+          "compiled","label":"exhaustive shard
+          set","source_metadata":"on","docstring_retention":"simple",
+          "aggregate":true},{"group":"compiled","label":"exhaustive shard
+          set","source_metadata":"on","docstring_retention":"none","aggregate":
+          true},{"group":"compiled","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"full","aggregate":
+          true},{"group":"compiled","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"simple",
+          "aggregate":true},{"group":"compiled","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"none","aggregate":
+          true}]') || fromJSON('[{"group":"compiled-random","label":
+          "random-data libraries","source_metadata":"on","docstring_retention":
+          "full","aggregate":false},{"group":"compiled-property","label":
+          "property-testing libraries","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-library","label":"standard
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"compiled-runtime","label":
+          "runtime/testing infrastructure","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-agent","label":"agent libraries","source_metadata":"on",
+          "docstring_retention":"full","aggregate":false},{"group":
+          "compiled-integration","label":"integration/REPL","source_metadata":
+          "on","docstring_retention":"full","aggregate":false}]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -589,7 +821,9 @@ jobs:
       - name: Download Racket self-host
         uses: actions/download-artifact@v8
         with:
-          name: racket-self-host-${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}
+          name: >-2
+            racket-self-host-${{ matrix.case.source_metadata }}-docstrings-${{
+            matrix.case.docstring_retention }}
           path: build/compile/racket/bin
 
       - name: Run Racket-compiled Scheme-native shard
@@ -604,8 +838,10 @@ jobs:
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' "${CONSENT_PORTABLE_GROUP}"
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' \
+              "${CONSENT_PORTABLE_GROUP}"
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
@@ -617,9 +853,13 @@ jobs:
           CONSENT_PORTABLE_GROUP_SET: compiled
           CONSENT_CI_LOG_DIR: ci-logs
           CONSENT_CI_LOG_PREFIX: portable-compiled
-          CONSENT_CI_LOG_SUFFIX: ${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}
+          CONSENT_CI_LOG_SUFFIX: >-2
+            ${{ matrix.case.source_metadata }}-docstrings-${{
+            matrix.case.docstring_retention }}
           CONSENT_CI_SHARD_PREFIX: Portable R7RS Racket-compiled self-host
-          CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}"
+          CONSENT_CI_SHARD_SUFFIX: >-2
+             / source metadata ${{ matrix.case.source_metadata }} / docstrings
+            ${{ matrix.case.docstring_retention }}
         run: |
           chmod +x "$CONSENT_COMPILED"
           mkdir -p ci-logs
@@ -629,7 +869,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-compiled-${{ matrix.case.group }}-${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}
+          name: >-2
+            test-log-portable-compiled-${{ matrix.case.group }}-${{
+            matrix.case.source_metadata }}-docstrings-${{
+            matrix.case.docstring_retention }}
           path: ci-logs/*.log
           if-no-files-found: warn
 
@@ -645,21 +888,71 @@ jobs:
           fi
 
   test-portable-guile-shards:
-    name: portable R7RS / Guile / ${{ matrix.case.label }} / syntax ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}
+    name: >-2
+      portable R7RS / Guile / ${{ matrix.case.label }} / syntax ${{
+      matrix.case.source_metadata }} / docstrings ${{
+      matrix.case.docstring_retention }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.case.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.case.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.case.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.case.source_metadata == 'on' &&
+        '250000' || '' }}
       CONSENT_PORTABLE_HOST: guile
       CONSENT_PORTABLE_GROUP: ${{ matrix.case.group }}
-      CONSENT_CI_LOG_FILE: portable-guile-${{ matrix.case.group }}-${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Guile ${{ matrix.case.label }} / source metadata ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}
+      CONSENT_CI_LOG_FILE: >-2
+        portable-guile-${{ matrix.case.group }}-${{ matrix.case.source_metadata
+        }}-docstrings-${{ matrix.case.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: >-2
+        Portable R7RS Guile ${{ matrix.case.label }} / source metadata ${{
+        matrix.case.source_metadata }} / docstrings ${{
+        matrix.case.docstring_retention }}
     strategy:
       fail-fast: false
       matrix:
-        case: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"group":"integration","label":"integration/REPL","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"evaluator","label":"evaluator","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"random","label":"random-data libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"property","label":"property-testing libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"library","label":"standard libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"agent","label":"agent libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"runtime","label":"runtime/testing infrastructure","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"full","label":"exhaustive shard set","source_metadata":"on","docstring_retention":"simple","aggregate":true},{"group":"full","label":"exhaustive shard set","source_metadata":"on","docstring_retention":"none","aggregate":true},{"group":"full","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"full","aggregate":true},{"group":"full","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"simple","aggregate":true},{"group":"full","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"none","aggregate":true}]') || fromJSON('[{"group":"integration","label":"integration/REPL","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"evaluator","label":"evaluator","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"random","label":"random-data libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"property","label":"property-testing libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"library","label":"standard libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"agent","label":"agent libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"runtime","label":"runtime/testing infrastructure","source_metadata":"on","docstring_retention":"full","aggregate":false}]') }}
+        case: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('[{"group":"integration","label":
+          "integration/REPL","source_metadata":"on","docstring_retention":
+          "full","aggregate":false},{"group":"evaluator","label":"evaluator",
+          "source_metadata":"on","docstring_retention":"full","aggregate":false}
+          ,{"group":"random","label":"random-data
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"property","label":"property-testing
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"library","label":"standard
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"agent","label":"agent
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"runtime","label":"runtime/testing
+          infrastructure","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"full","label":"exhaustive shard
+          set","source_metadata":"on","docstring_retention":"simple",
+          "aggregate":true},{"group":"full","label":"exhaustive shard
+          set","source_metadata":"on","docstring_retention":"none","aggregate":
+          true},{"group":"full","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"full","aggregate":
+          true},{"group":"full","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"simple",
+          "aggregate":true},{"group":"full","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"none","aggregate":
+          true}]') || fromJSON('[{"group":"integration","label":
+          "integration/REPL","source_metadata":"on","docstring_retention":
+          "full","aggregate":false},{"group":"evaluator","label":"evaluator",
+          "source_metadata":"on","docstring_retention":"full","aggregate":false}
+          ,{"group":"random","label":"random-data
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"property","label":"property-testing
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"library","label":"standard
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"agent","label":"agent
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"runtime","label":"runtime/testing
+          infrastructure","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false}]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -680,8 +973,10 @@ jobs:
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' "${CONSENT_PORTABLE_GROUP}"
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' \
+              "${CONSENT_PORTABLE_GROUP}"
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
@@ -693,16 +988,23 @@ jobs:
           CONSENT_PORTABLE_GROUP_SET: direct
           CONSENT_CI_LOG_DIR: ci-logs
           CONSENT_CI_LOG_PREFIX: portable-guile
-          CONSENT_CI_LOG_SUFFIX: ${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}
+          CONSENT_CI_LOG_SUFFIX: >-2
+            ${{ matrix.case.source_metadata }}-docstrings-${{
+            matrix.case.docstring_retention }}
           CONSENT_CI_SHARD_PREFIX: Portable R7RS Guile
-          CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}"
+          CONSENT_CI_SHARD_SUFFIX: >-2
+             / source metadata ${{ matrix.case.source_metadata }} / docstrings
+            ${{ matrix.case.docstring_retention }}
         run: tools/run-portable-test-set.sh
 
       - name: Upload Guile shard log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-guile-${{ matrix.case.group }}-${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}
+          name: >-2
+            test-log-portable-guile-${{ matrix.case.group }}-${{
+            matrix.case.source_metadata }}-docstrings-${{
+            matrix.case.docstring_retention }}
           path: ci-logs/*.log
           if-no-files-found: warn
 
@@ -718,16 +1020,25 @@ jobs:
           fi
 
   test-portable-extra-hosts:
-    name: portable R7RS / ${{ matrix.host.host_name }} / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    name: >-2
+      portable R7RS / ${{ matrix.host.host_name }} / syntax ${{
+      matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
       DEBIAN_FRONTEND: noninteractive
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
-      CONSENT_CI_LOG_FILE: portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.host.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.source_metadata == 'on' &&
+        '250000' || '' }}
+      CONSENT_CI_LOG_FILE: >-2
+        portable-${{ matrix.host.host }}-${{ matrix.source_metadata
+        }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: >-2
+        ${{ matrix.host.summary_name }} / source metadata ${{
+        matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention
+        }}
     strategy:
       fail-fast: false
       # Per-push lane runs every extra host on the canonical on/full combo only;
@@ -735,8 +1046,14 @@ jobs:
       # Gambit (test-portable-gambit) carries the full portable cross on every
       # lane, so the host-independent metadata/docstring axis stays covered.
       matrix:
-        source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
-        docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
+        source_metadata: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('["on", "off"]') ||
+          fromJSON('["on"]') }}
+        docstring_retention: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('["full", "simple", "none"]') ||
+          fromJSON('["full"]') }}
         host:
           - host: racket
             host_name: Racket
@@ -784,20 +1101,24 @@ jobs:
           ok=0
           for attempt in 1 2 3 4; do
             if run apt-get update -o Acquire::Retries=3 \
-               && run apt-get install -y --no-install-recommends -o Acquire::Retries=3 ca-certificates git tar zstd; then
+               && run apt-get install -y --no-install-recommends -o \
+                 Acquire::Retries=3 ca-certificates git tar zstd; then
               ok=1
               break
             fi
             echo "::warning::apt attempt ${attempt} failed; retrying" >&2
             sleep $((attempt * 10))
           done
-          [ "${ok}" -eq 1 ] || { echo "::error::apt failed after retries" >&2; exit 1; }
+          [ "${ok}" -eq 1 ] || { echo "::error::apt failed after retries" \
+            >&2; exit 1; }
 
       - name: Check out repository
         uses: actions/checkout@v6
 
       - name: Cache Racket R7RS package
-        if: matrix.host.host == 'racket' || matrix.host.host == 'racket-reflect' || matrix.host.host == 'racket-reflect-stress'
+        if: >-2
+          matrix.host.host == 'racket' || matrix.host.host == 'racket-reflect'
+          || matrix.host.host == 'racket-reflect-stress'
         uses: actions/cache@v4
         with:
           path: |
@@ -813,13 +1134,15 @@ jobs:
       - name: Verify portable R7RS host
         shell: bash
         run: |
+          scheme_smoke='(import (scheme base) (scheme write))'
+          scheme_smoke="${scheme_smoke} (write (+ 1 2)) (newline)"
           case "${{ matrix.host.host }}" in
             racket|racket-reflect|racket-reflect-stress)
               raco pkg install --batch --auto --skip-installed --no-docs r7rs
-              racket -I r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+              racket -I r7rs -e "$scheme_smoke"
               ;;
             guile|guile-reflect|guile-reflect-stress)
-              guile --no-auto-compile --r7rs -c '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+              guile --no-auto-compile --r7rs -c "$scheme_smoke"
               ;;
           esac
 
@@ -829,9 +1152,13 @@ jobs:
         env:
           CONSENT_CI_LOG_DIR: ci-logs
           CONSENT_CI_LOG_PREFIX: ${{ matrix.host.log_prefix }}
-          CONSENT_CI_LOG_SUFFIX: ${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          CONSENT_CI_LOG_SUFFIX: >-2
+            ${{ matrix.source_metadata }}-docstrings-${{
+            matrix.docstring_retention }}
           CONSENT_CI_SHARD_PREFIX: ${{ matrix.host.shard_prefix }}
-          CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}"
+          CONSENT_CI_SHARD_SUFFIX: >-2
+             / source metadata ${{ matrix.source_metadata }} / docstrings ${{
+            matrix.docstring_retention }}
         run: |
           mkdir -p ci-logs
           make "${{ matrix.host.make_target }}"
@@ -843,12 +1170,15 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make "${{ matrix.host.make_target }}" 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          make "${{ matrix.host.make_target }}" 2>&1 | tee \
+            "ci-logs/${CONSENT_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '${{ matrix.host.selector }}'
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' \
+              '${{ matrix.host.selector }}'
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
@@ -857,7 +1187,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          name: >-2
+            test-log-portable-${{ matrix.host.host }}-${{
+            matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention
+            }}
           path: ci-logs/*.log
           if-no-files-found: warn
 
@@ -872,7 +1205,10 @@ jobs:
           fi
 
   test-portable-gauche-shards:
-    name: portable R7RS / Gauche / ${{ matrix.case.label }} / syntax ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}
+    name: >-2
+      portable R7RS / Gauche / ${{ matrix.case.label }} / syntax ${{
+      matrix.case.source_metadata }} / docstrings ${{
+      matrix.case.docstring_retention }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container: public.ecr.aws/ubuntu/ubuntu:26.04
@@ -880,18 +1216,66 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.case.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.case.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.case.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.case.source_metadata == 'on' &&
+        '250000' || '' }}
       CONSENT_PORTABLE_HOST: gauche
       CONSENT_PORTABLE_GROUP: ${{ matrix.case.group }}
-      CONSENT_CI_LOG_FILE: portable-gauche-${{ matrix.case.group }}-${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gauche ${{ matrix.case.label }} / source metadata ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}
+      CONSENT_CI_LOG_FILE: >-2
+        portable-gauche-${{ matrix.case.group }}-${{
+        matrix.case.source_metadata }}-docstrings-${{
+        matrix.case.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: >-2
+        Portable R7RS Gauche ${{ matrix.case.label }} / source metadata ${{
+        matrix.case.source_metadata }} / docstrings ${{
+        matrix.case.docstring_retention }}
     strategy:
       fail-fast: false
       max-parallel: 4
       matrix:
         # Put the historical 262-second REPL program first so GitHub assigns it
         # a runner before the smaller semantic groups.
-        case: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"group":"integration","label":"integration/REPL","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"evaluator","label":"evaluator","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"random","label":"random-data libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"property","label":"property-testing libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"library","label":"standard libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"agent","label":"agent libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"runtime","label":"runtime/testing infrastructure","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"full","label":"exhaustive shard set","source_metadata":"on","docstring_retention":"simple","aggregate":true},{"group":"full","label":"exhaustive shard set","source_metadata":"on","docstring_retention":"none","aggregate":true},{"group":"full","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"full","aggregate":true},{"group":"full","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"simple","aggregate":true},{"group":"full","label":"exhaustive shard set","source_metadata":"off","docstring_retention":"none","aggregate":true}]') || fromJSON('[{"group":"integration","label":"integration/REPL","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"evaluator","label":"evaluator","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"random","label":"random-data libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"property","label":"property-testing libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"library","label":"standard libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"agent","label":"agent libraries","source_metadata":"on","docstring_retention":"full","aggregate":false},{"group":"runtime","label":"runtime/testing infrastructure","source_metadata":"on","docstring_retention":"full","aggregate":false}]') }}
+        case: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('[{"group":"integration","label":
+          "integration/REPL","source_metadata":"on","docstring_retention":
+          "full","aggregate":false},{"group":"evaluator","label":"evaluator",
+          "source_metadata":"on","docstring_retention":"full","aggregate":false}
+          ,{"group":"random","label":"random-data
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"property","label":"property-testing
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"library","label":"standard
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"agent","label":"agent
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"runtime","label":"runtime/testing
+          infrastructure","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"full","label":"exhaustive shard
+          set","source_metadata":"on","docstring_retention":"simple",
+          "aggregate":true},{"group":"full","label":"exhaustive shard
+          set","source_metadata":"on","docstring_retention":"none","aggregate":
+          true},{"group":"full","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"full","aggregate":
+          true},{"group":"full","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"simple",
+          "aggregate":true},{"group":"full","label":"exhaustive shard
+          set","source_metadata":"off","docstring_retention":"none","aggregate":
+          true}]') || fromJSON('[{"group":"integration","label":
+          "integration/REPL","source_metadata":"on","docstring_retention":
+          "full","aggregate":false},{"group":"evaluator","label":"evaluator",
+          "source_metadata":"on","docstring_retention":"full","aggregate":false}
+          ,{"group":"random","label":"random-data
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"property","label":"property-testing
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"library","label":"standard
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"agent","label":"agent
+          libraries","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false},{"group":"runtime","label":"runtime/testing
+          infrastructure","source_metadata":"on","docstring_retention":"full",
+          "aggregate":false}]') }}
     steps:
       - name: Install checkout tools
         shell: bash
@@ -918,8 +1302,10 @@ jobs:
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' "${CONSENT_PORTABLE_GROUP}"
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=(testing-plan-shard %s)\n' \
+              "${CONSENT_PORTABLE_GROUP}"
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
@@ -931,16 +1317,23 @@ jobs:
           CONSENT_PORTABLE_GROUP_SET: direct
           CONSENT_CI_LOG_DIR: ci-logs
           CONSENT_CI_LOG_PREFIX: portable-gauche
-          CONSENT_CI_LOG_SUFFIX: ${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}
+          CONSENT_CI_LOG_SUFFIX: >-2
+            ${{ matrix.case.source_metadata }}-docstrings-${{
+            matrix.case.docstring_retention }}
           CONSENT_CI_SHARD_PREFIX: Portable R7RS Gauche
-          CONSENT_CI_SHARD_SUFFIX: " / source metadata ${{ matrix.case.source_metadata }} / docstrings ${{ matrix.case.docstring_retention }}"
+          CONSENT_CI_SHARD_SUFFIX: >-2
+             / source metadata ${{ matrix.case.source_metadata }} / docstrings
+            ${{ matrix.case.docstring_retention }}
         run: tools/run-portable-test-set.sh
 
       - name: Upload Gauche shard log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-gauche-${{ matrix.case.group }}-${{ matrix.case.source_metadata }}-docstrings-${{ matrix.case.docstring_retention }}
+          name: >-2
+            test-log-portable-gauche-${{ matrix.case.group }}-${{
+            matrix.case.source_metadata }}-docstrings-${{
+            matrix.case.docstring_retention }}
           path: ci-logs/*.log
           if-no-files-found: warn
 
@@ -956,7 +1349,9 @@ jobs:
           fi
 
   test-portable-gauche-hosts:
-    name: portable R7RS / ${{ matrix.host.host_name }} / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    name: >-2
+      portable R7RS / ${{ matrix.host.host_name }} / syntax ${{
+      matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Gauche is packaged in Ubuntu 26.04 but not the bare ubuntu-latest runner's
@@ -967,9 +1362,16 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
-      CONSENT_CI_LOG_FILE: portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.host.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.source_metadata == 'on' &&
+        '250000' || '' }}
+      CONSENT_CI_LOG_FILE: >-2
+        portable-${{ matrix.host.host }}-${{ matrix.source_metadata
+        }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: >-2
+        ${{ matrix.host.summary_name }} / source metadata ${{
+        matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention
+        }}
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -978,8 +1380,14 @@ jobs:
       # cross. Gambit carries the full portable cross on every lane, so the
       # host-independent metadata/docstring axis stays covered.
       matrix:
-        source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
-        docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
+        source_metadata: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('["on", "off"]') ||
+          fromJSON('["on"]') }}
+        docstring_retention: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('["full", "simple", "none"]') ||
+          fromJSON('["full"]') }}
         host:
           - host: gauche-reflect-stress
             host_name: Gauche reflection stress
@@ -1004,14 +1412,16 @@ jobs:
           ok=0
           for attempt in 1 2 3 4; do
             if run apt-get update -o Acquire::Retries=3 \
-               && run apt-get install -y --no-install-recommends -o Acquire::Retries=3 ca-certificates git tar zstd; then
+               && run apt-get install -y --no-install-recommends -o \
+                 Acquire::Retries=3 ca-certificates git tar zstd; then
               ok=1
               break
             fi
             echo "::warning::apt attempt ${attempt} failed; retrying" >&2
             sleep $((attempt * 10))
           done
-          [ "${ok}" -eq 1 ] || { echo "::error::apt failed after retries" >&2; exit 1; }
+          [ "${ok}" -eq 1 ] || { echo "::error::apt failed after retries" \
+            >&2; exit 1; }
 
       - name: Check out repository
         uses: actions/checkout@v6
@@ -1024,7 +1434,8 @@ jobs:
       - name: Verify portable R7RS host
         shell: bash
         run: |
-          gosh -r7 -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+          gosh -r7 -e \
+            '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Run portable R7RS reflection shard
         shell: bash
@@ -1032,12 +1443,15 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make "${{ matrix.host.make_target }}" 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          make "${{ matrix.host.make_target }}" 2>&1 | tee \
+            "ci-logs/${CONSENT_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '${{ matrix.host.selector }}'
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' \
+              '${{ matrix.host.selector }}'
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
@@ -1046,7 +1460,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          name: >-2
+            test-log-portable-${{ matrix.host.host }}-${{
+            matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention
+            }}
           path: ci-logs/*.log
           if-no-files-found: warn
 
@@ -1055,20 +1472,28 @@ jobs:
         run: |
           if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
-              --eval "(require 'consent-ci)" \
-              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --load tools/consent-ci-write-summary.el
           fi
 
   test-emacs-hosted:
-    name: Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{ matrix.source_metadata }}; docstrings ${{ matrix.docstring_retention }})
+    name: >-2
+      Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{
+      matrix.source_metadata }}; docstrings ${{ matrix.docstring_retention }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
-      CONSENT_CI_LOG_FILE: emacs-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.source_metadata == 'on' &&
+        '250000' || '' }}
+      CONSENT_CI_LOG_FILE: >-2
+        emacs-${{ matrix.shard.shard }}-${{ matrix.source_metadata
+        }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: >-2
+        ${{ matrix.shard.summary_name }} / source metadata ${{
+        matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention
+        }}
     strategy:
       fail-fast: false
       # Per-push lane runs the library, agent/capability, tools, integration,
@@ -1077,8 +1502,14 @@ jobs:
       # core language/runtime shard carries the full Emacs cross on every lane
       # in its own job (test-emacs-core).
       matrix:
-        source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
-        docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
+        source_metadata: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('["on", "off"]') ||
+          fromJSON('["on"]') }}
+        docstring_retention: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('["full", "simple", "none"]') ||
+          fromJSON('["full"]') }}
         shard:
           # Longest expected wall-time shards appear first so GitHub starts
           # them in the first runner wave when matrix capacity is constrained.
@@ -1086,67 +1517,109 @@ jobs:
             label: reflection docs/apropos stress
             make_target: test-emacs-reflect-documentation-stress
             summary_name: Emacs reflection documentation stress
-            selector: '"consent-reflect-test-documented-bindings-and-apropos-stress"'
+            selector: >-2
+              "consent-reflect-test-documented-bindings-and-apropos-stress"
           - shard: emacs-agent-state
             label: agent state
             make_target: test-emacs-agent-state
             summary_name: Emacs agent state
-            selector: '(or "consent-agent-io.*" "consent-context.*" "consent-helper.*" "consent-memory.*" "consent-models.*" "consent-plan.*" "consent-redaction.*" "consent-session.*" "consent-test.*" "consent-transcript.*")'
+            selector: >-2
+              (or "consent-agent-io.*" "consent-context.*" "consent-helper.*"
+              "consent-memory.*" "consent-models.*" "consent-plan.*"
+              "consent-redaction.*" "consent-session.*" "consent-test.*"
+              "consent-transcript.*")
           - shard: emacs-integration
             label: integration/REPL
             make_target: test-emacs-integration
             summary_name: Emacs integration/REPL
-            selector: '(or "consent-native-cli-daemon.*" "consent-repl.*" "consent-vcs.*")'
+            selector: >-2
+              (or "consent-native-cli-daemon.*" "consent-repl.*"
+              "consent-vcs.*")
           - shard: emacs-agent-reliability
             label: agent reliability
             make_target: test-emacs-agent-reliability
             summary_name: Emacs agent reliability
-            selector: '(or "consent-agent-reliability.*" "consent-agent-runner.*")'
+            selector: >-2
+              (or "consent-agent-reliability.*"
+              "consent-agent-runner.*")
           - shard: emacs-agent-control
             label: agent control
             make_target: test-emacs-agent-control
             summary_name: Emacs agent control
-            selector: '(or "consent-agent-prompt.*" "consent-agent-proposal.*" "consent-agent-registry.*" "consent-task.*")'
+            selector: >-2
+              (or "consent-agent-prompt.*" "consent-agent-proposal.*"
+              "consent-agent-registry.*" "consent-task.*")
           - shard: emacs-reflect
             label: reflection contract
             make_target: test-emacs-reflect
             summary_name: Emacs reflection contract
-            selector: '(and "consent-reflect.*" (not "consent-reflect-test-.*stress.*"))'
+            selector: >-2
+              (and "consent-reflect.*"
+              (not "consent-reflect-test-.*stress.*"))
           - shard: emacs-library-runtime
             label: library runtime
             make_target: test-emacs-library-runtime
             summary_name: Emacs library runtime
-            selector: '(and "consent-library.*" (not (or "consent-library-test-srfi-.*" "consent-library-test-stdlib-.*" "consent-library-test-vendored-srfi.*")))'
+            selector: >-2
+              (and "consent-library.*" (not (or "consent-library-test-srfi-.*"
+              "consent-library-test-stdlib-.*"
+              "consent-library-test-vendored-srfi.*")))
           - shard: emacs-tools
             label: tools/docs/integration
             make_target: test-emacs-tools
             summary_name: Emacs tools/docs/integration
-            selector: '(and (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-repl-agent-quickstart-doc.*" "consent-skill.*" "consent-smoke.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$") (not "^consent-compile-portable-test-\(racket\|gambit\)-\(builds-runner\|install-and-dist\)$"))'
+            selector: >-2
+              (and (or "consent-ci.*" "consent-compile.*"
+              "consent-control-loop-doc.*" "consent-debugger.*"
+              "consent-diagnostics.*" "consent-diff.*"
+              "consent-feature-reflection-doc.*" "consent-job.*"
+              "consent-repl-agent-quickstart-doc.*" "consent-skill.*"
+              "consent-smoke.*" "consent-scheme-documentation-test-.*"
+              "consent-scheme-module-ownership-test-.*"
+              "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$"
+              (and "^consent-scheme-module-boundary-test-"
+              "runtime-version-loads-outside-repo$"))
+              (not (and
+              "^consent-compile-portable-test-\(racket\|gambit\)-"
+              "\(builds-runner\|install-and-dist\)$")))
           - shard: emacs-library-stdlib-manifest
             label: standard-library manifests
             make_target: test-emacs-library-stdlib-manifest
             summary_name: Emacs standard-library manifests
-            selector: '(or "consent-library-test-stdlib-manifest.*" "consent-library-test-vendored-srfi.*")'
+            selector: >-2
+              (or "consent-library-test-stdlib-manifest.*"
+              "consent-library-test-vendored-srfi.*")
           - shard: emacs-library-stdlib-core
             label: standard-library behavior
             make_target: test-emacs-library-stdlib-core
             summary_name: Emacs standard-library behavior
-            selector: '(or (and "consent-library-test-srfi-.*" (not "consent-library-test-srfi-\(27\|194\|252\)-.*")) (and "consent-library-test-stdlib-.*" (not (or "consent-library-test-stdlib-manifest.*" "consent-library-test-stdlib-random-distributions.*"))))'
+            selector: >-2
+              (or (and "consent-library-test-srfi-.*" (not
+              "consent-library-test-srfi-\(27\|194\|252\)-.*")) (and
+              "consent-library-test-stdlib-.*" (not (or
+              "consent-library-test-stdlib-manifest.*"
+              "consent-library-test-stdlib-random-distributions.*"))))
           - shard: emacs-capability-boundary
             label: capability boundary
             make_target: test-emacs-capability-boundary
             summary_name: Emacs capability boundary
-            selector: '(or "consent-approval.*" "consent-capability.*" "consent-network.*" "consent-policy.*")'
+            selector: >-2
+              (or "consent-approval.*" "consent-capability.*"
+              "consent-network.*" "consent-policy.*")
           - shard: emacs-conformance
             label: fixture/conformance
             make_target: test-emacs-conformance
             summary_name: Emacs fixture/conformance
-            selector: '(or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-oracle.*")'
+            selector: >-2
+              (or "consent-conformance.*" "consent-fixture.*"
+              "consent-host-adapter-fixture.*" "consent-oracle.*")
           - shard: emacs-library-stdlib-property
             label: random/property libraries
             make_target: test-emacs-library-stdlib-property
             summary_name: Emacs random/property libraries
-            selector: '(or "consent-library-test-srfi-\(27\|194\|252\)-.*" "consent-library-test-stdlib-random-distributions.*")'
+            selector: >-2
+              (or "consent-library-test-srfi-\(27\|194\|252\)-.*"
+              "consent-library-test-stdlib-random-distributions.*")
           - shard: emacs-reflect-dynamic-manifest-stress
             label: reflection dynamic manifest stress
             make_target: test-emacs-reflect-dynamic-manifest-stress
@@ -1161,7 +1634,8 @@ jobs:
             label: reflection binding crosswalk stress
             make_target: test-emacs-reflect-binding-crosswalk-stress
             summary_name: Emacs reflection binding crosswalk stress
-            selector: '"consent-reflect-test-binding-libraries-crosswalk-stress"'
+            selector: >-2
+              "consent-reflect-test-binding-libraries-crosswalk-stress"
           # The native-build shard isolates the four full host-compile +
           # install/dist tests so they only run in `make test-full' locally
           # (#556). On CI's emacs-hosted runners neither gsc/gsi nor raco/racket
@@ -1175,7 +1649,9 @@ jobs:
             label: native-build/install-dist
             make_target: test-emacs-native-build
             summary_name: Emacs native-build/install-dist
-            selector: '"^consent-compile-portable-test-\(racket\|gambit\)-\(builds-runner\|install-and-dist\)$"'
+            selector: >-2
+              (and "^consent-compile-portable-test-\(racket\|gambit\)-"
+              "\(builds-runner\|install-and-dist\)$")
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -1191,12 +1667,15 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make "${{ matrix.shard.make_target }}" 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          make "${{ matrix.shard.make_target }}" 2>&1 | tee \
+            "ci-logs/${CONSENT_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '${{ matrix.shard.selector }}'
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' \
+              '${{ matrix.shard.selector }}'
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
@@ -1205,7 +1684,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          name: >-2
+            test-log-${{ matrix.shard.shard }}-${{ matrix.source_metadata
+            }}-docstrings-${{ matrix.docstring_retention }}
           path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
           if-no-files-found: warn
 
@@ -1214,38 +1695,59 @@ jobs:
         run: |
           if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
-              --eval "(require 'consent-ci)" \
-              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --load tools/consent-ci-write-summary.el
           fi
 
   test-emacs-core:
-    name: Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{ matrix.combo.source_metadata }}; docstrings ${{ matrix.combo.docstring_retention }})
+    name: >-2
+      Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{
+      matrix.combo.source_metadata }}; docstrings ${{
+      matrix.combo.docstring_retention }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    # Canonical Emacs shard: on the per-push lane the core language/runtime shard
-    # runs the canonical on/full combo plus a single fully-stripped off/none
-    # de-feature smoke leg, so the Emacs reader/writer/docstring axis keeps a fast
-    # per-push canary (#481). The scheduled / workflow_dispatch lane expands it back
-    # to the full 2×3 syntax/docstring cross-product. The non-core Emacs shards
-    # trim to the canonical combo on the per-push lane (see test-emacs-hosted).
+    # Canonical Emacs shard: on the per-push lane the core language/runtime
+    # shard runs the canonical on/full combo plus a single fully-stripped
+    # off/none de-feature smoke leg, so the Emacs reader/writer/docstring axis
+    # keeps a fast per-push canary (#481). The scheduled / workflow_dispatch
+    # lane expands it back to the full 2×3 syntax/docstring cross-product. The
+    # non-core Emacs shards trim to the canonical combo on the per-push lane.
     env:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
-      CONSENT_CI_LOG_FILE: emacs-${{ matrix.shard.shard }}-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_CI_LOG_FILE: >-2
+        emacs-${{ matrix.shard.shard }}-${{ matrix.combo.source_metadata
+        }}-docstrings-${{ matrix.combo.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: >-2
+        ${{ matrix.shard.summary_name }} / source metadata ${{
+        matrix.combo.source_metadata }} / docstrings ${{
+        matrix.combo.docstring_retention }}
     strategy:
       fail-fast: false
-      # Per-push lane: canonical on/full plus a single fully-stripped off/none smoke
-      # leg. Scheduled / workflow_dispatch lane: full 2×3 cross.
+      # Per-push lane: canonical on/full plus a single fully-stripped off/none
+      # smoke leg. Scheduled / workflow_dispatch lane: full 2×3 cross.
       matrix:
-        combo: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"on","docstring_retention":"simple"},{"source_metadata":"on","docstring_retention":"none"},{"source_metadata":"off","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"simple"},{"source_metadata":"off","docstring_retention":"none"}]') || fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"none"}]') }}
+        combo: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('[{"source_metadata":"on",
+          "docstring_retention":"full"},{"source_metadata":"on",
+          "docstring_retention":"simple"},{"source_metadata":"on",
+          "docstring_retention":"none"},{"source_metadata":"off",
+          "docstring_retention":"full"},{"source_metadata":"off",
+          "docstring_retention":"simple"},{"source_metadata":"off",
+          "docstring_retention":"none"}]') ||
+          fromJSON('[{"source_metadata":"on","docstring_retention":"full"},
+          {"source_metadata":"off","docstring_retention":"none"}]') }}
         shard:
           - shard: emacs-core
             label: core language/runtime
             make_target: test-emacs-core
             summary_name: Emacs core language/runtime
-            selector: '(or "consent-base.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")'
+            selector: >-2
+              (or "consent-base.*" "consent-eval.*"
+              "consent-interpreter-module.*" "consent-macro.*"
+              "consent-reader.*" "consent-result.*" "consent-runtime.*")
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -1261,12 +1763,15 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make "${{ matrix.shard.make_target }}" 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          make "${{ matrix.shard.make_target }}" 2>&1 | tee \
+            "ci-logs/${CONSENT_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
-            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '${{ matrix.shard.selector }}'
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' \
+              '${{ matrix.shard.selector }}'
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
@@ -1275,7 +1780,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-${{ matrix.shard.shard }}-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
+          name: >-2
+            test-log-${{ matrix.shard.shard }}-${{ matrix.combo.source_metadata
+            }}-docstrings-${{ matrix.combo.docstring_retention }}
           path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
           if-no-files-found: warn
 
@@ -1284,35 +1791,49 @@ jobs:
         run: |
           if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
-              --eval "(require 'consent-ci)" \
-              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --load tools/consent-ci-write-summary.el
           fi
 
   test-parity:
-    name: Emacs/portable parity gate (syntax ${{ matrix.source_metadata }}; docstrings ${{ matrix.docstring_retention }})
+    name: >-2
+      Emacs/portable parity gate (syntax ${{ matrix.source_metadata }};
+      docstrings ${{ matrix.docstring_retention }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Required cross-implementation gate (#374): run the shared fixture corpus
     # through both in-repo cores -- the Emacs-hosted implementation and the
     # portable R7RS implementation, exercised here under Guile -- and fail on
     # any result divergence. The per-push lane runs the canonical on/full combo;
-    # the scheduled / workflow_dispatch lane expands to the full 2x3 cross, since
-    # each core's own shards already carry the metadata/docstring axis. Guile is
+    # the scheduled / workflow_dispatch lane expands to the full 2x3 cross,
+    # since each core's own shards already carry the metadata/docstring axis.
+    # Guile is
     # the parity host here because it ships in the bare ubuntu-latest runner's
-    # apt universe; Gauche is only packaged in the Ubuntu 26.04 container used by
-    # the Gauche-specific portable-host shards.
+    # apt universe; Gauche is only packaged in the Ubuntu 26.04 container used
+    # by the Gauche-specific portable-host shards.
     env:
       CONSENT_PARITY_HOST: guile
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
-      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
-      CONSENT_CI_LOG_FILE: parity-guile-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: Emacs/portable parity gate / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: >-2
+        ${{ matrix.source_metadata == 'on' &&
+        '250000' || '' }}
+      CONSENT_CI_LOG_FILE: >-2
+        parity-guile-${{ matrix.source_metadata }}-docstrings-${{
+        matrix.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: >-2
+        Emacs/portable parity gate / source metadata ${{ matrix.source_metadata
+        }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
       matrix:
-        source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
-        docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
+        source_metadata: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('["on", "off"]') ||
+          fromJSON('["on"]') }}
+        docstring_retention: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && fromJSON('["full", "simple", "none"]') ||
+          fromJSON('["full"]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -1325,7 +1846,8 @@ jobs:
       - name: Verify Guile
         run: |
           guile --no-auto-compile --r7rs -L scheme \
-            -c '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+            -c \
+              '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Run Emacs/portable parity gate
         shell: bash
@@ -1337,7 +1859,8 @@ jobs:
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' \
+              "${CONSENT_CI_SHARD_SUMMARY_NAME}"
             printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-parity-test-.*"'
             printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
@@ -1347,7 +1870,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-parity-guile-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          name: >-2
+            test-log-parity-guile-${{ matrix.source_metadata }}-docstrings-${{
+            matrix.docstring_retention }}
           path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
           if-no-files-found: warn
 
@@ -1356,8 +1881,7 @@ jobs:
         run: |
           if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
-              --eval "(require 'consent-ci)" \
-              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --load tools/consent-ci-write-summary.el
           fi
 
   test-summary:
@@ -1404,7 +1928,8 @@ jobs:
             logs+=("$log")
           done < <(find ci-logs -type f -name '*.log' -print0)
           if [ "${#logs[@]}" -eq 0 ]; then
-            printf '%s\n' 'No shard logs were available.' >> "$GITHUB_STEP_SUMMARY"
+            printf '%s\n' 'No shard logs were available.' >> \
+              "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           summary_file=ci-logs/test-shard-summary.md
@@ -1425,10 +1950,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CONSENT_CI_PARITY_RESULT: ${{ needs.test-parity.result }}
-          CONSENT_CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CONSENT_CI_RUN_URL: >-2
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{
+            github.run_id }}
           CONSENT_CI_PR_NUMBER: ${{ github.event.pull_request.number }}
-          CONSENT_CI_BASE_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
-          CONSENT_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CONSENT_CI_BASE_REF: >-2
+            ${{ github.event.pull_request.base.ref || github.ref_name }}
+          CONSENT_CI_HEAD_SHA: >-2
+            ${{ github.event.pull_request.head.sha || github.sha }}
           CONSENT_CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           mkdir -p ci-logs
@@ -1437,7 +1966,8 @@ jobs:
             logs+=("$log")
           done < <(find ci-logs -type f -name '*.log' -print0)
           if [ "${#logs[@]}" -eq 0 ]; then
-            printf '%s\n' 'No shard logs were available; skipping per-run record.'
+            printf '%s\n' \
+              'No shard logs were available; skipping per-run record.'
             exit 0
           fi
           CONSENT_CI_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1445,23 +1975,32 @@ jobs:
           # Change scope comes from the PR API (history-independent here, since
           # the summary job only checks out the merge commit). Null on push /
           # schedule lanes, which have no pull request to size.
-          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] && [ -n "${CONSENT_CI_PR_NUMBER}" ]; then
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] && [ -n \
+            "${CONSENT_CI_PR_NUMBER}" ]; then
             if scope="$(gh pr view "${CONSENT_CI_PR_NUMBER}" \
                   --repo "${GITHUB_REPOSITORY}" \
-                  --json files,changedFiles,additions,deletions 2>/dev/null)"; then
-              CONSENT_CI_CHANGED_FILES="$(printf '%s' "$scope" | jq -r '.changedFiles')"
-              CONSENT_CI_INSERTIONS="$(printf '%s' "$scope" | jq -r '.additions')"
-              CONSENT_CI_DELETIONS="$(printf '%s' "$scope" | jq -r '.deletions')"
-              export CONSENT_CI_CHANGED_FILES CONSENT_CI_INSERTIONS CONSENT_CI_DELETIONS
-              if printf '%s' "$scope" \
-                  | jq -e '.files[] | select(.path == "scheme/consent/version.sld")' >/dev/null; then
+                  --json files,changedFiles,additions,deletions \
+                    2>/dev/null)"; then
+              CONSENT_CI_CHANGED_FILES=$(printf '%s' "$scope" |
+                jq -r '.changedFiles')
+              CONSENT_CI_INSERTIONS=$(printf '%s' "$scope" |
+                jq -r '.additions')
+              CONSENT_CI_DELETIONS=$(printf '%s' "$scope" |
+                jq -r '.deletions')
+              export CONSENT_CI_CHANGED_FILES CONSENT_CI_INSERTIONS \
+                CONSENT_CI_DELETIONS
+              version_file=scheme/consent/version.sld
+              if printf '%s' "$scope" |
+                  jq -e --arg path "$version_file" \
+                    '.files[] | select(.path == $path)' >/dev/null; then
                 export CONSENT_CI_VERSION_CHANGED=true
               else
                 export CONSENT_CI_VERSION_CHANGED=false
               fi
             fi
           fi
-          CONSENT_CI_RUN_RECORD_FILE=ci-logs/run-record.jsonl emacs -Q --batch -L lisp \
+          CONSENT_CI_RUN_RECORD_FILE=ci-logs/run-record.jsonl emacs -Q \
+            --batch -L lisp \
             --eval "(require 'consent-ci)" \
             --funcall consent-ci-run-record-batch-main -- "${logs[@]}"
           printf 'Wrote per-run CI record:\n'
@@ -1480,7 +2019,9 @@ jobs:
         if: github.event_name == 'pull_request'
         shell: bash
         env:
-          CONSENT_CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CONSENT_CI_RUN_URL: >-2
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{
+            github.run_id }}
         run: |
           mkdir -p ci-logs
           logs=()
@@ -1488,15 +2029,19 @@ jobs:
             logs+=("$log")
           done < <(find ci-logs -type f -name '*.log' -print0)
           if [ "${#logs[@]}" -eq 0 ]; then
-            printf '%s\n\n%s\n' '<!-- consent-ci-timing-summary -->' 'No shard logs were available.' > ci-logs/pr-timing-summary.md
+            printf '%s\n\n%s\n' '<!-- consent-ci-timing-summary -->' \
+              'No shard logs were available.' > ci-logs/pr-timing-summary.md
             exit 0
           fi
-          CONSENT_CI_PR_SUMMARY_FILE=ci-logs/pr-timing-summary.md emacs -Q --batch -L lisp \
+          CONSENT_CI_PR_SUMMARY_FILE=ci-logs/pr-timing-summary.md emacs -Q \
+            --batch -L lisp \
             --eval "(require 'consent-ci)" \
             --funcall consent-ci-pr-summary-batch-main -- "${logs[@]}"
 
       - name: Publish pull request timing comment
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: >-2
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1504,19 +2049,25 @@ jobs:
         run: |
           marker='<!-- consent-ci-timing-summary -->'
           comment_file=ci-logs/pr-timing-summary.md
+          comments_api="repos/${GITHUB_REPOSITORY}/issues"
+          comments_api="${comments_api}/${CONSENT_PR_NUMBER}/comments"
           if [ ! -s "$comment_file" ]; then
-            printf '%s\n\nNo shard timing summary was available.' "$marker" > "$comment_file"
+            printf '%s\n\nNo shard timing summary was available.' "$marker" > \
+              "$comment_file"
           fi
-          comment_id="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${CONSENT_PR_NUMBER}/comments" \
+          comment_id="$(gh api "$comments_api" \
             --paginate \
-            --jq '.[] | select(.body | contains("<!-- consent-ci-timing-summary -->")) | .id' \
+            --jq \
+              '.[] | select(.body | contains("timing-summary")) | .id' \
             | head -n 1)"
           if [ -n "$comment_id" ]; then
-            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+            gh api --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
               --field "body=@${comment_file}" \
               --silent
           else
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${CONSENT_PR_NUMBER}/comments" \
+            gh api --method POST \
+              "$comments_api" \
               --field "body=@${comment_file}" \
               --silent
           fi
@@ -1554,14 +2105,17 @@ jobs:
           path: |
             build/compile/racket/src
             build/compile/racket/collections
-          key: ${{ runner.os }}-racket-build-v2-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
+          key: >-2
+            ${{ runner.os }}-racket-build-v2-${{ hashFiles('scheme/**',
+            'tools/compile-portable.sh') }}
           restore-keys: |
             ${{ runner.os }}-racket-build-v2-
 
       - name: Verify Racket host
         run: |
           raco pkg install --batch --auto --skip-installed --no-docs r7rs
-          racket -I r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+          racket -I r7rs -e \
+            '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Cache Ollama models
         uses: actions/cache@v5
@@ -1571,7 +2125,10 @@ jobs:
 
       - name: Install Ollama
         run: |
-          curl -fsSL "https://ollama.com/download/ollama-linux-amd64.tar.zst?version=${OLLAMA_VERSION}" \
+          ollama_root=https://ollama.com/download
+          ollama_archive=ollama-linux-amd64.tar.zst
+          curl -fsSL \
+            "${ollama_root}/${ollama_archive}?version=${OLLAMA_VERSION}" \
             | zstd -d \
             | sudo tar -xf - -C /usr/local
           ollama --version

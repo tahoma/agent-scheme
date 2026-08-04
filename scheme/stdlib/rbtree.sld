@@ -4,11 +4,14 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; Implements `(stdlib rbtree)` as a portable R7RS adaptation of the
-;;; `nieper/rbtree` helper used by the official SRFI 146 ordered mapping source:
+;;; `nieper/rbtree` helper used by the official SRFI 146 ordered mapping
+;;; source:
+;;; readability-allow: external-identifier -- Upstream source URL stays whole.
 ;;; https://github.com/scheme-requests-for-implementation/srfi-146/tree/master/nieper.
 ;;; Local patches rename the internal helper library, inline the upstream
 ;;; implementation for Consent Scheme's source-library loader, adapt imports to
-;;; local stdlib libraries, and document exported procedures with Consent Scheme
+;;; local stdlib libraries, and document exported procedures with Consent
+;;; Scheme
 ;;; metadata. This library is stdlib substrate for `(scheme mapping)` /
 ;;; `(srfi 146)`, not part of the R7RS-small conformance surface.
 
@@ -359,7 +362,8 @@
          (obj (type any)
           (description "Key whose successor is requested."))
          (failure (type procedure)
-          (description "Zero-argument procedure called when no successor exists.")))
+          (description
+            "Zero-argument procedure called when no successor exists.")))
         (returns (type any)
          (description "Successor key or FAILURE's result."))
         (effects procedure-call))
@@ -384,7 +388,8 @@
          (obj (type any)
           (description "Key whose predecessor is requested."))
          (failure (type procedure)
-          (description "Zero-argument procedure called when no predecessor exists.")))
+          (description
+            "Zero-argument procedure called when no predecessor exists.")))
         (returns (type any)
          (description "Predecessor key or FAILURE's result."))
         (effects procedure-call))
@@ -403,7 +408,8 @@
       "Return a tree containing PROC-transformed key/value pairs from TREE."
       #((parameters
          (proc (type procedure)
-          (description "Procedure called as (proc key value), returning two values."))
+          (description
+            "Procedure called as (proc key value), returning two values."))
          (tree (type red-black-tree)
           (description "Tree to transform.")))
         (returns (type red-black-tree)
@@ -471,7 +477,8 @@
         (returns (type any)
          (description
           ("Five values: keys below OBJ, keys at or below OBJ, an equal-key"
-           "singleton or empty tree, keys at or above OBJ, and keys above OBJ.")))
+           "singleton or empty tree, keys at or above OBJ, and keys above OBJ.\
+")))
         (effects allocation procedure-call))
       (let loop ((tree1 (black))
                  (tree2 (black))
@@ -511,14 +518,16 @@
 
     ;; Catenate TREE1 and TREE2 using ITEM when ITEM is present.
     (define (catenate-left tree1 item tree2)
-      "Return TREE1 catenated to ITEM and TREE2, or TREE2 when ITEM is absent."
+      "Return TREE1 catenated to ITEM and TREE2, or TREE2 when ITEM is absent.\
+"
       (if item
           (tree-catenate tree1 (item-key item) (item-value item) tree2)
           tree2))
 
     ;; Catenate TREE1 and TREE2 using ITEM when ITEM is present.
     (define (catenate-right tree1 item tree2)
-      "Return TREE1 catenated to ITEM and TREE2, or TREE1 when ITEM is absent."
+      "Return TREE1 catenated to ITEM and TREE2, or TREE1 when ITEM is absent.\
+"
       (if item
           (tree-catenate tree1 (item-key item) (item-value item) tree2)
           tree1))

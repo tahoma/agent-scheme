@@ -1,4 +1,4 @@
-;;; consent-scheme-module-ownership-test.el --- Portable module ownership checks  -*- lexical-binding: t; -*-
+;;; consent-scheme-module-ownership-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -85,7 +85,8 @@ comments or docstrings do not."
           (setq found t)))
       found)))
 
-(ert-deftest consent-scheme-module-ownership-test-runtime-result-own-definitions ()
+(ert-deftest
+  consent-scheme-module-ownership-test-runtime-result-own-definitions ()
   "Keep runtime values and result rendering out of the portable evaluator."
   (let ((runtime
          (consent-scheme-module-ownership-test--read
@@ -179,7 +180,8 @@ comments or docstrings do not."
     (should
      (< (length (split-string eval "\n")) 80))))
 
-(ert-deftest consent-scheme-module-ownership-test-symbol-boundary-is-confined ()
+(ert-deftest consent-scheme-module-ownership-test-symbol-boundary-is-confined
+  ()
   "Keep mixed host/owned symbol handling inside the Consent runtime."
   (let ((standard-names '("eq?"
                           "eqv?"
@@ -241,7 +243,8 @@ comments or docstrings do not."
     (should-not
      (string-match-p "consent-with-boundary-symbol-table" boundary))))
 
-(ert-deftest consent-scheme-module-ownership-test-portable-libraries-use-scheme-numbers ()
+(ert-deftest
+  consent-scheme-module-ownership-test-portable-libraries-use-scheme-numbers ()
   "Keep reader-owned numeric constructors and accessors out of pure libraries."
   (let ((forbidden-symbols '("consent-make-canonical-integer"
                              "consent-make-canonical-decimal"
@@ -257,7 +260,8 @@ comments or docstrings do not."
                              "consent-number-negative?"
                              "consent-number-abs"
                              "consent-number->external")))
-    (dolist (path (consent-scheme-module-ownership-test--non-core-library-paths))
+    (dolist (path
+      (consent-scheme-module-ownership-test--non-core-library-paths))
       (let ((source (consent-scheme-module-ownership-test--read path)))
         (dolist (symbol forbidden-symbols)
           (ert-info ((format "path=%s symbol=%s" path symbol))

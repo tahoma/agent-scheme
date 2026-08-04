@@ -1,4 +1,4 @@
-;;; consent-macro.el --- R7RS syntax-rules expansion  -*- lexical-binding: t; -*-
+;;; consent-macro.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -552,7 +552,8 @@ keyword."
                     use-syntax-environment)
                  (null input-tail))))
       (consent--match-fixed-pattern-elements
-       patterns pattern-tail input-elements input-tail transformer bindings path
+       patterns pattern-tail input-elements input-tail transformer bindings
+         path
        use-environment use-syntax-environment))))
 
 (defun consent--match-syntax-rule
@@ -875,7 +876,7 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
          expression
          environment
          context))
-	       (t expression)))))
+               (t expression)))))
 
 (defun consent--expand-definition-form (form environment context)
   "Return macro-expanded variable definition FORM."
@@ -962,7 +963,8 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
                         binding "parameterize binding")))
                   (unless (= (length binding-parts) 2)
                     (consent--eval-error
-                     "parameterize binding must contain a parameter and value"))
+                     "parameterize binding must contain a parameter and\
+ value"))
                   (list (consent--expand-expression-fully
                          (car binding-parts) environment context)
                         (consent--expand-expression-fully
@@ -1005,7 +1007,8 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
                         binding "letrec binding")))
                   (unless (= (length binding-parts) 2)
                     (consent--eval-error
-                     "letrec binding must contain an identifier and initializer"))
+                     "letrec binding must contain an identifier and\
+ initializer"))
                   (list (car binding-parts)
                         (consent--expand-expression-fully
                          (cadr binding-parts) environment context))))

@@ -9,7 +9,8 @@
 # messages, generated artifacts, or ordinary documentation. Explicit
 # tool-assisted development credit belongs in docs/credits.md instead of
 # repeated functional history or process metadata. The rule is checked into the
-# repository, so it is enforced by CI rather than left to contributor (or agent)
+# repository, so it is enforced by CI rather than left to contributor (or
+# agent)
 # diligence -- the same stance the byte-compile (#415) and portable (#421) lint
 # gates take for their concerns.
 #
@@ -19,7 +20,7 @@
 #   * Self-attribution markers (TIER A) are scanned everywhere -- tracked file
 #     contents, commit messages, the PR title/body, and the branch name. These
 #     are unambiguous "made by a tool" signals (a `Co-authored-by:` trailer
-#     naming a model/tool, a "Generated with/by <tool>" line, a session URL, the
+# naming a model/tool, a "Generated with/by <tool>" line, a session URL, the
 #     robot emoji). They have no legitimate use and are verified absent from
 #     tracked file contents.
 #
@@ -29,10 +30,10 @@
 #     `CLAUDE.md` is a checked-in tool-config file, `docs/references.md` cites
 #     Anthropic's published papers, `docs/credits.md` gives explicit
 #     tool-assisted development credit, and "cursor" is this project's own word
-#     for the shared stdin cursor. The slug set is therefore deliberately narrow
+# for the shared stdin cursor. The slug set is therefore deliberately narrow
 #     (claude, codex, copilot, chatgpt, devin) and excludes words with a
 #     legitimate technical use here (notably "openai", as in the shipped
-#     OpenAI-compatible transport, "anthropic", "cursor", and bare model words).
+# OpenAI-compatible transport, "anthropic", "cursor", and bare model words).
 #
 #   * Commit author/committer identity (TIER C) is scanned ONLY against the
 #     `%an <%ae>` / `%cn <%ce>` fields of each commit in the range, never file
@@ -40,7 +41,7 @@
 #     vendor "noreply" identity badges the commit as machine-authored on the PR
 #     even when the branch name, every commit message, and the PR body are
 #     clean -- the gap that let branded authorship reach a merged PR while the
-#     other dimensions stayed green. The identity scan adds the vendor-bot email
+# other dimensions stayed green. The identity scan adds the vendor-bot email
 #     domains (which are never a legitimate author here, unlike the same vendor
 #     word in prose) on top of the TIER A and TIER B patterns.
 #
@@ -48,7 +49,7 @@
 # necessarily spells the patterns out. Inputs from the CI event are passed in
 # through the environment:
 #
-#   CONSENT_BRANDING_BASE    base ref/sha for the commit range (default origin/main)
+# CONSENT_BRANDING_BASE base ref/sha for the commit range (default origin/main)
 #   CONSENT_BRANDING_HEAD    head ref/sha for the commit range (default HEAD)
 #   CONSENT_BRANDING_BRANCH  branch name to scan (default: current branch)
 #   CONSENT_PR_TITLE         pull request title to scan (optional)
@@ -61,10 +62,16 @@ repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 cd "$repo_root"
 
 # TIER A -- self-attribution markers (ASCII), scanned in files and metadata.
-attribution_re='co-authored-by:.*(claude|anthropic|codex|copilot|chatgpt|openai|gpt|gemini|llama|devin|cursor)|generated[ _-]+(with|by).*(claude|anthropic|codex|copilot|chatgpt|cursor|gpt|gemini|devin)|claude\.(ai|com)|claude[-_]session'
+attribution_re='co-authored-by:.*(claude|anthropic|codex|copilot|chatgpt'
+attribution_re="${attribution_re}|openai|gpt|gemini|llama|devin|cursor)"
+attribution_re="${attribution_re}|generated[ _-]+(with|by).*"
+attribution_re="${attribution_re}(claude|anthropic|codex|copilot|chatgpt"
+attribution_re="${attribution_re}|cursor|gpt|gemini|devin)"
+attribution_re="${attribution_re}|claude\\.(ai|com)|claude[-_]session"
 
 # TIER B -- bare vendor/tool slugs (ASCII), scanned in metadata contexts only.
-slug_re='\b(claude|codex|copilot|chatgpt|devin)\b|claude[ ._-]?(code|opus|sonnet|haiku)'
+slug_re='\b(claude|codex|copilot|chatgpt|devin)\b'
+slug_re="${slug_re}|claude[ ._-]?(code|opus|sonnet|haiku)"
 
 # TIER C -- vendor-bot identity, scanned ONLY against commit author/committer
 # identity (never file contents or prose). These email domains are what GitHub
@@ -77,7 +84,8 @@ identity_re='@(anthropic|openai)\.com'
 robot_emoji='🤖'
 
 # Violations are accumulated in a shared file rather than a variable so counts
-# survive the pipeline subshells the scanners run in (POSIX sh runs each side of
+# survive the pipeline subshells the scanners run in (POSIX sh runs each side
+# of
 # a pipe in a subshell, so a piped `report` cannot mutate a parent counter).
 violations=$(mktemp)
 trap 'rm -f "$violations"' EXIT INT TERM
@@ -121,7 +129,8 @@ fi
 # Base resolution order: an explicit override, then the GitHub Actions base ref
 # (set on pull_request runs), then origin/main. The commit scan runs only when
 # that base is actually present locally, so it degrades cleanly to a no-op on a
-# shallow checkout rather than forcing a network fetch inside a piggybacked job.
+# shallow checkout rather than forcing a network fetch inside a piggybacked
+# job.
 base=${CONSENT_BRANDING_BASE:-}
 head=${CONSENT_BRANDING_HEAD:-HEAD}
 if [ -z "$base" ] && [ -n "${GITHUB_BASE_REF:-}" ] && \
@@ -133,7 +142,8 @@ if [ -z "$base" ] && git rev-parse --verify --quiet origin/main >/dev/null 2>&1
 then
   base=origin/main
 fi
-if [ -n "$base" ] && git rev-parse --verify --quiet "$base" >/dev/null 2>&1; then
+if [ -n "$base" ] && git rev-parse --verify --quiet "$base" >/dev/null 2>&1; \
+  then
   range="$base..$head"
 else
   range=""
@@ -172,10 +182,13 @@ fi
 # --- Pull request title and body (TIER A + TIER B) ------------------------
 # The PR title/body live only in GitHub metadata, never in git. Prefer values
 # injected by a workflow (CONSENT_PR_TITLE/BODY). Failing that, when running in
-# GitHub Actions on a pull_request, derive the PR number from GITHUB_REF and read
+# GitHub Actions on a pull_request, derive the PR number from GITHUB_REF and
+# read
 # the title/body from the public REST API UNAUTHENTICATED -- no token, no
-# workflow change. This is best-effort: it succeeds for a public repository when
-# the runner can reach the API and is not rate-limited, and it degrades to a loud
+# workflow change. This is best-effort: it succeeds for a public repository
+# when
+# the runner can reach the API and is not rate-limited, and it degrades to a
+# loud
 # notice (not a failure) otherwise, so it never makes the piggybacked lint job
 # flaky. A dedicated workflow that injects CONSENT_PR_* is the deterministic
 # upgrade; see docs/development.md.
@@ -191,10 +204,17 @@ if [ -z "$pr_title$pr_body" ] && [ -n "${GITHUB_ACTIONS:-}" ]; then
     response=$(curl -fsSL -H "Accept: application/vnd.github+json" "$api" \
       2>/dev/null || true)
     if [ -n "$response" ]; then
-      pr_title=$(printf '%s' "$response" | jq -r '.title // ""' 2>/dev/null || true)
-      pr_body=$(printf '%s' "$response" | jq -r '.body // ""' 2>/dev/null || true)
+      pr_title=$(printf '%s' "$response" | jq -r '.title // ""' 2>/dev/null \
+        || true)
+      pr_body=$(printf '%s' "$response" | jq -r '.body // ""' 2>/dev/null || \
+        true)
     else
-      printf 'notice: lint-branding could not read PR #%s metadata unauthenticated (private repo, rate limit, or no egress); PR title/body branding scan skipped this run\n' \
+      notice='notice: lint-branding could not read PR #%s metadata '
+      notice="${notice}unauthenticated (private repo, rate limit, "
+      notice="${notice}or no egress); "
+      notice="${notice}PR title/body branding scan skipped this run\n"
+      printf \
+        "$notice" \
         "$pr_number" >&2
     fi
   fi
@@ -209,14 +229,25 @@ fi
 if [ -s "$violations" ]; then
   sort -u "$violations" >&2
   count=$(sort -u "$violations" | wc -l | tr -d ' ')
-  printf '\nbranding gate failed: %s match(es). See AGENTS.md: no assistant, tool, vendor, or workflow branding in branch names, PR titles/bodies, commit messages, docs, or artifacts.\n' \
+  failure='\nbranding gate failed: %s match(es). See AGENTS.md: no '
+  failure="${failure}assistant, tool, vendor, or workflow branding in branch "
+  failure="${failure}names, PR titles/bodies, commit messages, docs, or "
+  failure="${failure}artifacts.\n"
+  printf \
+    "$failure" \
     "$count" >&2
   # Self-documenting remediation: a PR title/body hit is usually a "Generated
   # by" trailer the PR-creation tooling appends after a clean body, so the fix
   # is not in the diff. Point at it so the red check explains how to clear
   # itself without the resolution being rediscovered each time.
   if grep -Eq 'branding violation \[PR (title|body)\]' "$violations"; then
-    printf 'remediation (PR title/body): this is usually a trailer the pull-request-creation tooling appends after a clean body is supplied. Edit the PR description to remove it (an explicit pull-request update, or the PR edit UI) and re-check; an explicit update is not re-injected, only PR creation adds it. Re-read the description to confirm. See docs/contributing.md "Branding gate".\n' >&2
+    remediation='remediation (PR title/body): this is usually a trailer the '
+    remediation="${remediation}pull-request-creation tooling appends after a "
+    remediation="${remediation}clean body is supplied. Edit the PR description "
+    remediation="${remediation}to remove it and re-check; an explicit update "
+    remediation="${remediation}is not re-injected. Re-read the description to "
+    remediation="${remediation}confirm. See docs/contributing.md Branding gate."
+    printf '%s\n' "$remediation" >&2
   fi
   exit 1
 fi

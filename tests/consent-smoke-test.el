@@ -1,4 +1,4 @@
-;;; consent-smoke-test.el --- Smoke tests for the test harness  -*- lexical-binding: t; -*-
+;;; consent-smoke-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

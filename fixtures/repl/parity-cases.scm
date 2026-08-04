@@ -10,27 +10,32 @@
 ;;
 ;;   - tests/scheme/consent-repl-parity-test.scm drives the portable terminal
 ;;     REPL shell `(cli repl-shell)';
-;;   - tests/consent-repl-parity-test.el drives the Emacs incremental stdin REPL
+;; - tests/consent-repl-parity-test.el drives the Emacs incremental stdin REPL
 ;;     `consent-repl-stream'.
 ;;
 ;; Each host reads this corpus with its own Consent reader and compares the
 ;; expectations to the records its REPL emits, so a host that drifts from the
-;; contract fails its runner.  Because the corpus is one shared file, both hosts
+;; contract fails its runner. Because the corpus is one shared file, both hosts
 ;; are held to the same record vocabulary, field values, and ordering.
 ;;
-;; Conformance scope (docs/repl-interaction-contract.md "Forward Compatibility"):
+;; Conformance scope (docs/repl-interaction-contract.md "Forward
+;; Compatibility"):
 ;; v1 cases assert synchronous, positional record ordering for a single
 ;; foreground turn.  The runners correlate a `repl-result'/`repl-condition' to
-;; its submission by the `(submission sub-N)' field -- the durable join -- rather
-;; than by record position, and they do not assume a recoverable condition always
+;; its submission by the `(submission sub-N)' field -- the durable join --
+;; rather
+;; than by record position, and they do not assume a recoverable condition
+;; always
 ;; continues at the same interaction level.  Those two assumptions are
 ;; revision-scoped, not contract-permanent.
 ;;
 ;; A case `expect' enumerates EVERY record the turn produces, in order.  The
 ;; runners assert per-kind record counts as well as field values, so an extra,
-;; missing, or reshaped record is a failure.  Field assertions are deliberately a
+;; missing, or reshaped record is a failure. Field assertions are deliberately
+;; a
 ;; subset of each record: only contract-meaningful, host-neutral fields are
-;; pinned.  Host-specific text (condition `message'/`display' strings, the opaque
+;; pinned. Host-specific text (condition `message'/`display' strings, the
+;; opaque
 ;; `value'/`budget' payloads) is intentionally NOT asserted, since the contract
 ;; fixes the record shape, not a host's exact human-readable rendering.
 ;;
@@ -40,12 +45,13 @@
 ;; from its complete submissions, replay it to a fresh session with the same
 ;; options, and compare.  `(replay reproduced)' means the replay re-emits the
 ;; same record stream -- every input chunk became a complete submission, so the
-;; transcript round-trips byte for byte on each host.  `(replay (partial (reason
+;; transcript round-trips byte for byte on each host. `(replay (partial (reason
 ;; R)))' marks the cases replay cannot reproduce, because some input is not a
 ;; replayable submission: a ready-input reprompt, a bare reader condition (no
 ;; `repl-submission' is emitted), an EOF-truncated incomplete form (`(complete
 ;; #f)'), or program input consumed by an evaluated read.  Those carry their
-;; submissions forward but drop the unreplayable artifact, so replay is a strict
+;; submissions forward but drop the unreplayable artifact, so replay is a
+;; strict
 ;; subset, not an equal stream.  The reproduced/partial split is exactly what
 ;; replay can and cannot reproduce, and the runners assert both directions.
 
@@ -60,14 +66,16 @@
   (cases
 
     ((id repl-eval-simple)
-     (description "A simple expression renders its value and closes cleanly on EOF.")
+     (description
+       "A simple expression renders its value and closes cleanly on EOF.")
      (replay reproduced)
      (session "project-main")
      (options ())
      (input "(+ 1 2)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete
+          #t) (eof #f))
         (repl-result (id res-1) (submission sub-1) (ordinal 1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "3"))
@@ -75,15 +83,19 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-line-comment-ready-reprompt)
-     (description "A line-comment-only ready input line redraws the same ordinal prompt before the next form.")
-     (replay (partial (reason "ready-input comments are not replayable submissions")))
+     (description
+       "A line-comment-only ready input line redraws the same ordinal prompt b\
+efore the next form.")
+     (replay (partial (reason
+       "ready-input comments are not replayable submissions")))
      (session "project-main")
      (options ())
      (input "  ;; comment\n(+ 1 2)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
         (repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete
+          #t) (eof #f))
         (repl-result (id res-1) (submission sub-1) (ordinal 1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "3"))
@@ -91,26 +103,35 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-session-persistence)
-     (description "Imports, definitions, and macros persist across separately submitted forms.")
+     (description
+       "Imports, definitions, and macros persist across separately submitted f\
+orms.")
      (replay reproduced)
      (session "project-main")
      (options ())
-     (input "(import (scheme base))\n(define base 20)\n(define-syntax inc (syntax-rules () ((_ v) (+ v 1))))\n(inc base)\n")
+     (input
+       "(import (scheme base))\n(define base 20)\n(define-syntax inc (syntax-r\
+ules () ((_ v) (+ v 1))))\n(inc base)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(import (scheme base))") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source
+          "(import (scheme base))") (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
-        (repl-submission (id sub-2) (ordinal 2) (source "(define base 20)") (complete #t) (eof #f))
+        (repl-submission (id sub-2) (ordinal 2) (source "(define base 20)")
+          (complete #t) (eof #f))
         (repl-result (id res-2) (submission sub-2)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 3) (state ready) (pending #f))
-        (repl-submission (id sub-3) (ordinal 3) (source "(define-syntax inc (syntax-rules () ((_ v) (+ v 1))))") (complete #t) (eof #f))
+        (repl-submission (id sub-3) (ordinal 3) (source
+          "(define-syntax inc (syntax-rules () ((_ v) (+ v 1))))") (complete
+          #t) (eof #f))
         (repl-result (id res-3) (submission sub-3)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 4) (state ready) (pending #f))
-        (repl-submission (id sub-4) (ordinal 4) (source "(inc base)") (complete #t) (eof #f))
+        (repl-submission (id sub-4) (ordinal 4) (source "(inc base)") (complete
+          #t) (eof #f))
         (repl-result (id res-4) (submission sub-4)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "21"))
@@ -118,32 +139,57 @@
         (repl-exit (reason eof) (status closed-ok) (count 4) (detail #f)))))
 
     ((id repl-reflection-tutorial-import-registry)
-     (description "Reflection tutorial imports persist in the live registry across submissions.")
+     (description
+       "Reflection tutorial imports persist in the live registry across submis\
+sions.")
      (replay reproduced)
      (session "project-main")
      (options ())
-     (input "(import (scheme base) (agent reflect))\n(define (tutorial-imported? name) (let loop ((names (current-imports))) (cond ((null? names) #f) ((equal? (car names) name) #t) (else (loop (cdr names))))))\n(list (tutorial-imported? '(agent reflect)) (tutorial-imported? '(scheme base)))\n(define (tutorial-binding-summary target) (let loop ((bindings (library-bindings '(agent reflect)))) (cond ((null? bindings) 'missing) ((eq? (reflection-field (car bindings) 'name) target) (list (reflection-field (car bindings) 'name) (reflection-field (car bindings) 'kind) (reflection-field (car bindings) 'library))) (else (loop (cdr bindings))))))\n(tutorial-binding-summary 'apropos)\n")
+     (input
+       "(import (scheme base) (agent reflect))\n(define (tutorial-imported? na\
+me) (let loop ((names (current-imports))) (cond ((null? names) #f) ((\
+equal? (car names) name) #t) (else (loop (cdr names))))))\n(list (tut\
+orial-imported? '(agent reflect)) (tutorial-imported? '(scheme base))\
+)\n(define (tutorial-binding-summary target) (let loop ((bindings (li\
+brary-bindings '(agent reflect)))) (cond ((null? bindings) 'missing) \
+((eq? (reflection-field (car bindings) 'name) target) (list (reflecti\
+on-field (car bindings) 'name) (reflection-field (car bindings) 'kind\
+) (reflection-field (car bindings) 'library))) (else (loop (cdr bindi\
+ngs))))))\n(tutorial-binding-summary 'apropos)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(import (scheme base) (agent reflect))") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source
+          "(import (scheme base) (agent reflect))") (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
         (repl-submission (id sub-2) (ordinal 2)
-                         (source "(define (tutorial-imported? name) (let loop ((names (current-imports))) (cond ((null? names) #f) ((equal? (car names) name) #t) (else (loop (cdr names))))))")
+                         (source
+                           "(define (tutorial-imported? name) (let loop ((name\
+s (current-imports))) (cond ((null? names) #f) ((equal? (c\
+ar names) name) #t) (else (loop (cdr names))))))")
                          (complete #t) (eof #f))
         (repl-result (id res-2) (submission sub-2)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 3) (state ready) (pending #f))
         (repl-submission (id sub-3) (ordinal 3)
-                         (source "(list (tutorial-imported? '(agent reflect)) (tutorial-imported? '(scheme base)))")
+                         (source
+                           "(list (tutorial-imported? '(agent reflect)) (tutor\
+ial-imported? '(scheme base)))")
                          (complete #t) (eof #f))
         (repl-result (id res-3) (submission sub-3)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "(#t #t)"))
         (repl-prompt (ordinal 4) (state ready) (pending #f))
         (repl-submission (id sub-4) (ordinal 4)
-                         (source "(define (tutorial-binding-summary target) (let loop ((bindings (library-bindings '(agent reflect)))) (cond ((null? bindings) 'missing) ((eq? (reflection-field (car bindings) 'name) target) (list (reflection-field (car bindings) 'name) (reflection-field (car bindings) 'kind) (reflection-field (car bindings) 'library))) (else (loop (cdr bindings))))))")
+                         (source
+                           "(define (tutorial-binding-summary target) (let loo\
+p ((bindings (library-bindings '(agent reflect)))) (cond (\
+(null? bindings) 'missing) ((eq? (reflection-field (car bi\
+ndings) 'name) target) (list (reflection-field (car bindin\
+gs) 'name) (reflection-field (car bindings) 'kind) (reflec\
+tion-field (car bindings) 'library))) (else (loop (cdr bin\
+dings))))))")
                          (complete #t) (eof #f))
         (repl-result (id res-4) (submission sub-4)
                      (evaluation-result (evaluation-result (status ok))))
@@ -158,27 +204,38 @@
         (repl-exit (reason eof) (status closed-ok) (count 5) (detail #f)))))
 
     ((id repl-generated-source-gate-imports)
-     (description "The generated-source quick-start import block exposes the sandbox evaluator in the user session.")
+     (description
+       "The generated-source quick-start import block exposes the sandbox eval\
+uator in the user session.")
      (replay reproduced)
      (session "project-main")
      (options ())
-     (input "(import (scheme write) (scheme repl) (agent generated-source) (consent eval))\n(define generated-source-run-probe generated-source-run)\n(define generated-source-eval-probe consent-eval-source-result)\n")
+     (input
+       "(import (scheme write) (scheme repl) (agent generated-source) (consent \
+eval))\n(define generated-source-run-probe generated-source-run)\n(d\
+efine generated-source-eval-probe consent-eval-source-result)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
         (repl-submission (id sub-1) (ordinal 1)
-                         (source "(import (scheme write) (scheme repl) (agent generated-source) (consent eval))")
+                         (source
+                           "(import (scheme write) (scheme repl) (agent genera\
+ted-source) (consent eval))")
                          (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
         (repl-submission (id sub-2) (ordinal 2)
-                         (source "(define generated-source-run-probe generated-source-run)")
+                         (source
+                           "(define generated-source-run-probe generated-sourc\
+e-run)")
                          (complete #t) (eof #f))
         (repl-result (id res-2) (submission sub-2)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 3) (state ready) (pending #f))
         (repl-submission (id sub-3) (ordinal 3)
-                         (source "(define generated-source-eval-probe consent-eval-source-result)")
+                         (source
+                           "(define generated-source-eval-probe consent-eval-s\
+ource-result)")
                          (complete #t) (eof #f))
         (repl-result (id res-3) (submission sub-3)
                      (evaluation-result (evaluation-result (status ok))))
@@ -186,17 +243,22 @@
         (repl-exit (reason eof) (status closed-ok) (count 3) (detail #f)))))
 
     ((id repl-recoverable-eval-condition)
-     (description "A recoverable evaluator condition keeps the session open for the next form.")
+     (description
+       "A recoverable evaluator condition keeps the session open for the next \
+form.")
      (replay reproduced)
      (session "project-main")
      (options ())
      (input "undefined-name\n(+ 4 5)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "undefined-name") (complete #t) (eof #f))
-        (repl-condition (id cond-1) (submission sub-1) (ordinal 1) (phase eval) (recoverable #t))
+        (repl-submission (id sub-1) (ordinal 1) (source "undefined-name")
+          (complete #t) (eof #f))
+        (repl-condition (id cond-1) (submission sub-1) (ordinal 1) (phase eval)
+          (recoverable #t))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
-        (repl-submission (id sub-2) (ordinal 2) (source "(+ 4 5)") (complete #t) (eof #f))
+        (repl-submission (id sub-2) (ordinal 2) (source "(+ 4 5)") (complete
+          #t) (eof #f))
         (repl-result (id res-2) (submission sub-2) (ordinal 2)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "9"))
@@ -204,17 +266,22 @@
         (repl-exit (reason eof) (status closed-ok) (count 2) (detail #f)))))
 
     ((id repl-recoverable-read-condition)
-     (description "A recoverable reader condition resynchronizes and keeps the session open.")
-     (replay (partial (reason "a bare reader condition emits no submission to re-feed")))
+     (description
+       "A recoverable reader condition resynchronizes and keeps the session op\
+en.")
+     (replay (partial (reason
+       "a bare reader condition emits no submission to re-feed")))
      (session "project-main")
      (options ())
      (input ")\n(+ 6 7)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-condition (id cond-1) (submission sub-1) (phase read) (recoverable #t)
+        (repl-condition (id cond-1) (submission sub-1) (phase read)
+          (recoverable #t)
                         (condition (condition (type reader-error))))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
-        (repl-submission (id sub-2) (ordinal 2) (source "(+ 6 7)") (complete #t) (eof #f))
+        (repl-submission (id sub-2) (ordinal 2) (source "(+ 6 7)") (complete
+          #t) (eof #f))
         (repl-result (id res-2) (submission sub-2)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "13"))
@@ -222,7 +289,9 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-incomplete-continuation)
-     (description "An incomplete form is continued under one submission, not reported as a hard error.")
+     (description
+       "An incomplete form is continued under one submission, not reported as \
+a hard error.")
      (replay reproduced)
      (session "project-main")
      (options ())
@@ -230,7 +299,8 @@
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
         (repl-prompt (ordinal 1) (state continuation) (pending #t))
-        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1\n2)") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1\n2)") (complete
+          #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "3"))
@@ -238,7 +308,9 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-continuation-nesting-depth)
-     (description "A continuation prompt carries the reader's pending nesting depth and innermost construct kind, narrowing as constructs close.")
+     (description
+       "A continuation prompt carries the reader's pending nesting depth and i\
+nnermost construct kind, narrowing as constructs close.")
      (replay reproduced)
      (session "project-main")
      (options ())
@@ -249,7 +321,8 @@
                      (nesting 2) (pending-kind list))
         (repl-prompt (ordinal 1) (state continuation) (pending #t)
                      (nesting 1) (pending-kind list))
-        (repl-submission (id sub-1) (ordinal 1) (source "(+ (* 2\n3)\n4)") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(+ (* 2\n3)\n4)")
+          (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "10"))
@@ -257,7 +330,9 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-continuation-pending-string)
-     (description "An unterminated string reports the string as the innermost pending construct on the continuation prompt.")
+     (description
+       "An unterminated string reports the string as the innermost pending con\
+struct on the continuation prompt.")
      (replay reproduced)
      (session "project-main")
      (options ())
@@ -266,7 +341,8 @@
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
         (repl-prompt (ordinal 1) (state continuation) (pending #t)
                      (nesting 2) (pending-kind string))
-        (repl-submission (id sub-1) (ordinal 1) (source "(string-length \"a\nb\")") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source
+          "(string-length \"a\nb\")") (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "3"))
@@ -274,19 +350,23 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-multiple-forms-one-chunk)
-     (description "Several complete forms in one input chunk evaluate in order, one submission each.")
+     (description
+       "Several complete forms in one input chunk evaluate in order, one submi\
+ssion each.")
      (replay reproduced)
      (session "project-main")
      (options ())
      (input "(+ 1 2) (* 3 4)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete
+          #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "3"))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
-        (repl-submission (id sub-2) (ordinal 2) (source "(* 3 4)") (complete #t) (eof #f))
+        (repl-submission (id sub-2) (ordinal 2) (source "(* 3 4)") (complete
+          #t) (eof #f))
         (repl-result (id res-2) (submission sub-2)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "12"))
@@ -294,14 +374,17 @@
         (repl-exit (reason eof) (status closed-ok) (count 2) (detail #f)))))
 
     ((id repl-multiple-values)
-     (description "A multiple-value result renders through the values evaluation-result datum.")
+     (description
+       "A multiple-value result renders through the values evaluation-result d\
+atum.")
      (replay reproduced)
      (session "project-main")
      (options ())
      (input "(values 1 2)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(values 1 2)") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(values 1 2)")
+          (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status values)))
                      (display "(values 1 2)"))
@@ -309,14 +392,16 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-zero-values)
-     (description "A zero-value result renders the empty values evaluation-result datum.")
+     (description
+       "A zero-value result renders the empty values evaluation-result datum.")
      (replay reproduced)
      (session "project-main")
      (options ())
      (input "(values)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(values)") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(values)") (complete
+          #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status values)))
                      (display "(values)"))
@@ -324,95 +409,134 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-eof-mid-form)
-     (description "EOF while a partial form is buffered closes with the documented error status.")
-     (replay (partial (reason "an EOF-truncated incomplete form is not a replayable submission")))
+     (description
+       "EOF while a partial form is buffered closes with the documented error \
+status.")
+     (replay (partial (reason
+       "an EOF-truncated incomplete form is not a replayable submission")))
      (session "project-main")
      (options ())
      (input "(+ 1\n")
      (expect
-       ;; The continuation prompt is a request for more input, emitted before the
-       ;; read that then returns EOF: reaching the incomplete branch always means
+       ;; The continuation prompt is a request for more input, emitted before
+       ;; the
+       ;; read that then returns EOF: reaching the incomplete branch always
+       ;; means
        ;; a partial form is buffered, so the gutter is shown and the user then
        ;; ends input (Ctrl-D).
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
         (repl-prompt (ordinal 1) (state continuation) (pending #t))
-        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1") (complete #f) (eof #t))
-        (repl-condition (id cond-1) (submission sub-1) (phase read) (recoverable #f)
+        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1") (complete #f)
+          (eof #t))
+        (repl-condition (id cond-1) (submission sub-1) (phase read)
+          (recoverable #f)
                         (condition (condition (type reader-error))))
         (repl-exit (reason eof) (status closed-error) (count 0)
                    (detail "unterminated form at end of input")))))
 
     ((id repl-explicit-exit)
-     (description "An explicit exit request closes the session after the current submission.")
+     (description
+       "An explicit exit request closes the session after the current submissi\
+on.")
      (replay reproduced)
      (session "project-main")
      (options ())
      (input "(+ 1 2)\n(exit)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete
+          #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "3"))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
-        (repl-submission (id sub-2) (ordinal 2) (source "(exit)") (complete #t) (eof #f))
-        (repl-exit (reason explicit) (status closed-ok) (count 2) (detail #f)))))
+        (repl-submission (id sub-2) (ordinal 2) (source "(exit)") (complete #t)
+          (eof #f))
+        (repl-exit (reason explicit) (status closed-ok) (count 2) (detail
+          #f)))))
 
     ((id repl-policy-denied-default)
-     (description "The default policy denies an ungranted host effect, failing closed without ending the session.")
+     (description
+       "The default policy denies an ungranted host effect, failing closed wit\
+hout ending the session.")
      (replay reproduced)
      (session "project-main")
      (options ())
-     (input "(begin (import (scheme file)) (open-output-file \"/tmp/consent-repl-parity-denied\"))\n")
+     (input
+       "(begin (import (scheme file)) (open-output-file \"/tmp/consent-repl-pa\
+rity-denied\"))\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
         (repl-submission (id sub-1) (ordinal 1)
-                         (source "(begin (import (scheme file)) (open-output-file \"/tmp/consent-repl-parity-denied\"))")
+                         (source
+                           "(begin (import (scheme file)) (open-output-file \"\
+/tmp/consent-repl-parity-denied\"))")
                          (complete #t) (eof #f))
-        (repl-condition (id cond-1) (submission sub-1) (phase eval) (recoverable #t)
+        (repl-condition (id cond-1) (submission sub-1) (phase eval)
+          (recoverable #t)
                         (condition (condition (type policy-denial))))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-policy-denied-interaction-environment)
-     (description "A session-policy denial of the interaction environment fails closed as a policy denial.")
+     (description
+       "A session-policy denial of the interaction environment fails closed as \
+a policy denial.")
      (replay reproduced)
      (session "project-main")
      (options ((policy-actions ((standard-host-effect deny)))))
-     (input "(import (scheme base) (scheme repl))\n(interaction-environment)\n")
+     (input
+       "(import (scheme base) (scheme repl))\n(interaction-environment)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(import (scheme base) (scheme repl))") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source
+          "(import (scheme base) (scheme repl))") (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
-        (repl-submission (id sub-2) (ordinal 2) (source "(interaction-environment)") (complete #t) (eof #f))
-        (repl-condition (id cond-2) (submission sub-2) (phase eval) (recoverable #t)
+        (repl-submission (id sub-2) (ordinal 2) (source
+          "(interaction-environment)") (complete #t) (eof #f))
+        (repl-condition (id cond-2) (submission sub-2) (phase eval)
+          (recoverable #t)
                         (condition (condition (type policy-denial))))
         (repl-prompt (ordinal 3) (state ready) (pending #f))
         (repl-exit (reason eof) (status closed-ok) (count 2) (detail #f)))))
 
     ((id repl-program-input-no-steal)
-     (description "A submitted form reads program input from the shared stdin cursor; the line it reads is consumed as program data, and the following form is still read as its own submission rather than stolen.  A REPL session authorizes its own stdin by invocation, so no grant is set in options.")
-     (replay (partial (reason "program input consumed across the shared cursor is not a replayable submission")))
+     (description
+       "A submitted form reads program input from the shared stdin cursor; the \
+line it reads is consumed as program data, and the following form is \
+still read as its own submission rather than stolen.  A REPL session \
+authorizes its own stdin by invocation, so no grant is set in option\
+s.")
+     (replay (partial (reason
+       "program input consumed across the shared cursor is not a replayable su\
+bmission")))
      (session "project-main")
      (options ())
-     (input "(import (scheme base) (scheme read))\n(read-line)\nDATA\n(+ 1 2)\n")
+     (input
+       "(import (scheme base) (scheme read))\n(read-line)\nDATA\n(+ 1 2)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(import (scheme base) (scheme read))") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source
+          "(import (scheme base) (scheme read))") (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
-        (repl-submission (id sub-2) (ordinal 2) (source "(read-line)") (complete #t) (eof #f))
+        (repl-submission (id sub-2) (ordinal 2) (source "(read-line)")
+          (complete #t) (eof #f))
         ;; res-2 reads the program-data line "DATA"; its rendered value is
-        ;; host-deterministic but left unpinned here -- the eval suites assert the
-        ;; read value.  This case pins the structure: "DATA" is consumed as program
-        ;; data (not a submission) and (+ 1 2) is still read as sub-3, not stolen.
+        ;; host-deterministic but left unpinned here -- the eval suites assert
+        ;; the
+        ;; read value. This case pins the structure: "DATA" is consumed as
+        ;; program
+        ;; data (not a submission) and (+ 1 2) is still read as sub-3, not
+        ;; stolen.
         (repl-result (id res-2) (submission sub-2)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 3) (state ready) (pending #f))
-        (repl-submission (id sub-3) (ordinal 3) (source "(+ 1 2)") (complete #t) (eof #f))
+        (repl-submission (id sub-3) (ordinal 3) (source "(+ 1 2)") (complete
+          #t) (eof #f))
         (repl-result (id res-3) (submission sub-3)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 4) (state ready) (pending #f))
@@ -420,18 +544,22 @@
 
     ;; Bounded result rendering (#508): a session sets a `render-limits' option
     ;; `((depth D) (length L) (size S))' and the result `display' field renders
-    ;; within those ceilings, eliding at each limit with the canonical, parseable
+    ;; within those ceilings, eliding at each limit with the canonical,
+    ;; parseable
     ;; `...' truncation marker.  Both hosts must produce byte-identical bounded
     ;; text, so these cases pin the marker and each bound across the two cores.
     ((id repl-render-bound-length)
-     (description "A length-limited render shows the first L elements then the `...' marker.")
+     (description
+       "A length-limited render shows the first L elements then the `...' mark\
+er.")
      (replay reproduced)
      (session "project-main")
      (options ((render-limits ((depth 8) (length 3) (size 4096)))))
      (input "(list 1 2 3 4 5 6 7 8)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(list 1 2 3 4 5 6 7 8)") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source
+          "(list 1 2 3 4 5 6 7 8)") (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1) (ordinal 1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "(1 2 3 ...)"))
@@ -439,14 +567,19 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-render-bound-depth-default)
-     (description "With no override, the documented default depth ceiling (8) elides the deepest nesting with `...'.  This pins the default bound, not just an override.")
+     (description
+       "With no override, the documented default depth ceiling (8) elides the \
+deepest nesting with `...'.  This pins the default bound, not just an \
+override.")
      (replay reproduced)
      (session "project-main")
      (options ())
      (input "(quote (1 (2 (3 (4 (5 (6 (7 (8 (9))))))))))\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(quote (1 (2 (3 (4 (5 (6 (7 (8 (9))))))))))") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source
+          "(quote (1 (2 (3 (4 (5 (6 (7 (8 (9))))))))))") (complete #t) (eof
+          #f))
         (repl-result (id res-1) (submission sub-1) (ordinal 1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "(1 (2 (3 (4 (5 (6 (7 (8 ...))))))))"))
@@ -454,14 +587,17 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-render-bound-size)
-     (description "A total-size ceiling is the hard backstop: the walk stops once S characters are emitted and ends with the `...' marker.")
+     (description
+       "A total-size ceiling is the hard backstop: the walk stops once S chara\
+cters are emitted and ends with the `...' marker.")
      (replay reproduced)
      (session "project-main")
      (options ((render-limits ((depth 8) (length 64) (size 14)))))
      (input "(list 100 200 300 400 500)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
-        (repl-submission (id sub-1) (ordinal 1) (source "(list 100 200 300 400 500)") (complete #t) (eof #f))
+        (repl-submission (id sub-1) (ordinal 1) (source
+          "(list 100 200 300 400 500)") (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1) (ordinal 1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "(100 200 300 ..."))
@@ -469,7 +605,9 @@
         (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
 
     ((id repl-introspection-describe-is-data)
-     (description "A describe request is an ordinary procedure call whose result renders as a Scheme-readable datum.")
+     (description
+       "A describe request is an ordinary procedure call whose result renders \
+as a Scheme-readable datum.")
      (replay reproduced)
      (session "project-main")
      (options ((render-limits ((depth 16) (length 64) (size 4096)))))
@@ -487,6 +625,17 @@
                          (complete #t) (eof #f))
         (repl-result (id res-2) (submission sub-2) (ordinal 2)
                      (evaluation-result (evaluation-result (status ok)))
-                     (display "(binding-description (subject (binding +)) (binding-kind value) (value-kind primitive-procedure) (library (scheme base)) (source kernel) (value-summary \"#<primitive +>\") (documentation (documentation-metadata (subject (binding +)) (kind procedure) (library (scheme base)) (source kernel) (origin (primitive-manifest metadata)) (fields ((documentation \"Return the sum of all numeric arguments, or 0 when called with no arguments.\") (parameters ((numbers (type (list-of number)) (description \"Numeric addends to sum.\")))) (returns ((type number) (description \"The numeric sum.\"))) (effects (pure)))))))"))
+                     (display
+                       "(binding-description (subject (binding +)) (binding-ki\
+nd value) (value-kind primitive-procedure) (library (schem\
+e base)) (source kernel) (value-summary \"#<primitive +>\"\
+) (documentation (documentation-metadata (subject (binding \
++)) (kind procedure) (library (scheme base)) (source kern\
+el) (origin (primitive-manifest metadata)) (fields ((docum\
+entation \"Return the sum of all numeric arguments, or 0 w\
+hen called with no arguments.\") (parameters ((numbers (ty\
+pe (list-of number)) (description \"Numeric addends to sum\
+.\")))) (returns ((type number) (description \"The numeric \
+sum.\"))) (effects (pure)))))))"))
         (repl-prompt (ordinal 3) (state ready) (pending #f))
         (repl-exit (reason eof) (status closed-ok) (count 2) (detail #f)))))))

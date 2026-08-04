@@ -3,7 +3,8 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; This program runs under an external R7RS Scheme and exercises the portable
-;;; terminal REPL shell (cli repl-shell) against the cross-host REPL interaction
+;;; terminal REPL shell (cli repl-shell) against the cross-host REPL
+;;; interaction
 ;;; contract (docs/repl-interaction-contract.md) without loading the Emacs host
 ;;; adapter.  It asserts the emitted record vocabulary, durable session
 ;;; evaluation, recoverable conditions, EOF/exit close status, policy-gated
@@ -81,7 +82,8 @@
              (and (pair? evaluation)
                        (eq? (car evaluation) 'evaluation-result)))
       (test-equal 'simple-eval-status 'ok (field evaluation 'status))))
-  ;; The first prompt is a ready primary prompt; exactly one exit closes cleanly.
+  ;; The first prompt is a ready primary prompt; exactly one exit closes
+  ;; cleanly.
   (let ((prompt (car (records-of records 'repl-prompt))))
     (test-equal 'simple-eval-prompt-state 'ready (field prompt 'state))
     (test-equal 'simple-eval-prompt-pending #f (field prompt 'pending))
@@ -141,7 +143,8 @@
   (let ((condition (car (records-of records 'repl-condition))))
     (test-equal 'eval-condition-phase 'eval (field condition 'phase))
     (test-equal 'eval-condition-recoverable #t (field condition 'recoverable))
-    (test-equal 'eval-condition-submission 'sub-1 (field condition 'submission)))
+    (test-equal 'eval-condition-submission 'sub-1 (field condition
+      'submission)))
   ;; The session keeps running: the following form still evaluates.
   (let ((result (car (records-of records 'repl-result))))
     (test-equal 'eval-condition-session-continues "9" (field result 'display)))
@@ -173,7 +176,8 @@
     (test-equal 'read-condition-phase 'read (field condition 'phase))
     (test-equal 'read-condition-recoverable #t (field condition 'recoverable)))
   (let ((result (car (records-of records 'repl-result))))
-    (test-equal 'read-condition-session-continues "13" (field result 'display)))))
+    (test-equal 'read-condition-session-continues "13" (field result
+      'display)))))
 
 ;;;; An incomplete form is continued, not reported as a hard error
 
@@ -191,8 +195,10 @@
              (portable-host-number 1)
              (consent-number-value (field (list-ref prompts 1) 'ordinal))))
   (let ((submission (car (records-of records 'repl-submission))))
-    (test-equal 'continuation-submission-complete #t (field submission 'complete))
-    (test-equal 'continuation-submission-source "(+ 1\n2)" (field submission 'source)))
+    (test-equal 'continuation-submission-complete #t (field submission
+      'complete))
+    (test-equal 'continuation-submission-source "(+ 1\n2)" (field submission
+      'source)))
   (test-equal 'continuation-result
              "3"
              (field (car (records-of records 'repl-result))
@@ -205,9 +211,12 @@
 (let ((records (drive "\n(+ 1 2)\n")))
   (let ((prompts (records-of records 'repl-prompt)))
     (test-equal 'blank-ready-prompt-count 3 (length prompts))
-    (test-equal 'blank-ready-first-state 'ready (field (list-ref prompts 0) 'state))
-    (test-equal 'blank-ready-second-state 'ready (field (list-ref prompts 1) 'state))
-    (test-equal 'blank-ready-third-state 'ready (field (list-ref prompts 2) 'state))
+    (test-equal 'blank-ready-first-state 'ready (field (list-ref prompts 0)
+      'state))
+    (test-equal 'blank-ready-second-state 'ready (field (list-ref prompts 1)
+      'state))
+    (test-equal 'blank-ready-third-state 'ready (field (list-ref prompts 2)
+      'state))
     (test-equal 'blank-ready-first-ordinal
              (portable-host-number 1)
              (consent-number-value (field (list-ref prompts 0) 'ordinal)))
@@ -309,13 +318,15 @@
 
 ;;;; The continuation prompt is emitted before the read it requests
 
-;; A continuation gutter is a request for more input, so it must be emitted (and
+;; A continuation gutter is a request for more input, so it must be emitted
+;; (and
 ;; flushed) *before* the blocking read that supplies the continued line -- on a
 ;; live TTY a prompt emitted after the read would land glued to the next result
 ;; line instead of fronting the continued input.  The record-stream order alone
 ;; cannot capture this: a fully-buffered string never blocks, so the emission
 ;; order of records is identical either way.  Instrument the read/emit
-;; interleaving directly -- log each chunk read alongside the continuation prompt
+;; interleaving directly -- log each chunk read alongside the continuation
+;; prompt
 ;; -- and assert exactly one chunk is read before the prompt is emitted.
 (testing-registry-case
  'continuation-prompt-precedes-read '(portable core)
@@ -352,7 +363,8 @@
  'eof-incomplete-submission-complete '(portable core)
 (let ((records (drive "(+ 1\n")))
   (let ((submission (car (records-of records 'repl-submission))))
-    (test-equal 'eof-incomplete-submission-complete #f (field submission 'complete))
+    (test-equal 'eof-incomplete-submission-complete #f (field submission
+      'complete))
     (test-equal 'eof-incomplete-submission-eof #t (field submission 'eof)))
   (let ((condition (car (records-of records 'repl-condition))))
     (test-equal 'eof-incomplete-condition-phase 'read (field condition 'phase))
@@ -361,7 +373,8 @@
              (field condition 'recoverable)))
   (let ((exit (car (records-of records 'repl-exit))))
     (test-equal 'eof-incomplete-exit-reason 'eof (field exit 'reason))
-    (test-equal 'eof-incomplete-exit-status 'closed-error (field exit 'status)))))
+    (test-equal 'eof-incomplete-exit-status 'closed-error (field exit
+      'status)))))
 
 ;;;; Explicit exit closes with the explicit reason and clean status
 
@@ -382,7 +395,8 @@
  'policy-denied-phase '(portable core)
 (let ((records
        (drive
-        "(begin (import (scheme file)) (open-output-file \"/tmp/consent-repl-denied\"))\n")))
+        "(begin (import (scheme file)) (open-output-file \"/tmp/consent-repl-d\
+enied\"))\n")))
   (let ((condition (car (records-of records 'repl-condition))))
     (test-equal 'policy-denied-phase 'eval (field condition 'phase))
     (test-equal 'policy-denied-recoverable #t (field condition 'recoverable))
@@ -404,7 +418,8 @@
          "(interaction-environment)\n")
         '((policy-actions . ((standard-host-effect . deny)))))))
   (let ((condition (car (records-of records 'repl-condition))))
-    (test-equal 'denied-interaction-environment-phase 'eval (field condition 'phase))
+    (test-equal 'denied-interaction-environment-phase 'eval (field condition
+      'phase))
     (let ((datum (field condition 'condition)))
       (test-equal 'denied-interaction-environment-type
              'policy-denial
@@ -436,8 +451,10 @@
     (test-equal 'stream-separation-program-output
              "emitted"
              (apply string-append (reverse output)))
-    ;; ...and the record stream carries only contract records (one per evaluated
-    ;; submission: import, display, and the sum), never the program output text.
+    ;; ...and the record stream carries only contract records (one per
+    ;; evaluated
+    ;; submission: import, display, and the sum), never the program output
+    ;; text.
     (let ((records (reverse records)))
       (test-equal 'stream-separation-result-count
              3
@@ -562,7 +579,8 @@
               records)
     (get-output-string port)))
 
-;; Return the ordered `display' strings of the `repl-result' records in RECORDS.
+;; Return the ordered `display' strings of the `repl-result' records in
+;; RECORDS.
 (define (result-displays records)
   (map (lambda (result) (field result 'display))
        (records-of records 'repl-result)))
@@ -582,7 +600,8 @@
              (procedure? (cli-repl-chrome-lookup "classic"))))
 (testing-registry-case
  'chrome-unknown-lookup '(portable core)
-(test-assert 'chrome-unknown-lookup (not (cli-repl-chrome-lookup 'no-such-chrome))))
+(test-assert 'chrome-unknown-lookup (not (cli-repl-chrome-lookup
+  'no-such-chrome))))
 (testing-registry-case
  'chrome-names-complete '(portable core)
 (let ((names (cli-repl-chrome-names)))
@@ -611,7 +630,8 @@
                                                      color?))))))))
   (test-equal 'datum-recovers-raw-stream (datum-stream records) (render #f))
   ;; The datum chrome is never colored, even with color forced on.
-  (test-assert 'datum-never-colored (not (string-contains? (render #t) escape)))
+  (test-assert 'datum-never-colored (not (string-contains? (render #t)
+    escape)))
   ;; The canonical view is reachable regardless of any default chrome change.
   (test-assert 'datum-always-reachable
              (procedure? (cli-repl-chrome-lookup 'datum)))))
@@ -621,7 +641,8 @@
 (testing-registry-case
  'comment-uses-block-comments '(portable core)
 (let* ((input "(+ 1 2)\n(define base 7)\n(* base 3)\n")
-       (rendered (cli-repl-rendered-from-string input "repl-main" 'comment #f)))
+       (rendered (cli-repl-rendered-from-string input "repl-main" 'comment
+         #f)))
   ;; Prompts, results, and diagnostics are block comments.
   (test-assert 'comment-uses-block-comments (string-contains? rendered "#| "))
   ;; Re-driving the rendered control stream reproduces the same results: the
@@ -637,10 +658,13 @@
 (testing-registry-case
  'comment-echoed-suppresses-submission-echo '(portable core)
 (let* ((input "(+ 1 2)\n(define base 7)\n(set! base 9)\n(* base 3)\n")
-       (echoed (cli-repl-rendered-from-string input "repl-main" 'comment #f #t))
+       (echoed (cli-repl-rendered-from-string input "repl-main" 'comment #f
+         #t))
        (piped (cli-repl-rendered-from-string input "repl-main" 'comment #f)))
-  ;; The piped render carries one bare echo per form (the chrome's single copy);
-  ;; the interactive render carries none, since the terminal supplies that copy.
+  ;; The piped render carries one bare echo per form (the chrome's single
+  ;; copy);
+  ;; the interactive render carries none, since the terminal supplies that
+  ;; copy.
   (test-equal 'comment-echoed-suppresses-submission-echo
              '()
              (result-displays (drive echoed)))
@@ -658,20 +682,24 @@
              (result-displays (drive input)))))
 
 ;; The default-session prompt shows the ordinal alone; the result is its own
-;; `;;'-aligned line comment followed by a `;;' separator, and the EOF exit is a
+;; `;;'-aligned line comment followed by a `;;' separator, and the EOF exit is
+;; a
 ;; `;;   __ ' line aligned from the close count.
 (testing-registry-case
  'comment-default-session-prompt '(portable core)
 (test-equal 'comment-default-session-prompt
-             "#| 1 |# (+ 1 2)\n;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"
-             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f)))
+             "#| 1 |# (+ 1 2)\n;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n\
+"
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment
+               #f)))
 ;; Under the input-echoed posture the same session drops the bare submission
 ;; echo: the terminal's own echo lands in that exact slot after the prompt.
 (testing-registry-case
  'comment-echoed-default-session-prompt '(portable core)
 (test-equal 'comment-echoed-default-session-prompt
              "#| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"
-             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f #t)))
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f
+               #t)))
 ;; A blank line at an input-echoed ready prompt does not start a submission and
 ;; does not mean continuation.  The control-channel helper shows adjacent
 ;; same-ordinal prompts; in a live TTY the echoed blank line sits between them.
@@ -679,7 +707,8 @@
  'comment-echoed-blank-ready-reprompts '(portable core)
 (test-equal 'comment-echoed-blank-ready-reprompts
              "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"
-             (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'comment #f #t)))
+             (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'comment
+               #f #t)))
 (testing-registry-case
  'comment-echoed-line-comment-ready-reprompts '(portable core)
 (test-equal 'comment-echoed-line-comment-ready-reprompts
@@ -694,9 +723,10 @@
              (string-append
         "#| project-main:1 |# (+ 1 2)\n;;                => 3\n;;\n"
         "#| project-main:2 |# ;;                __ exit closed-ok\n")
-             (cli-repl-rendered-from-string "(+ 1 2)\n" "project-main" 'comment #f)))
-;; Marker alignment tracks the ordinal width: a 1-digit ordinal gives `;;   => '
-;; (3 pad) and a 2-digit ordinal `;;    => ' (4 pad), with the continuation dots
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "project-main" 'comment
+               #f)))
+;; Marker alignment tracks the ordinal width: a 1-digit ordinal gives `;; => '
+;; (3 pad) and a 2-digit ordinal `;; => ' (4 pad), with the continuation dots
 ;; widening to match.
 (testing-registry-case
  'comment-two-digit-ordinal-alignment '(portable core)
@@ -719,37 +749,44 @@
  'classic-prompts-and-values '(portable core)
 (test-equal 'classic-prompts-and-values
              "> (+ 1 2)\n= 3\n\n> _ exit closed-ok\n"
-             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'classic #f)))
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'classic
+               #f)))
 ;; The same blank-ready-prompt redraw applies to `classic'.  The helper omits
 ;; terminal echo, so it shows the repeated ready prompts next to each other.
 (testing-registry-case
  'classic-echoed-blank-ready-reprompts '(portable core)
 (test-equal 'classic-echoed-blank-ready-reprompts
              "> > = 3\n\n> _ exit closed-ok\n"
-             (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'classic #f #t)))
+             (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'classic
+               #f #t)))
 (testing-registry-case
  'classic-echoed-line-comment-ready-reprompts '(portable core)
 (test-equal 'classic-echoed-line-comment-ready-reprompts
              "> > = 3\n\n> _ exit closed-ok\n"
              (cli-repl-rendered-from-string
         "  ;; comment\n(+ 1 2)\n" "repl-main" 'classic #f #t)))
-;; A condition is marked `! ' (not `- '), so it pops in a colorless capture.  The
-;; diagnostic text is now cross-host identical for an error whose wording agrees
+;; A condition is marked `! ' (not `- '), so it pops in a colorless capture.
+;; The
+;; diagnostic text is now cross-host identical for an error whose wording
+;; agrees
 ;; (the `consent eval error: ' prefix matches the Emacs twin after its message
 ;; convergence), so assert the whole line exactly.
 (testing-registry-case
  'classic-condition-marker '(portable core)
 (test-equal 'classic-condition-marker
-             (string-append "> (/ 1 0)\n! consent eval error: / division by zero"
+             (string-append
+               "> (/ 1 0)\n! consent eval error: / division by zero"
                       "\n\n> _ exit closed-ok\n")
-             (cli-repl-rendered-from-string "(/ 1 0)\n" "repl-main" 'classic #f)))
+             (cli-repl-rendered-from-string "(/ 1 0)\n" "repl-main" 'classic
+               #f)))
 ;; `> ' and `. ' are both two columns, so a continued form's code aligns with
 ;; the first submission's code; the open-construct count is dropped.
 (testing-registry-case
  'classic-continuation-aligns '(portable core)
 (test-equal 'classic-continuation-aligns
              "> . (+ 1\n2)\n= 3\n\n> _ exit closed-ok\n"
-             (cli-repl-rendered-from-string "(+ 1\n2)\n" "repl-main" 'classic #f)))
+             (cli-repl-rendered-from-string "(+ 1\n2)\n" "repl-main" 'classic
+               #f)))
 ;; A deeper continuation just adds another `. ' gutter -- no nesting count.
 (testing-registry-case
  'classic-continuation-no-count '(portable core)
@@ -770,12 +807,14 @@
  'quiet-results-only '(portable core)
 (test-equal 'quiet-results-only
              "3\n"
-             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'quiet #f)))
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'quiet
+               #f)))
 (testing-registry-case
  'silent-suppresses-all '(portable core)
 (test-equal 'silent-suppresses-all
              ""
-             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'silent #f)))
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'silent
+               #f)))
 
 ;;;; A recoverable condition still renders under a human chrome
 
@@ -784,7 +823,8 @@
 (let ((rendered
        (cli-repl-rendered-from-string "undefined-name\n" "repl-main"
                                       'comment #f)))
-  (test-assert 'comment-condition-marker (string-contains? rendered ";;   !! "))))
+  (test-assert 'comment-condition-marker (string-contains? rendered
+    ";;   !! "))))
 
 ;;;; Program output: `comment' owns it (control channel), others keep it raw
 
@@ -799,7 +839,8 @@
  'comment-output-on-control-channel '(portable core)
 (test-equal 'comment-output-on-control-channel
              (string-append
-        "#| 1 |# (import (scheme base) (scheme write))\n;;   => (unspecified)\n;;\n"
+        "#| 1 |# (import (scheme base) (scheme write))\n;;   => (unspecified)\n\
+;;\n"
         "#| 2 |# (display \"hi\\n\")\n;;   :: hi\n;;   => (unspecified)\n;;\n"
         "#| 3 |# (+ 1 1)\n;;   => 2\n;;\n#| 4 |# ;;   __ exit closed-ok\n")
              (cli-repl-rendered-from-string
@@ -825,7 +866,8 @@
                              "(newline) 0)\n")
               "repl-main" 'comment #f)
              ";;   :: a\n;;   :: b\n;;   => 0")))
-;; Output that ends without a newline still gets a terminating one so the comment
+;; Output that ends without a newline still gets a terminating one so the
+;; comment
 ;; closes before the result line.
 (testing-registry-case
  'comment-output-no-trailing-newline '(portable core)
@@ -837,7 +879,8 @@
              ";;   :: x\n;;   => 5")))
 ;; `classic' (and every non-`comment' chrome) leaves program output raw on its
 ;; own stream; the control channel carries records only, not the printed text.
-;; The printed value (12321) is computed so it is absent from the echoed source.
+;; The printed value (12321) is computed so it is absent from the echoed
+;; source.
 (testing-registry-case
  'classic-output-raw-on-stdout '(portable core)
 (let ((classic (cli-repl-capture-from-string
@@ -847,8 +890,10 @@
   (test-equal 'classic-output-raw-on-stdout "12321\n" (cdr classic))
   (test-assert 'classic-output-not-on-control-channel
              (not (string-contains? (car classic) "12321")))))
-;; The `comment' control-channel transcript round-trips through a fresh session:
-;; the commented output is inert on replay and the re-evaluated forms regenerate
+;; The `comment' control-channel transcript round-trips through a fresh
+;; session:
+;; the commented output is inert on replay and the re-evaluated forms
+;; regenerate
 ;; it, so the per-submission results match the original input's.
 (testing-registry-case
  'comment-output-transcript-replays '(portable core)
@@ -856,7 +901,8 @@
                              "(display \"hello\\n\")\n"
                              "(begin (display \"x\")(newline) 42)\n"
                              "(+ 2 3)\n"))
-       (transcript (cli-repl-rendered-from-string input "repl-main" 'comment #f)))
+       (transcript (cli-repl-rendered-from-string input "repl-main" 'comment
+         #f)))
   (test-equal 'comment-output-transcript-replays
              (result-displays (drive input))
              (result-displays (drive transcript)))))
@@ -884,7 +930,8 @@
  'paint-color-emits-escape '(portable core)
 (test-assert 'paint-color-emits-escape
              (string-contains?
-             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #t)
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment
+               #t)
              escape)))
 (testing-registry-case
  'paint-plain-has-no-escape '(portable core)
@@ -899,7 +946,8 @@
 (testing-registry-case
  'parse-session '(portable core)
 (let ((options (cli-repl-parse-options
-                (list "--chrome" "classic" "--color=always" "--session" "demo"))))
+                (list "--chrome" "classic" "--color=always" "--session"
+                  "demo"))))
   (test-equal 'parse-session "demo" (cdr (assq 'session options)))
   (test-equal 'parse-chrome 'classic (cdr (assq 'chrome options)))
   (test-equal 'parse-color-inline 'always (cdr (assq 'color options)))))
@@ -908,19 +956,24 @@
 (let ((options (cli-repl-parse-options (list "--color" "never"))))
   (test-equal 'parse-color-spaced 'never (cdr (assq 'color options)))
   (test-equal 'parse-chrome-default 'comment (cdr (assq 'chrome options)))
-  (test-equal 'parse-session-default "repl-main" (cdr (assq 'session options)))))
-;; A bare `--repl' token (passed through from the compiled host dispatch) and any
+  (test-equal 'parse-session-default "repl-main" (cdr (assq 'session
+    options)))))
+;; A bare `--repl' token (passed through from the compiled host dispatch) and
+;; any
 ;; unrecognized argument are ignored, leaving the defaults intact.
 (testing-registry-case
  'parse-ignores-repl-token '(portable core)
 (let ((options (cli-repl-parse-options (list "--repl"))))
-  (test-equal 'parse-ignores-repl-token 'comment (cdr (assq 'chrome options)))))
-;; `--replay FILE' carries the transcript path; the default is #f (stdin session).
+  (test-equal 'parse-ignores-repl-token 'comment (cdr (assq 'chrome
+    options)))))
+;; `--replay FILE' carries the transcript path; the default is #f (stdin
+;; session).
 (testing-registry-case
  'parse-replay '(portable core)
 (test-equal 'parse-replay
              "t.scm"
-             (cdr (assq 'replay (cli-repl-parse-options (list "--replay" "t.scm"))))))
+             (cdr (assq 'replay (cli-repl-parse-options (list "--replay"
+               "t.scm"))))))
 (testing-registry-case
  'parse-replay-default '(portable core)
 (test-equal 'parse-replay-default
@@ -929,7 +982,8 @@
 
 ;;;; Transcript capture and replay (docs/repl-interaction-contract.md)
 
-;; Serialize a record stream through the consent writer -- the canonical capture
+;; Serialize a record stream through the consent writer -- the canonical
+;; capture
 ;; form.  Comparing serialized streams is host-portable: value-equal canonical
 ;; numbers render identically, so two streams serialize the same exactly when
 ;; they carry the same data, sidestepping per-host record identity.
@@ -956,7 +1010,8 @@
              (serialize captured)
              (serialize (cli-repl-replay-records reloaded "project-main")))))
 
-;; An EOF-truncated partial form is not a complete submission, so it contributes
+;; An EOF-truncated partial form is not a complete submission, so it
+;; contributes
 ;; no replayable source.
 (testing-registry-case
  'submissions-skip-incomplete '(portable core)
@@ -967,7 +1022,8 @@
 ;; A pure transcript replays to an EQUAL record stream, and the report says so.
 (testing-registry-case
  'replay-input '(portable core)
-(let* ((captured (drive "(import (scheme base))\n(define base 20)\n(* base 3)\n"))
+(let* ((captured (drive
+  "(import (scheme base))\n(define base 20)\n(* base 3)\n"))
        (replayed (cli-repl-replay-records captured "project-main"))
        (report (cli-repl-replay-report captured replayed)))
   (test-equal 'replay-input
@@ -981,7 +1037,8 @@
              (consent-number-value (field report 'submissions)))))
 
 ;; A live host effect cannot be reproduced under a weaker replay posture.  A
-;; submission that resolved the session interaction environment as a result when
+;; submission that resolved the session interaction environment as a result
+;; when
 ;; captured fails closed as a condition when replayed under a denying posture;
 ;; the report records that divergence rather than letting it pass silently
 ;; (docs "Capture and Replay": effectful forms fail closed, not silently).
@@ -995,13 +1052,16 @@
                   '((policy-actions (standard-host-effect . deny)))))
        (report (cli-repl-replay-report captured replayed)))
   ;; Capture: both forms succeeded (two results, no conditions).
-  (test-equal 'replay-effect-captured-results 2 (count-of captured 'repl-result))
+  (test-equal 'replay-effect-captured-results 2 (count-of captured
+    'repl-result))
   (test-equal 'replay-effect-captured-no-conditions
              0
              (count-of captured 'repl-condition))
   ;; Replay denied the effect: the interaction-environment form is a condition.
-  (test-equal 'replay-effect-replayed-results 1 (count-of replayed 'repl-result))
-  (test-equal 'replay-effect-replayed-conditions 1 (count-of replayed 'repl-condition))
+  (test-equal 'replay-effect-replayed-results 1 (count-of replayed
+    'repl-result))
+  (test-equal 'replay-effect-replayed-conditions 1 (count-of replayed
+    'repl-condition))
   ;; The report flags the result -> condition divergence with its source.
   (test-equal 'replay-report-status-diverged 'diverged (field report 'status))
   (let ((divergence (car (field report 'divergences))))

@@ -123,7 +123,8 @@
       "Return #t when STATE is part of the public task lifecycle vocabulary."
       #((parameters
          (state (type symbol)
-          (description ("Symbol to check against the task lifecycle vocabulary."))))
+          (description
+            ("Symbol to check against the task lifecycle vocabulary."))))
         (returns (type boolean)
          (description "#t when STATE is a public task state; otherwise #f."))
         (effects pure))
@@ -152,7 +153,8 @@
          (fields (type list)
           (description "Association list of condition fields.")))
         (returns (type task-condition)
-         (description "A `task-condition` datum suitable for an error irritant."))
+         (description
+           "A `task-condition` datum suitable for an error irritant."))
         (effects pure))
       (cons 'task-condition
             (cons (list 'kind kind)
@@ -253,7 +255,8 @@
       #((parameters
          (datum . "Value to inspect."))
         (returns (type boolean)
-         (description ("#t when DATUM is tagged as an agent-task; otherwise #f.")))
+         (description
+           ("#t when DATUM is tagged as an agent-task; otherwise #f.")))
         (effects pure))
       (task-record? datum 'agent-task))
 
@@ -262,7 +265,8 @@
       #((parameters
          (datum . "Value to inspect."))
         (returns (type boolean)
-         (description ("#t when DATUM is tagged as an agent-step; otherwise #f.")))
+         (description
+           ("#t when DATUM is tagged as an agent-step; otherwise #f.")))
         (effects pure))
       (task-record? datum 'agent-step))
 
@@ -271,7 +275,8 @@
       #((parameters
          (datum . "Value to inspect."))
         (returns (type boolean)
-         (description ("#t when DATUM is tagged as an agent-action; otherwise #f.")))
+         (description
+           ("#t when DATUM is tagged as an agent-action; otherwise #f.")))
         (effects pure))
       (task-record? datum 'agent-action))
 
@@ -552,7 +557,8 @@
           (description "Observation kind symbol."))
          (value . "Observed value as Scheme-readable data.")
          (options (type list)
-          (description ("Association list overriding redactions and audit metadata."))))
+          (description
+            ("Association list overriding redactions and audit metadata."))))
         (returns (type agent-observation)
          (description "A canonical `agent-observation` datum."))
         (effects pure))
@@ -578,7 +584,8 @@
          (selected-action (type (or agent-action string symbol))
           (description "Selected action id, action datum, or none."))
          (reason (type (or string pair))
-          (description ("Human-readable or Scheme-readable reason for the decision.")))
+          (description
+            ("Human-readable or Scheme-readable reason for the decision.")))
          (options (type list)
           (description
            ("Association list overriding policy, model, rules, and"
@@ -723,7 +730,8 @@
          (stop (type task-stop)
           (description "Task-stop receipt or stop metadata."))
          (options (type list)
-          (description ("Association list overriding transcript and audit fields."))))
+          (description
+            ("Association list overriding transcript and audit fields."))))
         (returns (type agent-completion)
          (description "A canonical `agent-completion` datum."))
         (effects pure))

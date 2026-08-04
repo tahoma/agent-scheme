@@ -1,4 +1,4 @@
-;;; consent-interpreter.el --- R7RS interpreter backend  -*- lexical-binding: t; -*-
+;;; consent-interpreter.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -6,7 +6,7 @@
 
 ;; Interpreter backend for Consent Scheme.  This module owns evaluation,
 ;; procedure application, primitive implementations, trampoline execution, and
-;; Scheme-readable evaluation result records.  Public orchestration entry points
+;; Scheme-readable evaluation result records. Public orchestration entry points
 ;; live in `consent-eval'.
 
 ;;; Code:
@@ -124,7 +124,8 @@ records remain opaque at the Scheme boundary."
         (setq rest (consent--identifier-key cursor)))
        (t
         (consent--eval-error
-         "lambda formals must be an identifier, a proper list, or a dotted list")))
+         "lambda formals must be an identifier, a proper list, or a dotted\
+ list")))
       (setq required (nreverse required))
       (consent--ensure-distinct-names
        (if rest (append required (list rest)) required)
@@ -411,8 +412,10 @@ initializers are evaluated."
             (let ((parsed-definition
                    (consent--parse-definition definition)))
               (push (cons 'define parsed-definition) parsed)
-              ;; Install all internal-definition names before any initializer is
-              ;; evaluated so mutually recursive bodies see allocated locations.
+              ;; Install all internal-definition names before any initializer
+              ;; is
+              ;; evaluated so mutually recursive bodies see allocated
+              ;; locations.
               (unless (eq (gethash (car parsed-definition)
                                     (consent--environment-bindings
                                      body-environment)
@@ -634,7 +637,8 @@ The signal becomes an interpreter error object so guard clauses can use
 `error-object?' and the message and irritant accessors."
   (consent--make-error-object (error-message-string condition) nil))
 
-(defun consent--apply-host-primitive/k (function arguments context continuation)
+(defun consent--apply-host-primitive/k (function arguments context
+  continuation)
   "Invoke host primitive FUNCTION and deliver its budgeted result.
 An elisp signal escaping FUNCTION (a primitive argument error, a native
 module raise) becomes an interpreted raise that walks the context's
@@ -854,7 +858,8 @@ Unknown type extensions remain advisory and therefore pass."
                                      (symbol-name retention))))))
     (consent--record-event! context datum)
     (consent--eval-error
-     "boundary contract checking unavailable: docstring-retention %s strips rich metadata"
+     "boundary contract checking unavailable: docstring-retention %s strips\
+ rich metadata"
      retention
      datum)))
 
@@ -1112,7 +1117,8 @@ any resulting bounce to preserve existing direct-call helper behavior."
     (parts environment context tailp continuation)
   "Evaluate an if expression PARTS in ENVIRONMENT."
   (unless (memq (length parts) '(3 4))
-    (consent--eval-error "if requires test, consequent, and optional alternate"))
+    (consent--eval-error
+      "if requires test, consequent, and optional alternate"))
   (consent--eval-expression
    (cadr parts)
    environment
@@ -1425,11 +1431,11 @@ each initializer."
       (consent--eval-error "empty list is not an expression"))
     (let ((operator (car parts)))
       (cond
-	       ((and (consent--symbol-named-p operator "quote")
-	             (consent--special-operator-active-p operator environment))
-	        (unless (= (length parts) 2)
-	          (consent--eval-error "quote requires exactly one datum"))
-	        (consent--continue
+               ((and (consent--symbol-named-p operator "quote")
+                     (consent--special-operator-active-p operator environment))
+                (unless (= (length parts) 2)
+                  (consent--eval-error "quote requires exactly one datum"))
+                (consent--continue
                  continuation
                  (consent--charge-literal
                   (consent--strip-identifiers
@@ -1437,62 +1443,63 @@ each initializer."
                    nil
                    (consent--eval-context-symbol-table context))
                   context)))
-	       ((and (consent--symbol-named-p operator "quasiquote")
-	             (consent--special-operator-active-p operator environment))
+               ((and (consent--symbol-named-p operator "quasiquote")
+                     (consent--special-operator-active-p operator environment))
 	        ;; The quasiquote builder assembles its result with host cons/append
 	        ;; rather than the charged primitives, so charge the realized result
 	        ;; once -- like any other literal -- off the hot primitive path.
-	        (consent--continue
+                (consent--continue
                  continuation
                  (consent--charge-literal
-	          (consent--strip-identifiers
+                  (consent--strip-identifiers
                    (consent--eval-quasiquote parts environment context)
                    nil
                    (consent--eval-context-symbol-table context))
-	          context)))
-	       ((and (consent--symbol-named-p operator "lambda")
-	             (consent--special-operator-active-p operator environment))
-	        (unless (>= (length parts) 3)
-	          (consent--eval-error "lambda requires formals and a body"))
-	        (let ((formals (cadr parts))
-	              (body (cddr parts)))
-	          (let* ((parsed-formals (consent--parse-formals formals))
-	                 (documentation-result
-	                  (consent--body-documentation-result
-	                   body context parsed-formals)))
-	            (consent--continue
-	             continuation
-	             (consent--make-procedure
-	              parsed-formals
-	              (plist-get documentation-result :body)
-	              environment
-	              (plist-get documentation-result :metadata)
-	              (consent--eval-context-syntax-environment context))))))
-	       ((and (consent--symbol-named-p operator "if")
-	             (consent--special-operator-active-p operator environment))
-	        (consent--eval-if parts environment context tailp continuation))
-	       ((and (consent--symbol-named-p operator "set!")
-	             (consent--special-operator-active-p operator environment))
-	        (consent--eval-set! parts environment context continuation))
-	       ((and (consent--symbol-named-p operator "let-values")
-	             (consent--special-operator-active-p operator environment))
-	        (consent--eval-let-values
+                  context)))
+               ((and (consent--symbol-named-p operator "lambda")
+                     (consent--special-operator-active-p operator environment))
+                (unless (>= (length parts) 3)
+                  (consent--eval-error "lambda requires formals and a body"))
+                (let ((formals (cadr parts))
+                      (body (cddr parts)))
+                  (let* ((parsed-formals (consent--parse-formals formals))
+                         (documentation-result
+                          (consent--body-documentation-result
+                           body context parsed-formals)))
+                    (consent--continue
+                     continuation
+                     (consent--make-procedure
+                      parsed-formals
+                      (plist-get documentation-result :body)
+                      environment
+                      (plist-get documentation-result :metadata)
+                      (consent--eval-context-syntax-environment context))))))
+               ((and (consent--symbol-named-p operator "if")
+                     (consent--special-operator-active-p operator environment))
+                (consent--eval-if parts environment context tailp continuation))
+               ((and (consent--symbol-named-p operator "set!")
+                     (consent--special-operator-active-p operator environment))
+                (consent--eval-set! parts environment context continuation))
+               ((and (consent--symbol-named-p operator "let-values")
+                     (consent--special-operator-active-p operator environment))
+                (consent--eval-let-values
                  parts environment context tailp nil continuation))
-	       ((and (consent--symbol-named-p operator "let*-values")
-	             (consent--special-operator-active-p operator environment))
-	        (consent--eval-let-values
+               ((and (consent--symbol-named-p operator "let*-values")
+                     (consent--special-operator-active-p operator environment))
+                (consent--eval-let-values
                  parts environment context tailp t continuation))
-	       ((and (consent--symbol-named-p operator "letrec")
-	             (consent--special-operator-active-p operator environment))
-	        (consent--eval-letrec
+               ((and (consent--symbol-named-p operator "letrec")
+                     (consent--special-operator-active-p operator environment))
+                (consent--eval-letrec
                  parts environment context tailp nil continuation))
-	       ((and (consent--symbol-named-p operator "letrec*")
-	             (consent--special-operator-active-p operator environment))
-	        (consent--eval-letrec
+               ((and (consent--symbol-named-p operator "letrec*")
+                     (consent--special-operator-active-p operator environment))
+                (consent--eval-letrec
                  parts environment context tailp t continuation))
        ((and (consent--symbol-named-p operator "define")
-	             (consent--special-operator-active-p operator environment))
-	        (consent--eval-error "define is not valid in expression position"))
+                     (consent--special-operator-active-p operator environment))
+                (consent--eval-error "define is not valid in expression\
+ position"))
        ((and (consent--symbol-named-p operator "define-values")
              (consent--special-operator-active-p operator environment))
         (consent--eval-error
@@ -1513,16 +1520,16 @@ each initializer."
              (consent--special-operator-active-p operator environment))
         (consent--eval-error
          "import is not valid in expression position"))
-	       ((and (consent--symbol-named-p operator "begin")
-	             (consent--special-operator-active-p operator environment))
-	        (consent--eval-sequence
+               ((and (consent--symbol-named-p operator "begin")
+                     (consent--special-operator-active-p operator environment))
+                (consent--eval-sequence
                  (cdr parts) environment context tailp nil continuation))
-	       ((and (consent--symbol-named-p operator "with-budget")
-	             (consent--special-operator-active-p operator environment))
-	        (consent--eval-with-budget
+               ((and (consent--symbol-named-p operator "with-budget")
+                     (consent--special-operator-active-p operator environment))
+                (consent--eval-with-budget
                  parts environment context continuation))
-	       (t
-	        (consent--eval-expression
+               (t
+                (consent--eval-expression
                  operator
                  environment
                  context
@@ -1538,7 +1545,8 @@ each initializer."
                       nil
                       (lambda (arguments)
                         (consent--apply-procedure
-                         procedure arguments context tailp continuation)))))))))))
+                         procedure arguments context tailp
+                           continuation)))))))))))
 
 (defun consent--eval-with-budget (parts environment context continuation)
   "Evaluate (with-budget SPEC BODY ...) under a tightened budget.
@@ -1616,8 +1624,10 @@ When TAILP is non-nil, tail calls may return an
             ((consp expression)
              (let ((expanded (consent--expand-expression
                               expression environment context)))
-               ;; Expansion is interleaved with evaluation so local syntax forms can
-               ;; update CONTEXT before the resulting core expression is evaluated.
+               ;; Expansion is interleaved with evaluation so local syntax
+               ;; forms can
+               ;; update CONTEXT before the resulting core expression is
+               ;; evaluated.
                (if (eq expanded expression)
                    (consent--eval-combination
                     expression environment context tailp next)
@@ -1658,7 +1668,8 @@ top-level definition forms within the sequence."
                       rest
                       t)
                    (consent--eval-error
-                    "import is only allowed at top level or in library bodies")))
+                    "import is only allowed at top level or in library\
+ bodies")))
                 ((consent--define-library-form-p form)
                  (if allow-definitions
                      (after-form
@@ -1689,7 +1700,8 @@ top-level definition forms within the sequence."
                       rest
                       nil)
                    (consent--eval-error
-                    "define-record-type is only allowed before body expressions")))
+                    "define-record-type is only allowed before body\
+ expressions")))
                 ((consent--define-values-form-p form)
                  (if allow-definitions
                      (consent--eval-define-values
@@ -3847,11 +3859,14 @@ DESCRIPTION names the primitive for errors."
   (or (and context (consent--eval-context-current-input-port context))
       (consent--policy-denied description context)))
 
-;; Standard streams (docs/repl-interaction-contract.md, "Stream Separation"): an
-;; evaluation may connect its `(current-input-port)', `(current-output-port)', and
-;; `(current-error-port)' to the process standard streams.  The standard streams
+;; Standard streams (docs/repl-interaction-contract.md, "Stream Separation"):
+;; an
+;; evaluation may connect its `(current-input-port)', `(current-output-port)',
+;; and
+;; `(current-error-port)' to the process standard streams. The standard streams
 ;; are consented by invocation -- what the caller handed the process -- so the
-;; host attaching real stdio also supplies, by default, the device callbacks plus
+;; host attaching real stdio also supplies, by default, the device callbacks
+;; plus
 ;; one `port' grant per stream (`(backing stdin)'/`stdout'/`stderr'); the core
 ;; stays fail-closed and connects a stream only when its device and a matching
 ;; active grant are both present.  No raw host port is exposed: input is pulled
@@ -3878,7 +3893,8 @@ comparison is by symbol name."
               (symbol-name backing))))
 
 (defun consent--find-standard-stream-grant (context backing operation)
-  "Return CONTEXT's active `port' grant for OPERATION backed by BACKING, or nil."
+  "Return CONTEXT's active `port' grant for OPERATION backed by BACKING, or\
+ nil."
   (seq-find (lambda (grant)
               (consent--standard-stream-grant-p grant backing operation))
             (consent--capability-context-grants context)))
@@ -3887,7 +3903,8 @@ comparison is by symbol name."
 ;; zero-argument function returning the next chunk of input as a non-empty
 ;; string, or nil at end of stream.  The host supplies it (its real stdin read,
 ;; one line/chunk at a time); genuinely finite in-memory input is wrapped as a
-;; one-shot reader by `consent-program-input-from-string'.  Reads refill only as far
+;; one-shot reader by `consent-program-input-from-string'. Reads refill only as
+;; far
 ;; as the current operation needs, so a `(read-line)' filter over a live or
 ;; unbounded pipe processes input incrementally instead of draining it all up
 ;; front.  The reader and an end-of-stream flag ride in the port's mutable
@@ -3895,7 +3912,8 @@ comparison is by symbol name."
 ;; of the portable `(consent interpreter)' streaming program-input port.
 (defconst consent--program-input-refill-primitive
   (consent--make-primitive-procedure 'program-input-read nil 0 0)
-  "Synthetic primitive naming program-input refills for host-callback budgeting.")
+  "Synthetic primitive naming program-input refills for host-callback\
+ budgeting.")
 
 (defun consent--program-input-reader-from-options (options)
   "Return OPTIONS' `:program-input-reader' host input reader thunk.
@@ -3932,7 +3950,8 @@ pull is charged against the host-callback budget and audited as a port read,
 so an unbounded stream stays budget-bounded and fail-closed like every host
 effect."
   (unless (consent--program-input-eof-p port)
-    (consent--note-host-callback context consent--program-input-refill-primitive)
+    (consent--note-host-callback context
+      consent--program-input-refill-primitive)
     (let ((chunk (funcall (consent--program-input-reader-of port))))
       (if (and (stringp chunk) (> (length chunk) 0))
           (progn
@@ -4013,13 +4032,16 @@ holding a live host port."
 
 ;; The binary peer of the program-input port (#528): a `stdio'-backed binary
 ;; input port that refills *bytes* on demand from a host byte reader -- a
-;; zero-argument function returning the next chunk as a non-empty vector of bytes,
+;; zero-argument function returning the next chunk as a non-empty vector of
+;; bytes,
 ;; or nil at end of stream -- so a byte filter calling `read-u8'/`peek-u8'/
-;; `read-bytevector' over a live or unbounded pipe processes input incrementally
+;; `read-bytevector' over a live or unbounded pipe processes input
+;; incrementally
 ;; instead of draining it up front.  The byte reader and an end-of-stream flag
 ;; ride in the port's counters alist; the growable buffer is the port `source'
-;; byte vector.  Byte twin of the textual reader thunk, with a distinct counters
-;; key so a binary and a textual stdin port never cross paths.  Emacs parity twin
+;; byte vector. Byte twin of the textual reader thunk, with a distinct counters
+;; key so a binary and a textual stdin port never cross paths. Emacs parity
+;; twin
 ;; of the portable `(consent interpreter)' streaming binary program-input port.
 (defconst consent--program-binary-input-refill-primitive
   (consent--make-primitive-procedure 'program-binary-input-read nil 0 0)
@@ -4065,7 +4087,8 @@ effect."
           nil)))))
 
 (defun consent--program-binary-input-fill-until! (port context done-p)
-  "Refill PORT from its host byte reader until DONE-P holds or the stream ends."
+  "Refill PORT from its host byte reader until DONE-P holds or the stream\
+ ends."
   (while (and (not (funcall done-p))
               (not (consent--program-binary-input-eof-p port)))
     (consent--program-binary-input-refill! port context)))
@@ -4107,12 +4130,14 @@ holding a live host port.  Binary twin of
     port))
 
 ;; A program-output / program-error port is the write side of the standard
-;; streams: a `stdio'-backed port whose textual writes flush through a host writer
+;; streams: a `stdio'-backed port whose textual writes flush through a host
+;; writer
 ;; thunk immediately (see `consent--write-text-to-port'), so program output is
 ;; never buffered to end of program and a filter streams as it runs.
 (defconst consent--program-output-write-primitive
   (consent--make-primitive-procedure 'program-output-write nil 0 0)
-  "Synthetic primitive naming program-output writes for host-callback budgeting.")
+  "Synthetic primitive naming program-output writes for host-callback\
+ budgeting.")
 
 (defun consent--program-output-streaming-p (port)
   "Report whether PORT flushes through a host program-output writer."
@@ -4156,11 +4181,14 @@ flushes through WRITER immediately rather than holding a live host port."
     port))
 
 ;; The binary peer of the program-output / program-error port (#528): a
-;; `stdio'-backed binary output port whose byte writes flush through a host byte
+;; `stdio'-backed binary output port whose byte writes flush through a host
+;; byte
 ;; writer immediately (see `consent--append-bytes-to-port'), so a `write-u8'/
 ;; `write-bytevector' filter streams as it runs instead of buffering to end of
-;; program.  The byte writer receives each flush as a list of byte integers -- the
-;; representation `consent--append-bytes-to-port' already accumulates -- under a
+;; program. The byte writer receives each flush as a list of byte integers --
+;; the
+;; representation `consent--append-bytes-to-port' already accumulates -- under
+;; a
 ;; distinct counters key from the textual writer.
 (defconst consent--program-binary-output-write-primitive
   (consent--make-primitive-procedure 'program-binary-output-write nil 0 0)
@@ -4216,7 +4244,8 @@ BUILD makes the port from GRANT; INSTALL stores it on CONTEXT.  Without the
 grant the connection is denied and recorded; without the device it is a
 no-op."
   (when device
-    (let ((grant (consent--find-standard-stream-grant context backing operation)))
+    (let ((grant (consent--find-standard-stream-grant context backing
+      operation)))
       (consent-audit-record
        'capability-request
        `((domain . port) (operation . ,operation) (backing . ,backing)))
@@ -4261,7 +4290,8 @@ The standard streams are consented by invocation; ambient effects keep gating."
      (lambda (port)
        (setf (consent--eval-context-current-input-port context) port)))
     (consent--connect-standard-stream!
-     context (and (not reader) (functionp byte-reader) byte-reader) 'stdin 'read
+     context (and (not reader) (functionp byte-reader) byte-reader) 'stdin
+       'read
      (lambda (grant)
        (consent--make-program-binary-input-port grant byte-reader))
      (lambda (port)
@@ -4347,7 +4377,8 @@ The standard streams are consented by invocation; ambient effects keep gating."
     (when context
       (consent--note-output context (length text)))
     ;; A streaming stdio output port flushes each write through its host writer
-    ;; immediately (so a single-form filter loop streams instead of buffering to
+    ;; immediately (so a single-form filter loop streams instead of buffering
+    ;; to
     ;; end of program), charged against the host-callback budget; an ordinary
     ;; in-memory port accumulates its contents as before.
     (if (consent--program-output-streaming-p output)
@@ -4364,7 +4395,8 @@ The standard streams are consented by invocation; ambient effects keep gating."
 
 (defun consent--write-to-output-port
     (value port mode displayp &optional context)
-  "Write VALUE to PORT using MODE and display rendering when DISPLAYP is non-nil."
+  "Write VALUE to PORT using MODE and display rendering when DISPLAYP is\
+ non-nil."
   (consent--write-text-to-port
    (if displayp
        (consent--display-string value)
@@ -4563,7 +4595,8 @@ The standard streams are consented by invocation; ambient effects keep gating."
                  (consent--current-input-port-or-deny context "read"))
                "read")))
     (consent--port-capability-check port context 'read)
-    ;; `read' realizes fresh structure from external input, so charge the parsed
+    ;; `read' realizes fresh structure from external input, so charge the
+    ;; parsed
     ;; datum once -- like a literal -- to bound oversized input.
     (if (consent--program-input-streaming-p port)
         (consent--charge-literal
@@ -4728,9 +4761,11 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
       (consent--eval-error
        "%s host binary output ports are not available" description))
     (consent--port-capability-check output context 'write)
-    ;; A streaming stdio binary port flushes each byte write through its host byte
+    ;; A streaming stdio binary port flushes each byte write through its host
+    ;; byte
     ;; writer immediately (so a single-form byte filter streams instead of
-    ;; buffering to end of program), charged against the host-callback budget; an
+    ;; buffering to end of program), charged against the host-callback budget;
+    ;; an
     ;; ordinary in-memory port accumulates its bytes as before.
     (if (consent--program-binary-output-streaming-p output)
         (progn
@@ -4761,7 +4796,8 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
          "read-u8 host binary input ports are not available"))
       (consent--port-capability-check port context 'read)
       ;; A streaming stdio binary port refills bytes on demand: pull one chunk
-      ;; when no byte is buffered, so a byte filter never drains the pipe up front.
+      ;; when no byte is buffered, so a byte filter never drains the pipe up
+      ;; front.
       (when (consent--program-binary-input-streaming-p port)
         (consent--program-binary-input-fill-until!
          port context
@@ -4824,7 +4860,8 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
        "read-bytevector host binary input ports are not available"))
      (t
       (consent--port-capability-check port context 'read)
-      ;; A streaming stdio binary port refills until COUNT bytes are buffered or
+      ;; A streaming stdio binary port refills until COUNT bytes are buffered
+      ;; or
       ;; the stream ends, so a bounded read pulls only what it needs.
       (when (consent--program-binary-input-streaming-p port)
         (consent--program-binary-input-fill-until!
@@ -5966,7 +6003,8 @@ When KEEP-RESULTS is non-nil, return the collected values."
 
 (defun consent--primitive-values (arguments context)
   "Primitive values over ARGUMENTS."
-  ;; One fresh multiple-values wrapper; the values it carries were charged where
+  ;; One fresh multiple-values wrapper; the values it carries were charged
+  ;; where
   ;; they were allocated.
   (consent--charge-value-allocation
    (consent--make-multiple-values arguments) 1 context))
@@ -6506,7 +6544,8 @@ objects so result records can be rendered by `consent-datum->external'."
      ((consent--continuation-p value)
       (list (consent--result-symbol "procedure")
             (consent--result-field "kind"
-                                        (consent--result-symbol "continuation"))))
+                                        (consent--result-symbol
+                              "continuation"))))
      ((consent-error-object-p value)
       (list (consent--result-symbol "error-object")
             (consent--result-field

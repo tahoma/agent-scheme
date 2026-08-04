@@ -1,22 +1,25 @@
-;;; consent-repl-parity-test.el --- Shared cross-host REPL parity suite  -*- lexical-binding: t; -*-
+;;; consent-repl-parity-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
 ;; Emacs half of the shared cross-host REPL parity conformance suite.  It reads
-;; the host-neutral parity corpus (fixtures/repl/parity-cases.scm) and drives the
+;; the host-neutral parity corpus (fixtures/repl/parity-cases.scm) and drives
+;; the
 ;; SAME cases against the Emacs incremental stdin REPL (`consent-repl-stream'),
 ;; asserting the SAME expected record sequence the portable runner asserts
 ;; against the terminal REPL shell (tests/scheme/consent-repl-parity-test.scm).
-;; Because both runners share one corpus, a host that drifts from the cross-host
+;; Because both runners share one corpus, a host that drifts from the
+;; cross-host
 ;; REPL interaction contract (docs/repl-interaction-contract.md) fails its
 ;; runner.
 ;;
 ;; Both the corpus expectations and the emitted records are normalized to the
-;; shared host shape with `consent-test-fixture-host-datum', so the comparison is
+;; shared host shape with `consent-test-fixture-host-datum', so the comparison
+;; is
 ;; representation-independent: Scheme symbols, integers, strings, and the
-;; canonical booleans compare equal across the two hosts' datum encodings.  Each
+;; canonical booleans compare equal across the two hosts' datum encodings. Each
 ;; case `expect' enumerates every record the turn produces; the runner asserts
 ;; per-kind record counts and the contract-meaningful fields of each record,
 ;; correlating a `repl-result'/`repl-condition' to its submission by the
@@ -58,7 +61,8 @@
   (cadr (assq name (cdr-safe datum))))
 
 (defun consent-repl-parity-test--case-field (case name)
-  "Return field NAME from an untagged CASE alist `((field value) ...)', or nil."
+  "Return field NAME from an untagged CASE alist `((field value) ...)', or\
+ nil."
   (cadr (assq name case)))
 
 (defun consent-repl-parity-test--kind (record)
@@ -76,7 +80,8 @@
   (length (consent-repl-parity-test--of records tag)))
 
 (defun consent-repl-parity-test--union-kinds (&rest record-lists)
-  "Return the distinct kinds appearing in any of RECORD-LISTS, in first-seen order."
+  "Return the distinct kinds appearing in any of RECORD-LISTS, in first-seen\
+ order."
   (let ((seen nil))
     (dolist (records record-lists)
       (dolist (record records)
@@ -94,7 +99,8 @@
        (symbolp (caar value))))
 
 (defun consent-repl-parity-test--option-value (value)
-  "Convert a corpus option VALUE (record-style alist or atom) to a dotted alist."
+  "Convert a corpus option VALUE (record-style alist or atom) to a dotted\
+ alist."
   (if (consent-repl-parity-test--assoc-form-p value)
       (mapcar (lambda (entry)
                 (cons (car entry)
@@ -117,11 +123,13 @@
 ;;;; Expectation matching
 
 (defun consent-repl-parity-test--correlated-kind-p (kind)
-  "Return non-nil when KIND's pattern is correlated by submission, not position."
+  "Return non-nil when KIND's pattern is correlated by submission, not\
+ position."
   (memq kind '(repl-result repl-condition)))
 
 (defun consent-repl-parity-test--find-by-submission (records tag submission)
-  "Return the RECORDS record of kind TAG whose `submission' field is SUBMISSION."
+  "Return the RECORDS record of kind TAG whose `submission' field is\
+ SUBMISSION."
   (seq-find (lambda (record)
               (equal (consent-repl-parity-test--field record 'submission)
                      submission))
@@ -139,7 +147,8 @@ EXPECTED is either an atom (compared with `equal') or a nested record pattern
     (equal actual expected)))
 
 (defun consent-repl-parity-test--fields-match-p (record fields)
-  "Return non-nil when RECORD's fields all satisfy the FIELDS expectation list."
+  "Return non-nil when RECORD's fields all satisfy the FIELDS expectation\
+ list."
   (cl-every
    (lambda (entry)
      (consent-repl-parity-test--value-match-p
@@ -154,24 +163,30 @@ EXPECTED is either an atom (compared with `equal') or a nested record pattern
            (expected (cadr entry))
            (got (consent-repl-parity-test--field record fname)))
       (should
-       (consent-repl-parity-test--field-ok id (consent-repl-parity-test--kind pattern)
+       (consent-repl-parity-test--field-ok id (consent-repl-parity-test--kind
+         pattern)
                                            fname got expected)))))
 
 (defun consent-repl-parity-test--field-ok (id kind fname got expected)
-  "Return non-nil when GOT matches EXPECTED, attaching ID/KIND/FNAME on failure."
+  "Return non-nil when GOT matches EXPECTED, attaching ID/KIND/FNAME on\
+ failure."
   (or (consent-repl-parity-test--value-match-p got expected)
       (ert-fail (format "case %s record %s field %s: expected %S, got %S"
                         id kind fname expected got))))
 
 (defun consent-repl-parity-test--serialize (records)
-  "Serialize RECORDS through the consent writer for a host-portable stream compare."
+  "Serialize RECORDS through the consent writer for a host-portable stream\
+ compare."
   (mapcar #'consent-result->external records))
 
 (defun consent-repl-parity-test--run-roundtrip (case raw session options)
-  "Replay RAW (the captured records) to a fresh SESSION and assert the round-trip.
+  "Replay RAW (the captured records) to a fresh SESSION and assert the\
+ round-trip.
 A `reproduced' case must replay to an EQUAL serialized stream; a `partial' case
-must NOT (it drops an unreplayable bare reader condition or EOF-truncated form).
-Serializing through the consent writer makes the compare representation-stable."
+must NOT (it drops an unreplayable bare reader condition or EOF-truncated\
+ form).
+Serializing through the consent writer makes the compare\
+ representation-stable."
   (let* ((mode (consent-repl-parity-test--case-field case 'replay))
          (replayed (consent-repl-stream-replay-records raw session options))
          (same (equal (consent-repl-parity-test--serialize raw)
@@ -198,7 +213,9 @@ Serializing through the consent writer makes the compare representation-stable."
             (expect-count (consent-repl-parity-test--count expect k)))
         (unless (= actual-count expect-count)
           (ert-fail
-           (format "case %s record %s count: expected %S, got %S\nexpected: %S\nactual: %S"
+           (format
+             "case %s record %s count: expected %S, got %S\nexpected:\
+ %S\nactual: %S"
                    id k expect-count actual-count expect actual)))))
     ;; Positional queues for non-correlated kinds (prompt, submission, exit).
     (dolist (k (consent-repl-parity-test--union-kinds actual))
@@ -206,7 +223,8 @@ Serializing through the consent writer makes the compare representation-stable."
     (dolist (pattern expect)
       (let ((kind (consent-repl-parity-test--kind pattern)))
         (if (consent-repl-parity-test--correlated-kind-p kind)
-            (let* ((submission (consent-repl-parity-test--field pattern 'submission))
+            (let* ((submission (consent-repl-parity-test--field pattern
+              'submission))
                    (record (consent-repl-parity-test--find-by-submission
                             actual kind submission)))
               (should record)
@@ -236,7 +254,8 @@ Serializing through the consent writer makes the compare representation-stable."
       (should (= (length ids) (length (delete-dups (copy-sequence ids))))))))
 
 (ert-deftest consent-repl-parity-suite-runs-against-emacs-host ()
-  "Every shared parity case emits the contract record sequence on the Emacs host."
+  "Every shared parity case emits the contract record sequence on the Emacs\
+ host."
   (let ((cases (cdr (assq 'cases (cdr (consent-repl-parity-test--suite))))))
     (should cases)
     (dolist (case cases)

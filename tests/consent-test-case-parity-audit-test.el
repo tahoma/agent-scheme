@@ -1,4 +1,4 @@
-;;; consent-test-case-parity-audit-test.el --- Test ownership audit  -*- lexical-binding: t; -*-
+;;; consent-test-case-parity-audit-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -41,10 +41,14 @@
     (insert-file-contents (expand-file-name relative consent--test-root))
     (let (names)
       (goto-char (point-min))
-      (while (re-search-forward
-              "^(ert-deftest[[:space:]]+\\([^()[:space:]]+\\)"
-              nil t)
-        (push (intern (match-string 1)) names))
+      (condition-case nil
+          (while t
+            (let ((form (read (current-buffer))))
+              (when (and (consp form)
+                         (eq (car form) 'ert-deftest)
+                         (symbolp (cadr form)))
+                (push (cadr form) names))))
+        (end-of-file nil))
       (nreverse names))))
 
 (defun consent-test-case-parity-audit--program-paths ()

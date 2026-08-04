@@ -151,7 +151,8 @@ cursor across sessions."
       (consent-make-interaction-context (cons (cons 'session-id id) options)))
 
     (define (active-session-manager)
-      "Return the live session manager, ensuring a context factory is installed."
+      "Return the live session manager, ensuring a context factory is installe\
+d."
       (if (not (session-model:session-manager-context-factory
                 interpreter-session-manager))
           (session-model:session-manager-set-context-factory!
@@ -159,7 +160,8 @@ cursor across sessions."
       interpreter-session-manager)
 
     (define (own-runtime-datum value context)
-      "Return VALUE with every visible symbol owned by CONTEXT's symbol table."
+      "Return VALUE with every visible symbol owned by CONTEXT's symbol table.\
+"
       "Published data already owned by the context keeps its original graph,"
       "including reader source metadata; only changed paths are rebuilt."
       (own-runtime-datum* value context '()))
@@ -227,7 +229,8 @@ cursor across sessions."
          (else value)))
 
     (define (portable-library-call procedure context . arguments)
-      "Apply PROCEDURE to ARGUMENTS normalized for a compiled portable library."
+      "Apply PROCEDURE to ARGUMENTS normalized for a compiled portable library\
+."
       (apply consent-call-native-library procedure context arguments))
 
     (define (portable-redact value policy context)
@@ -238,7 +241,8 @@ cursor across sessions."
                              policy))
 
     (define (portable-safe-for-provider? value provider context)
-      "Report provider safety through the compiled portable redaction library."
+      "Report provider safety through the compiled portable redaction library.\
+"
       (portable-library-call redaction-model:safe-for-provider?
                              context
                              value
@@ -338,11 +342,13 @@ cursor across sessions."
       (not (eq? value #f)))
 
     (define (parse-record-definition form)
-      "Parse define-record-type syntax into constructor, predicate, and field specs."
+      "Parse define-record-type syntax into constructor, predicate, and field \
+specs."
       (let ((parts (proper-list-elements form "define-record-type form")))
         (if (< (length parts) 4)
             (eval-error
-             "define-record-type requires name, constructor, predicate, and fields"
+             "define-record-type requires name, constructor, predicate, and fi\
+elds"
              form))
         (let* ((type-name
                 (expect-identifier-key (second parts) "record type name"))
@@ -396,7 +402,8 @@ cursor across sessions."
                   (if (not (or (= (length field-parts) 2)
                                (= (length field-parts) 3)))
                       (eval-error
-                       "record field requires name, accessor, and optional mutator"
+                       "record field requires name, accessor, and optional mut\
+ator"
                        (car field-specs)))
                   (let ((field-name
                          (expect-identifier-key
@@ -440,16 +447,19 @@ cursor across sessions."
          (else (loop (cdr rest) (+ index 1))))))
 
     (define (expect-record-of-type value record-type description)
-      "Validate record of type input and raise an evaluator error on mismatch."
+      "Validate record of type input and raise an evaluator error on mismatch.\
+"
       (if (not (and (consent-record? value)
                     (eq? (consent-record-type value) record-type)))
           (eval-error
-           (string-append (interpreter-symbol-name description) " expected record")
+           (string-append (interpreter-symbol-name description)
+             " expected record")
            value))
       value)
 
     (define (define-or-set-record-binding! environment name value)
-      "Install or update a record-related binding while preserving import protection."
+      "Install or update a record-related binding while preserving import prot\
+ection."
       (let ((cell (frame-cell environment name)))
         (if cell
             (begin
@@ -459,7 +469,8 @@ cursor across sessions."
             (environment-define! environment name value))))
 
     (define (eval-record-definition form environment context)
-      "Install a record type plus generated constructor, predicate, and field procedures."
+      "Install a record type plus generated constructor, predicate, and field \
+procedures."
       (let* ((spec (parse-record-definition form))
              (type-name (second (host-assq 'type-name spec)))
              (fields (second (host-assq 'fields spec)))
@@ -479,7 +490,8 @@ cursor across sessions."
                               (rest-arguments arguments))
                      (if (null? rest-fields)
                          ;; Charge the record header plus its field slots; the
-                         ;; field values were charged where they were allocated.
+                         ;; field values were charged where they were
+                         ;; allocated.
                          (charge-value-allocation!
                           (consent-make-record record-type values)
                           (+ 1 (vector-length values))
@@ -503,7 +515,8 @@ cursor across sessions."
                1
                1)))
         (define-or-set-record-binding! environment type-name record-type)
-        (define-or-set-record-binding! environment constructor-name constructor)
+        (define-or-set-record-binding! environment constructor-name
+          constructor)
         (define-or-set-record-binding! environment predicate-name predicate)
         (for-each
          (lambda (accessor)
@@ -552,7 +565,8 @@ cursor across sessions."
         consent-unspecified))
 
     (define (split-body body)
-      "Split a body into leading internal definitions and remaining expressions."
+      "Split a body into leading internal definitions and remaining expression\
+s."
       (let loop ((cursor body) (definitions '()))
         (cond
          ((and (pair? cursor) (body-definition-form? (car cursor)))
@@ -809,7 +823,8 @@ cursor across sessions."
                 (if rest
                     (begin
                       (environment-define! environment rest values)
-                      ;; The rest list is freshly consed by the apply machinery;
+                      ;; The rest list is freshly consed by the apply
+                      ;; machinery;
                       ;; charge its pairs as the allocation they are.
                       (note-value-allocation! context (length values))))
                 environment)
@@ -841,7 +856,8 @@ cursor across sessions."
                             prefix)))))
 
     (define (host-condition->consent-condition condition)
-      "Return CONDITION as a value interpreted exception handlers can inspect."
+      "Return CONDITION as a value interpreted exception handlers can inspect.\
+"
       "Host error objects become interpreter error objects so guard clauses"
       "can use error-object? and the message and irritant accessors; any"
       "other raised host value crosses unchanged."
@@ -885,7 +901,8 @@ cursor across sessions."
              continuation)
             ;; Primitive results are no longer walked: allocating primitives
             ;; charge their own nodes, and an accessor result is a substructure
-            ;; of an already-budgeted argument, so it creates nothing to charge.
+            ;; of an already-budgeted argument, so it creates nothing to
+            ;; charge.
             (continue continuation (cdr outcome)))))
 
     (define (contract-enabled? context)
@@ -1062,7 +1079,8 @@ cursor across sessions."
                               (context-docstring-retention context)))))
         (record-context-event! context datum)
         (eval-error
-         "boundary contract checking unavailable: docstring-retention strips rich metadata"
+         "boundary contract checking unavailable: docstring-retention strips r\
+ich metadata"
          datum)))
 
     (define (contract-parameter-descriptor parameters name)
@@ -1169,7 +1187,8 @@ cursor across sessions."
             (continue continuation value))
           continuation))
 
-    (define (apply-procedure procedure arguments context tail? . maybe-continuation)
+    (define (apply-procedure procedure arguments context tail? .
+      maybe-continuation)
       "All callable values pass through this boundary so primitive callbacks,"
       "parameter procedures, compound procedures, and continuations share"
       "arity, budget, tail-position, and trampoline behavior."
@@ -1391,7 +1410,8 @@ cursor across sessions."
                 cursor depth environment context)))))))
 
     (define (eval-quasiquote-template template depth environment context)
-      "Evaluate one quasiquote template with nested quasiquote depth tracking."
+      "Evaluate one quasiquote template with nested quasiquote depth tracking.\
+"
       (cond
        ((tagged-list? template 'unquote)
         (let ((operand (single-argument-syntax template "unquote")))
@@ -1405,7 +1425,8 @@ cursor across sessions."
        ((tagged-list? template 'unquote-splicing)
         (if (= depth 1)
             (eval-error
-             "unquote-splicing is only valid inside a quasiquoted list or vector"
+             "unquote-splicing is only valid inside a quasiquoted list or vect\
+or"
              template)
             (let ((operand
                    (single-argument-syntax template "unquote-splicing")))
@@ -1426,7 +1447,8 @@ cursor across sessions."
        (else template)))
 
     (define (eval-quasiquote parts environment context)
-      "Evaluate a quasiquote form after validating its single template operand."
+      "Evaluate a quasiquote form after validating its single template operand\
+."
       (if (not (= (length parts) 2))
           (eval-error "quasiquote requires exactly one template" parts))
       (eval-quasiquote-template (second parts) 1 environment context))
@@ -1437,7 +1459,8 @@ cursor across sessions."
         (if (not (= (length parts) 2))
             (eval-error
              (string-append description
-                            " binding must contain an identifier and initializer")
+                            " binding must contain an identifier and initializ\
+er")
              binding))
         (cons (expect-identifier-key (car parts) description)
               (second parts))))
@@ -1518,7 +1541,8 @@ cursor across sessions."
 
     (define (eval-let-values
              parts environment context tail? sequential? . maybe-continuation)
-      "Evaluate let-values or let*-values with parallel or sequential binding."
+      "Evaluate let-values or let*-values with parallel or sequential binding.\
+"
       (if (< (length parts) 3)
           (eval-error
            (string-append
@@ -1598,7 +1622,8 @@ cursor across sessions."
               (drain-state state context)
               state))))
 
-    (define (eval-arguments operands environment context arguments continuation)
+    (define (eval-arguments operands environment context arguments
+      continuation)
       "Evaluate procedure operands from left to right into argument values."
       (if (null? operands)
           (continue continuation (reverse arguments))
@@ -1616,7 +1641,8 @@ cursor across sessions."
                     arguments)
               continuation)))))
 
-    (define (eval-combination expression environment context tail? continuation)
+    (define (eval-combination expression environment context tail?
+      continuation)
       "Evaluate a combination or special form with tail-position awareness."
       (let ((parts (proper-list-elements expression "expression")))
         (if (null? parts)
@@ -1642,8 +1668,10 @@ cursor across sessions."
            ((and operator-name
                  (string=? operator-name "quasiquote")
                  (special-operator-active? operator environment))
-            ;; The quasiquote builder assembles its result with host cons/append
-            ;; rather than the charged primitives, so charge the realized result
+            ;; The quasiquote builder assembles its result with host
+            ;; cons/append
+            ;; rather than the charged primitives, so charge the realized
+            ;; result
             ;; once -- like any other literal -- off the hot primitive path.
             (continue
              continuation
@@ -1766,9 +1794,12 @@ cursor across sessions."
       "SPEC evaluates to a `(budget ...)' datum; for its dynamic extent the"
       "active counter ceilings admit at most the SPEC amount more. The"
       "inherited ceilings are restored when the body completes. A non-local"
-      "exit out of the body leaves the tightened ceilings in place, which is a"
-      "conservative, fail-closed outcome rather than a relaxation. The body is"
-      "an implicit `begin'; wrap it in `(let () ...)' for internal definitions."
+      "exit out of the body leaves the tightened ceilings in place, which is a\
+"
+      "conservative, fail-closed outcome rather than a relaxation. The body is\
+"
+      "an implicit `begin'; wrap it in `(let () ...)' for internal definitions\
+."
       (if (< (length parts) 3)
           (eval-error "with-budget requires a budget spec and a body" parts))
       (eval-expression
@@ -1792,7 +1823,8 @@ cursor across sessions."
 
     (define (eval-expression
              expression environment context tail? . maybe-continuation)
-      "Evaluate one expression, interleaving macro expansion and trampoline setup."
+      "Evaluate one expression, interleaving macro expansion and trampoline se\
+tup."
       (let ((direct-call? (null? maybe-continuation))
             (continuation
              (if (null? maybe-continuation)
@@ -1893,7 +1925,8 @@ cursor across sessions."
                        (eval-import form environment context)
                        remaining)
                       (eval-error
-                       "import is only allowed at top level or in library bodies"
+                       "import is only allowed at top level or in library bodi\
+es"
                        form)))
                  ((define-library-form? form)
                   (if allow-definitions?
@@ -1921,7 +1954,8 @@ cursor across sessions."
                        (eval-record-definition form environment context)
                        remaining)
                       (eval-error
-                       "define-record-type is only allowed before body expressions"
+                       "define-record-type is only allowed before body express\
+ions"
                        form)))
                  ((definition-form? form)
                   (if allow-definitions?
@@ -2028,7 +2062,8 @@ cursor across sessions."
                (restore-dynamic-state context checkpoint))))))
 
     (define (trampoline expression environment context)
-      "Evaluate EXPRESSION in tail-call trampoline mode and return the result."
+      "Evaluate EXPRESSION in tail-call trampoline mode and return the result.\
+"
       "The result needs no final budget walk: every node it reaches was"
       "charged at the allocation that produced it."
       (drain-state
@@ -2095,7 +2130,8 @@ cursor across sessions."
       (eq? (consent-number-kind number) 'complex))
 
     (define (complex-parts number)
-      "Return NUMBER's rectangular parts, using zero imaginary part for reals."
+      "Return NUMBER's rectangular parts, using zero imaginary part for reals.\
+"
       (if (number-complex-representation? number)
           (consent-number-owned-value number)
           (cons number (consent-make-canonical-integer 0))))
@@ -2336,7 +2372,8 @@ cursor across sessions."
              datum))))
 
     (define (expect-nonnegative-index datum limit description allow-end?)
-      "Validate nonnegative index input and raise an evaluator error on mismatch."
+      "Validate nonnegative index input and raise an evaluator error on mismat\
+ch."
       (let ((index (exact-integer->host datum description)))
         (if (not (and (<= 0 index)
                       (if allow-end? (<= index limit) (< index limit))))
@@ -2557,7 +2594,8 @@ cursor across sessions."
 
     (define (fold-numbers arguments identity operation description
                           . maybe-unary-inverse)
-      "Fold a variadic numeric primitive with optional unary inverse behavior."
+      "Fold a variadic numeric primitive with optional unary inverse behavior.\
+"
       (let ((numbers (numeric-arguments arguments description))
             (unary-inverse
              (if (null? maybe-unary-inverse) #f (car maybe-unary-inverse))))
@@ -2752,14 +2790,16 @@ cursor across sessions."
       (primitive-compare arguments >= ">="))
 
     (define (primitive-abs arguments context)
-      "Implement the `abs` primitive with argument validation and Consent Scheme values."
+      "Implement the `abs` primitive with argument validation and Consent Sche\
+me values."
       (let ((number (expect-number (car arguments) "abs")))
         (if (number-complex-representation? number)
             (eval-error "abs expected real number" number)
             (consent-number-abs number))))
 
     (define (primitive-min arguments context)
-      "Implement the `min` primitive with argument validation and Consent Scheme values."
+      "Implement the `min` primitive with argument validation and Consent Sche\
+me values."
       (let ((numbers (numeric-arguments arguments "min")))
         (let loop ((best (car numbers)) (rest (cdr numbers)))
           (if (null? rest)
@@ -2770,7 +2810,8 @@ cursor across sessions."
                     (cdr rest))))))
 
     (define (primitive-max arguments context)
-      "Implement the `max` primitive with argument validation and Consent Scheme values."
+      "Implement the `max` primitive with argument validation and Consent Sche\
+me values."
       (let ((numbers (numeric-arguments arguments "max")))
         (let loop ((best (car numbers)) (rest (cdr numbers)))
           (if (null? rest)
@@ -2792,7 +2833,8 @@ cursor across sessions."
       (consent-number-zero? (expect-number (car arguments) "zero?")))
 
     (define (primitive-positive? arguments context)
-      "Implement the `positive?` primitive with argument validation and Consent"
+      "Implement the `positive?` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (primitive-compare
        (list (car arguments) (consent-make-canonical-integer 0))
@@ -2800,7 +2842,8 @@ cursor across sessions."
        "positive?"))
 
     (define (primitive-negative? arguments context)
-      "Implement the `negative?` primitive with argument validation and Consent"
+      "Implement the `negative?` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (primitive-compare
        (list (car arguments) (consent-make-canonical-integer 0))
@@ -2808,7 +2851,8 @@ cursor across sessions."
        "negative?"))
 
     (define (primitive-odd? arguments context)
-      "Implement the `odd?` primitive with argument validation and Consent Scheme values."
+      "Implement the `odd?` primitive with argument validation and Consent Sch\
+eme values."
       (not (owned-numeric
             'integer-even?
             (exact-integer-owned (car arguments) "odd?"))))
@@ -2834,7 +2878,8 @@ cursor across sessions."
        (car (integer-divmod arguments mode description))))
 
     (define (primitive-quotient arguments context)
-      "Implement the `quotient` primitive with argument validation and Consent"
+      "Implement the `quotient` primitive with argument validation and Consent\
+"
       "Scheme values."
       (integer-quotient
        arguments 'integer-divmod-truncate "quotient"))
@@ -2846,13 +2891,15 @@ cursor across sessions."
        arguments 'integer-divmod-floor "floor-quotient"))
 
     (define (primitive-truncate-quotient arguments context)
-      "Implement the `truncate-quotient` primitive with argument validation and"
+      "Implement the `truncate-quotient` primitive with argument validation an\
+d"
       "Consent Scheme values."
       (integer-quotient
        arguments 'integer-divmod-truncate "truncate-quotient"))
 
     (define (primitive-remainder arguments context)
-      "Implement the `remainder` primitive with argument validation and Consent"
+      "Implement the `remainder` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (consent-make-canonical-integer
        (cdr
@@ -2894,7 +2941,8 @@ cursor across sessions."
       (owned-numeric 'rational-round pair 'round))
 
     (define (primitive-rounding arguments function description)
-      "Implement the `rounding` primitive with argument validation and Consent"
+      "Implement the `rounding` primitive with argument validation and Consent\
+"
       "Scheme values."
       (let ((number
              (number-real-part-for-ordering (car arguments) description)))
@@ -2924,7 +2972,8 @@ cursor across sessions."
       (primitive-rounding arguments ceiling-rational-pair "ceiling"))
 
     (define (primitive-truncate arguments context)
-      "Implement the `truncate` primitive with argument validation and Consent"
+      "Implement the `truncate` primitive with argument validation and Consent\
+"
       "Scheme values."
       (primitive-rounding arguments truncate-rational-pair "truncate"))
 
@@ -2934,7 +2983,8 @@ cursor across sessions."
       (primitive-rounding arguments round-rational-pair "round"))
 
     (define (integer-argument datum description)
-      "Return DATUM as an owned integer, accepting exact and inexact integers."
+      "Return DATUM as an owned integer, accepting exact and inexact integers.\
+"
       (let ((number (expect-number datum description)))
         (cond
          ((and (number-exact? number) (number-integer? number))
@@ -2958,7 +3008,8 @@ cursor across sessions."
       (owned-numeric 'integer-power base exponent))
 
     (define (primitive-gcd arguments context)
-      "Implement the `gcd` primitive with argument validation and Consent Scheme values."
+      "Implement the `gcd` primitive with argument validation and Consent Sche\
+me values."
       (let loop ((rest (numeric-arguments arguments "gcd"))
                  (result (owned-numeric 'integer-from-small 0))
                  (inexact? #f))
@@ -2970,7 +3021,8 @@ cursor across sessions."
                   (or inexact? (number-inexact? (car rest)))))))
 
     (define (primitive-lcm arguments context)
-      "Implement the `lcm` primitive with argument validation and Consent Scheme values."
+      "Implement the `lcm` primitive with argument validation and Consent Sche\
+me values."
       (let loop ((rest (numeric-arguments arguments "lcm"))
                  (result (owned-numeric 'integer-from-small 1))
                  (inexact? #f))
@@ -2994,7 +3046,8 @@ cursor across sessions."
                     (or inexact? (number-inexact? (car rest))))))))
 
     (define (primitive-numerator arguments context)
-      "Implement the `numerator` primitive with argument validation and Consent"
+      "Implement the `numerator` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let* ((number (expect-number (car arguments) "numerator"))
              (pair (if (number-inexact? number)
@@ -3024,7 +3077,8 @@ cursor across sessions."
       (number-inexact (car arguments)))
 
     (define (primitive-expt arguments context)
-      "Implement the `expt` primitive with argument validation and Consent Scheme values."
+      "Implement the `expt` primitive with argument validation and Consent Sch\
+eme values."
       (let ((base (expect-number (car arguments) "expt"))
             (power (expect-number (second arguments) "expt")))
         (if (and (number-exact? base)
@@ -3052,16 +3106,19 @@ cursor across sessions."
                    (number->host-float power "expt"))))))
 
     (define (primitive-inexact-unary arguments function description)
-      "Dispatch temporary host transcendental acceleration and canonicalize it."
+      "Dispatch temporary host transcendental acceleration and canonicalize it\
+."
       (consent-make-canonical-decimal
        (function (number->host-float (car arguments) description))))
 
     (define (primitive-exp arguments context)
-      "Implement the `exp` primitive with argument validation and Consent Scheme values."
+      "Implement the `exp` primitive with argument validation and Consent Sche\
+me values."
       (primitive-inexact-unary arguments exp "exp"))
 
     (define (primitive-log arguments context)
-      "Implement the `log` primitive with argument validation and Consent Scheme values."
+      "Implement the `log` primitive with argument validation and Consent Sche\
+me values."
       (let ((value (primitive-inexact-unary (list (car arguments))
                                             log
                                             "log")))
@@ -3074,27 +3131,33 @@ cursor across sessions."
               (primitive/ (list value base) context)))))
 
     (define (primitive-sin arguments context)
-      "Implement the `sin` primitive with argument validation and Consent Scheme values."
+      "Implement the `sin` primitive with argument validation and Consent Sche\
+me values."
       (primitive-inexact-unary arguments sin "sin"))
 
     (define (primitive-cos arguments context)
-      "Implement the `cos` primitive with argument validation and Consent Scheme values."
+      "Implement the `cos` primitive with argument validation and Consent Sche\
+me values."
       (primitive-inexact-unary arguments cos "cos"))
 
     (define (primitive-tan arguments context)
-      "Implement the `tan` primitive with argument validation and Consent Scheme values."
+      "Implement the `tan` primitive with argument validation and Consent Sche\
+me values."
       (primitive-inexact-unary arguments tan "tan"))
 
     (define (primitive-asin arguments context)
-      "Implement the `asin` primitive with argument validation and Consent Scheme values."
+      "Implement the `asin` primitive with argument validation and Consent Sch\
+eme values."
       (primitive-inexact-unary arguments asin "asin"))
 
     (define (primitive-acos arguments context)
-      "Implement the `acos` primitive with argument validation and Consent Scheme values."
+      "Implement the `acos` primitive with argument validation and Consent Sch\
+eme values."
       (primitive-inexact-unary arguments acos "acos"))
 
     (define (primitive-atan arguments context)
-      "Implement the `atan` primitive with argument validation and Consent Scheme values."
+      "Implement the `atan` primitive with argument validation and Consent Sch\
+eme values."
       (if (null? (cdr arguments))
           (primitive-inexact-unary arguments atan "atan")
           (consent-make-canonical-decimal
@@ -3102,7 +3165,8 @@ cursor across sessions."
                  (number->host-float (second arguments) "atan")))))
 
     (define (primitive-sqrt arguments context)
-      "Implement the `sqrt` primitive with argument validation and Consent Scheme values."
+      "Implement the `sqrt` primitive with argument validation and Consent Sch\
+eme values."
       (let* ((number (expect-number (car arguments) "sqrt"))
              (value (number->host-float number "sqrt")))
         (if (and (not (number-complex-representation? number))
@@ -3137,7 +3201,8 @@ cursor across sessions."
                (consent-make-canonical-integer (cdr result))))))
 
     (define (primitive-truncate/ arguments context)
-      "Implement the `truncate/` primitive with argument validation and Consent"
+      "Implement the `truncate/` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let ((result
              (integer-divmod
@@ -3261,16 +3326,19 @@ cursor across sessions."
       (number-finite? (expect-number (car arguments) "finite?")))
 
     (define (primitive-infinite? arguments context)
-      "Implement the `infinite?` primitive with argument validation and Consent"
+      "Implement the `infinite?` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (number-infinite? (expect-number (car arguments) "infinite?")))
 
     (define (primitive-nan? arguments context)
-      "Implement the `nan?` primitive with argument validation and Consent Scheme values."
+      "Implement the `nan?` primitive with argument validation and Consent Sch\
+eme values."
       (number-nan? (expect-number (car arguments) "nan?")))
 
     (define (primitive-make-rectangular arguments context)
-      "Implement the `make-rectangular` primitive with argument validation and"
+      "Implement the `make-rectangular` primitive with argument validation and\
+"
       "Consent Scheme values."
       (consent-make-canonical-complex
        (expect-number (car arguments) "make-rectangular")
@@ -3292,7 +3360,8 @@ cursor across sessions."
           (* magnitude (sin angle))))))
 
     (define (primitive-real-part arguments context)
-      "Implement the `real-part` primitive with argument validation and Consent"
+      "Implement the `real-part` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let ((number (expect-number (car arguments) "real-part")))
         (if (number-complex-representation? number)
@@ -3300,7 +3369,8 @@ cursor across sessions."
             number)))
 
     (define (primitive-imag-part arguments context)
-      "Implement the `imag-part` primitive with argument validation and Consent"
+      "Implement the `imag-part` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let ((number (expect-number (car arguments) "imag-part")))
         (if (number-complex-representation? number)
@@ -3308,7 +3378,8 @@ cursor across sessions."
             (consent-make-canonical-integer 0))))
 
     (define (primitive-magnitude arguments context)
-      "Implement the `magnitude` primitive with argument validation and Consent"
+      "Implement the `magnitude` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let ((number (expect-number (car arguments) "magnitude")))
         (if (number-complex-representation? number)
@@ -3337,7 +3408,8 @@ cursor across sessions."
                 (consent-make-canonical-decimal 0.0)))))
 
     (define (primitive-cons arguments context)
-      "Implement the `cons` primitive with argument validation and Consent Scheme values."
+      "Implement the `cons` primitive with argument validation and Consent Sch\
+eme values."
       ;; One fresh pair; its car/cdr were charged where they were allocated.
       ;; Charging `cons' charges every prelude list builder (list, append,
       ;; reverse, map, ...) that conses, with no walk of the growing result.
@@ -3347,21 +3419,24 @@ cursor across sessions."
        context))
 
     (define (primitive-car arguments context)
-      "Implement the `car` primitive with argument validation and Consent Scheme values."
+      "Implement the `car` primitive with argument validation and Consent Sche\
+me values."
       (let ((pair (car arguments)))
         (if (pair? pair)
             (car pair)
             (eval-error "car expected pair" pair))))
 
     (define (primitive-cdr arguments context)
-      "Implement the `cdr` primitive with argument validation and Consent Scheme values."
+      "Implement the `cdr` primitive with argument validation and Consent Sche\
+me values."
       (let ((pair (car arguments)))
         (if (pair? pair)
             (cdr pair)
             (eval-error "cdr expected pair" pair))))
 
     (define (primitive-list arguments context)
-      "Implement the `list` primitive with argument validation and Consent Scheme values."
+      "Implement the `list` primitive with argument validation and Consent Sch\
+eme values."
       arguments)
 
     (define (proper-list? value)
@@ -3394,7 +3469,8 @@ cursor across sessions."
       (reverse (proper-list-elements (car arguments) "reverse")))
 
     (define (primitive-list-tail arguments context)
-      "Implement the `list-tail` primitive with argument validation and Consent"
+      "Implement the `list-tail` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let ((index (exact-integer->host (second arguments) "list-tail")))
         (if (< index 0)
@@ -3406,7 +3482,8 @@ cursor across sessions."
            (else (eval-error "list-tail index exceeds list length"))))))
 
     (define (primitive-list-ref arguments context)
-      "Implement the `list-ref` primitive with argument validation and Consent"
+      "Implement the `list-ref` primitive with argument validation and Consent\
+"
       "Scheme values."
       (let ((tail (primitive-list-tail arguments context)))
         (if (pair? tail)
@@ -3414,7 +3491,8 @@ cursor across sessions."
             (eval-error "list-ref index exceeds list length"))))
 
     (define (primitive-list-set! arguments context)
-      "Implement the `list-set!` primitive with argument validation and Consent"
+      "Implement the `list-set!` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let ((tail (primitive-list-tail arguments context)))
         (if (not (pair? tail))
@@ -3423,7 +3501,8 @@ cursor across sessions."
         consent-unspecified))
 
     (define (primitive-set-car! arguments context)
-      "Implement the `set-car!` primitive with argument validation and Consent"
+      "Implement the `set-car!` primitive with argument validation and Consent\
+"
       "Scheme values."
       (let ((pair (car arguments)))
         (if (not (pair? pair))
@@ -3432,7 +3511,8 @@ cursor across sessions."
         consent-unspecified))
 
     (define (primitive-set-cdr! arguments context)
-      "Implement the `set-cdr!` primitive with argument validation and Consent"
+      "Implement the `set-cdr!` primitive with argument validation and Consent\
+"
       "Scheme values."
       (let ((pair (car arguments)))
         (if (not (pair? pair))
@@ -3441,7 +3521,8 @@ cursor across sessions."
         consent-unspecified))
 
     (define (primitive-make-list arguments context)
-      "Implement the `make-list` primitive with argument validation and Consent"
+      "Implement the `make-list` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let ((length (exact-integer->host (car arguments) "make-list"))
             (fill (if (null? (cdr arguments))
@@ -3459,7 +3540,8 @@ cursor across sessions."
        (else value)))
 
     (define (primitive-list-copy arguments context)
-      "Implement the `list-copy` primitive with argument validation and Consent"
+      "Implement the `list-copy` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (copy-list (car arguments)))
 
@@ -3474,16 +3556,19 @@ cursor across sessions."
       (pair? (car arguments)))
 
     (define (primitive-not arguments context)
-      "Implement the `not` primitive with argument validation and Consent Scheme values."
+      "Implement the `not` primitive with argument validation and Consent Sche\
+me values."
       (if (eq? (car arguments) #f) #t #f))
 
     (define (primitive-boolean? arguments context)
-      "Implement the `boolean?` primitive with argument validation and Consent"
+      "Implement the `boolean?` primitive with argument validation and Consent\
+"
       "Scheme values."
       (boolean? (car arguments)))
 
     (define (primitive-boolean=? arguments context)
-      "Implement the `boolean=?` primitive with argument validation and Consent"
+      "Implement the `boolean=?` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let ((first (car arguments)))
         (if (not (boolean? first))
@@ -3502,7 +3587,8 @@ cursor across sessions."
       (consent-number? (car arguments)))
 
     (define (primitive-complex? arguments context)
-      "Implement the `complex?` primitive with argument validation and Consent"
+      "Implement the `complex?` primitive with argument validation and Consent\
+"
       "Scheme values."
       (consent-number? (car arguments)))
 
@@ -3512,12 +3598,14 @@ cursor across sessions."
       (number-real? (car arguments)))
 
     (define (primitive-rational? arguments context)
-      "Implement the `rational?` primitive with argument validation and Consent"
+      "Implement the `rational?` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (number-rational? (car arguments)))
 
     (define (primitive-integer? arguments context)
-      "Implement the `integer?` primitive with argument validation and Consent"
+      "Implement the `integer?` primitive with argument validation and Consent\
+"
       "Scheme values."
       (number-integer? (car arguments)))
 
@@ -3533,7 +3621,8 @@ cursor across sessions."
       (number-exact? (car arguments)))
 
     (define (primitive-inexact? arguments context)
-      "Implement the `inexact?` primitive with argument validation and Consent"
+      "Implement the `inexact?` primitive with argument validation and Consent\
+"
       "Scheme values."
       (number-inexact? (car arguments)))
 
@@ -3573,10 +3662,12 @@ cursor across sessions."
                         "number->string radix"))))
         (if (not (or (= radix 2) (= radix 8) (= radix 10) (= radix 16)))
             (eval-error "number->string radix must be 2, 8, 10, or 16"))
-        (charge-string-allocation! (number->string/radix number radix) context)))
+        (charge-string-allocation! (number->string/radix number radix)
+          context)))
 
     (define (explicit-number-prefix? text)
-      "Report whether TEXT begins with an explicit reader radix/exactness prefix."
+      "Report whether TEXT begins with an explicit reader radix/exactness pref\
+ix."
       (and (>= (string-length text) 2)
            (char=? (string-ref text 0) #\#)
            (let ((marker (char-downcase (string-ref text 1))))
@@ -3622,7 +3713,8 @@ cursor across sessions."
       (and (<= #x80 byte) (<= byte #xbf)))
 
     (define (string-slice->utf8 string start end)
-      "Encode host STRING from START through END with Consent UTF-8 semantics."
+      "Encode host STRING from START through END with Consent UTF-8 semantics.\
+"
       (let loop ((index start) (bytes '()))
         (if (= index end)
             (apply bytevector (reverse bytes))
@@ -3660,7 +3752,8 @@ cursor across sessions."
                  "string->utf8 encountered a non-scalar character")))))))
 
     (define (utf8-slice->string bytes start end)
-      "Decode BYTES from START through END with strict Consent UTF-8 semantics."
+      "Decode BYTES from START through END with strict Consent UTF-8 semantics\
+."
       (letrec
           ((invalid
             (lambda ()
@@ -3760,7 +3853,8 @@ cursor across sessions."
 
     (define (primitive-string->symbol arguments context)
       "Implement the `string->symbol` primitive with argument validation and"
-      "Consent Scheme values. The interned-symbol budget is charged before the"
+      "Consent Scheme values. The interned-symbol budget is charged before the\
+"
       "name is interned so a flood of distinct names fails closed on its own"
       "dimension rather than relying on the step budget as a proxy."
       (let ((name (expect-string (car arguments) "string->symbol")))
@@ -3768,7 +3862,8 @@ cursor across sessions."
         (consent-intern-symbol (context-symbol-table context) name)))
 
     (define (primitive-symbol=? arguments context)
-      "Implement the `symbol=?` primitive with argument validation and Consent"
+      "Implement the `symbol=?` primitive with argument validation and Consent\
+"
       "Scheme values."
       (let ((first (car arguments)))
         (if (not (consent-symbol? first))
@@ -3877,7 +3972,8 @@ cursor across sessions."
         port))
 
     (define (expect-textual-input-port value description)
-      "Validate textual input port input and raise an evaluator error on mismatch."
+      "Validate textual input port input and raise an evaluator error on misma\
+tch."
       (let ((port (expect-input-port value description)))
         (if (not (consent-port-textual? port))
             (eval-error
@@ -3886,7 +3982,8 @@ cursor across sessions."
         port))
 
     (define (expect-textual-output-port value description)
-      "Validate textual output port input and raise an evaluator error on mismatch."
+      "Validate textual output port input and raise an evaluator error on mism\
+atch."
       (let ((port (expect-output-port value description)))
         (if (not (consent-port-textual? port))
             (eval-error
@@ -3895,7 +3992,8 @@ cursor across sessions."
         port))
 
     (define (expect-binary-input-port value description)
-      "Validate binary input port input and raise an evaluator error on mismatch."
+      "Validate binary input port input and raise an evaluator error on mismat\
+ch."
       (let ((port (expect-input-port value description)))
         (if (not (consent-port-binary? port))
             (eval-error
@@ -3904,7 +4002,8 @@ cursor across sessions."
         port))
 
     (define (expect-binary-output-port value description)
-      "Validate binary output port input and raise an evaluator error on mismatch."
+      "Validate binary output port input and raise an evaluator error on misma\
+tch."
       (let ((port (expect-output-port value description)))
         (if (not (consent-port-binary? port))
             (eval-error
@@ -3913,7 +4012,8 @@ cursor across sessions."
         port))
 
     (define (expect-string-output-port value description)
-      "Validate string output port input and raise an evaluator error on mismatch."
+      "Validate string output port input and raise an evaluator error on misma\
+tch."
       (let ((port (expect-textual-output-port value description)))
         (if (not (eq? (consent-port-medium port) 'string))
             (eval-error
@@ -3922,7 +4022,8 @@ cursor across sessions."
         port))
 
     (define (expect-bytevector-output-port value description)
-      "Validate bytevector output port input and raise an evaluator error on mismatch."
+      "Validate bytevector output port input and raise an evaluator error on m\
+ismatch."
       (let ((port (expect-binary-output-port value description)))
         (if (not (eq? (consent-port-medium port) 'bytevector))
             (eval-error
@@ -4016,7 +4117,8 @@ cursor across sessions."
                        (if error?
                            (list 'error result)
                            (list 'ok (if (integer? result)
-                                         (consent-make-canonical-integer result)
+                                         (consent-make-canonical-integer
+                              result)
                                          result))))))))
 
     (define (port-capability-limit-name operation)
@@ -4163,7 +4265,8 @@ cursor across sessions."
             consent-unspecified)))
 
     (define (write-text-to-port text port description . maybe-context)
-      "Write text to port data through the Consent Scheme port or datum renderer."
+      "Write text to port data through the Consent Scheme port or datum render\
+er."
       (let ((output (expect-textual-output-port port description))
             (context (if (null? maybe-context) #f (car maybe-context))))
         (if (not (host-memq (consent-port-medium output) '(string file)))
@@ -4179,7 +4282,8 @@ cursor across sessions."
             (note-output! context (string-length text)))
         ;; A streaming stdio output port flushes each write through its host
         ;; writer immediately (so a single-form filter loop streams instead of
-        ;; buffering to end of program), charged against the host-callback budget;
+        ;; buffering to end of program), charged against the host-callback
+        ;; budget;
         ;; an ordinary in-memory port accumulates its contents as before.
         (if (program-output-streaming? output)
             (begin
@@ -4194,7 +4298,8 @@ cursor across sessions."
         consent-unspecified))
 
     (define (write-to-output-port value port mode display? . maybe-context)
-      "Write to output port data through the Consent Scheme port or datum renderer."
+      "Write to output port data through the Consent Scheme port or datum rend\
+erer."
       (write-text-to-port
        (if display?
            (display-string value)
@@ -4243,14 +4348,16 @@ cursor across sessions."
            (consent-port-binary? (car arguments))))
 
     (define (primitive-input-port-open? arguments context)
-      "Implement the `input-port-open?` primitive with argument validation and"
+      "Implement the `input-port-open?` primitive with argument validation and\
+"
       "Consent Scheme values."
       (let ((port (expect-port (car arguments) "input-port-open?")))
         (and (consent-port-input? port)
              (consent-port-open? port))))
 
     (define (primitive-output-port-open? arguments context)
-      "Implement the `output-port-open?` primitive with argument validation and"
+      "Implement the `output-port-open?` primitive with argument validation an\
+d"
       "Consent Scheme values."
       (let ((port (expect-port (car arguments) "output-port-open?")))
         (and (consent-port-output? port)
@@ -4319,14 +4426,16 @@ cursor across sessions."
       (close-port-value (expect-port (car arguments) "close-port") context))
 
     (define (primitive-close-input-port arguments context)
-      "Implement the `close-input-port` primitive with argument validation and"
+      "Implement the `close-input-port` primitive with argument validation and\
+"
       "Consent Scheme values."
       (close-port-value
        (expect-input-port (car arguments) "close-input-port")
        context))
 
     (define (primitive-close-output-port arguments context)
-      "Implement the `close-output-port` primitive with argument validation and"
+      "Implement the `close-output-port` primitive with argument validation an\
+d"
       "Consent Scheme values."
       (close-port-value
        (expect-output-port (car arguments) "close-output-port")
@@ -4340,7 +4449,8 @@ cursor across sessions."
        #f '() #f '() #f #f #f '()))
 
     (define (primitive-open-input-string arguments context)
-      "Implement the `open-input-string` primitive with argument validation and"
+      "Implement the `open-input-string` primitive with argument validation an\
+d"
       "Consent Scheme values."
       (make-consent-port
        'string #t #f #t #f #t
@@ -4349,7 +4459,8 @@ cursor across sessions."
        #f '() #f '() #f #f #f '()))
 
     (define (primitive-get-output-string arguments context)
-      "Implement the `get-output-string` primitive with argument validation and"
+      "Implement the `get-output-string` primitive with argument validation an\
+d"
       "Consent Scheme values."
       (charge-string-allocation!
        (consent-port-contents
@@ -4377,7 +4488,8 @@ cursor across sessions."
         copy))
 
     (define (primitive-open-input-bytevector arguments context)
-      "Implement the `open-input-bytevector` primitive with argument validation"
+      "Implement the `open-input-bytevector` primitive with argument validatio\
+n"
       "and Consent Scheme values."
       (make-consent-port
        'bytevector #t #f #f #t #t
@@ -4397,7 +4509,8 @@ cursor across sessions."
                 (loop (+ index 1) (cdr rest)))))))
 
     (define (primitive-get-output-bytevector arguments context)
-      "Implement the `get-output-bytevector` primitive with argument validation"
+      "Implement the `get-output-bytevector` primitive with argument validatio\
+n"
       "and Consent Scheme values."
       (charge-bytevector-allocation!
        (list->bytevector
@@ -4408,7 +4521,8 @@ cursor across sessions."
        context))
 
     (define (primitive-read arguments context)
-      "Implement the `read` primitive with argument validation and Consent Scheme values."
+      "Implement the `read` primitive with argument validation and Consent Sch\
+eme values."
       (let ((port
              (expect-textual-input-port
               (if (null? arguments)
@@ -4419,7 +4533,8 @@ cursor across sessions."
         ;; `read' realizes fresh structure from external input, so charge the
         ;; parsed datum once -- like a literal -- to bound oversized input.
         (if (program-input-streaming? port)
-            (charge-literal! (program-input-read-streaming port context) context)
+            (charge-literal! (program-input-read-streaming port context)
+              context)
             (let ((result
                    (consent-read-from-string-at
                     (consent-port-source port)
@@ -4473,7 +4588,8 @@ cursor across sessions."
                 (consent-host-character->character char))))))
 
     (define (primitive-read-char arguments context)
-      "Implement the `read-char` primitive with argument validation and Consent"
+      "Implement the `read-char` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (if (null? arguments)
           (text-port-next-char
@@ -4484,7 +4600,8 @@ cursor across sessions."
           (text-port-next-char (car arguments) #t "read-char" context)))
 
     (define (primitive-peek-char arguments context)
-      "Implement the `peek-char` primitive with argument validation and Consent"
+      "Implement the `peek-char` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (if (null? arguments)
           (text-port-next-char
@@ -4517,7 +4634,8 @@ cursor across sessions."
          ((not (host-memq
                 (consent-port-medium port)
                 '(string file network)))
-          (eval-error "read-string host textual input ports are not available"))
+          (eval-error
+            "read-string host textual input ports are not available"))
          (else
           (revalidate-port-operation! port context 'read)
           (if (program-input-streaming? port)
@@ -4543,7 +4661,8 @@ cursor across sessions."
                context))))))))
 
     (define (primitive-read-line arguments context)
-      "Implement the `read-line` primitive with argument validation and Consent"
+      "Implement the `read-line` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let ((port (expect-textual-input-port
                    (if (null? arguments)
@@ -4603,14 +4722,18 @@ cursor across sessions."
                             " host binary output ports are not available")
              port))
         (revalidate-port-operation! output context 'write)
-        ;; A streaming stdio binary port flushes each byte write through its host
-        ;; byte writer immediately (so a single-form byte filter streams instead of
-        ;; buffering to end of program), charged against the host-callback budget;
+        ;; A streaming stdio binary port flushes each byte write through its
+        ;; host
+        ;; byte writer immediately (so a single-form byte filter streams
+        ;; instead of
+        ;; buffering to end of program), charged against the host-callback
+        ;; budget;
         ;; an ordinary in-memory port accumulates its bytes as before.
         (if (program-binary-output-streaming? output)
             (begin
               (if context
-                  (note-host-callback! context program-binary-output-write-primitive))
+                  (note-host-callback! context
+                    program-binary-output-write-primitive))
               ((program-binary-output-writer-of output) bytes))
             (set-consent-port-contents!
              output
@@ -4620,7 +4743,8 @@ cursor across sessions."
         consent-unspecified))
 
     (define (write-byte-to-port byte port description . maybe-context)
-      "Write byte to port data through the Consent Scheme port or datum renderer."
+      "Write byte to port data through the Consent Scheme port or datum render\
+er."
       (append-bytes-to-port
        (list byte)
        port
@@ -4640,7 +4764,8 @@ cursor across sessions."
                  "read-u8 host binary input ports are not available"))
             (revalidate-port-operation! port context 'read)
             ;; A streaming stdio binary port refills bytes on demand: pull one
-            ;; chunk when no byte is buffered, so a byte filter never drains the
+            ;; chunk when no byte is buffered, so a byte filter never drains
+            ;; the
             ;; pipe up front.
             (if (program-binary-input-streaming? port)
                 (program-binary-input-fill-until!
@@ -4687,7 +4812,8 @@ cursor across sessions."
                      (bytevector-u8-ref source position))))))))
 
     (define (primitive-u8-ready? arguments context)
-      "Implement the `u8-ready?` primitive with argument validation and Consent"
+      "Implement the `u8-ready?` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (if (not (null? arguments))
           (expect-binary-input-port (car arguments) "u8-ready?"))
@@ -4725,10 +4851,12 @@ cursor across sessions."
          ((not (host-memq
                 (consent-port-medium port)
                 '(bytevector file)))
-          (eval-error "read-bytevector host binary input ports are not available"))
+          (eval-error
+            "read-bytevector host binary input ports are not available"))
          (else
           (revalidate-port-operation! port context 'read)
-          ;; A streaming stdio binary port refills until COUNT bytes are buffered
+          ;; A streaming stdio binary port refills until COUNT bytes are
+          ;; buffered
           ;; or the stream ends, so a bounded read pulls only what it needs.
           (if (program-binary-input-streaming? port)
               (program-binary-input-fill-until!
@@ -4749,7 +4877,8 @@ cursor across sessions."
                context))))))))
 
     (define (primitive-read-bytevector! arguments context)
-      "Implement the `read-bytevector!` primitive with argument validation and"
+      "Implement the `read-bytevector!` primitive with argument validation and\
+"
       "Consent Scheme values."
       (let* ((arity (length arguments))
              (target (expect-bytevector
@@ -4783,9 +4912,11 @@ cursor across sessions."
                         (consent-port-medium port)
                         '(bytevector file)))
                   (eval-error
-                   "read-bytevector! host binary input ports are not available"))
+                   "read-bytevector! host binary input ports are not available\
+"))
               (revalidate-port-operation! port context 'read)
-              ;; A streaming stdio binary port refills until the target range can
+              ;; A streaming stdio binary port refills until the target range
+              ;; can
               ;; be filled or the stream ends.
               (if (program-binary-input-streaming? port)
                   (program-binary-input-fill-until!
@@ -4814,7 +4945,8 @@ cursor across sessions."
                       (consent-host-datum->consent-datum amount))))))))
 
     (define (primitive-write-u8 arguments context)
-      "Implement the `write-u8` primitive with argument validation and Consent"
+      "Implement the `write-u8` primitive with argument validation and Consent\
+"
       "Scheme values."
       (if (not (null? (cdr arguments)))
           (write-byte-to-port
@@ -4825,7 +4957,8 @@ cursor across sessions."
       consent-unspecified)
 
     (define (primitive-write-bytevector arguments context)
-      "Implement the `write-bytevector` primitive with argument validation and"
+      "Implement the `write-bytevector` primitive with argument validation and\
+"
       "Consent Scheme values."
       (if (not (null? (cdr arguments)))
           (let* ((bytes (expect-bytevector
@@ -4937,7 +5070,8 @@ cursor across sessions."
        context))
 
     (define (primitive-flush-output-port arguments context)
-      "Implement the `flush-output-port` primitive with argument validation and"
+      "Implement the `flush-output-port` primitive with argument validation an\
+d"
       "Consent Scheme values."
       (if (not (null? arguments))
           (flush-file-output-port
@@ -4957,7 +5091,8 @@ cursor across sessions."
       #f)
 
     (define (primitive-features arguments context)
-      "Implement the `features` primitive with argument validation and Consent"
+      "Implement the `features` primitive with argument validation and Consent\
+"
       "Scheme values."
       (own-runtime-datum
        '(r7rs srfi-0 ratios exact-complex ieee-float consent)
@@ -5002,7 +5137,8 @@ cursor across sessions."
       consent-unspecified)
 
     (define (context-current-request context)
-      "Return the current request context, or #f when no request was supplied."
+      "Return the current request context, or #f when no request was supplied.\
+"
       (portable-library-call
        context-model:make-request-context
        context
@@ -5179,7 +5315,8 @@ cursor across sessions."
 
     (define (reflect-symbol-name-assq name entries)
       "Return NAME's entry after normalizing symbol identity to text."
-      (let ((key (and (interpreter-symbol? name) (interpreter-symbol-name name))))
+      (let ((key (and (interpreter-symbol? name) (interpreter-symbol-name
+        name))))
         (and key
              (let loop ((rest entries))
                (cond
@@ -5297,9 +5434,11 @@ cursor across sessions."
     (define primitive-implementation-documentation-specs
       (list
        (cons 'primitive+
-             "Implement the `+' primitive over any number of numeric arguments.")
+             "Implement the `+' primitive over any number of numeric arguments\
+.")
        (cons 'primitive-current-second
-             "Implement R7RS `current-second` through a policy-gated clock read.")))
+             "Implement R7RS `current-second` through a policy-gated clock rea\
+d.")))
 
     (define (reflect-implementation-documentation hook)
       "Return documentation metadata derived from implementation HOOK."
@@ -5426,7 +5565,8 @@ cursor across sessions."
        (else
         (let* ((name (reflect-binding-name subject context))
                (environment (context-interaction-environment context))
-               (cell (and name environment (environment-cell environment name)))
+               (cell (and name environment (environment-cell environment
+                 name)))
                (value (and cell (cell-value cell)))
                (spec (reflect-primitive-procedure-spec value))
                (documentation
@@ -5503,7 +5643,8 @@ cursor across sessions."
        (else
         (let* ((name (reflect-binding-name subject context))
                (environment (context-interaction-environment context))
-               (cell (and name environment (environment-cell environment name)))
+               (cell (and name environment (environment-cell environment
+                 name)))
                (value (if cell (cell-value cell) #f)))
           (cond
            ((and cell (not (undefined? value)))
@@ -5662,7 +5803,8 @@ cursor across sessions."
                                (library-binding-library-key binding)))))
 
     (define (reflect-library-bindings library-name context)
-      "Return registered exported binding records for LIBRARY-NAME in CONTEXT."
+      "Return registered exported binding records for LIBRARY-NAME in CONTEXT.\
+"
       (let* ((key (library-name-key library-name))
              (library (library-registry-ref context key)))
         (if library
@@ -5803,7 +5945,8 @@ cursor across sessions."
 
     (define (reflect-symbol-name-member? name symbols)
       "Report whether SYMBOLS contains a symbol whose name equals NAME."
-      (let ((key (and (interpreter-symbol? name) (interpreter-symbol-name name))))
+      (let ((key (and (interpreter-symbol? name) (interpreter-symbol-name
+        name))))
         (and key
              (let loop ((rest symbols))
                (cond
@@ -5850,7 +5993,8 @@ cursor across sessions."
                  (result '()))
         (if (null? entries)
             (reverse result)
-            (let ((key (reflect-library-catalog-field (car entries) 'name '())))
+            (let ((key (reflect-library-catalog-field (car entries) 'name
+              '())))
               (if (and (not (reflect-library-entry-name-seen? key result))
                        (reflect-library-entry-exports-name?
                         (car entries)
@@ -6622,7 +6766,8 @@ cursor across sessions."
        context))
 
     (define (primitive-create-session arguments context)
-      "Create a session with its own sandbox environment and return its datum."
+      "Create a session with its own sandbox environment and return its datum.\
+"
       "Optional ARGUMENTS are a scope symbol (default `named') and an options"
       "alist overriding id and construction fields.  Does not change the"
       "default session."
@@ -6661,7 +6806,8 @@ cursor across sessions."
             (eval-error "unknown session" (car arguments)))))
 
     (define (primitive-current-session arguments context)
-      "Return the default session datum, or session info when none is selected."
+      "Return the default session datum, or session info when none is selected\
+."
       (let ((datum
              (portable-library-call
               session-model:session-manager-current
@@ -7430,7 +7576,8 @@ cursor across sessions."
 
     (define (helper-options arguments)
       "Return helper options from optional primitive ARGUMENTS."
-      (if (and (pair? arguments) (pair? (cdr arguments)) (pair? (cddr arguments)))
+      (if (and (pair? arguments) (pair? (cdr arguments)) (pair? (cddr
+        arguments)))
           (third arguments)
           '()))
 
@@ -7450,7 +7597,8 @@ cursor across sessions."
           '(project-root portable)))
 
     (define (primitive-agent-artifact arguments context)
-      "Save a structured helper artifact and yield it through the event channel."
+      "Save a structured helper artifact and yield it through the event channe\
+l."
       (let* ((scope (helper-default-scope context))
             (record
               (portable-library-call helper-model:helper-store-artifact-save!
@@ -7584,7 +7732,8 @@ cursor across sessions."
           (loop (cdr rest) result)))))
 
     (define (primitive-agent-test-eval-source-result arguments context)
-      "Evaluate one declared source-string test under normal evaluator policy."
+      "Evaluate one declared source-string test under normal evaluator policy.\
+"
       (let ((source (expect-string
                      (car arguments)
                      "agent-test-eval-source-result source"))
@@ -8058,7 +8207,8 @@ cursor across sessions."
           #t
           #f))
 
-    (define (record-policy-decision! context category operation decision fields)
+    (define (record-policy-decision! context category operation decision
+      fields)
       "Record a portable policy decision into the context audit event list."
       (record-audit-event!
        context
@@ -8092,7 +8242,8 @@ cursor across sessions."
           '()))
 
     (define (deny-interaction-environment! context reason fields)
-      "Record and raise an interaction-environment denial before exposing state."
+      "Record and raise an interaction-environment denial before exposing stat\
+e."
       (record-audit-event!
        context
        'policy-decision
@@ -8105,7 +8256,8 @@ cursor across sessions."
       (eval-error reason))
 
     (define (primitive-interaction-environment arguments context)
-      "Implement `interaction-environment` as a session-gated mutable specifier."
+      "Implement `interaction-environment` as a session-gated mutable specifie\
+r."
       (let ((session-id (context-session-id context))
             (environment (context-interaction-environment context))
             (syntax-environment (context-syntax-environment context)))
@@ -8151,7 +8303,8 @@ cursor across sessions."
       (consent-make-canonical-integer value))
 
     (define (time-positive-exact-integer value description)
-      "Return VALUE as a positive exact Consent Scheme integer for DESCRIPTION."
+      "Return VALUE as a positive exact Consent Scheme integer for DESCRIPTION\
+."
       (if (not (and (exact-integer? value) (> value 0)))
           (eval-error
            (string-append description
@@ -8198,7 +8351,8 @@ cursor across sessions."
        (expect-string (car arguments) "get-environment-variable")))
 
     (define (primitive-get-environment-variables arguments context)
-      "Implement `get-environment-variables` through a policy-gated host read."
+      "Implement `get-environment-variables` through a policy-gated host read.\
+"
       (authorize-process-environment-capability
        "get-environment-variables" context)
       (host-get-environment-variables))
@@ -8346,7 +8500,8 @@ cursor across sessions."
         (register-file-port! context port 'binary-input)))
 
     (define (primitive-open-binary-input-file arguments context)
-      "Implement the `open-binary-input-file` primitive with capability checks."
+      "Implement the `open-binary-input-file` primitive with capability checks\
+."
       (let* ((filename
               (expect-string (car arguments) "open-binary-input-file"))
              (authorization
@@ -8465,7 +8620,8 @@ cursor across sessions."
        context))
 
     (define (primitive-call-with-port/k arguments context continuation)
-      "Continuation-aware implementation of the `call-with-port` primitive for"
+      "Continuation-aware implementation of the `call-with-port` primitive for\
+"
       "trampoline evaluation."
       (let ((port (expect-port (car arguments) "call-with-port port"))
             (procedure
@@ -8590,7 +8746,8 @@ cursor across sessions."
         (make-environment-specifier environment syntax-environment #t)))
 
     (define (expect-environment-specifier value description)
-      "Validate environment specifier input and raise an evaluator error on mismatch."
+      "Validate environment specifier input and raise an evaluator error on mi\
+smatch."
       (if (not (environment-specifier? value))
           (eval-error
            (string-append description " expected an environment specifier")
@@ -8606,13 +8763,15 @@ cursor across sessions."
           (definition-form? form)))
 
     (define (primitive-eval arguments context)
-      "Implement the `eval` primitive with argument validation and Consent Scheme values."
+      "Implement the `eval` primitive with argument validation and Consent Sch\
+eme values."
       (drain-state
        (primitive-eval/k arguments context identity-continuation)
        context))
 
     (define (primitive-eval/k arguments context continuation)
-      "Continuation-aware implementation of the `eval` primitive for trampoline"
+      "Continuation-aware implementation of the `eval` primitive for trampolin\
+e"
       "evaluation."
       (let* ((expression (car arguments))
              (specifier
@@ -8634,7 +8793,8 @@ cursor across sessions."
                 expression environment context #t continuation))))))
 
     (define (read-policy-file-forms filename context description)
-      "Read policy-approved source file forms and return forms, directory, and"
+      "Read policy-approved source file forms and return forms, directory, and\
+"
       "authorization data."
       (let* ((authorization
               (resolve-file-policy-path filename context description))
@@ -8672,13 +8832,15 @@ cursor across sessions."
                 (context-syntax-environment context))))
 
     (define (primitive-load arguments context)
-      "Implement the `load` primitive with argument validation and Consent Scheme values."
+      "Implement the `load` primitive with argument validation and Consent Sch\
+eme values."
       (drain-state
        (primitive-load/k arguments context identity-continuation)
        context))
 
     (define (primitive-load/k arguments context continuation)
-      "Continuation-aware implementation of the `load` primitive for trampoline"
+      "Continuation-aware implementation of the `load` primitive for trampolin\
+e"
       "evaluation."
       (let* ((filename (expect-string (car arguments) "load"))
              (read-result
@@ -8769,7 +8931,8 @@ cursor across sessions."
         consent-unspecified))
 
     (define (primitive-substring arguments context)
-      "Implement the `substring` primitive with argument validation and Consent"
+      "Implement the `substring` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (let* ((string (expect-string (car arguments) "substring"))
              (start (expect-nonnegative-index
@@ -8841,7 +9004,8 @@ cursor across sessions."
                      "vector->string")))
         (let loop ((index (car range)) (result '()))
           (if (= index (cdr range))
-              (charge-string-allocation! (list->string (reverse result)) context)
+              (charge-string-allocation! (list->string (reverse result))
+                context)
               (loop (+ index 1)
                     (cons (expect-host-character
                            (vector-ref vector index)
@@ -8934,27 +9098,32 @@ cursor across sessions."
                  (loop (cdr rest))))))))
 
     (define (primitive-string=? arguments context)
-      "Implement the `string=?` primitive with argument validation and Consent"
+      "Implement the `string=?` primitive with argument validation and Consent\
+"
       "Scheme values."
       (primitive-string-compare arguments = "string=?"))
 
     (define (primitive-string<? arguments context)
-      "Implement the `string<?` primitive with argument validation and Consent"
+      "Implement the `string<?` primitive with argument validation and Consent\
+"
       "Scheme values."
       (primitive-string-compare arguments < "string<?"))
 
     (define (primitive-string>? arguments context)
-      "Implement the `string>?` primitive with argument validation and Consent"
+      "Implement the `string>?` primitive with argument validation and Consent\
+"
       "Scheme values."
       (primitive-string-compare arguments > "string>?"))
 
     (define (primitive-string<=? arguments context)
-      "Implement the `string<=?` primitive with argument validation and Consent"
+      "Implement the `string<=?` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (primitive-string-compare arguments <= "string<=?"))
 
     (define (primitive-string>=? arguments context)
-      "Implement the `string>=?` primitive with argument validation and Consent"
+      "Implement the `string>=?` primitive with argument validation and Consen\
+t"
       "Scheme values."
       (primitive-string-compare arguments >= "string>=?"))
 
@@ -9029,7 +9198,8 @@ cursor across sessions."
        context))
 
     (define (primitive-make-parameter/k arguments context continuation)
-      "Continuation-aware implementation of the `make-parameter` primitive for"
+      "Continuation-aware implementation of the `make-parameter` primitive for\
+"
       "trampoline evaluation."
       (let ((initial (car arguments))
             (converter (if (null? (cdr arguments))
@@ -9074,7 +9244,8 @@ cursor across sessions."
       (charge-value-allocation! (make-multiple-values arguments) 1 context))
 
     (define (primitive-call-with-values arguments context)
-      "Implement the `call-with-values` primitive with argument validation and"
+      "Implement the `call-with-values` primitive with argument validation and\
+"
       "Consent Scheme values."
       (let* ((producer (expect-procedure
                         (car arguments)
@@ -9256,7 +9427,8 @@ cursor across sessions."
            (continue continuation value)))))
 
     (define (primitive-raise-continuable arguments context)
-      "Implement the `raise-continuable` primitive with argument validation and"
+      "Implement the `raise-continuable` primitive with argument validation an\
+d"
       "Consent Scheme values."
       (invoke-exception-handler (car arguments) context))
 
@@ -9316,7 +9488,8 @@ cursor across sessions."
            value)))
 
     (define (primitive-error-object-message arguments context)
-      "Implement the `error-object-message` primitive with argument validation"
+      "Implement the `error-object-message` primitive with argument validation\
+"
       "and Consent Scheme values."
       (consent-error-object-message
        (expect-error-object (car arguments) "error-object-message")))
@@ -9328,7 +9501,8 @@ cursor across sessions."
        (expect-error-object (car arguments) "error-object-irritants")))
 
     (define (primitive-map arguments context)
-      "Implement the `map` primitive with argument validation and Consent Scheme values."
+      "Implement the `map` primitive with argument validation and Consent Sche\
+me values."
       (map-over-lists
        (expect-procedure (car arguments) "map procedure")
        (cdr arguments)
@@ -9336,7 +9510,8 @@ cursor across sessions."
        #t))
 
     (define (primitive-for-each arguments context)
-      "Implement the `for-each` primitive with argument validation and Consent"
+      "Implement the `for-each` primitive with argument validation and Consent\
+"
       "Scheme values."
       (map-over-lists
        (expect-procedure (car arguments) "for-each procedure")
@@ -9507,14 +9682,16 @@ cursor across sessions."
        context))
 
     (define (primitive-bytevector-length arguments context)
-      "Implement the `bytevector-length` primitive with argument validation and"
+      "Implement the `bytevector-length` primitive with argument validation an\
+d"
       "Consent Scheme values."
       (consent-make-canonical-integer
        (bytevector-length
         (expect-bytevector (car arguments) "bytevector-length"))))
 
     (define (primitive-bytevector-u8-ref arguments context)
-      "Implement the `bytevector-u8-ref` primitive with argument validation and"
+      "Implement the `bytevector-u8-ref` primitive with argument validation an\
+d"
       "Consent Scheme values."
       (let* ((bytevector
               (expect-bytevector
@@ -9561,7 +9738,8 @@ cursor across sessions."
          context)))
 
     (define (primitive-bytevector-copy! arguments context)
-      "Implement the `bytevector-copy!` primitive with argument validation and"
+      "Implement the `bytevector-copy!` primitive with argument validation and\
+"
       "Consent Scheme values."
       (let* ((to (expect-bytevector
                   (car arguments)
@@ -9585,7 +9763,8 @@ cursor across sessions."
         consent-unspecified))
 
     (define (primitive-bytevector-append arguments context)
-      "Implement the `bytevector-append` primitive with argument validation and"
+      "Implement the `bytevector-append` primitive with argument validation an\
+d"
       "Consent Scheme values."
       (charge-bytevector-allocation!
        (apply bytevector-append
@@ -9675,7 +9854,8 @@ cursor across sessions."
         (equal-seen-pair? left right (cdr seen)))))
 
     (define (equal-value? left right seen)
-      "Implement equal? comparison with cycle detection for pairs and vectors."
+      "Implement equal? comparison with cycle detection for pairs and vectors.\
+"
       (cond
        ((eqv-value? left right) #t)
        ((and (pair? left) (pair? right))
@@ -9704,11 +9884,13 @@ cursor across sessions."
         (equal? left right))))
 
     (define (primitive-eq? arguments context)
-      "Implement the `eq?` primitive with argument validation and Consent Scheme values."
+      "Implement the `eq?` primitive with argument validation and Consent Sche\
+me values."
       (eq-value? (car arguments) (second arguments)))
 
     (define (primitive-eqv? arguments context)
-      "Implement the `eqv?` primitive with argument validation and Consent Scheme values."
+      "Implement the `eqv?` primitive with argument validation and Consent Sch\
+eme values."
       (eqv-value? (car arguments) (second arguments)))
 
     (define (primitive-equal? arguments context)
@@ -9717,7 +9899,8 @@ cursor across sessions."
       (equal-value? (car arguments) (second arguments) '()))
 
     (define (primitive-memq arguments context)
-      "Implement the `memq` primitive with argument validation and Consent Scheme values."
+      "Implement the `memq` primitive with argument validation and Consent Sch\
+eme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
@@ -9726,7 +9909,8 @@ cursor across sessions."
          (else (loop (cdr cursor))))))
 
     (define (primitive-memv arguments context)
-      "Implement the `memv` primitive with argument validation and Consent Scheme values."
+      "Implement the `memv` primitive with argument validation and Consent Sch\
+eme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
@@ -9745,7 +9929,8 @@ cursor across sessions."
          (else (loop (cdr cursor))))))
 
     (define (primitive-assq arguments context)
-      "Implement the `assq` primitive with argument validation and Consent Scheme values."
+      "Implement the `assq` primitive with argument validation and Consent Sch\
+eme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
@@ -9756,7 +9941,8 @@ cursor across sessions."
          (else (loop (cdr cursor))))))
 
     (define (primitive-assv arguments context)
-      "Implement the `assv` primitive with argument validation and Consent Scheme values."
+      "Implement the `assv` primitive with argument validation and Consent Sch\
+eme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
@@ -10072,7 +10258,8 @@ cursor across sessions."
        (cons 'primitive-eof-object primitive-eof-object)
        (cons 'primitive-eof-object? primitive-eof-object?)
        (cons 'primitive-error primitive-error)
-       (cons 'primitive-error-object-irritants primitive-error-object-irritants)
+       (cons 'primitive-error-object-irritants
+         primitive-error-object-irritants)
        (cons 'primitive-error-object-message primitive-error-object-message)
        (cons 'primitive-error-object? primitive-error-object?)
        (cons 'primitive-denominator primitive-denominator)
@@ -10113,7 +10300,8 @@ cursor across sessions."
        (cons 'primitive-numerator primitive-numerator)
        (cons 'primitive-open-input-bytevector primitive-open-input-bytevector)
        (cons 'primitive-open-input-string primitive-open-input-string)
-       (cons 'primitive-open-output-bytevector primitive-open-output-bytevector)
+       (cons 'primitive-open-output-bytevector
+         primitive-open-output-bytevector)
        (cons 'primitive-open-output-string primitive-open-output-string)
        (cons 'primitive-output-port-open? primitive-output-port-open?)
        (cons 'primitive-output-port? primitive-output-port?)
@@ -10181,7 +10369,8 @@ cursor across sessions."
        (cons 'primitive-vector-set! primitive-vector-set!)
        (cons 'primitive-vector? primitive-vector?)
        (cons 'primitive-values primitive-values)
-       (cons 'primitive-with-exception-handler primitive-with-exception-handler)
+       (cons 'primitive-with-exception-handler
+         primitive-with-exception-handler)
        (cons 'primitive-write-bytevector primitive-write-bytevector)
        (cons 'primitive-write-char primitive-write-char)
        (cons 'primitive-write-string primitive-write-string)
@@ -10231,17 +10420,27 @@ cursor across sessions."
           '()
           (second rest)))
 
-    ;; Standard streams (docs/repl-interaction-contract.md, "Stream Separation"):
+    ;; Standard streams (docs/repl-interaction-contract.md, "Stream
+    ;; Separation"):
     ;; an evaluation may connect its `(current-input-port)',
-    ;; `(current-output-port)', and `(current-error-port)' to the process standard
-    ;; streams.  The standard streams are *consented by invocation* -- they are what
-    ;; the caller handed the process -- so the host that attaches real stdio also
-    ;; supplies, by default, the device callbacks plus one `port' grant per stream
-    ;; (`(backing stdin)'/`stdout'/`stderr'); the core stays fail-closed and connects
-    ;; a stream only when its device and a matching active grant are both present.  A
-    ;; context with no devices/grants (the daemon/agent adapter, the host-run test
-    ;; runner) keeps its streams disconnected/captured.  No raw host port is exposed
-    ;; to Scheme: input is pulled through a reader thunk and output flushed through a
+    ;; `(current-output-port)', and `(current-error-port)' to the process
+    ;; standard
+    ;; streams. The standard streams are *consented by invocation* -- they are
+    ;; what
+    ;; the caller handed the process -- so the host that attaches real stdio
+    ;; also
+    ;; supplies, by default, the device callbacks plus one `port' grant per
+    ;; stream
+    ;; (`(backing stdin)'/`stdout'/`stderr'); the core stays fail-closed and
+    ;; connects
+    ;; a stream only when its device and a matching active grant are both
+    ;; present. A
+    ;; context with no devices/grants (the daemon/agent adapter, the host-run
+    ;; test
+    ;; runner) keeps its streams disconnected/captured. No raw host port is
+    ;; exposed
+    ;; to Scheme: input is pulled through a reader thunk and output flushed
+    ;; through a
     ;; writer thunk.  Ambient effects (files, processes, network, env, clock,
     ;; providers, editor) still gate independently.
     (define (standard-stream-grant-backing grant)
@@ -10255,7 +10454,8 @@ cursor across sessions."
          (else (loop (cdr scope))))))
 
     (define (standard-stream-grant? grant backing operation)
-      "Report whether GRANT is an active `port' grant for OPERATION backed by BACKING."
+      "Report whether GRANT is an active `port' grant for OPERATION backed by \
+BACKING."
       (and (pair? grant)
            (eq? (car grant) 'capability-grant)
            (eq? (capability-grant-field-value grant 'domain) 'port)
@@ -10266,7 +10466,8 @@ cursor across sessions."
            (eq? (standard-stream-grant-backing grant) backing)))
 
     (define (find-standard-stream-grant context backing operation)
-      "Return CONTEXT's active `port' grant for OPERATION backed by BACKING, or #f."
+      "Return CONTEXT's active `port' grant for OPERATION backed by BACKING, o\
+r #f."
       (let loop ((grants (context-capability-grants context)))
         (cond
          ((null? grants) #f)
@@ -10275,11 +10476,15 @@ cursor across sessions."
 
     ;; A program-input port draws characters from a host *reader* on demand: a
     ;; zero-argument procedure returning the next chunk of input as a non-empty
-    ;; string, or #f at end of stream.  The host supplies it (its real stdin read,
-    ;; one line/chunk at a time); genuinely finite in-memory input is wrapped as a
-    ;; one-shot reader by `consent-program-input-from-string'.  Reads refill only
+    ;; string, or #f at end of stream. The host supplies it (its real stdin
+    ;; read,
+    ;; one line/chunk at a time); genuinely finite in-memory input is wrapped
+    ;; as a
+    ;; one-shot reader by `consent-program-input-from-string'. Reads refill
+    ;; only
     ;; as far as the current operation needs, so a `(read-line)' filter over a
-    ;; live or unbounded pipe processes input incrementally instead of draining it
+    ;; live or unbounded pipe processes input incrementally instead of draining
+    ;; it
     ;; all up front.  The reader and an end-of-stream flag ride in the port's
     ;; mutable counters alist; the growable buffer is the port `source'.
     (define program-input-refill-primitive
@@ -10308,9 +10513,12 @@ cursor across sessions."
             chunk))))
 
     ;; The binary peer of `consent-program-input-from-string': a one-shot byte
-    ;; reader for genuinely finite in-memory input.  The textual stream's chunk is
-    ;; a string; the binary stream's chunk is a bytevector, so this is the honest
-    ;; finite binary-input constructor (fixtures, captured byte streams) and never
+    ;; reader for genuinely finite in-memory input. The textual stream's chunk
+    ;; is
+    ;; a string; the binary stream's chunk is a bytevector, so this is the
+    ;; honest
+    ;; finite binary-input constructor (fixtures, captured byte streams) and
+    ;; never
     ;; a way to model a live stdin, which has a time dimension a buffer cannot
     ;; represent.
     (define (consent-program-input-from-bytevector content)
@@ -10406,7 +10614,8 @@ cursor across sessions."
               (loop)))))
 
     (define (program-input-line-buffered? source position)
-      "Report whether SOURCE holds a newline at or after POSITION (line is complete)."
+      "Report whether SOURCE holds a newline at or after POSITION (line is com\
+plete)."
       (let ((length (string-length source)))
         (let loop ((index position))
           (cond
@@ -10419,8 +10628,10 @@ cursor across sessions."
       "is buffered, then delegating to the validating raise-on-error reader"
       "so streaming `read' shares the single datum path.  Refilling keeps"
       "pulling while the buffered prefix is `incomplete' (a valid partial"
-      "datum) or `eof' (exhausted without a datum yet), and stops once a whole"
-      "`datum' is buffered or the prefix is `invalid'; `program-input-fill-until!'"
+      "datum) or `eof' (exhausted without a datum yet), and stops once a whole\
+"
+      "`datum' is buffered or the prefix is `invalid'; `program-input-fill-unt\
+il!'"
       "also stops when the host stream itself ends."
       (program-input-fill-until!
        port context
@@ -10476,15 +10687,21 @@ cursor across sessions."
                (list 'status 'open)))
         port))
 
-    ;; The binary peer of the program-input port (#528): a `stdio'-backed binary
+    ;; The binary peer of the program-input port (#528): a `stdio'-backed
+    ;; binary
     ;; input port that refills *bytes* on demand from a host byte reader -- a
-    ;; zero-argument procedure returning the next chunk as a non-empty bytevector,
+    ;; zero-argument procedure returning the next chunk as a non-empty
+    ;; bytevector,
     ;; or #f at end of stream -- so a byte filter calling `read-u8'/`peek-u8'/
-    ;; `read-bytevector' over a live or unbounded pipe processes input incrementally
-    ;; instead of draining it up front.  The byte reader and an end-of-stream flag
-    ;; ride in the port's counters alist; the growable buffer is the port `source'
+    ;; `read-bytevector' over a live or unbounded pipe processes input
+    ;; incrementally
+    ;; instead of draining it up front. The byte reader and an end-of-stream
+    ;; flag
+    ;; ride in the port's counters alist; the growable buffer is the port
+    ;; `source'
     ;; bytevector.  It is the byte twin of the textual reader thunk and uses a
-    ;; distinct counters key so a binary and a textual stdin port never cross paths.
+    ;; distinct counters key so a binary and a textual stdin port never cross
+    ;; paths.
     (define program-binary-input-refill-primitive
       (make-primitive-procedure 'program-binary-input-read #f 0 0))
 
@@ -10543,7 +10760,8 @@ cursor across sessions."
                     #f))))))
 
     (define (program-binary-input-fill-until! port context done?)
-      "Refill PORT from its host byte reader until DONE? holds or the stream ends."
+      "Refill PORT from its host byte reader until DONE? holds or the stream e\
+nds."
       (let loop ()
         (if (and (not (done?)) (not (program-binary-input-eof? port)))
             (begin
@@ -10593,7 +10811,8 @@ cursor across sessions."
 
     ;; A program-output / program-error port is the write side of the standard
     ;; streams: a `stdio'-backed port whose textual writes flush through a host
-    ;; writer thunk immediately (see `write-text-to-port'), so program output is
+    ;; writer thunk immediately (see `write-text-to-port'), so program output
+    ;; is
     ;; never buffered to end of program and a filter streams as it runs.  The
     ;; writer rides in the port's counters alist.
     (define program-output-write-primitive
@@ -10655,9 +10874,12 @@ cursor across sessions."
     ;; The binary peer of the program-output / program-error port (#528): a
     ;; `stdio'-backed binary output port whose byte writes flush through a host
     ;; byte writer immediately (see `append-bytes-to-port'), so a `write-u8'/
-    ;; `write-bytevector' filter streams as it runs instead of buffering to end of
-    ;; program.  The byte writer receives each flush as a list of byte integers --
-    ;; the representation `append-bytes-to-port' already accumulates -- and rides in
+    ;; `write-bytevector' filter streams as it runs instead of buffering to end
+    ;; of
+    ;; program. The byte writer receives each flush as a list of byte integers
+    ;; --
+    ;; the representation `append-bytes-to-port' already accumulates -- and
+    ;; rides in
     ;; the port's counters under a distinct key from the textual writer.
     (define program-binary-output-write-primitive
       (make-primitive-procedure 'program-binary-output-write #f 0 0))
@@ -10715,7 +10937,8 @@ cursor across sessions."
                (list 'status 'open)))
         port))
 
-    (define (connect-standard-stream! context device backing operation build install)
+    (define (connect-standard-stream! context device backing operation build
+      install)
       "Connect one standard stream when DEVICE and a matching grant are"
       "present.  DEVICE is the host reader/writer (or #f); BACKING/OPERATION"
       "select the grant; BUILD makes the port from (context grant); INSTALL"
@@ -10757,7 +10980,8 @@ cursor across sessions."
                        (list 'operation operation)
                        (list 'backing backing)
                        (list 'reason
-                             "standard stream requires a matching port grant")))))))
+                             "standard stream requires a matching port \
+grant")))))))
 
     (define (connect-standard-streams! context options)
       "Connect CONTEXT's current input/output/error ports to the granted"
@@ -10778,8 +11002,10 @@ cursor across sessions."
             (out-writer (option-ref options 'program-output-writer #f))
             (err-writer (option-ref options 'program-error-writer #f))
             (byte-reader (option-ref options 'program-input-byte-reader #f))
-            (out-byte-writer (option-ref options 'program-output-byte-writer #f))
-            (err-byte-writer (option-ref options 'program-error-byte-writer #f)))
+            (out-byte-writer (option-ref options 'program-output-byte-writer
+              #f))
+            (err-byte-writer (option-ref options 'program-error-byte-writer
+              #f)))
         (connect-standard-stream!
          context reader 'stdin 'read
          (lambda (ctx grant) (make-program-input-port ctx grant reader))
@@ -10842,7 +11068,8 @@ cursor across sessions."
       "definitions, imports, libraries, and expressions."
       #((parameters
          (source (type (or string port))
-          (description ("Program source text or port read into a form sequence.")))
+          (description
+            ("Program source text or port read into a form sequence.")))
          (rest (type list)
           (description
            ("Optional environment then options alist; both default when"
@@ -10860,11 +11087,13 @@ cursor across sessions."
         (ensure-base-syntax! context environment)
         (trampoline (make-sequence forms #t) environment context)))
 
-    ;; String evaluation is an alias kept for callers that name the source kind.
+    ;; String evaluation is an alias kept for callers that name the source
+    ;; kind.
     (define consent-eval-string consent-eval-source)
 
     (define (call-with-result-condition-handler context thunk)
-      "Call THUNK, converting any raised condition to an evaluation-result datum."
+      "Call THUNK, converting any raised condition to an evaluation-result dat\
+um."
       (call/cc
        (lambda (return)
          (with-exception-handler
@@ -10906,7 +11135,8 @@ cursor across sessions."
       "capture, and budget reporting for REPL and protocol-boundary callers."
       #((parameters
          (source (type (or string port))
-          (description ("Program source text or port read into a form sequence.")))
+          (description
+            ("Program source text or port read into a form sequence.")))
          (rest (type list)
           (description
            ("Optional environment then options alist; both default when"
@@ -10932,16 +11162,21 @@ cursor across sessions."
               (trampoline (make-sequence forms #t) environment context)
               context))))))
 
-    ;; A durable interaction context bundles the persistent state a REPL session
+    ;; A durable interaction context bundles the persistent state a REPL
+    ;; session
     ;; reuses across submissions: the evaluator options (carrying `session-id',
-    ;; policy actions, and capability grants), the mutable value environment, and
+    ;; policy actions, and capability grants), the mutable value environment,
+    ;; and
     ;; the syntax environment and library registry.  Each submission still runs
-    ;; in a fresh evaluation context with its own step/host-callback/event budget
-    ;; -- exactly as `consent-eval-source-result' does -- but that context reuses
+    ;; in a fresh evaluation context with its own step/host-callback/event
+    ;; budget
+    ;; -- exactly as `consent-eval-source-result' does -- but that context
+    ;; reuses
     ;; the persisted value and syntax environments plus the live registry that
     ;; reflection and later imports consult.  Value definitions and imports
     ;; persist because they mutate the shared value environment; macros and
-    ;; imported syntax persist because the shared syntax environment is threaded
+    ;; imported syntax persist because the shared syntax environment is
+    ;; threaded
     ;; through instead of being rebuilt per call.  This is the portable peer of
     ;; the Emacs session evaluator that drives `consent-repl-eval-source'.
     (define-record-type <consent-interaction-context>
@@ -10957,9 +11192,11 @@ cursor across sessions."
       (libraries interaction-context-libraries
                  set-interaction-context-libraries!)
       (program-output-port interaction-context-program-output-port)
-      ;; The session program-input port, shared as the single stdin cursor between
-      ;; the REPL form reader and evaluated reads, or #f when program input is not
-      ;; connected (no reader/grant).  See the REPL engine's submission-boundary
+      ;; The session program-input port, shared as the single stdin cursor
+      ;; between
+      ;; the REPL form reader and evaluated reads, or #f when program input is
+      ;; not
+      ;; connected (no reader/grant). See the REPL engine's submission-boundary
       ;; hand-off via `consent-interaction-seed-program-input!'.
       (program-input-port interaction-context-program-input-port))
 
@@ -10991,9 +11228,12 @@ cursor across sessions."
       "`consent-interaction-eval-form' submissions."
       "When OPTIONS supply a pre-built `program-input-port' it is reused (the"
       "multi-session shared stdin cursor); otherwise, when OPTIONS supply a"
-      "`program-input-reader' and a matching active `port'/`read' grant backed"
-      "by `stdin', a program-input port is created and shared as the session's"
-      "single stdin cursor (the REPL form reader and evaluated reads draw from"
+      "`program-input-reader' and a matching active `port'/`read' grant backed\
+"
+      "by `stdin', a program-input port is created and shared as the session's\
+"
+      "single stdin cursor (the REPL form reader and evaluated reads draw from\
+"
       "it); otherwise program input stays disconnected and reads fail closed."
       #((parameters
          (rest (type list)
@@ -11037,7 +11277,8 @@ cursor across sessions."
       "Return MANAGER's default session interaction context, or #f when none."
       #((parameters
          (manager (type consent-session-manager)
-          (description ("Session manager whose current session is looked up."))))
+          (description
+            ("Session manager whose current session is looked up."))))
         (returns (type (or consent-interaction-context boolean))
          (description
           ("The current session's interaction context, or #f when no"
@@ -11049,7 +11290,8 @@ cursor across sessions."
     (define (consent-repl-seed-initial-session! manager session-id options)
       "Reset MANAGER and seed an initial named session for SESSION-ID."
       "Each REPL run starts from a clean manager (the process-local store is"
-      "shared across evaluations), then installs a context factory that shares"
+      "shared across evaluations), then installs a context factory that shares\
+"
       "one program-input port across all sessions so the multi-session REPL"
       "keeps a single stdin cursor, and registers the initial session as the"
       "default."
@@ -11057,7 +11299,8 @@ cursor across sessions."
          (manager (type consent-session-manager)
           (description "Session manager to reset and seed."))
          (session-id (type (or symbol string))
-          (description ("Symbol or string naming the initial default session.")))
+          (description
+            ("Symbol or string naming the initial default session.")))
          (options (type list)
           (description
            ("Options alist seeded into every session's interaction"
@@ -11090,10 +11333,12 @@ cursor across sessions."
       manager)
 
     (define (consent-interaction-program-input-port interaction)
-      "Return INTERACTION's shared program-input port, or #f when disconnected."
+      "Return INTERACTION's shared program-input port, or #f when disconnected\
+."
       #((parameters
          (interaction (type consent-interaction-context)
-          (description ("Interaction context whose shared stdin port is read."))))
+          (description
+            ("Interaction context whose shared stdin port is read."))))
         (returns (type (or port boolean))
          (description
           ("The shared program-input port, or #f when program input is"
@@ -11109,7 +11354,8 @@ cursor across sessions."
       "host stream truly ends, both form and program reads are at end."
       #((parameters
          (interaction (type consent-interaction-context)
-          (description ("Interaction context holding the shared stdin cursor.")))
+          (description
+            ("Interaction context holding the shared stdin cursor.")))
          (text (type string)
           (description "Post-form remainder string to seed at position 0.")))
         (returns
@@ -11129,7 +11375,8 @@ cursor across sessions."
       "form-reading buffer, so neither reader steals the other's characters."
       #((parameters
          (interaction (type consent-interaction-context)
-          (description ("Interaction context holding the shared stdin cursor."))))
+          (description
+            ("Interaction context holding the shared stdin cursor."))))
         (returns (type (or string boolean))
          (description
           ("The unconsumed remainder string after the port position,"
@@ -11142,10 +11389,12 @@ cursor across sessions."
                         (string-length (consent-port-source port))))))
 
     (define (consent-interaction-context-session-id interaction)
-      "Return the session id INTERACTION evaluates under, or #f when unsessioned."
+      "Return the session id INTERACTION evaluates under, or #f when unsession\
+ed."
       #((parameters
          (interaction (type consent-interaction-context)
-          (description ("Interaction context whose options carry the session id."))))
+          (description
+            ("Interaction context whose options carry the session id."))))
         (returns
          . ("The configured session id, or #f when the context is"
             "unsessioned."))
@@ -11159,7 +11408,8 @@ cursor across sessions."
       "evaluation."
       #((parameters
          (interaction (type consent-interaction-context)
-          (description ("Interaction context whose program-output port is read."))))
+          (description
+            ("Interaction context whose program-output port is read."))))
         (returns (type string)
          (description
           ("The string written to program output by the most recent"
@@ -11169,7 +11419,8 @@ cursor across sessions."
        (interaction-context-program-output-port interaction)))
 
     (define (consent-interaction-eval-form interaction form)
-      "Evaluate one already-read top-level FORM in durable INTERACTION, reusing"
+      "Evaluate one already-read top-level FORM in durable INTERACTION, reusin\
+g"
       "its value/syntax environments, library registry, and program-output"
       "port, and return an `evaluation-result' datum (ok/values or captured"
       "error) like `consent-eval-source-result'."

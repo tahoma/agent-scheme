@@ -13,9 +13,11 @@
 ;;; when a caller does not name a role or model explicitly.  Selection is
 ;;; deterministic over the registry contents and a goal/session context: it
 ;;; consults no wall-clock, no host randomness, and no model provider, so a
-;;; selection record is reproducible and cross-host identical (the D7 agent-layer
-;;; determinism stance).  The composed agent records its model-selection intent;
-;;; routing that intent to a concrete provider happens later, at prompt/run time.
+;;; selection record is reproducible and cross-host identical (the D7
+;;; agent-layer
+;;; determinism stance). The composed agent records its model-selection intent;
+;;; routing that intent to a concrete provider happens later, at prompt/run
+;;; time.
 
 (define-library (agent registry)
   (export make-agent
@@ -80,7 +82,8 @@
       (if (symbol? id) (symbol->string id) "agent"))
 
     (define (make-agent id options)
-      "Return a Scheme-readable agent datum bundling role, model, and metadata."
+      "Return a Scheme-readable agent datum bundling role, model, and metadata\
+."
       #((parameters
          (id (type symbol)
           (description "Stable agent id symbol."))
@@ -184,7 +187,8 @@
          (agent (type agent)
           (description "Agent datum to read.")))
         (returns (type list)
-         (description ("The agent skills list, or the empty list when absent.")))
+         (description
+           ("The agent skills list, or the empty list when absent.")))
         (effects pure))
       (record-field-value agent 'skills '()))
 
@@ -194,7 +198,8 @@
          (agent (type agent)
           (description "Agent datum to read.")))
         (returns (type (or symbol list))
-         (description ("The agent budget datum, or the symbol default when absent.")))
+         (description
+           ("The agent budget datum, or the symbol default when absent.")))
         (effects pure))
       (record-field-value agent 'budget 'default))
 
@@ -210,9 +215,11 @@
         (effects pure))
       (record-field-value agent 'description ""))
 
-    ;; Mutable registry container: a roster of agents in registration order plus
+    ;; Mutable registry container: a roster of agents in registration order
+    ;; plus
     ;; the id of the default agent automatic selection resolves to.  The roster
-    ;; is mutable host/session state, so it is a record rather than a serializable
+    ;; is mutable host/session state, so it is a record rather than a
+    ;; serializable
     ;; datum; the agents and selection records it holds remain tagged lists.
     (define-record-type <agent-registry>
       (make-registry-record agents default-id)
@@ -221,7 +228,8 @@
       (default-id registry-default-id set-registry-default-id!))
 
     (define (built-in-default-agent)
-      "Return the seeded general-purpose agent automatic selection falls back to."
+      "Return the seeded general-purpose agent automatic selection falls back \
+to."
       (make-agent 'default
                   (list (list 'name "default")
                         (list 'role 'planner)
@@ -230,7 +238,8 @@
                               "Automatically chosen general-purpose agent."))))
 
     (define (make-agent-registry)
-      "Return a fresh agent registry seeded with a default general-purpose agent."
+      "Return a fresh agent registry seeded with a default general-purpose age\
+nt."
       #((parameters)
         (returns (type agent-registry)
          (description
@@ -407,17 +416,20 @@
                                   goal session considered))
            (role-match
             (make-agent-selection 'selected role-match 'role-match
-                                  "selected the first registered agent matching the requested role"
+                                  "selected the first registered agent matchin\
+g the requested role"
                                   requested-role requested-model
                                   goal session considered))
            (model-match
             (make-agent-selection 'selected model-match 'model-match
-                                  "selected the first registered agent matching the requested model"
+                                  "selected the first registered agent matchin\
+g the requested model"
                                   requested-role requested-model
                                   goal session considered))
            (fallback
             (make-agent-selection 'selected fallback 'default-agent
-                                  "no goal-specific configuration; resolved to the default agent"
+                                  "no goal-specific configuration; resolved to \
+the default agent"
                                   requested-role requested-model
                                   goal session considered))
            ;; Defensive fallbacks for a registry constructed without a default
@@ -428,7 +440,8 @@
             (make-agent-selection 'selected
                                   (first-registered-agent registry)
                                   'first-agent
-                                  "no default agent set; resolved to the first registered agent"
+                                  "no default agent set; resolved to the first \
+registered agent"
                                   requested-role requested-model
                                   goal session considered))
            (else

@@ -7,7 +7,8 @@
 ;;; registry surface (register, list, reference, default / set-default), and
 ;;; deterministic, policy-visible automatic selection with an inspectable
 ;;; decision record.  It loads no Emacs host adapter; the same source backs the
-;;; Emacs interpreter, so passing here is the portable half of the parity check.
+;;; Emacs interpreter, so passing here is the portable half of the parity
+;;; check.
 
 (import (scheme base)
         (scheme write)
@@ -46,7 +47,8 @@
   (test-equal 'agent-skills '(edit-file) (agent-skills agent))
   (test-equal 'agent-budget '(budget (max-steps 8)) (agent-budget agent))
   (test-equal 'agent-description "Writes code." (agent-description agent))
-  (test-equal 'agent-field-value-generic 'coder (agent-field-value agent 'role))
+  (test-equal 'agent-field-value-generic 'coder (agent-field-value agent
+    'role))
   (test-equal 'agent-field-value-default
              'fallback
              (agent-field-value agent 'missing 'fallback))))
@@ -75,14 +77,16 @@
 (let ((registry (make-agent-registry)))
   (test-assert 'registry-predicate (agent-registry? registry))
   (test-equal 'seeded-default-id 'default (default-agent-id registry))
-  (test-equal 'seeded-default-role 'planner (agent-role (default-agent registry)))
+  (test-equal 'seeded-default-role 'planner (agent-role (default-agent
+    registry)))
   (test-equal 'seeded-agent-count 1 (length (agents registry)))
   (test-equal 'seeded-only-id '(default) (map agent-id (agents registry)))))
 
 (testing-registry-case
  'registration-order '(portable agent)
 (let ((registry (make-agent-registry)))
-  (register-agent registry (make-agent 'reviewer-1 (list (list 'role 'reviewer))))
+  (register-agent registry (make-agent 'reviewer-1 (list (list 'role
+    'reviewer))))
   (register-agent registry (make-agent 'coder-1 (list (list 'role 'coder))))
   (test-equal 'registration-order
              '(default reviewer-1 coder-1)
@@ -90,7 +94,8 @@
   (test-equal 'agent-ref-hit 'coder-1 (agent-id (agent-ref registry 'coder-1)))
   (test-equal 'agent-ref-miss #f (agent-ref registry 'absent))
   ;; Re-registering the same id replaces in place rather than duplicating.
-  (register-agent registry (make-agent 'coder-1 (list (list 'role 'summarizer))))
+  (register-agent registry (make-agent 'coder-1 (list (list 'role
+    'summarizer))))
   (test-equal 'replace-keeps-count 3 (length (agents registry)))
   (test-equal 'replace-updates-role
              'summarizer
@@ -108,11 +113,13 @@
 (testing-registry-case
  'set-default-returns-agent '(portable agent)
 (let ((registry (make-agent-registry)))
-  (register-agent registry (make-agent 'planner-2 (list (list 'role 'planner))))
+  (register-agent registry (make-agent 'planner-2 (list (list 'role
+    'planner))))
   (let ((returned (set-default-agent! registry 'planner-2)))
     (test-equal 'set-default-returns-agent 'planner-2 (agent-id returned)))
   (test-equal 'default-id-updated 'planner-2 (default-agent-id registry))
-  (test-equal 'default-agent-updated 'planner-2 (agent-id (default-agent registry)))
+  (test-equal 'default-agent-updated 'planner-2 (agent-id (default-agent
+    registry)))
   (test-assert 'set-default-unknown-raises
              (raises? (lambda () (set-default-agent! registry 'ghost))))))
 
@@ -122,7 +129,8 @@
  'auto-is-selection '(portable agent)
 (let ((registry (make-agent-registry)))
   (register-agent registry (make-agent 'coder-1 (list (list 'role 'coder))))
-  (register-agent registry (make-agent 'reviewer-1 (list (list 'role 'reviewer))))
+  (register-agent registry (make-agent 'reviewer-1 (list (list 'role
+    'reviewer))))
 
   ;; No configuration resolves to the default agent.
   (let ((selection (select-agent registry '())))
@@ -145,7 +153,8 @@
                                        (list 'goal "review the diff")
                                        (list 'session 'named-1)))))
     (test-equal 'role-basis 'role-match (agent-selection-basis selection))
-    (test-equal 'role-agent-id 'reviewer-1 (agent-selection-agent-id selection))
+    (test-equal 'role-agent-id 'reviewer-1 (agent-selection-agent-id
+      selection))
     (test-equal 'role-records-requested-role
              'reviewer
              (agent-selection-field-value selection 'requested-role))
@@ -158,15 +167,19 @@
 
   ;; A requested role with no match falls back to the default agent.
   (let ((selection (select-agent registry (list (list 'role 'unmatched)))))
-    (test-equal 'role-fallback-basis 'default-agent (agent-selection-basis selection))
-    (test-equal 'role-fallback-agent 'default (agent-selection-agent-id selection)))
+    (test-equal 'role-fallback-basis 'default-agent (agent-selection-basis
+      selection))
+    (test-equal 'role-fallback-agent 'default (agent-selection-agent-id
+      selection)))
 
   ;; An explicitly named agent wins over role matching.
   (let ((selection (select-agent registry
                                  (list (list 'agent 'coder-1)
                                        (list 'role 'reviewer)))))
-    (test-equal 'explicit-basis 'explicit-agent (agent-selection-basis selection))
-    (test-equal 'explicit-agent-id 'coder-1 (agent-selection-agent-id selection)))
+    (test-equal 'explicit-basis 'explicit-agent (agent-selection-basis
+      selection))
+    (test-equal 'explicit-agent-id 'coder-1 (agent-selection-agent-id
+      selection)))
 
   ;; An unknown explicit agent does not block role matching.
   (let ((selection (select-agent registry
@@ -210,11 +223,13 @@
  'model-match-basis '(portable agent)
 (let ((registry (make-agent-registry)))
   (register-agent registry
-                  (make-agent 'cod (list (list 'role 'coder) (list 'model 'm1))))
+                  (make-agent 'cod (list (list 'role 'coder) (list 'model
+                    'm1))))
   (let ((hit (select-agent registry (list (list 'model 'm1))))
         (miss (select-agent registry (list (list 'model 'nomatch)))))
     (test-equal 'model-match-basis 'model-match (agent-selection-basis hit))
     (test-equal 'model-match-agent 'cod (agent-selection-agent-id hit))
-    (test-equal 'model-miss-basis 'default-agent (agent-selection-basis miss)))))
+    (test-equal 'model-miss-basis 'default-agent (agent-selection-basis
+      miss)))))
 
 (testing-runner-main "Consent Agent Registry portable tests" (command-line))

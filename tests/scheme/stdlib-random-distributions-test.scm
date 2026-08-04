@@ -203,4 +203,5 @@
 (test-assert 'random-permutation-rejects-negative-degree
              (raises? (lambda () (random-permutation -1)))))
 
-(testing-runner-main "Stdlib Random Distributions portable tests" (command-line))
+(testing-runner-main "Stdlib Random Distributions portable tests"
+  (command-line))

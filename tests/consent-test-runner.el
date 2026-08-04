@@ -1,4 +1,4 @@
-;;; consent-test-runner.el --- Batch ERT runner  -*- lexical-binding: t; -*-
+;;; consent-test-runner.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -44,7 +44,8 @@ against an older checkout or archive extracted elsewhere.")
     (consent--test-target-file "scheme")))
 
 (defun consent--test-target-library-directory-absolute ()
-  "Return the absolute portable Scheme library directory under the target root."
+  "Return the absolute portable Scheme library directory under the target\
+ root."
   (consent--test-target-file "scheme"))
 
 (defun consent--test-emit-ci-check-timings (buffer)

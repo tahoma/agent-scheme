@@ -1,4 +1,4 @@
-;;; consent-oracle-test.el --- Reference oracle runner tests  -*- lexical-binding: t; -*-
+;;; consent-oracle-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -16,7 +16,7 @@
 (ert-deftest consent-oracle-test-classifies-eligibility ()
   "Classify fixtures that should and should not run against references."
   (let ((portable-case
-         '((id primitive-procedure-call)
+         `((id primitive-procedure-call)
            (kind r7rs-conformance)
            (phase eval)
            (category primitive-expressions)
@@ -24,11 +24,11 @@
            (status implemented)
            (oracle shared)
            (options ())
-           (source "(+ 1 2)")
-           (expect (value "3"))
+           (source (form ,(consent-read "(+ 1 2)")))
+           (expect (value 3))
            (description "Portable primitive call.")))
         (policy-case
-         '((id standard-library-file-exists-policy)
+         `((id standard-library-file-exists-policy)
            (kind r7rs-conformance)
            (phase eval)
            (category standard-libraries)
@@ -36,11 +36,14 @@
            (status policy-gated)
            (oracle shared)
            (options ())
-           (source "(import (scheme file)) (file-exists? \"x\")")
-           (expect (value "#t"))
+           (source
+             (forms
+               ,(consent-read "(import (scheme file))")
+               ,(consent-read "(file-exists? \"x\")")))
+           (expect (value t))
            (description "Policy-gated file access.")))
         (agent-case
-         '((id eval-multiple-values-result)
+         `((id eval-multiple-values-result)
            (kind agent-specific)
            (phase eval-result)
            (category multiple-values)
@@ -48,8 +51,10 @@
            (status implemented)
            (oracle shared)
            (options ())
-           (source "(values 1 2)")
-           (expect (result "(evaluation-result (status values))"))
+           (source (form ,(consent-read "(values 1 2)")))
+           (expect
+             (result
+               (evaluation-result (status values))))
            (description "Agent-specific result datum."))))
     (should (eq (consent-oracle-case-classification portable-case)
                 'eligible))
@@ -61,7 +66,7 @@
 (ert-deftest consent-oracle-test-classifies-explicit-eligibility-metadata ()
   "Honor explicit restrictive oracle eligibility metadata."
   (let ((metadata-case
-         '((id explicit-policy)
+         `((id explicit-policy)
            (kind r7rs-conformance)
            (phase eval)
            (category standard-libraries)
@@ -71,8 +76,8 @@
            (oracle-eligibility policy-gated)
            (oracle-reason host-policy)
            (options ())
-           (source "(+ 1 2)")
-           (expect (value "3"))
+           (source (form ,(consent-read "(+ 1 2)")))
+           (expect (value 3))
            (description "Synthetic metadata case."))))
     (should (eq (consent-oracle-case-classification metadata-case)
                 'policy-gated))))
@@ -136,7 +141,8 @@
 
 (ert-deftest consent-oracle-test-renders-ineligible-report ()
   "Render policy and ineligible fixture classifications as reports."
-  (let* ((case (consent-test-fixture-case 'standard-library-file-exists-policy))
+  (let* ((case (consent-test-fixture-case
+    'standard-library-file-exists-policy))
          (report (consent-oracle-run-case case nil)))
     (should (eq (consent-oracle-report-status report) 'policy-gated))
     (should
@@ -203,7 +209,9 @@
     (should
      (equal
       (consent-oracle-summary->external reports)
-      "(oracle-summary (total 4) (portable-agree 1) (implementation-variant 1) (agent-mismatch 1) (unsupported-reference 0) (policy-gated 1) (not-oracle-eligible 0))"))))
+      "(oracle-summary (total 4) (portable-agree 1) (implementation-variant 1)\
+ (agent-mismatch 1) (unsupported-reference 0) (policy-gated 1)\
+ (not-oracle-eligible 0))"))))
 
 (ert-deftest consent-oracle-test-parses-status-filter ()
   "Parse comma-separated status filters from batch environment text."
@@ -329,7 +337,8 @@
                process-environment))
         (consent-oracle-gambit-command nil)
         (consent-oracle-root-directory
-         (file-name-as-directory (expand-file-name "repo" temporary-file-directory))))
+         (file-name-as-directory (expand-file-name "repo"
+           temporary-file-directory))))
     (let ((implementation (consent-oracle-gambit-reference)))
       (should (eq (consent-oracle-reference-name implementation)
                   'gambit))

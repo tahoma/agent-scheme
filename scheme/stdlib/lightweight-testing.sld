@@ -5,7 +5,8 @@
 ;;;
 ;;; Vendored from the official SRFI 78 reference implementation at
 ;;; <https://srfi.schemers.org/srfi-78/check.scm>, final SRFI text plus
-;;; source snapshot SHA-256 ade1da44903e9208d906dbccd3bf2935b72cfea9dafc2d4db2ef6d0a5712568a.
+;;; source snapshot SHA-256
+;;; ade1da44903e9208d906dbccd3bf2935b72cfea9dafc2d4db2ef6d0a5712568a.
 ;;; Local patches wrap the implementation in an R7RS define-library form,
 ;;; import R7RS `(scheme cxr)' / `(scheme write)' support plus SRFI 42
 ;;; eager-comprehensions through `(stdlib eager-comprehensions)', add Consent
@@ -129,7 +130,8 @@
       (newline))
 
     (define (check-report)
-      "Write an SRFI 78 check summary and the first failed check when enabled."
+      "Write an SRFI 78 check summary and the first failed check when enabled.\
+"
       #((parameters)
         (returns (type unspecified)
          (description "Unspecified value."))
@@ -160,7 +162,8 @@
          (expected-total-count (type exact-integer)
           (description "Expected number of correct SRFI 78 checks.")))
         (returns (type boolean)
-         (description "True when there are no failures and the count matches."))
+         (description
+           "True when there are no failures and the count matches."))
         (effects state-read))
       (and (= (length check:failed) 0)
            (= check:correct expected-total-count)))
@@ -182,7 +185,8 @@
                  (check:report-expression expression)
                  (check:report-actual-result actual-result)
                  (check:report-failed expected-result)
-                 (check:add-failed! expression actual-result expected-result)))))
+                 (check:add-failed! expression actual-result
+                   expected-result)))))
         ((100)
          (check:report-expression expression)
          (let ((actual-result (thunk)))

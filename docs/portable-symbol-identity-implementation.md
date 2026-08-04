@@ -400,7 +400,7 @@ public.
    make lint-portable
    make lint-elisp
    make lint-branding
-   make lint-line-length
+   make lint-readability
    ```
 
 3. Run representative semantic gates:

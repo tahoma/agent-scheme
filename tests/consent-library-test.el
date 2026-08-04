@@ -1,4 +1,4 @@
-;;; consent-library-test.el --- R7RS library/import tests  -*- lexical-binding: t; -*-
+;;; consent-library-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
@@ -97,7 +97,8 @@
 (defconst consent-library-test--root
   (expand-file-name
    ".."
-   (file-name-directory (or load-file-name buffer-file-name default-directory)))
+   (file-name-directory (or load-file-name buffer-file-name
+     default-directory)))
   "Repository root for library fixture tests.")
 
 (defconst consent-library-test--stdlib-manifest-directory
@@ -159,7 +160,8 @@
          (status available)
          (canonical #t))))))
 "
-      collection collection collection collection collection collection source-root)
+      collection collection collection collection collection collection
+        source-root)
      nil
      manifest-file)
     (write-region
@@ -626,8 +628,10 @@
        (cadr (assq 'status (cdr (session-store-resume! store 'source-alpha))))
        (cadr (assq 'id (cdr snapshot)))
        (session-datum-id forked)
-       (cadr (assq 'status (cdr (session-store-retire! store 'source-alpha)))))")
-    "(source-alpha source-alpha (source-alpha source-beta) suspended active source-snap source-beta retired)")))
+       (cadr (assq 'status (cdr (session-store-retire! store\
+ 'source-alpha)))))")
+    "(source-alpha source-alpha (source-alpha source-beta) suspended active\
+ source-snap source-beta retired)")))
 
 (ert-deftest consent-library-test-testing-harness-is-source-backed ()
   "Expose the reusable portable test harness through the runtime catalog."
@@ -742,7 +746,8 @@
     (consent-library-test--external
      "(import (scheme base) (agent models openai))
       (model-openai-parse-response
-       \"{\\\"choices\\\":[{\\\"message\\\":{\\\"content\\\":\\\"source completion\\\"}}]}\")")
+       \"{\\\"choices\\\":[{\\\"message\\\":{\\\"content\\\":\\\"source\
+ completion\\\"}}]}\")")
     "\"source completion\"")))
 
 (ert-deftest consent-library-test-public-import-and-alias-remain-available ()
@@ -775,7 +780,8 @@
       (regexp-quote "(consent reader)")
       (error-message-string error)))))
 
-(ert-deftest consent-library-test-agent-primitive-backing-import-denied-by-default ()
+(ert-deftest
+  consent-library-test-agent-primitive-backing-import-denied-by-default ()
   "Reject primitive backing libraries without internal posture."
   (let ((error
          (should-error
@@ -823,7 +829,8 @@
      '(:internal-libraries-allowed t))
     "#t")))
 
-(ert-deftest consent-library-test-primitive-library-requires-provider-declaration ()
+(ert-deftest
+  consent-library-test-primitive-library-requires-provider-declaration ()
   "Reject primitive registration that relies only on implementation ids."
   (let* ((context (consent--new-eval-context nil))
          (environment (consent-make-base-environment))
@@ -901,7 +908,8 @@
                    '(reflection)))
     (should (equal (plist-get current-budget :capabilities) '()))))
 
-(ert-deftest consent-library-test-agent-reflect-materializes-from-declaration ()
+(ert-deftest consent-library-test-agent-reflect-materializes-from-declaration
+  ()
   "Use provider declarations and the reflect implementation resolver."
   (require 'consent-reflect)
   (let* ((context (consent--new-eval-context nil))
@@ -927,12 +935,14 @@
       (should (member "library-info" exports))
       (should (memq 'primitive-current-budget resolved)))))
 
-(ert-deftest consent-library-test-agent-reflect-retires-legacy-primitive-specs ()
+(ert-deftest consent-library-test-agent-reflect-retires-legacy-primitive-specs
+  ()
   "Do not keep a second source of truth for `(agent reflect)' primitives."
   (require 'consent-reflect)
   (should-not (fboundp 'consent-reflect-primitive-specs)))
 
-(ert-deftest consent-library-test-primitive-libraries-declare-provider-exports ()
+(ert-deftest consent-library-test-primitive-libraries-declare-provider-exports
+  ()
   "All built-in primitive libraries should be declared by their providers."
   (let (missing)
     (dolist (entry (consent--library-collection-manifest-entries))
@@ -978,7 +988,8 @@
        :type 'consent-eval-error)
       (should-error
        (consent--primitive-library-register-declaration
-        (consent-library-test--primitive-declaration-entry nil 'other-provider))
+        (consent-library-test--primitive-declaration-entry nil
+          'other-provider))
        :type 'consent-eval-error)
       (should
        (consent--primitive-library-register-declaration
@@ -1181,7 +1192,8 @@
       (list documents)
     (consent--proper-list-elements documents "local reference documents")))
 
-(ert-deftest consent-library-test-stdlib-manifests-link-local-reference-documents ()
+(ert-deftest
+  consent-library-test-stdlib-manifests-link-local-reference-documents ()
   "Link external stdlib entries to manifest-relative local references."
   (let (missing)
     (dolist (key consent-library-test--stdlib-external-reference-entries)
@@ -1206,7 +1218,8 @@
                 (push (format "%s reference file is absolute: %s" key path)
                       missing))
                ((string-match-p "\\`\\(?:docs\\|scheme\\)/" path)
-                (push (format "%s reference file is repo-relative: %s" key path)
+                (push (format "%s reference file is repo-relative: %s" key
+                  path)
                       missing))
                ((not (file-exists-p
                       (expand-file-name
@@ -1237,7 +1250,8 @@
                                        "srfi-[0-9]+\\.html\\'")))
     (should html-paths)
     (dolist (html-path html-paths)
-      (let* ((markdown-path (concat (file-name-sans-extension html-path) ".md"))
+      (let* ((markdown-path (concat (file-name-sans-extension html-path)
+        ".md"))
              (relative-html (file-relative-name html-path reference-directory))
              (relative-markdown
               (file-relative-name markdown-path reference-directory))
@@ -1289,7 +1303,8 @@
                             (format "exports for %s" library))))))))
     (should omitted-pure-alias)))
 
-(ert-deftest consent-library-test-pure-alias-manifest-inherits-target-exports ()
+(ert-deftest consent-library-test-pure-alias-manifest-inherits-target-exports
+  ()
   "Treat a pure alias without manifest exports as the target's full surface."
   (let ((entry
          (consent--library-collection-manifest-entry "(consent json)")))
@@ -1310,7 +1325,8 @@
          (consent--library-collection-manifest-entry
           "(agent memory primitive)"))
         (alias (consent--library-collection-manifest-entry "(consent json)"))
-        (index (consent--library-collection-manifest-entry "(manifest index)")))
+        (index (consent--library-collection-manifest-entry
+          "(manifest index)")))
     (should (= (plist-get task :schema-version) 1))
     (should (eq (plist-get task :kind) 'library))
     (should (eq (plist-get task :owner) 'agent))
@@ -1457,8 +1473,10 @@
           "42")))
     (consent--library-catalog-remove-manifest 'resolver-alias-fixture)))
 
-(ert-deftest consent-library-test-load-light-avoids-agent-implementation-requires ()
-  "Keep manifest aggregation from requiring agent implementations at module load."
+(ert-deftest
+  consent-library-test-load-light-avoids-agent-implementation-requires ()
+  "Keep manifest aggregation from requiring agent implementations at module\
+ load."
   (let ((source
          (with-temp-buffer
            (insert-file-contents
@@ -1942,7 +1960,8 @@
       (regexp-quote "srfi-261-binding")
       (error-message-string error)))))
 
-(ert-deftest consent-library-test-srfi-261-aliases-cover-supported-srfi-libraries ()
+(ert-deftest
+  consent-library-test-srfi-261-aliases-cover-supported-srfi-libraries ()
   "Require SRFI 261 portable aliases for every supported numeric SRFI."
   (let ((checked 0))
     (dolist (entry (consent--library-collection-manifest-entries))
@@ -1959,7 +1978,8 @@
                 (should (equal (plist-get alias-entry :target) target))))))
     (should (> checked 0))))
 
-(ert-deftest consent-library-test-srfi-261-pure-library-predicate-resolves-aliases ()
+(ert-deftest
+  consent-library-test-srfi-261-pure-library-predicate-resolves-aliases ()
   "Classify SRFI 261 pure libraries by resolved implementation entries."
   (should
    (consent-library-test--srfi-261-pure-library-entry-p
@@ -1971,7 +1991,8 @@
    (consent-library-test--srfi-261-pure-library-entry-p
     (consent--library-catalog-lookup "(srfi 97)"))))
 
-(ert-deftest consent-library-test-srfi-261-omitted-srfis-are-not-plain-libraries ()
+(ert-deftest
+  consent-library-test-srfi-261-omitted-srfis-are-not-plain-libraries ()
   "Require SRFI 261 omitted SRFIs to avoid plain binding-library manifests."
   (let ((checked 0))
     (dolist (number consent-library-test--srfi-261-omitted-srfis)
@@ -2489,7 +2510,8 @@
                      '(stdlib testing))))")
     "#t")))
 
-(ert-deftest consent-library-test-srfi-27-imports-and-generates-random-values ()
+(ert-deftest consent-library-test-srfi-27-imports-and-generates-random-values
+  ()
   "Import SRFI 27 aliases and exercise representative random-source behavior."
   (should
    (equal
@@ -2561,7 +2583,8 @@
             (random-source-randomize! (make-random-source))")
           :type 'consent-eval-error)))
     (should
-     (string-match-p "no active clock grant covers request" (cadr condition)))))
+     (string-match-p "no active clock grant covers request" (cadr
+       condition)))))
 
 (ert-deftest consent-library-test-srfi-27-randomize-uses-clock-grant ()
   "Allow SRFI 27 entropy randomization when a clock grant is present."
@@ -2625,7 +2648,8 @@
               (real? normal)))")
     "(5 #t #t)")))
 
-(ert-deftest consent-library-test-stdlib-manifest-documents-random-distributions ()
+(ert-deftest
+  consent-library-test-stdlib-manifest-documents-random-distributions ()
   "Expose random distribution helper status through the stdlib manifest."
   (should
    (equal
@@ -2655,7 +2679,8 @@
              (eq? (manifest-subfield entry 'provenance 'vendored?) #f)))")
     "#t")))
 
-(ert-deftest consent-library-test-srfi-194-imports-and-uses-random-data-generators ()
+(ert-deftest
+  consent-library-test-srfi-194-imports-and-uses-random-data-generators ()
   "Import SRFI 194 aliases and exercise representative generator behavior."
   (should
    (equal
@@ -2963,7 +2988,7 @@
               '(adapted-tests
                 (file \"tests/scheme/stdlib-eager-comprehensions-test.scm\")
                 (file
-                 \"tests/scheme/stdlib-eager-comprehensions-upstream-test.scm\"))
+ \"tests/scheme/stdlib-eager-comprehensions-upstream-test.scm\"))
               (manifest-subfield entry 'provenance 'local-patches))
              (equal? (manifest-field entry 'aliases)
                      '((srfi 42)
@@ -3072,7 +3097,7 @@
               '(adapted-tests
                 (file \"tests/scheme/stdlib-lightweight-testing-test.scm\")
                 (file
-                 \"tests/scheme/stdlib-lightweight-testing-upstream-test.scm\"))
+ \"tests/scheme/stdlib-lightweight-testing-upstream-test.scm\"))
               (manifest-subfield entry 'provenance 'local-patches))
              (equal? (manifest-field entry 'aliases)
                      '((srfi 78)
@@ -3193,7 +3218,8 @@
                even
                odd
                (lset-union = '(1 2) '(2 3 4)))))")
-    "((0 1 2 3) (0 1 4) ((a b) (c d)) (2 4) (11 22 33) 10 (4 6) #t #t 2 (\"bee\") (2 4) (1 3 5) (4 3 1 2))")))
+    "((0 1 2 3) (0 1 4) ((a b) (c d)) (2 4) (11 22 33) 10 (4 6) #t #t 2\
+ (\"bee\") (2 4) (1 3 5) (4 3 1 2))")))
 
 (ert-deftest consent-library-test-srfi-1-alias-import ()
   "Import SRFI 1 through its secondary `(srfi 1)' alias."
@@ -3369,7 +3395,8 @@
     "#t")))
 
 (ert-deftest consent-library-test-stdlib-rbtree-import ()
-  "Import internal `(stdlib rbtree)' and exercise representative tree behavior."
+  "Import internal `(stdlib rbtree)' and exercise representative tree\
+ behavior."
   (should
    (equal
     (consent-library-test--external
@@ -3482,7 +3509,8 @@
              (mapping-intersection
               updated
               (mapping integer-comparator 2 'TWO 4 'four 9 'nine))))")
-    "(#t 3 two ((1 . one) (2 . TWO) (3 . three) (4 . four)) (1 2 3 4) (one TWO three four) 1 4 2 4 ((3 . three) (4 . four)) missing 2)")))
+    "(#t 3 two ((1 . one) (2 . TWO) (3 . three) (4 . four)) (1 2 3 4) (one TWO\
+ three four) 1 4 2 4 ((3 . three) (4 . four)) missing 2)")))
 
 (ert-deftest consent-library-test-srfi-146-alias-import ()
   "Import SRFI 146 through its secondary `(srfi 146)' alias."
@@ -3512,7 +3540,8 @@
     "((1 . one) (2 . two))")))
 
 (ert-deftest consent-library-test-srfi-146-aliases-export-same-core-surface ()
-  "Keep `(scheme mapping)' and SRFI 146 aliases on the same ordered-map surface."
+  "Keep `(scheme mapping)' and SRFI 146 aliases on the same ordered-map\
+ surface."
   (should
    (equal
     (consent-library-test--external
@@ -3645,7 +3674,8 @@
                      '(scheme base))))")
     "#t")))
 
-(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-261-reference-shim ()
+(ert-deftest
+  consent-library-test-stdlib-manifest-documents-srfi-261-reference-shim ()
   "Expose SRFI 261 reference-name shim status through the stdlib manifest."
   (should
    (equal
@@ -3734,7 +3764,8 @@
                 (should (equal (plist-get alias-entry :target) target))))))))
     (should (> checked 0))))
 
-(ert-deftest consent-library-test-vendored-srfi-records-cover-intake-contract ()
+(ert-deftest consent-library-test-vendored-srfi-records-cover-intake-contract
+  ()
   "Expose SRFI bundle intake metadata as Scheme-readable records."
   (let ((vendored (consent-library-test--vendored-srfi-record 1))
         (testing (consent-library-test--vendored-srfi-record 64))
@@ -3765,7 +3796,8 @@
                    "vendored-adapted-implementation"))
     (should (equal (consent-library-test--record-field
                     vendored 'source-url)
-                   "https://github.com/scheme-requests-for-implementation/srfi-1"))
+                   (concat "https://github.com/"
+                           "scheme-requests-for-implementation/srfi-1")))
     (should (equal (consent-library-test--record-field
                     vendored 'license)
                    "MIT"))
@@ -3818,7 +3850,8 @@
                    "vendored-library"))
     (should (equal (consent-library-test--record-field
                     testing 'source-url)
-                   "https://github.com/scheme-requests-for-implementation/srfi-64"))
+                   (concat "https://github.com/"
+                           "scheme-requests-for-implementation/srfi-64")))
     (should (member "(srfi 64)"
                     (mapcar #'consent-datum->external
                             (consent-library-test--record-field
@@ -3919,7 +3952,8 @@
                    "vendored-adapted-implementation"))
     (should (equal (consent-library-test--record-field
                     random-bits 'source-url)
-                   "https://github.com/scheme-requests-for-implementation/srfi-27"))
+                   (concat "https://github.com/"
+                           "scheme-requests-for-implementation/srfi-27")))
     (should (equal (consent-library-test--record-field
                     random-bits 'license)
                    "MIT"))
@@ -3977,7 +4011,8 @@
                    "vendored-adapted-implementation"))
     (should (equal (consent-library-test--record-field
                     random-data 'source-url)
-                   "https://github.com/scheme-requests-for-implementation/srfi-194"))
+                   (concat "https://github.com/"
+                           "scheme-requests-for-implementation/srfi-194")))
     (should (equal (consent-library-test--record-field
                     random-data 'license)
                    "MIT"))
@@ -4035,7 +4070,8 @@
                    "vendored-adapted-implementation"))
     (should (equal (consent-library-test--record-field
                     property-testing 'source-url)
-                   "https://github.com/scheme-requests-for-implementation/srfi-252"))
+                   (concat "https://github.com/"
+                           "scheme-requests-for-implementation/srfi-252")))
     (should (equal (consent-library-test--record-field
                     property-testing 'license)
                    "MIT"))
@@ -4179,7 +4215,8 @@
                     missing 'reason)
                    "missing-srfi"))))
 
-(ert-deftest consent-library-test-dependency-solve-reports-missing-dependency ()
+(ert-deftest consent-library-test-dependency-solve-reports-missing-dependency
+  ()
   "Report an unsatisfied dependency instead of returning a false solution."
   (unwind-protect
       (progn

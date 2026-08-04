@@ -84,7 +84,7 @@
 ;;;; Switching the default session redirects subsequent forms, with isolation
 
 ;; `(define marker ...)' lands in whichever session is current when the form
-;; runs.  A fresh session is its own sandbox, so the verbs must be imported into
+;; runs. A fresh session is its own sandbox, so the verbs must be imported into
 ;; each session that uses them; switching back proves the two sessions keep
 ;; independent environments.
 (testing-registry-case
@@ -129,7 +129,8 @@
          "(set-default-session! 'project-main)\n"
          "y\n"))))
   (let ((results (records-of records 'repl-result)))
-    (test-equal 'set-default-redirects "70" (field (list-ref results 6) 'display))
+    (test-equal 'set-default-redirects "70" (field (list-ref results 6)
+      'display))
     (test-equal 'set-default-back "7" (field (list-ref results 8) 'display)))))
 
 ;;;; The verbs return Scheme-readable records and emit audit entries
@@ -171,7 +172,8 @@
 
 ;;;; The verbs fail closed without window-session authority
 
-;; Without the grant, create-session denies fail-closed: the form is reported as
+;; Without the grant, create-session denies fail-closed: the form is reported
+;; as
 ;; a recoverable evaluator condition (a Scheme-readable error record) and the
 ;; session keeps running.
 (testing-registry-case
@@ -182,7 +184,8 @@
          "(import (agent session))\n"
          "(create-session 'named '((id denied-a)))\n"
          "(+ 1 1)\n"))))
-  (test-equal 'deny-create-emits-condition 1 (count-of records 'repl-condition))
+  (test-equal 'deny-create-emits-condition 1 (count-of records
+    'repl-condition))
   (let ((condition (car (records-of records 'repl-condition))))
     (test-equal 'deny-create-phase 'eval (field condition 'phase)))
   ;; The session continues: the trailing arithmetic (the last result, after the
@@ -200,7 +203,8 @@
         (string-append
          "(import (agent session))\n"
          "(switch-session 'project-main)\n"))))
-  (test-equal 'deny-switch-emits-condition 1 (count-of records 'repl-condition))))
+  (test-equal 'deny-switch-emits-condition 1 (count-of records
+    'repl-condition))))
 
 ;;;; close-session retires a session and returns its record
 

@@ -1,4 +1,4 @@
-;;; consent-native-cli-daemon-doc-test.el --- Native CLI daemon contract doc checks  -*- lexical-binding: t; -*-
+;;; consent-native-cli-daemon-doc-test.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

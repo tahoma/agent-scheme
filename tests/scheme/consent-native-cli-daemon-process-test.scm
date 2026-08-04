@@ -2,17 +2,23 @@
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; This program is the `(process-boundary-suite native-cli)' lane running on the
-;;; portable Consent Scheme runtime.  It runs under every R7RS host shard, drives
+;;; This program is the `(process-boundary-suite native-cli)' lane running on
+;;; the
+;;; portable Consent Scheme runtime. It runs under every R7RS host shard,
+;;; drives
 ;;; the host-neutral adapter (cli native-cli), and -- on hosts whose process
-;;; module is available -- spawns, streams, waits for, signals, and reaps a real
-;;; child process through (cli process-host).  It asserts the same Scheme-readable
+;;; module is available -- spawns, streams, waits for, signals, and reaps a
+;;; real
+;;; child process through (cli process-host). It asserts the same
+;;; Scheme-readable
 ;;; boundary records the portable validator and the Emacs lanes use, so the
 ;;; non-Emacs hosts reach parity with the Emacs bootstrap.
 ;;;
-;;; Host-neutral checks -- record shape, fail-closed denials, vocabulary, and the
+;;; Host-neutral checks -- record shape, fail-closed denials, vocabulary, and
+;;; the
 ;;; interpreted/compiled record-shape alignment -- always run.  The real-spawn
-;;; checks run only when `cli-host-available?' is true; a host without a process
+;;; checks run only when `cli-host-available?' is true; a host without a
+;;; process
 ;;; module reports an explicit, non-silent skip and still validates the rest.
 
 (import (scheme base)
@@ -28,7 +34,8 @@
 
 ;;;; Datum navigation over the live record lists returned by execute
 
-;; Return RECORD's field forms, treating a leading sub-list as a headless record.
+;; Return RECORD's field forms, treating a leading sub-list as a headless
+;; record.
 (define (record-fields record)
   (if (pair? (car record)) record (cdr record)))
 
@@ -99,7 +106,8 @@
  'batch-deny-exit '(portable core)
 (let ((outcome (cli-native-cli-execute
                 '((subcommand . "process-run") (mode . "batch")
-                  (command . "/bin/echo") (child-arguments "should-not-run")))))
+                  (command . "/bin/echo") (child-arguments
+                    "should-not-run")))))
   (test-equal 'batch-deny-exit 3 (outcome-exit outcome))
   (let ((decision (record-of (outcome-records outcome) 'capability-decision))
         (error-datum (record-of (outcome-records outcome) 'adapter-error)))
@@ -124,7 +132,8 @@
   (test-equal 'stdin-deny-exit 3 (outcome-exit outcome))
   (test-equal 'stdin-deny-kind
              'noninteractive-confirmation-unavailable
-             (field-value (record-of (outcome-records outcome) 'adapter-error) 'kind))
+             (field-value (record-of (outcome-records outcome) 'adapter-error)
+               'kind))
   (test-equal 'stdin-deny-no-result
              #f
              (record-of (outcome-records outcome) 'adapter-result))))
@@ -141,7 +150,8 @@
     (test-equal 'stale-kind 'stale-handle (field-value error-datum 'kind))
     (test-equal 'stale-handle 'h-job-42 (field-value error-datum 'handle))
     (test-assert 'stale-condition condition)
-    (test-equal 'stale-condition-kind 'stale-handle (field-value condition 'kind))
+    (test-equal 'stale-condition-kind 'stale-handle (field-value condition
+      'kind))
     (test-equal 'stale-no-result
              #f
              (record-of (outcome-records outcome) 'adapter-result)))))
@@ -156,7 +166,8 @@
        (denial (cli-native-cli-execute
                 '((subcommand . "process-run") (mode . "batch")
                   (command . "/bin/echo") (child-arguments "x")))))
-  ;; Every emitted event kind and the denial error kind are declared vocabulary.
+  ;; Every emitted event kind and the denial error kind are declared
+  ;; vocabulary.
   (for-each
    (lambda (record)
      (if (eq? (car record) 'adapter-event)
@@ -190,7 +201,8 @@
   (test-equal 'compiled-execution
              'compiled
              (field-value compiled-result 'execution))
-  ;; The decision and request records are identical across execution strategies.
+  ;; The decision and request records are identical across execution
+  ;; strategies.
   (test-equal 'request-shape-aligned
              (record-of (outcome-records compiled) 'capability-request)
              (record-of (outcome-records interpreted) 'capability-request))
@@ -198,7 +210,8 @@
              (record-of (outcome-records compiled) 'capability-decision)
              (record-of (outcome-records interpreted) 'capability-decision))))
 
-;;;; Real process-boundary checks (only when a host process module is available)
+;;;; Real process-boundary checks (only when a host process module is
+;;;; available)
 
 (testing-registry-case
  'run-exit '(portable core)
@@ -269,7 +282,8 @@
              "portable-stdin-payload"
              (field-value (event-of-kind (outcome-records outcome) 'stdout)
                               'payload))
-          ;; The prompt is returned for the diagnostic stream, separate from the
+          ;; The prompt is returned for the diagnostic stream, separate from
+          ;; the
           ;; child's stdin port, which delivered the full payload above.
           (test-assert 'stdin-prompt-present
              (pair? (outcome-prompts outcome))))
@@ -288,7 +302,8 @@
       (let ((outcome (cli-native-cli-execute
                       (list '(subcommand . "process-run") '(mode . "batch")
                             '(approval . #t) '(command . "/bin/sh")
-                            '(child-arguments "-c" "printf %s \"$CONSENT_GRANT\"")
+                            '(child-arguments "-c"
+                              "printf %s \"$CONSENT_GRANT\"")
                             (list 'environment
                                   (cons "CONSENT_GRANT" "granted-value"))))))
         (test-equal 'environment-grant
@@ -314,4 +329,5 @@
 
 ;;;; Report
 
-(testing-runner-main "Consent Native Cli Daemon Process portable tests" (command-line))
+(testing-runner-main "Consent Native Cli Daemon Process portable tests"
+  (command-line))
