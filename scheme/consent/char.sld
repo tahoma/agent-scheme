@@ -33,53 +33,14 @@
   (import (scheme base)
           (consent unicode-data))
   (begin
-    (define (range-table-contains? table code)
-      "Return #t when CODE occurs in flat inclusive-range TABLE."
-      (let loop ((lower 0)
-                 (upper (- (quotient (vector-length table) 2) 1)))
-        (if (> lower upper)
-            #f
-            (let* ((middle (quotient (+ lower upper) 2))
-                   (index (* middle 2))
-                   (range-lower (vector-ref table index))
-                   (range-upper (vector-ref table (+ index 1))))
-              (cond
-               ((< code range-lower) (loop lower (- middle 1)))
-               ((> code range-upper) (loop (+ middle 1) upper))
-               (else #t))))))
-
-    (define (flat-mapping-ref table code)
-      "Return CODE's value in flat sorted TABLE, or #f."
-      (let loop ((lower 0)
-                 (upper (- (quotient (vector-length table) 2) 1)))
-        (if (> lower upper)
-            #f
-            (let* ((middle (quotient (+ lower upper) 2))
-                   (index (* middle 2))
-                   (source (vector-ref table index)))
-              (cond
-               ((< code source) (loop lower (- middle 1)))
-               ((> code source) (loop (+ middle 1) upper))
-               (else (vector-ref table (+ index 1))))))))
-
-    (define (full-mapping-ref table code)
-      "Return CODE's entry vector in sorted full-mapping TABLE, or #f."
-      (let loop ((lower 0) (upper (- (vector-length table) 1)))
-        (if (> lower upper)
-            #f
-            (let* ((middle (quotient (+ lower upper) 2))
-                   (entry (vector-ref table middle))
-                   (source (vector-ref entry 0)))
-              (cond
-               ((< code source) (loop lower (- middle 1)))
-               ((> code source) (loop (+ middle 1) upper))
-               (else entry))))))
-
-    (define (simple-character-map table character)
-      "Return CHARACTER mapped through flat simple-mapping TABLE."
-      (let* ((code (char->integer character))
-             (mapped (flat-mapping-ref table code)))
-        (if mapped (integer->char mapped) character)))
+    (define (simple-character-map mapper character lower upper offset)
+      "Return CHARACTER's ASCII or generated simple mapping."
+      (let ((code (char->integer character)))
+        (cond
+         ((< code lower) character)
+         ((<= code upper) (integer->char (+ code offset)))
+         ((< code #x80) character)
+         (else (integer->char (mapper code))))))
 
     (define (char-upper-case? character)
       "Report whether CHARACTER has the owned Unicode Uppercase property."
@@ -88,8 +49,12 @@
         (returns (type boolean) (description
           "Whether CHARACTER is uppercase."))
         (effects pure))
-      (range-table-contains? consent-unicode-uppercase-ranges
-                             (char->integer character)))
+      (let ((code (char->integer character)))
+        (cond
+         ((< code #x41) #f)
+         ((<= code #x5a) #t)
+         ((< code #x80) #f)
+         (else (consent-unicode-uppercase? code)))))
 
     (define (char-lower-case? character)
       "Report whether CHARACTER has the owned Unicode Lowercase property."
@@ -98,8 +63,12 @@
         (returns (type boolean) (description
           "Whether CHARACTER is lowercase."))
         (effects pure))
-      (range-table-contains? consent-unicode-lowercase-ranges
-                             (char->integer character)))
+      (let ((code (char->integer character)))
+        (cond
+         ((< code #x61) #f)
+         ((<= code #x7a) #t)
+         ((< code #x80) #f)
+         (else (consent-unicode-lowercase? code)))))
 
     (define (char-alphabetic? character)
       "Report whether CHARACTER has the owned Unicode Alphabetic property."
@@ -108,8 +77,14 @@
         (returns (type boolean)
          (description "Whether CHARACTER has the Alphabetic property."))
         (effects pure))
-      (range-table-contains? consent-unicode-alphabetic-ranges
-                             (char->integer character)))
+      (let ((code (char->integer character)))
+        (cond
+         ((< code #x41) #f)
+         ((<= code #x5a) #t)
+         ((< code #x61) #f)
+         ((<= code #x7a) #t)
+         ((< code #x80) #f)
+         (else (consent-unicode-alphabetic? code)))))
 
     (define (digit-value character)
       "Return CHARACTER's owned decimal digit value, or #f."
@@ -118,8 +93,12 @@
         (returns (type (or exact-integer boolean))
          (description "Decimal value from zero through nine, or #f."))
         (effects pure))
-      (flat-mapping-ref consent-unicode-decimal-values
-                        (char->integer character)))
+      (let ((code (char->integer character)))
+        (cond
+         ((< code #x30) #f)
+         ((<= code #x39) (- code #x30))
+         ((< code #x80) #f)
+         (else (consent-unicode-decimal-value code)))))
 
     (define (char-numeric? character)
       "Report whether CHARACTER has Numeric_Type=Decimal in this profile."
@@ -137,8 +116,14 @@
         (returns (type boolean) (description
           "Whether CHARACTER is whitespace."))
         (effects pure))
-      (range-table-contains? consent-unicode-whitespace-ranges
-                             (char->integer character)))
+      (let ((code (char->integer character)))
+        (cond
+         ((< code #x09) #f)
+         ((<= code #x0d) #t)
+         ((< code #x20) #f)
+         ((= code #x20) #t)
+         ((< code #x80) #f)
+         (else (consent-unicode-whitespace? code)))))
 
     (define (char-upcase character)
       "Return CHARACTER's owned simple uppercase mapping."
@@ -146,8 +131,8 @@
          (character (type character) (description "Character to map.")))
         (returns (type character) (description "Simple uppercase character."))
         (effects pure))
-      (simple-character-map consent-unicode-simple-uppercase-mappings
-                            character))
+      (simple-character-map consent-unicode-simple-uppercase
+                            character #x61 #x7a -32))
 
     (define (char-downcase character)
       "Return CHARACTER's owned simple lowercase mapping."
@@ -155,8 +140,8 @@
          (character (type character) (description "Character to map.")))
         (returns (type character) (description "Simple lowercase character."))
         (effects pure))
-      (simple-character-map consent-unicode-simple-lowercase-mappings
-                            character))
+      (simple-character-map consent-unicode-simple-lowercase
+                            character #x41 #x5a 32))
 
     (define (char-foldcase character)
       "Return CHARACTER's owned Unicode simple case-folding mapping."
@@ -164,8 +149,8 @@
          (character (type character) (description "Character to fold.")))
         (returns (type character) (description "Simple foldcase character."))
         (effects pure))
-      (simple-character-map consent-unicode-simple-foldcase-mappings
-                            character))
+      (simple-character-map consent-unicode-simple-foldcase
+                            character #x41 #x5a 32))
 
     (define (folded-char-compare predicate first second rest)
       "Compare FIRST, SECOND, and REST after owned character foldcase."
@@ -231,32 +216,29 @@
         (effects pure))
       (folded-char-compare >= first second rest))
 
-    (define (full-mapping-characters table character)
-      "Return CHARACTER's full TABLE mapping as a character list."
-      (let ((entry (full-mapping-ref table (char->integer character))))
-        (if (not entry)
-            (list character)
-            (let loop ((index (- (vector-length entry) 1)) (result '()))
-              (if (= index 0)
-                  result
-                  (loop (- index 1)
-                        (cons (integer->char (vector-ref entry index))
-                              result)))))))
+    (define (full-mapping-characters mapper character lower upper offset)
+      "Return CHARACTER's ASCII or generated full mapping list."
+      (let ((code (char->integer character)))
+        (cond
+         ((< code lower) (list character))
+         ((<= code upper) (list (integer->char (+ code offset))))
+         ((< code #x80) (list character))
+         (else (map integer->char (mapper code))))))
 
     (define (full-upcase-characters character)
       "Return CHARACTER's generated full uppercase mapping as a list."
-      (full-mapping-characters consent-unicode-full-uppercase-mappings
-                               character))
+      (full-mapping-characters
+       consent-unicode-full-uppercase character #x61 #x7a -32))
 
     (define (full-downcase-characters character)
       "Return CHARACTER's generated full lowercase mapping as a list."
-      (full-mapping-characters consent-unicode-full-lowercase-mappings
-                               character))
+      (full-mapping-characters
+       consent-unicode-full-lowercase character #x41 #x5a 32))
 
     (define (full-foldcase-characters character)
       "Return CHARACTER's generated full case-fold mapping as a list."
-      (full-mapping-characters consent-unicode-full-foldcase-mappings
-                               character))
+      (full-mapping-characters
+       consent-unicode-full-foldcase character #x41 #x5a 32))
 
     (define (string-case-map string mapper)
       "Return STRING transformed by MAPPER's full character mappings."

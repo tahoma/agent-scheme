@@ -9,24 +9,25 @@
 (define-library (consent unicode-data)
   (export consent-unicode-data-version
           consent-unicode-data-metadata
-          consent-unicode-alphabetic-ranges
-          consent-unicode-uppercase-ranges
-          consent-unicode-lowercase-ranges
-          consent-unicode-whitespace-ranges
-          consent-unicode-decimal-values
-          consent-unicode-simple-uppercase-mappings
-          consent-unicode-simple-lowercase-mappings
-          consent-unicode-simple-foldcase-mappings
-          consent-unicode-full-uppercase-mappings
-          consent-unicode-full-lowercase-mappings
-          consent-unicode-full-foldcase-mappings)
+          consent-unicode-data-counts
+          consent-unicode-alphabetic?
+          consent-unicode-uppercase?
+          consent-unicode-lowercase?
+          consent-unicode-whitespace?
+          consent-unicode-decimal-value
+          consent-unicode-simple-uppercase
+          consent-unicode-simple-lowercase
+          consent-unicode-simple-foldcase
+          consent-unicode-full-uppercase
+          consent-unicode-full-lowercase
+          consent-unicode-full-foldcase)
   (import (scheme base))
   (begin
     ;; Record the supported Unicode release as a Scheme datum.
-    (define consent-unicode-data-version '(17 0 0))
+    (define %unicode-data-version '(17 0 0))
 
     ;; Record the version, license, sources, and fallback policy.
-    (define consent-unicode-data-metadata
+    (define %unicode-data-metadata
       '((unicode-version "17.0.0")
         (source unicode-character-database)
         (license Unicode-3.0)
@@ -52,167 +53,245 @@
            "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c"))
          )))
 
-    ;; Inclusive ranges carrying the Unicode Alphabetic property.
-    (define consent-unicode-alphabetic-ranges
-      #(
-        #x41 #x5a #x61 #x7a #xaa #xaa #xb5 #xb5 #xba #xba #xc0 #xd6 #xd8 #xf6
-        #xf8 #x2c1 #x2c6 #x2d1 #x2e0 #x2e4 #x2ec #x2ec #x2ee #x2ee #x345 #x345
-        #x363 #x374 #x376 #x377 #x37a #x37d #x37f #x37f #x386 #x386 #x388 #x38a
-        #x38c #x38c #x38e #x3a1 #x3a3 #x3f5 #x3f7 #x481 #x48a #x52f #x531 #x556
-        #x559 #x559 #x560 #x588 #x5b0 #x5bd #x5bf #x5bf #x5c1 #x5c2 #x5c4 #x5c5
-        #x5c7 #x5c7 #x5d0 #x5ea #x5ef #x5f2 #x610 #x61a #x620 #x657 #x659 #x65f
-        #x66e #x6d3 #x6d5 #x6dc #x6e1 #x6e8 #x6ed #x6ef #x6fa #x6fc #x6ff #x6ff
-        #x710 #x73f #x74d #x7b1 #x7ca #x7ea #x7f4 #x7f5 #x7fa #x7fa #x800 #x817
-        #x81a #x82c #x840 #x858 #x860 #x86a #x870 #x887 #x889 #x88f #x897 #x897
-        #x8a0 #x8c9 #x8d4 #x8df #x8e3 #x8e9 #x8f0 #x93b #x93d #x94c #x94e #x950
-        #x955 #x963 #x971 #x983 #x985 #x98c #x98f #x990 #x993 #x9a8 #x9aa #x9b0
-        #x9b2 #x9b2 #x9b6 #x9b9 #x9bd #x9c4 #x9c7 #x9c8 #x9cb #x9cc #x9ce #x9ce
-        #x9d7 #x9d7 #x9dc #x9dd #x9df #x9e3 #x9f0 #x9f1 #x9fc #x9fc #xa01 #xa03
-        #xa05 #xa0a #xa0f #xa10 #xa13 #xa28 #xa2a #xa30 #xa32 #xa33 #xa35 #xa36
-        #xa38 #xa39 #xa3e #xa42 #xa47 #xa48 #xa4b #xa4c #xa51 #xa51 #xa59 #xa5c
-        #xa5e #xa5e #xa70 #xa75 #xa81 #xa83 #xa85 #xa8d #xa8f #xa91 #xa93 #xaa8
-        #xaaa #xab0 #xab2 #xab3 #xab5 #xab9 #xabd #xac5 #xac7 #xac9 #xacb #xacc
-        #xad0 #xad0 #xae0 #xae3 #xaf9 #xafc #xb01 #xb03 #xb05 #xb0c #xb0f #xb10
-        #xb13 #xb28 #xb2a #xb30 #xb32 #xb33 #xb35 #xb39 #xb3d #xb44 #xb47 #xb48
-        #xb4b #xb4c #xb56 #xb57 #xb5c #xb5d #xb5f #xb63 #xb71 #xb71 #xb82 #xb83
-        #xb85 #xb8a #xb8e #xb90 #xb92 #xb95 #xb99 #xb9a #xb9c #xb9c #xb9e #xb9f
-        #xba3 #xba4 #xba8 #xbaa #xbae #xbb9 #xbbe #xbc2 #xbc6 #xbc8 #xbca #xbcc
-        #xbd0 #xbd0 #xbd7 #xbd7 #xc00 #xc0c #xc0e #xc10 #xc12 #xc28 #xc2a #xc39
-        #xc3d #xc44 #xc46 #xc48 #xc4a #xc4c #xc55 #xc56 #xc58 #xc5a #xc5c #xc5d
-        #xc60 #xc63 #xc80 #xc83 #xc85 #xc8c #xc8e #xc90 #xc92 #xca8 #xcaa #xcb3
-        #xcb5 #xcb9 #xcbd #xcc4 #xcc6 #xcc8 #xcca #xccc #xcd5 #xcd6 #xcdc #xcde
-        #xce0 #xce3 #xcf1 #xcf3 #xd00 #xd0c #xd0e #xd10 #xd12 #xd3a #xd3d #xd44
-        #xd46 #xd48 #xd4a #xd4c #xd4e #xd4e #xd54 #xd57 #xd5f #xd63 #xd7a #xd7f
-        #xd81 #xd83 #xd85 #xd96 #xd9a #xdb1 #xdb3 #xdbb #xdbd #xdbd #xdc0 #xdc6
-        #xdcf #xdd4 #xdd6 #xdd6 #xdd8 #xddf #xdf2 #xdf3 #xe01 #xe3a #xe40 #xe46
-        #xe4d #xe4d #xe81 #xe82 #xe84 #xe84 #xe86 #xe8a #xe8c #xea3 #xea5 #xea5
-        #xea7 #xeb9 #xebb #xebd #xec0 #xec4 #xec6 #xec6 #xecd #xecd #xedc #xedf
-        #xf00 #xf00 #xf40 #xf47 #xf49 #xf6c #xf71 #xf83 #xf88 #xf97 #xf99 #xfbc
-        #x1000 #x1036 #x1038 #x1038 #x103b #x103f #x1050 #x108f #x109a #x109d
-        #x10a0 #x10c5 #x10c7 #x10c7 #x10cd #x10cd #x10d0 #x10fa #x10fc #x1248
-        #x124a #x124d #x1250 #x1256 #x1258 #x1258 #x125a #x125d #x1260 #x1288
-        #x128a #x128d #x1290 #x12b0 #x12b2 #x12b5 #x12b8 #x12be #x12c0 #x12c0
-        #x12c2 #x12c5 #x12c8 #x12d6 #x12d8 #x1310 #x1312 #x1315 #x1318 #x135a
-        #x1380 #x138f #x13a0 #x13f5 #x13f8 #x13fd #x1401 #x166c #x166f #x167f
-        #x1681 #x169a #x16a0 #x16ea #x16ee #x16f8 #x1700 #x1713 #x171f #x1733
-        #x1740 #x1753 #x1760 #x176c #x176e #x1770 #x1772 #x1773 #x1780 #x17b3
-        #x17b6 #x17c8 #x17d7 #x17d7 #x17dc #x17dc #x1820 #x1878 #x1880 #x18aa
-        #x18b0 #x18f5 #x1900 #x191e #x1920 #x192b #x1930 #x1938 #x1950 #x196d
-        #x1970 #x1974 #x1980 #x19ab #x19b0 #x19c9 #x1a00 #x1a1b #x1a20 #x1a5e
-        #x1a61 #x1a74 #x1aa7 #x1aa7 #x1abf #x1ac0 #x1acc #x1ace #x1b00 #x1b33
-        #x1b35 #x1b43 #x1b45 #x1b4c #x1b80 #x1ba9 #x1bac #x1baf #x1bba #x1be5
-        #x1be7 #x1bf1 #x1c00 #x1c36 #x1c4d #x1c4f #x1c5a #x1c7d #x1c80 #x1c8a
-        #x1c90 #x1cba #x1cbd #x1cbf #x1ce9 #x1cec #x1cee #x1cf3 #x1cf5 #x1cf6
-        #x1cfa #x1cfa #x1d00 #x1dbf #x1dd3 #x1df4 #x1e00 #x1f15 #x1f18 #x1f1d
-        #x1f20 #x1f45 #x1f48 #x1f4d #x1f50 #x1f57 #x1f59 #x1f59 #x1f5b #x1f5b
-        #x1f5d #x1f5d #x1f5f #x1f7d #x1f80 #x1fb4 #x1fb6 #x1fbc #x1fbe #x1fbe
-        #x1fc2 #x1fc4 #x1fc6 #x1fcc #x1fd0 #x1fd3 #x1fd6 #x1fdb #x1fe0 #x1fec
-        #x1ff2 #x1ff4 #x1ff6 #x1ffc #x2071 #x2071 #x207f #x207f #x2090 #x209c
-        #x2102 #x2102 #x2107 #x2107 #x210a #x2113 #x2115 #x2115 #x2119 #x211d
-        #x2124 #x2124 #x2126 #x2126 #x2128 #x2128 #x212a #x212d #x212f #x2139
-        #x213c #x213f #x2145 #x2149 #x214e #x214e #x2160 #x2188 #x24b6 #x24e9
-        #x2c00 #x2ce4 #x2ceb #x2cee #x2cf2 #x2cf3 #x2d00 #x2d25 #x2d27 #x2d27
-        #x2d2d #x2d2d #x2d30 #x2d67 #x2d6f #x2d6f #x2d80 #x2d96 #x2da0 #x2da6
-        #x2da8 #x2dae #x2db0 #x2db6 #x2db8 #x2dbe #x2dc0 #x2dc6 #x2dc8 #x2dce
-        #x2dd0 #x2dd6 #x2dd8 #x2dde #x2de0 #x2dff #x2e2f #x2e2f #x3005 #x3007
-        #x3021 #x3029 #x3031 #x3035 #x3038 #x303c #x3041 #x3096 #x309d #x309f
-        #x30a1 #x30fa #x30fc #x30ff #x3105 #x312f #x3131 #x318e #x31a0 #x31bf
-        #x31f0 #x31ff #x3400 #x4dbf #x4e00 #xa48c #xa4d0 #xa4fd #xa500 #xa60c
-        #xa610 #xa61f #xa62a #xa62b #xa640 #xa66e #xa674 #xa67b #xa67f #xa6ef
-        #xa717 #xa71f #xa722 #xa788 #xa78b #xa7dc #xa7f1 #xa805 #xa807 #xa827
-        #xa840 #xa873 #xa880 #xa8c3 #xa8c5 #xa8c5 #xa8f2 #xa8f7 #xa8fb #xa8fb
-        #xa8fd #xa8ff #xa90a #xa92a #xa930 #xa952 #xa960 #xa97c #xa980 #xa9b2
-        #xa9b4 #xa9bf #xa9cf #xa9cf #xa9e0 #xa9ef #xa9fa #xa9fe #xaa00 #xaa36
-        #xaa40 #xaa4d #xaa60 #xaa76 #xaa7a #xaabe #xaac0 #xaac0 #xaac2 #xaac2
-        #xaadb #xaadd #xaae0 #xaaef #xaaf2 #xaaf5 #xab01 #xab06 #xab09 #xab0e
-        #xab11 #xab16 #xab20 #xab26 #xab28 #xab2e #xab30 #xab5a #xab5c #xab69
-        #xab70 #xabea #xac00 #xd7a3 #xd7b0 #xd7c6 #xd7cb #xd7fb #xf900 #xfa6d
-        #xfa70 #xfad9 #xfb00 #xfb06 #xfb13 #xfb17 #xfb1d #xfb28 #xfb2a #xfb36
-        #xfb38 #xfb3c #xfb3e #xfb3e #xfb40 #xfb41 #xfb43 #xfb44 #xfb46 #xfbb1
-        #xfbd3 #xfd3d #xfd50 #xfd8f #xfd92 #xfdc7 #xfdf0 #xfdfb #xfe70 #xfe74
-        #xfe76 #xfefc #xff21 #xff3a #xff41 #xff5a #xff66 #xffbe #xffc2 #xffc7
-        #xffca #xffcf #xffd2 #xffd7 #xffda #xffdc #x10000 #x1000b #x1000d
-        #x10026 #x10028 #x1003a #x1003c #x1003d #x1003f #x1004d #x10050 #x1005d
-        #x10080 #x100fa #x10140 #x10174 #x10280 #x1029c #x102a0 #x102d0 #x10300
-        #x1031f #x1032d #x1034a #x10350 #x1037a #x10380 #x1039d #x103a0 #x103c3
-        #x103c8 #x103cf #x103d1 #x103d5 #x10400 #x1049d #x104b0 #x104d3 #x104d8
-        #x104fb #x10500 #x10527 #x10530 #x10563 #x10570 #x1057a #x1057c #x1058a
-        #x1058c #x10592 #x10594 #x10595 #x10597 #x105a1 #x105a3 #x105b1 #x105b3
-        #x105b9 #x105bb #x105bc #x105c0 #x105f3 #x10600 #x10736 #x10740 #x10755
-        #x10760 #x10767 #x10780 #x10785 #x10787 #x107b0 #x107b2 #x107ba #x10800
-        #x10805 #x10808 #x10808 #x1080a #x10835 #x10837 #x10838 #x1083c #x1083c
-        #x1083f #x10855 #x10860 #x10876 #x10880 #x1089e #x108e0 #x108f2 #x108f4
-        #x108f5 #x10900 #x10915 #x10920 #x10939 #x10940 #x10959 #x10980 #x109b7
-        #x109be #x109bf #x10a00 #x10a03 #x10a05 #x10a06 #x10a0c #x10a13 #x10a15
-        #x10a17 #x10a19 #x10a35 #x10a60 #x10a7c #x10a80 #x10a9c #x10ac0 #x10ac7
-        #x10ac9 #x10ae4 #x10b00 #x10b35 #x10b40 #x10b55 #x10b60 #x10b72 #x10b80
-        #x10b91 #x10c00 #x10c48 #x10c80 #x10cb2 #x10cc0 #x10cf2 #x10d00 #x10d27
-        #x10d4a #x10d65 #x10d69 #x10d69 #x10d6f #x10d85 #x10e80 #x10ea9 #x10eab
-        #x10eac #x10eb0 #x10eb1 #x10ec2 #x10ec7 #x10efa #x10efc #x10f00 #x10f1c
-        #x10f27 #x10f27 #x10f30 #x10f45 #x10f70 #x10f81 #x10fb0 #x10fc4 #x10fe0
-        #x10ff6 #x11000 #x11045 #x11071 #x11075 #x11080 #x110b8 #x110c2 #x110c2
-        #x110d0 #x110e8 #x11100 #x11132 #x11144 #x11147 #x11150 #x11172 #x11176
-        #x11176 #x11180 #x111bf #x111c1 #x111c4 #x111ce #x111cf #x111da #x111da
-        #x111dc #x111dc #x11200 #x11211 #x11213 #x11234 #x11237 #x11237 #x1123e
-        #x11241 #x11280 #x11286 #x11288 #x11288 #x1128a #x1128d #x1128f #x1129d
-        #x1129f #x112a8 #x112b0 #x112e8 #x11300 #x11303 #x11305 #x1130c #x1130f
-        #x11310 #x11313 #x11328 #x1132a #x11330 #x11332 #x11333 #x11335 #x11339
-        #x1133d #x11344 #x11347 #x11348 #x1134b #x1134c #x11350 #x11350 #x11357
-        #x11357 #x1135d #x11363 #x11380 #x11389 #x1138b #x1138b #x1138e #x1138e
-        #x11390 #x113b5 #x113b7 #x113c0 #x113c2 #x113c2 #x113c5 #x113c5 #x113c7
-        #x113ca #x113cc #x113cd #x113d1 #x113d1 #x113d3 #x113d3 #x11400 #x11441
-        #x11443 #x11445 #x11447 #x1144a #x1145f #x11461 #x11480 #x114c1 #x114c4
-        #x114c5 #x114c7 #x114c7 #x11580 #x115b5 #x115b8 #x115be #x115d8 #x115dd
-        #x11600 #x1163e #x11640 #x11640 #x11644 #x11644 #x11680 #x116b5 #x116b8
-        #x116b8 #x11700 #x1171a #x1171d #x1172a #x11740 #x11746 #x11800 #x11838
-        #x118a0 #x118df #x118ff #x11906 #x11909 #x11909 #x1190c #x11913 #x11915
-        #x11916 #x11918 #x11935 #x11937 #x11938 #x1193b #x1193c #x1193f #x11942
-        #x119a0 #x119a7 #x119aa #x119d7 #x119da #x119df #x119e1 #x119e1 #x119e3
-        #x119e4 #x11a00 #x11a32 #x11a35 #x11a3e #x11a50 #x11a97 #x11a9d #x11a9d
-        #x11ab0 #x11af8 #x11b60 #x11b67 #x11bc0 #x11be0 #x11c00 #x11c08 #x11c0a
-        #x11c36 #x11c38 #x11c3e #x11c40 #x11c40 #x11c72 #x11c8f #x11c92 #x11ca7
-        #x11ca9 #x11cb6 #x11d00 #x11d06 #x11d08 #x11d09 #x11d0b #x11d36 #x11d3a
-        #x11d3a #x11d3c #x11d3d #x11d3f #x11d41 #x11d43 #x11d43 #x11d46 #x11d47
-        #x11d60 #x11d65 #x11d67 #x11d68 #x11d6a #x11d8e #x11d90 #x11d91 #x11d93
-        #x11d96 #x11d98 #x11d98 #x11db0 #x11ddb #x11ee0 #x11ef6 #x11f00 #x11f10
-        #x11f12 #x11f3a #x11f3e #x11f40 #x11fb0 #x11fb0 #x12000 #x12399 #x12400
-        #x1246e #x12480 #x12543 #x12f90 #x12ff0 #x13000 #x1342f #x13441 #x13446
-        #x13460 #x143fa #x14400 #x14646 #x16100 #x1612e #x16800 #x16a38 #x16a40
-        #x16a5e #x16a70 #x16abe #x16ad0 #x16aed #x16b00 #x16b2f #x16b40 #x16b43
-        #x16b63 #x16b77 #x16b7d #x16b8f #x16d40 #x16d6c #x16e40 #x16e7f #x16ea0
-        #x16eb8 #x16ebb #x16ed3 #x16f00 #x16f4a #x16f4f #x16f87 #x16f8f #x16f9f
-        #x16fe0 #x16fe1 #x16fe3 #x16fe3 #x16ff0 #x16ff6 #x17000 #x18cd5 #x18cff
-        #x18d1e #x18d80 #x18df2 #x1aff0 #x1aff3 #x1aff5 #x1affb #x1affd #x1affe
-        #x1b000 #x1b122 #x1b132 #x1b132 #x1b150 #x1b152 #x1b155 #x1b155 #x1b164
-        #x1b167 #x1b170 #x1b2fb #x1bc00 #x1bc6a #x1bc70 #x1bc7c #x1bc80 #x1bc88
-        #x1bc90 #x1bc99 #x1bc9e #x1bc9e #x1d400 #x1d454 #x1d456 #x1d49c #x1d49e
-        #x1d49f #x1d4a2 #x1d4a2 #x1d4a5 #x1d4a6 #x1d4a9 #x1d4ac #x1d4ae #x1d4b9
-        #x1d4bb #x1d4bb #x1d4bd #x1d4c3 #x1d4c5 #x1d505 #x1d507 #x1d50a #x1d50d
-        #x1d514 #x1d516 #x1d51c #x1d51e #x1d539 #x1d53b #x1d53e #x1d540 #x1d544
-        #x1d546 #x1d546 #x1d54a #x1d550 #x1d552 #x1d6a5 #x1d6a8 #x1d6c0 #x1d6c2
-        #x1d6da #x1d6dc #x1d6fa #x1d6fc #x1d714 #x1d716 #x1d734 #x1d736 #x1d74e
-        #x1d750 #x1d76e #x1d770 #x1d788 #x1d78a #x1d7a8 #x1d7aa #x1d7c2 #x1d7c4
-        #x1d7cb #x1df00 #x1df1e #x1df25 #x1df2a #x1e000 #x1e006 #x1e008 #x1e018
-        #x1e01b #x1e021 #x1e023 #x1e024 #x1e026 #x1e02a #x1e030 #x1e06d #x1e08f
-        #x1e08f #x1e100 #x1e12c #x1e137 #x1e13d #x1e14e #x1e14e #x1e290 #x1e2ad
-        #x1e2c0 #x1e2eb #x1e4d0 #x1e4eb #x1e5d0 #x1e5ed #x1e5f0 #x1e5f0 #x1e6c0
-        #x1e6de #x1e6e0 #x1e6f5 #x1e6fe #x1e6ff #x1e7e0 #x1e7e6 #x1e7e8 #x1e7eb
-        #x1e7ed #x1e7ee #x1e7f0 #x1e7fe #x1e800 #x1e8c4 #x1e900 #x1e943 #x1e947
-        #x1e947 #x1e94b #x1e94b #x1ee00 #x1ee03 #x1ee05 #x1ee1f #x1ee21 #x1ee22
-        #x1ee24 #x1ee24 #x1ee27 #x1ee27 #x1ee29 #x1ee32 #x1ee34 #x1ee37 #x1ee39
-        #x1ee39 #x1ee3b #x1ee3b #x1ee42 #x1ee42 #x1ee47 #x1ee47 #x1ee49 #x1ee49
-        #x1ee4b #x1ee4b #x1ee4d #x1ee4f #x1ee51 #x1ee52 #x1ee54 #x1ee54 #x1ee57
-        #x1ee57 #x1ee59 #x1ee59 #x1ee5b #x1ee5b #x1ee5d #x1ee5d #x1ee5f #x1ee5f
-        #x1ee61 #x1ee62 #x1ee64 #x1ee64 #x1ee67 #x1ee6a #x1ee6c #x1ee72 #x1ee74
-        #x1ee77 #x1ee79 #x1ee7c #x1ee7e #x1ee7e #x1ee80 #x1ee89 #x1ee8b #x1ee9b
-        #x1eea1 #x1eea3 #x1eea5 #x1eea9 #x1eeab #x1eebb #x1f130 #x1f149 #x1f150
-        #x1f169 #x1f170 #x1f189 #x20000 #x2a6df #x2a700 #x2b81d #x2b820 #x2cead
-        #x2ceb0 #x2ebe0 #x2ebf0 #x2ee5d #x2f800 #x2fa1d #x30000 #x3134a #x31350
-        #x33479
+    ;; Expose representation counts without exporting mutable
+    ;; tables.
+    (define %unicode-data-counts
+      '(
+        (alphabetic-range-segments 931)
+        (uppercase-range-segments 661)
+        (lowercase-range-segments 678)
+        (whitespace-range-segments 10)
+        (decimal-blocks 77)
+        (simple-uppercase-segments 694)
+        (simple-lowercase-segments 678)
+        (simple-foldcase-segments 701)
+        (full-uppercase-overrides 102)
+        (full-lowercase-overrides 1)
+        (full-foldcase-overrides 104)
         ))
 
-    ;; Inclusive ranges carrying the Unicode Uppercase property.
-    (define consent-unicode-uppercase-ranges
+    ;; Private indexed ranges carrying the Alphabetic property.
+    (define %unicode-alphabetic-ranges
+      #(
+        #x41 #x5a #x61 #x7a #xaa #xaa #xb5 #xb5 #xba #xba #xc0 #xd6 #xd8 #xf6
+        #xf8 #xff #x100 #x1ff #x200 #x2c1 #x2c6 #x2d1 #x2e0 #x2e4 #x2ec #x2ec
+        #x2ee #x2ee #x345 #x345 #x363 #x374 #x376 #x377 #x37a #x37d #x37f #x37f
+        #x386 #x386 #x388 #x38a #x38c #x38c #x38e #x3a1 #x3a3 #x3f5 #x3f7 #x3ff
+        #x400 #x481 #x48a #x4ff #x500 #x52f #x531 #x556 #x559 #x559 #x560 #x588
+        #x5b0 #x5bd #x5bf #x5bf #x5c1 #x5c2 #x5c4 #x5c5 #x5c7 #x5c7 #x5d0 #x5ea
+        #x5ef #x5f2 #x610 #x61a #x620 #x657 #x659 #x65f #x66e #x6d3 #x6d5 #x6dc
+        #x6e1 #x6e8 #x6ed #x6ef #x6fa #x6fc #x6ff #x6ff #x710 #x73f #x74d #x7b1
+        #x7ca #x7ea #x7f4 #x7f5 #x7fa #x7fa #x800 #x817 #x81a #x82c #x840 #x858
+        #x860 #x86a #x870 #x887 #x889 #x88f #x897 #x897 #x8a0 #x8c9 #x8d4 #x8df
+        #x8e3 #x8e9 #x8f0 #x8ff #x900 #x93b #x93d #x94c #x94e #x950 #x955 #x963
+        #x971 #x983 #x985 #x98c #x98f #x990 #x993 #x9a8 #x9aa #x9b0 #x9b2 #x9b2
+        #x9b6 #x9b9 #x9bd #x9c4 #x9c7 #x9c8 #x9cb #x9cc #x9ce #x9ce #x9d7 #x9d7
+        #x9dc #x9dd #x9df #x9e3 #x9f0 #x9f1 #x9fc #x9fc #xa01 #xa03 #xa05 #xa0a
+        #xa0f #xa10 #xa13 #xa28 #xa2a #xa30 #xa32 #xa33 #xa35 #xa36 #xa38 #xa39
+        #xa3e #xa42 #xa47 #xa48 #xa4b #xa4c #xa51 #xa51 #xa59 #xa5c #xa5e #xa5e
+        #xa70 #xa75 #xa81 #xa83 #xa85 #xa8d #xa8f #xa91 #xa93 #xaa8 #xaaa #xab0
+        #xab2 #xab3 #xab5 #xab9 #xabd #xac5 #xac7 #xac9 #xacb #xacc #xad0 #xad0
+        #xae0 #xae3 #xaf9 #xafc #xb01 #xb03 #xb05 #xb0c #xb0f #xb10 #xb13 #xb28
+        #xb2a #xb30 #xb32 #xb33 #xb35 #xb39 #xb3d #xb44 #xb47 #xb48 #xb4b #xb4c
+        #xb56 #xb57 #xb5c #xb5d #xb5f #xb63 #xb71 #xb71 #xb82 #xb83 #xb85 #xb8a
+        #xb8e #xb90 #xb92 #xb95 #xb99 #xb9a #xb9c #xb9c #xb9e #xb9f #xba3 #xba4
+        #xba8 #xbaa #xbae #xbb9 #xbbe #xbc2 #xbc6 #xbc8 #xbca #xbcc #xbd0 #xbd0
+        #xbd7 #xbd7 #xc00 #xc0c #xc0e #xc10 #xc12 #xc28 #xc2a #xc39 #xc3d #xc44
+        #xc46 #xc48 #xc4a #xc4c #xc55 #xc56 #xc58 #xc5a #xc5c #xc5d #xc60 #xc63
+        #xc80 #xc83 #xc85 #xc8c #xc8e #xc90 #xc92 #xca8 #xcaa #xcb3 #xcb5 #xcb9
+        #xcbd #xcc4 #xcc6 #xcc8 #xcca #xccc #xcd5 #xcd6 #xcdc #xcde #xce0 #xce3
+        #xcf1 #xcf3 #xd00 #xd0c #xd0e #xd10 #xd12 #xd3a #xd3d #xd44 #xd46 #xd48
+        #xd4a #xd4c #xd4e #xd4e #xd54 #xd57 #xd5f #xd63 #xd7a #xd7f #xd81 #xd83
+        #xd85 #xd96 #xd9a #xdb1 #xdb3 #xdbb #xdbd #xdbd #xdc0 #xdc6 #xdcf #xdd4
+        #xdd6 #xdd6 #xdd8 #xddf #xdf2 #xdf3 #xe01 #xe3a #xe40 #xe46 #xe4d #xe4d
+        #xe81 #xe82 #xe84 #xe84 #xe86 #xe8a #xe8c #xea3 #xea5 #xea5 #xea7 #xeb9
+        #xebb #xebd #xec0 #xec4 #xec6 #xec6 #xecd #xecd #xedc #xedf #xf00 #xf00
+        #xf40 #xf47 #xf49 #xf6c #xf71 #xf83 #xf88 #xf97 #xf99 #xfbc #x1000
+        #x1036 #x1038 #x1038 #x103b #x103f #x1050 #x108f #x109a #x109d #x10a0
+        #x10c5 #x10c7 #x10c7 #x10cd #x10cd #x10d0 #x10fa #x10fc #x10ff #x1100
+        #x11ff #x1200 #x1248 #x124a #x124d #x1250 #x1256 #x1258 #x1258 #x125a
+        #x125d #x1260 #x1288 #x128a #x128d #x1290 #x12b0 #x12b2 #x12b5 #x12b8
+        #x12be #x12c0 #x12c0 #x12c2 #x12c5 #x12c8 #x12d6 #x12d8 #x12ff #x1300
+        #x1310 #x1312 #x1315 #x1318 #x135a #x1380 #x138f #x13a0 #x13f5 #x13f8
+        #x13fd #x1401 #x14ff #x1500 #x15ff #x1600 #x166c #x166f #x167f #x1681
+        #x169a #x16a0 #x16ea #x16ee #x16f8 #x1700 #x1713 #x171f #x1733 #x1740
+        #x1753 #x1760 #x176c #x176e #x1770 #x1772 #x1773 #x1780 #x17b3 #x17b6
+        #x17c8 #x17d7 #x17d7 #x17dc #x17dc #x1820 #x1878 #x1880 #x18aa #x18b0
+        #x18f5 #x1900 #x191e #x1920 #x192b #x1930 #x1938 #x1950 #x196d #x1970
+        #x1974 #x1980 #x19ab #x19b0 #x19c9 #x1a00 #x1a1b #x1a20 #x1a5e #x1a61
+        #x1a74 #x1aa7 #x1aa7 #x1abf #x1ac0 #x1acc #x1ace #x1b00 #x1b33 #x1b35
+        #x1b43 #x1b45 #x1b4c #x1b80 #x1ba9 #x1bac #x1baf #x1bba #x1be5 #x1be7
+        #x1bf1 #x1c00 #x1c36 #x1c4d #x1c4f #x1c5a #x1c7d #x1c80 #x1c8a #x1c90
+        #x1cba #x1cbd #x1cbf #x1ce9 #x1cec #x1cee #x1cf3 #x1cf5 #x1cf6 #x1cfa
+        #x1cfa #x1d00 #x1dbf #x1dd3 #x1df4 #x1e00 #x1eff #x1f00 #x1f15 #x1f18
+        #x1f1d #x1f20 #x1f45 #x1f48 #x1f4d #x1f50 #x1f57 #x1f59 #x1f59 #x1f5b
+        #x1f5b #x1f5d #x1f5d #x1f5f #x1f7d #x1f80 #x1fb4 #x1fb6 #x1fbc #x1fbe
+        #x1fbe #x1fc2 #x1fc4 #x1fc6 #x1fcc #x1fd0 #x1fd3 #x1fd6 #x1fdb #x1fe0
+        #x1fec #x1ff2 #x1ff4 #x1ff6 #x1ffc #x2071 #x2071 #x207f #x207f #x2090
+        #x209c #x2102 #x2102 #x2107 #x2107 #x210a #x2113 #x2115 #x2115 #x2119
+        #x211d #x2124 #x2124 #x2126 #x2126 #x2128 #x2128 #x212a #x212d #x212f
+        #x2139 #x213c #x213f #x2145 #x2149 #x214e #x214e #x2160 #x2188 #x24b6
+        #x24e9 #x2c00 #x2ce4 #x2ceb #x2cee #x2cf2 #x2cf3 #x2d00 #x2d25 #x2d27
+        #x2d27 #x2d2d #x2d2d #x2d30 #x2d67 #x2d6f #x2d6f #x2d80 #x2d96 #x2da0
+        #x2da6 #x2da8 #x2dae #x2db0 #x2db6 #x2db8 #x2dbe #x2dc0 #x2dc6 #x2dc8
+        #x2dce #x2dd0 #x2dd6 #x2dd8 #x2dde #x2de0 #x2dff #x2e2f #x2e2f #x3005
+        #x3007 #x3021 #x3029 #x3031 #x3035 #x3038 #x303c #x3041 #x3096 #x309d
+        #x309f #x30a1 #x30fa #x30fc #x30ff #x3105 #x312f #x3131 #x318e #x31a0
+        #x31bf #x31f0 #x31ff #x3400 #x34ff #x3500 #x35ff #x3600 #x36ff #x3700
+        #x37ff #x3800 #x38ff #x3900 #x39ff #x3a00 #x3aff #x3b00 #x3bff #x3c00
+        #x3cff #x3d00 #x3dff #x3e00 #x3eff #x3f00 #x3fff #x4000 #x40ff #x4100
+        #x41ff #x4200 #x42ff #x4300 #x43ff #x4400 #x44ff #x4500 #x45ff #x4600
+        #x46ff #x4700 #x47ff #x4800 #x48ff #x4900 #x49ff #x4a00 #x4aff #x4b00
+        #x4bff #x4c00 #x4cff #x4d00 #x4dbf #x4e00 #x4eff #x4f00 #x4fff #x5000
+        #x50ff #x5100 #x51ff #x5200 #x52ff #x5300 #x53ff #x5400 #x54ff #x5500
+        #x55ff #x5600 #x56ff #x5700 #x57ff #x5800 #x58ff #x5900 #x59ff #x5a00
+        #x5aff #x5b00 #x5bff #x5c00 #x5cff #x5d00 #x5dff #x5e00 #x5eff #x5f00
+        #x5fff #x6000 #x60ff #x6100 #x61ff #x6200 #x62ff #x6300 #x63ff #x6400
+        #x64ff #x6500 #x65ff #x6600 #x66ff #x6700 #x67ff #x6800 #x68ff #x6900
+        #x69ff #x6a00 #x6aff #x6b00 #x6bff #x6c00 #x6cff #x6d00 #x6dff #x6e00
+        #x6eff #x6f00 #x6fff #x7000 #x70ff #x7100 #x71ff #x7200 #x72ff #x7300
+        #x73ff #x7400 #x74ff #x7500 #x75ff #x7600 #x76ff #x7700 #x77ff #x7800
+        #x78ff #x7900 #x79ff #x7a00 #x7aff #x7b00 #x7bff #x7c00 #x7cff #x7d00
+        #x7dff #x7e00 #x7eff #x7f00 #x7fff #x8000 #x80ff #x8100 #x81ff #x8200
+        #x82ff #x8300 #x83ff #x8400 #x84ff #x8500 #x85ff #x8600 #x86ff #x8700
+        #x87ff #x8800 #x88ff #x8900 #x89ff #x8a00 #x8aff #x8b00 #x8bff #x8c00
+        #x8cff #x8d00 #x8dff #x8e00 #x8eff #x8f00 #x8fff #x9000 #x90ff #x9100
+        #x91ff #x9200 #x92ff #x9300 #x93ff #x9400 #x94ff #x9500 #x95ff #x9600
+        #x96ff #x9700 #x97ff #x9800 #x98ff #x9900 #x99ff #x9a00 #x9aff #x9b00
+        #x9bff #x9c00 #x9cff #x9d00 #x9dff #x9e00 #x9eff #x9f00 #x9fff #xa000
+        #xa0ff #xa100 #xa1ff #xa200 #xa2ff #xa300 #xa3ff #xa400 #xa48c #xa4d0
+        #xa4fd #xa500 #xa5ff #xa600 #xa60c #xa610 #xa61f #xa62a #xa62b #xa640
+        #xa66e #xa674 #xa67b #xa67f #xa6ef #xa717 #xa71f #xa722 #xa788 #xa78b
+        #xa7dc #xa7f1 #xa7ff #xa800 #xa805 #xa807 #xa827 #xa840 #xa873 #xa880
+        #xa8c3 #xa8c5 #xa8c5 #xa8f2 #xa8f7 #xa8fb #xa8fb #xa8fd #xa8ff #xa90a
+        #xa92a #xa930 #xa952 #xa960 #xa97c #xa980 #xa9b2 #xa9b4 #xa9bf #xa9cf
+        #xa9cf #xa9e0 #xa9ef #xa9fa #xa9fe #xaa00 #xaa36 #xaa40 #xaa4d #xaa60
+        #xaa76 #xaa7a #xaabe #xaac0 #xaac0 #xaac2 #xaac2 #xaadb #xaadd #xaae0
+        #xaaef #xaaf2 #xaaf5 #xab01 #xab06 #xab09 #xab0e #xab11 #xab16 #xab20
+        #xab26 #xab28 #xab2e #xab30 #xab5a #xab5c #xab69 #xab70 #xabea #xac00
+        #xacff #xad00 #xadff #xae00 #xaeff #xaf00 #xafff #xb000 #xb0ff #xb100
+        #xb1ff #xb200 #xb2ff #xb300 #xb3ff #xb400 #xb4ff #xb500 #xb5ff #xb600
+        #xb6ff #xb700 #xb7ff #xb800 #xb8ff #xb900 #xb9ff #xba00 #xbaff #xbb00
+        #xbbff #xbc00 #xbcff #xbd00 #xbdff #xbe00 #xbeff #xbf00 #xbfff #xc000
+        #xc0ff #xc100 #xc1ff #xc200 #xc2ff #xc300 #xc3ff #xc400 #xc4ff #xc500
+        #xc5ff #xc600 #xc6ff #xc700 #xc7ff #xc800 #xc8ff #xc900 #xc9ff #xca00
+        #xcaff #xcb00 #xcbff #xcc00 #xccff #xcd00 #xcdff #xce00 #xceff #xcf00
+        #xcfff #xd000 #xd0ff #xd100 #xd1ff #xd200 #xd2ff #xd300 #xd3ff #xd400
+        #xd4ff #xd500 #xd5ff #xd600 #xd6ff #xd700 #xd7a3 #xd7b0 #xd7c6 #xd7cb
+        #xd7fb #xf900 #xf9ff #xfa00 #xfa6d #xfa70 #xfad9 #xfb00 #xfb06 #xfb13
+        #xfb17 #xfb1d #xfb28 #xfb2a #xfb36 #xfb38 #xfb3c #xfb3e #xfb3e #xfb40
+        #xfb41 #xfb43 #xfb44 #xfb46 #xfbb1 #xfbd3 #xfbff #xfc00 #xfcff #xfd00
+        #xfd3d #xfd50 #xfd8f #xfd92 #xfdc7 #xfdf0 #xfdfb #xfe70 #xfe74 #xfe76
+        #xfefc #xff21 #xff3a #xff41 #xff5a #xff66 #xffbe #xffc2 #xffc7 #xffca
+        #xffcf #xffd2 #xffd7 #xffda #xffdc #x10000 #x1000b #x1000d #x10026
+        #x10028 #x1003a #x1003c #x1003d #x1003f #x1004d #x10050 #x1005d #x10080
+        #x100fa #x10140 #x10174 #x10280 #x1029c #x102a0 #x102d0 #x10300 #x1031f
+        #x1032d #x1034a #x10350 #x1037a #x10380 #x1039d #x103a0 #x103c3 #x103c8
+        #x103cf #x103d1 #x103d5 #x10400 #x1049d #x104b0 #x104d3 #x104d8 #x104fb
+        #x10500 #x10527 #x10530 #x10563 #x10570 #x1057a #x1057c #x1058a #x1058c
+        #x10592 #x10594 #x10595 #x10597 #x105a1 #x105a3 #x105b1 #x105b3 #x105b9
+        #x105bb #x105bc #x105c0 #x105f3 #x10600 #x10736 #x10740 #x10755 #x10760
+        #x10767 #x10780 #x10785 #x10787 #x107b0 #x107b2 #x107ba #x10800 #x10805
+        #x10808 #x10808 #x1080a #x10835 #x10837 #x10838 #x1083c #x1083c #x1083f
+        #x10855 #x10860 #x10876 #x10880 #x1089e #x108e0 #x108f2 #x108f4 #x108f5
+        #x10900 #x10915 #x10920 #x10939 #x10940 #x10959 #x10980 #x109b7 #x109be
+        #x109bf #x10a00 #x10a03 #x10a05 #x10a06 #x10a0c #x10a13 #x10a15 #x10a17
+        #x10a19 #x10a35 #x10a60 #x10a7c #x10a80 #x10a9c #x10ac0 #x10ac7 #x10ac9
+        #x10ae4 #x10b00 #x10b35 #x10b40 #x10b55 #x10b60 #x10b72 #x10b80 #x10b91
+        #x10c00 #x10c48 #x10c80 #x10cb2 #x10cc0 #x10cf2 #x10d00 #x10d27 #x10d4a
+        #x10d65 #x10d69 #x10d69 #x10d6f #x10d85 #x10e80 #x10ea9 #x10eab #x10eac
+        #x10eb0 #x10eb1 #x10ec2 #x10ec7 #x10efa #x10efc #x10f00 #x10f1c #x10f27
+        #x10f27 #x10f30 #x10f45 #x10f70 #x10f81 #x10fb0 #x10fc4 #x10fe0 #x10ff6
+        #x11000 #x11045 #x11071 #x11075 #x11080 #x110b8 #x110c2 #x110c2 #x110d0
+        #x110e8 #x11100 #x11132 #x11144 #x11147 #x11150 #x11172 #x11176 #x11176
+        #x11180 #x111bf #x111c1 #x111c4 #x111ce #x111cf #x111da #x111da #x111dc
+        #x111dc #x11200 #x11211 #x11213 #x11234 #x11237 #x11237 #x1123e #x11241
+        #x11280 #x11286 #x11288 #x11288 #x1128a #x1128d #x1128f #x1129d #x1129f
+        #x112a8 #x112b0 #x112e8 #x11300 #x11303 #x11305 #x1130c #x1130f #x11310
+        #x11313 #x11328 #x1132a #x11330 #x11332 #x11333 #x11335 #x11339 #x1133d
+        #x11344 #x11347 #x11348 #x1134b #x1134c #x11350 #x11350 #x11357 #x11357
+        #x1135d #x11363 #x11380 #x11389 #x1138b #x1138b #x1138e #x1138e #x11390
+        #x113b5 #x113b7 #x113c0 #x113c2 #x113c2 #x113c5 #x113c5 #x113c7 #x113ca
+        #x113cc #x113cd #x113d1 #x113d1 #x113d3 #x113d3 #x11400 #x11441 #x11443
+        #x11445 #x11447 #x1144a #x1145f #x11461 #x11480 #x114c1 #x114c4 #x114c5
+        #x114c7 #x114c7 #x11580 #x115b5 #x115b8 #x115be #x115d8 #x115dd #x11600
+        #x1163e #x11640 #x11640 #x11644 #x11644 #x11680 #x116b5 #x116b8 #x116b8
+        #x11700 #x1171a #x1171d #x1172a #x11740 #x11746 #x11800 #x11838 #x118a0
+        #x118df #x118ff #x11906 #x11909 #x11909 #x1190c #x11913 #x11915 #x11916
+        #x11918 #x11935 #x11937 #x11938 #x1193b #x1193c #x1193f #x11942 #x119a0
+        #x119a7 #x119aa #x119d7 #x119da #x119df #x119e1 #x119e1 #x119e3 #x119e4
+        #x11a00 #x11a32 #x11a35 #x11a3e #x11a50 #x11a97 #x11a9d #x11a9d #x11ab0
+        #x11af8 #x11b60 #x11b67 #x11bc0 #x11be0 #x11c00 #x11c08 #x11c0a #x11c36
+        #x11c38 #x11c3e #x11c40 #x11c40 #x11c72 #x11c8f #x11c92 #x11ca7 #x11ca9
+        #x11cb6 #x11d00 #x11d06 #x11d08 #x11d09 #x11d0b #x11d36 #x11d3a #x11d3a
+        #x11d3c #x11d3d #x11d3f #x11d41 #x11d43 #x11d43 #x11d46 #x11d47 #x11d60
+        #x11d65 #x11d67 #x11d68 #x11d6a #x11d8e #x11d90 #x11d91 #x11d93 #x11d96
+        #x11d98 #x11d98 #x11db0 #x11ddb #x11ee0 #x11ef6 #x11f00 #x11f10 #x11f12
+        #x11f3a #x11f3e #x11f40 #x11fb0 #x11fb0 #x12000 #x12399 #x12400 #x1246e
+        #x12480 #x12543 #x12f90 #x12ff0 #x13000 #x1342f #x13441 #x13446 #x13460
+        #x143fa #x14400 #x14646 #x16100 #x1612e #x16800 #x16a38 #x16a40 #x16a5e
+        #x16a70 #x16abe #x16ad0 #x16aed #x16b00 #x16b2f #x16b40 #x16b43 #x16b63
+        #x16b77 #x16b7d #x16b8f #x16d40 #x16d6c #x16e40 #x16e7f #x16ea0 #x16eb8
+        #x16ebb #x16ed3 #x16f00 #x16f4a #x16f4f #x16f87 #x16f8f #x16f9f #x16fe0
+        #x16fe1 #x16fe3 #x16fe3 #x16ff0 #x16ff6 #x17000 #x18cd5 #x18cff #x18d1e
+        #x18d80 #x18df2 #x1aff0 #x1aff3 #x1aff5 #x1affb #x1affd #x1affe #x1b000
+        #x1b122 #x1b132 #x1b132 #x1b150 #x1b152 #x1b155 #x1b155 #x1b164 #x1b167
+        #x1b170 #x1b2fb #x1bc00 #x1bc6a #x1bc70 #x1bc7c #x1bc80 #x1bc88 #x1bc90
+        #x1bc99 #x1bc9e #x1bc9e #x1d400 #x1d454 #x1d456 #x1d49c #x1d49e #x1d49f
+        #x1d4a2 #x1d4a2 #x1d4a5 #x1d4a6 #x1d4a9 #x1d4ac #x1d4ae #x1d4b9 #x1d4bb
+        #x1d4bb #x1d4bd #x1d4c3 #x1d4c5 #x1d505 #x1d507 #x1d50a #x1d50d #x1d514
+        #x1d516 #x1d51c #x1d51e #x1d539 #x1d53b #x1d53e #x1d540 #x1d544 #x1d546
+        #x1d546 #x1d54a #x1d550 #x1d552 #x1d6a5 #x1d6a8 #x1d6c0 #x1d6c2 #x1d6da
+        #x1d6dc #x1d6fa #x1d6fc #x1d714 #x1d716 #x1d734 #x1d736 #x1d74e #x1d750
+        #x1d76e #x1d770 #x1d788 #x1d78a #x1d7a8 #x1d7aa #x1d7c2 #x1d7c4 #x1d7cb
+        #x1df00 #x1df1e #x1df25 #x1df2a #x1e000 #x1e006 #x1e008 #x1e018 #x1e01b
+        #x1e021 #x1e023 #x1e024 #x1e026 #x1e02a #x1e030 #x1e06d #x1e08f #x1e08f
+        #x1e100 #x1e12c #x1e137 #x1e13d #x1e14e #x1e14e #x1e290 #x1e2ad #x1e2c0
+        #x1e2eb #x1e4d0 #x1e4eb #x1e5d0 #x1e5ed #x1e5f0 #x1e5f0 #x1e6c0 #x1e6de
+        #x1e6e0 #x1e6f5 #x1e6fe #x1e6ff #x1e7e0 #x1e7e6 #x1e7e8 #x1e7eb #x1e7ed
+        #x1e7ee #x1e7f0 #x1e7fe #x1e800 #x1e8c4 #x1e900 #x1e943 #x1e947 #x1e947
+        #x1e94b #x1e94b #x1ee00 #x1ee03 #x1ee05 #x1ee1f #x1ee21 #x1ee22 #x1ee24
+        #x1ee24 #x1ee27 #x1ee27 #x1ee29 #x1ee32 #x1ee34 #x1ee37 #x1ee39 #x1ee39
+        #x1ee3b #x1ee3b #x1ee42 #x1ee42 #x1ee47 #x1ee47 #x1ee49 #x1ee49 #x1ee4b
+        #x1ee4b #x1ee4d #x1ee4f #x1ee51 #x1ee52 #x1ee54 #x1ee54 #x1ee57 #x1ee57
+        #x1ee59 #x1ee59 #x1ee5b #x1ee5b #x1ee5d #x1ee5d #x1ee5f #x1ee5f #x1ee61
+        #x1ee62 #x1ee64 #x1ee64 #x1ee67 #x1ee6a #x1ee6c #x1ee72 #x1ee74 #x1ee77
+        #x1ee79 #x1ee7c #x1ee7e #x1ee7e #x1ee80 #x1ee89 #x1ee8b #x1ee9b #x1eea1
+        #x1eea3 #x1eea5 #x1eea9 #x1eeab #x1eebb #x1f130 #x1f149 #x1f150 #x1f169
+        #x1f170 #x1f189 #x20000 #x2a6df #x2a700 #x2b81d #x2b820 #x2cead #x2ceb0
+        #x2ebe0 #x2ebf0 #x2ee5d #x2f800 #x2fa1d #x30000 #x3134a #x31350 #x33479
+        ))
+
+    ;; Private entry offsets by BMP page or supplementary plane.
+    (define %unicode-alphabetic-index
+      #(
+        #x0 #x8 #x9 #xe #x19 #x1b #x26 #x2f #x34 #x3f #x53 #x6f #x8c #xa4 #xb8
+        #xc6 #xcc #xd6 #xd7 #xe5 #xeb #xec #xed #xf2 #xfc #xff #x106 #x10c
+        #x113 #x11d #x11f #x120 #x133 #x136 #x144 #x144 #x144 #x145 #x145 #x145
+        #x145 #x145 #x145 #x145 #x145 #x148 #x157 #x158 #x158 #x160 #x164 #x164
+        #x164 #x165 #x166 #x167 #x168 #x169 #x16a #x16b #x16c #x16d #x16e #x16f
+        #x170 #x171 #x172 #x173 #x174 #x175 #x176 #x177 #x178 #x179 #x17a #x17b
+        #x17c #x17d #x17e #x17f #x180 #x181 #x182 #x183 #x184 #x185 #x186 #x187
+        #x188 #x189 #x18a #x18b #x18c #x18d #x18e #x18f #x190 #x191 #x192 #x193
+        #x194 #x195 #x196 #x197 #x198 #x199 #x19a #x19b #x19c #x19d #x19e #x19f
+        #x1a0 #x1a1 #x1a2 #x1a3 #x1a4 #x1a5 #x1a6 #x1a7 #x1a8 #x1a9 #x1aa #x1ab
+        #x1ac #x1ad #x1ae #x1af #x1b0 #x1b1 #x1b2 #x1b3 #x1b4 #x1b5 #x1b6 #x1b7
+        #x1b8 #x1b9 #x1ba #x1bb #x1bc #x1bd #x1be #x1bf #x1c0 #x1c1 #x1c2 #x1c3
+        #x1c4 #x1c5 #x1c6 #x1c7 #x1c8 #x1c9 #x1ca #x1cb #x1cc #x1cd #x1ce #x1cf
+        #x1d0 #x1d1 #x1d2 #x1d3 #x1d4 #x1d6 #x1d7 #x1dd #x1e1 #x1e9 #x1f1 #x1fa
+        #x202 #x203 #x204 #x205 #x206 #x207 #x208 #x209 #x20a #x20b #x20c #x20d
+        #x20e #x20f #x210 #x211 #x212 #x213 #x214 #x215 #x216 #x217 #x218 #x219
+        #x21a #x21b #x21c #x21d #x21e #x21f #x220 #x221 #x222 #x223 #x224 #x225
+        #x226 #x227 #x228 #x229 #x22a #x22b #x22c #x22d #x230 #x230 #x230 #x230
+        #x230 #x230 #x230 #x230 #x230 #x230 #x230 #x230 #x230 #x230 #x230 #x230
+        #x230 #x230 #x230 #x230 #x230 #x230 #x230 #x230 #x230 #x230 #x230 #x230
+        #x230 #x230 #x230 #x230 #x230 #x230 #x231 #x233 #x23d #x23e #x242 #x244
+        #x24b #x39b #x3a1 #x3a3 #x3a3 #x3a3 #x3a3 #x3a3 #x3a3 #x3a3 #x3a3 #x3a3
+        #x3a3 #x3a3 #x3a3 #x3a3 #x3a3
+        ))
+
+    ;; Private indexed ranges carrying the Uppercase property.
+    (define %unicode-uppercase-ranges
       #(
         #x41 #x5a #xc0 #xd6 #xd8 #xde #x100 #x100 #x102 #x102 #x104 #x104 #x106
         #x106 #x108 #x108 #x10a #x10a #x10c #x10c #x10e #x10e #x110 #x110 #x112
@@ -242,92 +321,92 @@
         #x38c #x38e #x38f #x391 #x3a1 #x3a3 #x3ab #x3cf #x3cf #x3d2 #x3d4 #x3d8
         #x3d8 #x3da #x3da #x3dc #x3dc #x3de #x3de #x3e0 #x3e0 #x3e2 #x3e2 #x3e4
         #x3e4 #x3e6 #x3e6 #x3e8 #x3e8 #x3ea #x3ea #x3ec #x3ec #x3ee #x3ee #x3f4
-        #x3f4 #x3f7 #x3f7 #x3f9 #x3fa #x3fd #x42f #x460 #x460 #x462 #x462 #x464
-        #x464 #x466 #x466 #x468 #x468 #x46a #x46a #x46c #x46c #x46e #x46e #x470
-        #x470 #x472 #x472 #x474 #x474 #x476 #x476 #x478 #x478 #x47a #x47a #x47c
-        #x47c #x47e #x47e #x480 #x480 #x48a #x48a #x48c #x48c #x48e #x48e #x490
-        #x490 #x492 #x492 #x494 #x494 #x496 #x496 #x498 #x498 #x49a #x49a #x49c
-        #x49c #x49e #x49e #x4a0 #x4a0 #x4a2 #x4a2 #x4a4 #x4a4 #x4a6 #x4a6 #x4a8
-        #x4a8 #x4aa #x4aa #x4ac #x4ac #x4ae #x4ae #x4b0 #x4b0 #x4b2 #x4b2 #x4b4
-        #x4b4 #x4b6 #x4b6 #x4b8 #x4b8 #x4ba #x4ba #x4bc #x4bc #x4be #x4be #x4c0
-        #x4c1 #x4c3 #x4c3 #x4c5 #x4c5 #x4c7 #x4c7 #x4c9 #x4c9 #x4cb #x4cb #x4cd
-        #x4cd #x4d0 #x4d0 #x4d2 #x4d2 #x4d4 #x4d4 #x4d6 #x4d6 #x4d8 #x4d8 #x4da
-        #x4da #x4dc #x4dc #x4de #x4de #x4e0 #x4e0 #x4e2 #x4e2 #x4e4 #x4e4 #x4e6
-        #x4e6 #x4e8 #x4e8 #x4ea #x4ea #x4ec #x4ec #x4ee #x4ee #x4f0 #x4f0 #x4f2
-        #x4f2 #x4f4 #x4f4 #x4f6 #x4f6 #x4f8 #x4f8 #x4fa #x4fa #x4fc #x4fc #x4fe
-        #x4fe #x500 #x500 #x502 #x502 #x504 #x504 #x506 #x506 #x508 #x508 #x50a
-        #x50a #x50c #x50c #x50e #x50e #x510 #x510 #x512 #x512 #x514 #x514 #x516
-        #x516 #x518 #x518 #x51a #x51a #x51c #x51c #x51e #x51e #x520 #x520 #x522
-        #x522 #x524 #x524 #x526 #x526 #x528 #x528 #x52a #x52a #x52c #x52c #x52e
-        #x52e #x531 #x556 #x10a0 #x10c5 #x10c7 #x10c7 #x10cd #x10cd #x13a0
-        #x13f5 #x1c89 #x1c89 #x1c90 #x1cba #x1cbd #x1cbf #x1e00 #x1e00 #x1e02
-        #x1e02 #x1e04 #x1e04 #x1e06 #x1e06 #x1e08 #x1e08 #x1e0a #x1e0a #x1e0c
-        #x1e0c #x1e0e #x1e0e #x1e10 #x1e10 #x1e12 #x1e12 #x1e14 #x1e14 #x1e16
-        #x1e16 #x1e18 #x1e18 #x1e1a #x1e1a #x1e1c #x1e1c #x1e1e #x1e1e #x1e20
-        #x1e20 #x1e22 #x1e22 #x1e24 #x1e24 #x1e26 #x1e26 #x1e28 #x1e28 #x1e2a
-        #x1e2a #x1e2c #x1e2c #x1e2e #x1e2e #x1e30 #x1e30 #x1e32 #x1e32 #x1e34
-        #x1e34 #x1e36 #x1e36 #x1e38 #x1e38 #x1e3a #x1e3a #x1e3c #x1e3c #x1e3e
-        #x1e3e #x1e40 #x1e40 #x1e42 #x1e42 #x1e44 #x1e44 #x1e46 #x1e46 #x1e48
-        #x1e48 #x1e4a #x1e4a #x1e4c #x1e4c #x1e4e #x1e4e #x1e50 #x1e50 #x1e52
-        #x1e52 #x1e54 #x1e54 #x1e56 #x1e56 #x1e58 #x1e58 #x1e5a #x1e5a #x1e5c
-        #x1e5c #x1e5e #x1e5e #x1e60 #x1e60 #x1e62 #x1e62 #x1e64 #x1e64 #x1e66
-        #x1e66 #x1e68 #x1e68 #x1e6a #x1e6a #x1e6c #x1e6c #x1e6e #x1e6e #x1e70
-        #x1e70 #x1e72 #x1e72 #x1e74 #x1e74 #x1e76 #x1e76 #x1e78 #x1e78 #x1e7a
-        #x1e7a #x1e7c #x1e7c #x1e7e #x1e7e #x1e80 #x1e80 #x1e82 #x1e82 #x1e84
-        #x1e84 #x1e86 #x1e86 #x1e88 #x1e88 #x1e8a #x1e8a #x1e8c #x1e8c #x1e8e
-        #x1e8e #x1e90 #x1e90 #x1e92 #x1e92 #x1e94 #x1e94 #x1e9e #x1e9e #x1ea0
-        #x1ea0 #x1ea2 #x1ea2 #x1ea4 #x1ea4 #x1ea6 #x1ea6 #x1ea8 #x1ea8 #x1eaa
-        #x1eaa #x1eac #x1eac #x1eae #x1eae #x1eb0 #x1eb0 #x1eb2 #x1eb2 #x1eb4
-        #x1eb4 #x1eb6 #x1eb6 #x1eb8 #x1eb8 #x1eba #x1eba #x1ebc #x1ebc #x1ebe
-        #x1ebe #x1ec0 #x1ec0 #x1ec2 #x1ec2 #x1ec4 #x1ec4 #x1ec6 #x1ec6 #x1ec8
-        #x1ec8 #x1eca #x1eca #x1ecc #x1ecc #x1ece #x1ece #x1ed0 #x1ed0 #x1ed2
-        #x1ed2 #x1ed4 #x1ed4 #x1ed6 #x1ed6 #x1ed8 #x1ed8 #x1eda #x1eda #x1edc
-        #x1edc #x1ede #x1ede #x1ee0 #x1ee0 #x1ee2 #x1ee2 #x1ee4 #x1ee4 #x1ee6
-        #x1ee6 #x1ee8 #x1ee8 #x1eea #x1eea #x1eec #x1eec #x1eee #x1eee #x1ef0
-        #x1ef0 #x1ef2 #x1ef2 #x1ef4 #x1ef4 #x1ef6 #x1ef6 #x1ef8 #x1ef8 #x1efa
-        #x1efa #x1efc #x1efc #x1efe #x1efe #x1f08 #x1f0f #x1f18 #x1f1d #x1f28
-        #x1f2f #x1f38 #x1f3f #x1f48 #x1f4d #x1f59 #x1f59 #x1f5b #x1f5b #x1f5d
-        #x1f5d #x1f5f #x1f5f #x1f68 #x1f6f #x1fb8 #x1fbb #x1fc8 #x1fcb #x1fd8
-        #x1fdb #x1fe8 #x1fec #x1ff8 #x1ffb #x2102 #x2102 #x2107 #x2107 #x210b
-        #x210d #x2110 #x2112 #x2115 #x2115 #x2119 #x211d #x2124 #x2124 #x2126
-        #x2126 #x2128 #x2128 #x212a #x212d #x2130 #x2133 #x213e #x213f #x2145
-        #x2145 #x2160 #x216f #x2183 #x2183 #x24b6 #x24cf #x2c00 #x2c2f #x2c60
-        #x2c60 #x2c62 #x2c64 #x2c67 #x2c67 #x2c69 #x2c69 #x2c6b #x2c6b #x2c6d
-        #x2c70 #x2c72 #x2c72 #x2c75 #x2c75 #x2c7e #x2c80 #x2c82 #x2c82 #x2c84
-        #x2c84 #x2c86 #x2c86 #x2c88 #x2c88 #x2c8a #x2c8a #x2c8c #x2c8c #x2c8e
-        #x2c8e #x2c90 #x2c90 #x2c92 #x2c92 #x2c94 #x2c94 #x2c96 #x2c96 #x2c98
-        #x2c98 #x2c9a #x2c9a #x2c9c #x2c9c #x2c9e #x2c9e #x2ca0 #x2ca0 #x2ca2
-        #x2ca2 #x2ca4 #x2ca4 #x2ca6 #x2ca6 #x2ca8 #x2ca8 #x2caa #x2caa #x2cac
-        #x2cac #x2cae #x2cae #x2cb0 #x2cb0 #x2cb2 #x2cb2 #x2cb4 #x2cb4 #x2cb6
-        #x2cb6 #x2cb8 #x2cb8 #x2cba #x2cba #x2cbc #x2cbc #x2cbe #x2cbe #x2cc0
-        #x2cc0 #x2cc2 #x2cc2 #x2cc4 #x2cc4 #x2cc6 #x2cc6 #x2cc8 #x2cc8 #x2cca
-        #x2cca #x2ccc #x2ccc #x2cce #x2cce #x2cd0 #x2cd0 #x2cd2 #x2cd2 #x2cd4
-        #x2cd4 #x2cd6 #x2cd6 #x2cd8 #x2cd8 #x2cda #x2cda #x2cdc #x2cdc #x2cde
-        #x2cde #x2ce0 #x2ce0 #x2ce2 #x2ce2 #x2ceb #x2ceb #x2ced #x2ced #x2cf2
-        #x2cf2 #xa640 #xa640 #xa642 #xa642 #xa644 #xa644 #xa646 #xa646 #xa648
-        #xa648 #xa64a #xa64a #xa64c #xa64c #xa64e #xa64e #xa650 #xa650 #xa652
-        #xa652 #xa654 #xa654 #xa656 #xa656 #xa658 #xa658 #xa65a #xa65a #xa65c
-        #xa65c #xa65e #xa65e #xa660 #xa660 #xa662 #xa662 #xa664 #xa664 #xa666
-        #xa666 #xa668 #xa668 #xa66a #xa66a #xa66c #xa66c #xa680 #xa680 #xa682
-        #xa682 #xa684 #xa684 #xa686 #xa686 #xa688 #xa688 #xa68a #xa68a #xa68c
-        #xa68c #xa68e #xa68e #xa690 #xa690 #xa692 #xa692 #xa694 #xa694 #xa696
-        #xa696 #xa698 #xa698 #xa69a #xa69a #xa722 #xa722 #xa724 #xa724 #xa726
-        #xa726 #xa728 #xa728 #xa72a #xa72a #xa72c #xa72c #xa72e #xa72e #xa732
-        #xa732 #xa734 #xa734 #xa736 #xa736 #xa738 #xa738 #xa73a #xa73a #xa73c
-        #xa73c #xa73e #xa73e #xa740 #xa740 #xa742 #xa742 #xa744 #xa744 #xa746
-        #xa746 #xa748 #xa748 #xa74a #xa74a #xa74c #xa74c #xa74e #xa74e #xa750
-        #xa750 #xa752 #xa752 #xa754 #xa754 #xa756 #xa756 #xa758 #xa758 #xa75a
-        #xa75a #xa75c #xa75c #xa75e #xa75e #xa760 #xa760 #xa762 #xa762 #xa764
-        #xa764 #xa766 #xa766 #xa768 #xa768 #xa76a #xa76a #xa76c #xa76c #xa76e
-        #xa76e #xa779 #xa779 #xa77b #xa77b #xa77d #xa77e #xa780 #xa780 #xa782
-        #xa782 #xa784 #xa784 #xa786 #xa786 #xa78b #xa78b #xa78d #xa78d #xa790
-        #xa790 #xa792 #xa792 #xa796 #xa796 #xa798 #xa798 #xa79a #xa79a #xa79c
-        #xa79c #xa79e #xa79e #xa7a0 #xa7a0 #xa7a2 #xa7a2 #xa7a4 #xa7a4 #xa7a6
-        #xa7a6 #xa7a8 #xa7a8 #xa7aa #xa7ae #xa7b0 #xa7b4 #xa7b6 #xa7b6 #xa7b8
-        #xa7b8 #xa7ba #xa7ba #xa7bc #xa7bc #xa7be #xa7be #xa7c0 #xa7c0 #xa7c2
-        #xa7c2 #xa7c4 #xa7c7 #xa7c9 #xa7c9 #xa7cb #xa7cc #xa7ce #xa7ce #xa7d0
-        #xa7d0 #xa7d2 #xa7d2 #xa7d4 #xa7d4 #xa7d6 #xa7d6 #xa7d8 #xa7d8 #xa7da
-        #xa7da #xa7dc #xa7dc #xa7f5 #xa7f5 #xff21 #xff3a #x10400 #x10427
+        #x3f4 #x3f7 #x3f7 #x3f9 #x3fa #x3fd #x3ff #x400 #x42f #x460 #x460 #x462
+        #x462 #x464 #x464 #x466 #x466 #x468 #x468 #x46a #x46a #x46c #x46c #x46e
+        #x46e #x470 #x470 #x472 #x472 #x474 #x474 #x476 #x476 #x478 #x478 #x47a
+        #x47a #x47c #x47c #x47e #x47e #x480 #x480 #x48a #x48a #x48c #x48c #x48e
+        #x48e #x490 #x490 #x492 #x492 #x494 #x494 #x496 #x496 #x498 #x498 #x49a
+        #x49a #x49c #x49c #x49e #x49e #x4a0 #x4a0 #x4a2 #x4a2 #x4a4 #x4a4 #x4a6
+        #x4a6 #x4a8 #x4a8 #x4aa #x4aa #x4ac #x4ac #x4ae #x4ae #x4b0 #x4b0 #x4b2
+        #x4b2 #x4b4 #x4b4 #x4b6 #x4b6 #x4b8 #x4b8 #x4ba #x4ba #x4bc #x4bc #x4be
+        #x4be #x4c0 #x4c1 #x4c3 #x4c3 #x4c5 #x4c5 #x4c7 #x4c7 #x4c9 #x4c9 #x4cb
+        #x4cb #x4cd #x4cd #x4d0 #x4d0 #x4d2 #x4d2 #x4d4 #x4d4 #x4d6 #x4d6 #x4d8
+        #x4d8 #x4da #x4da #x4dc #x4dc #x4de #x4de #x4e0 #x4e0 #x4e2 #x4e2 #x4e4
+        #x4e4 #x4e6 #x4e6 #x4e8 #x4e8 #x4ea #x4ea #x4ec #x4ec #x4ee #x4ee #x4f0
+        #x4f0 #x4f2 #x4f2 #x4f4 #x4f4 #x4f6 #x4f6 #x4f8 #x4f8 #x4fa #x4fa #x4fc
+        #x4fc #x4fe #x4fe #x500 #x500 #x502 #x502 #x504 #x504 #x506 #x506 #x508
+        #x508 #x50a #x50a #x50c #x50c #x50e #x50e #x510 #x510 #x512 #x512 #x514
+        #x514 #x516 #x516 #x518 #x518 #x51a #x51a #x51c #x51c #x51e #x51e #x520
+        #x520 #x522 #x522 #x524 #x524 #x526 #x526 #x528 #x528 #x52a #x52a #x52c
+        #x52c #x52e #x52e #x531 #x556 #x10a0 #x10c5 #x10c7 #x10c7 #x10cd #x10cd
+        #x13a0 #x13f5 #x1c89 #x1c89 #x1c90 #x1cba #x1cbd #x1cbf #x1e00 #x1e00
+        #x1e02 #x1e02 #x1e04 #x1e04 #x1e06 #x1e06 #x1e08 #x1e08 #x1e0a #x1e0a
+        #x1e0c #x1e0c #x1e0e #x1e0e #x1e10 #x1e10 #x1e12 #x1e12 #x1e14 #x1e14
+        #x1e16 #x1e16 #x1e18 #x1e18 #x1e1a #x1e1a #x1e1c #x1e1c #x1e1e #x1e1e
+        #x1e20 #x1e20 #x1e22 #x1e22 #x1e24 #x1e24 #x1e26 #x1e26 #x1e28 #x1e28
+        #x1e2a #x1e2a #x1e2c #x1e2c #x1e2e #x1e2e #x1e30 #x1e30 #x1e32 #x1e32
+        #x1e34 #x1e34 #x1e36 #x1e36 #x1e38 #x1e38 #x1e3a #x1e3a #x1e3c #x1e3c
+        #x1e3e #x1e3e #x1e40 #x1e40 #x1e42 #x1e42 #x1e44 #x1e44 #x1e46 #x1e46
+        #x1e48 #x1e48 #x1e4a #x1e4a #x1e4c #x1e4c #x1e4e #x1e4e #x1e50 #x1e50
+        #x1e52 #x1e52 #x1e54 #x1e54 #x1e56 #x1e56 #x1e58 #x1e58 #x1e5a #x1e5a
+        #x1e5c #x1e5c #x1e5e #x1e5e #x1e60 #x1e60 #x1e62 #x1e62 #x1e64 #x1e64
+        #x1e66 #x1e66 #x1e68 #x1e68 #x1e6a #x1e6a #x1e6c #x1e6c #x1e6e #x1e6e
+        #x1e70 #x1e70 #x1e72 #x1e72 #x1e74 #x1e74 #x1e76 #x1e76 #x1e78 #x1e78
+        #x1e7a #x1e7a #x1e7c #x1e7c #x1e7e #x1e7e #x1e80 #x1e80 #x1e82 #x1e82
+        #x1e84 #x1e84 #x1e86 #x1e86 #x1e88 #x1e88 #x1e8a #x1e8a #x1e8c #x1e8c
+        #x1e8e #x1e8e #x1e90 #x1e90 #x1e92 #x1e92 #x1e94 #x1e94 #x1e9e #x1e9e
+        #x1ea0 #x1ea0 #x1ea2 #x1ea2 #x1ea4 #x1ea4 #x1ea6 #x1ea6 #x1ea8 #x1ea8
+        #x1eaa #x1eaa #x1eac #x1eac #x1eae #x1eae #x1eb0 #x1eb0 #x1eb2 #x1eb2
+        #x1eb4 #x1eb4 #x1eb6 #x1eb6 #x1eb8 #x1eb8 #x1eba #x1eba #x1ebc #x1ebc
+        #x1ebe #x1ebe #x1ec0 #x1ec0 #x1ec2 #x1ec2 #x1ec4 #x1ec4 #x1ec6 #x1ec6
+        #x1ec8 #x1ec8 #x1eca #x1eca #x1ecc #x1ecc #x1ece #x1ece #x1ed0 #x1ed0
+        #x1ed2 #x1ed2 #x1ed4 #x1ed4 #x1ed6 #x1ed6 #x1ed8 #x1ed8 #x1eda #x1eda
+        #x1edc #x1edc #x1ede #x1ede #x1ee0 #x1ee0 #x1ee2 #x1ee2 #x1ee4 #x1ee4
+        #x1ee6 #x1ee6 #x1ee8 #x1ee8 #x1eea #x1eea #x1eec #x1eec #x1eee #x1eee
+        #x1ef0 #x1ef0 #x1ef2 #x1ef2 #x1ef4 #x1ef4 #x1ef6 #x1ef6 #x1ef8 #x1ef8
+        #x1efa #x1efa #x1efc #x1efc #x1efe #x1efe #x1f08 #x1f0f #x1f18 #x1f1d
+        #x1f28 #x1f2f #x1f38 #x1f3f #x1f48 #x1f4d #x1f59 #x1f59 #x1f5b #x1f5b
+        #x1f5d #x1f5d #x1f5f #x1f5f #x1f68 #x1f6f #x1fb8 #x1fbb #x1fc8 #x1fcb
+        #x1fd8 #x1fdb #x1fe8 #x1fec #x1ff8 #x1ffb #x2102 #x2102 #x2107 #x2107
+        #x210b #x210d #x2110 #x2112 #x2115 #x2115 #x2119 #x211d #x2124 #x2124
+        #x2126 #x2126 #x2128 #x2128 #x212a #x212d #x2130 #x2133 #x213e #x213f
+        #x2145 #x2145 #x2160 #x216f #x2183 #x2183 #x24b6 #x24cf #x2c00 #x2c2f
+        #x2c60 #x2c60 #x2c62 #x2c64 #x2c67 #x2c67 #x2c69 #x2c69 #x2c6b #x2c6b
+        #x2c6d #x2c70 #x2c72 #x2c72 #x2c75 #x2c75 #x2c7e #x2c80 #x2c82 #x2c82
+        #x2c84 #x2c84 #x2c86 #x2c86 #x2c88 #x2c88 #x2c8a #x2c8a #x2c8c #x2c8c
+        #x2c8e #x2c8e #x2c90 #x2c90 #x2c92 #x2c92 #x2c94 #x2c94 #x2c96 #x2c96
+        #x2c98 #x2c98 #x2c9a #x2c9a #x2c9c #x2c9c #x2c9e #x2c9e #x2ca0 #x2ca0
+        #x2ca2 #x2ca2 #x2ca4 #x2ca4 #x2ca6 #x2ca6 #x2ca8 #x2ca8 #x2caa #x2caa
+        #x2cac #x2cac #x2cae #x2cae #x2cb0 #x2cb0 #x2cb2 #x2cb2 #x2cb4 #x2cb4
+        #x2cb6 #x2cb6 #x2cb8 #x2cb8 #x2cba #x2cba #x2cbc #x2cbc #x2cbe #x2cbe
+        #x2cc0 #x2cc0 #x2cc2 #x2cc2 #x2cc4 #x2cc4 #x2cc6 #x2cc6 #x2cc8 #x2cc8
+        #x2cca #x2cca #x2ccc #x2ccc #x2cce #x2cce #x2cd0 #x2cd0 #x2cd2 #x2cd2
+        #x2cd4 #x2cd4 #x2cd6 #x2cd6 #x2cd8 #x2cd8 #x2cda #x2cda #x2cdc #x2cdc
+        #x2cde #x2cde #x2ce0 #x2ce0 #x2ce2 #x2ce2 #x2ceb #x2ceb #x2ced #x2ced
+        #x2cf2 #x2cf2 #xa640 #xa640 #xa642 #xa642 #xa644 #xa644 #xa646 #xa646
+        #xa648 #xa648 #xa64a #xa64a #xa64c #xa64c #xa64e #xa64e #xa650 #xa650
+        #xa652 #xa652 #xa654 #xa654 #xa656 #xa656 #xa658 #xa658 #xa65a #xa65a
+        #xa65c #xa65c #xa65e #xa65e #xa660 #xa660 #xa662 #xa662 #xa664 #xa664
+        #xa666 #xa666 #xa668 #xa668 #xa66a #xa66a #xa66c #xa66c #xa680 #xa680
+        #xa682 #xa682 #xa684 #xa684 #xa686 #xa686 #xa688 #xa688 #xa68a #xa68a
+        #xa68c #xa68c #xa68e #xa68e #xa690 #xa690 #xa692 #xa692 #xa694 #xa694
+        #xa696 #xa696 #xa698 #xa698 #xa69a #xa69a #xa722 #xa722 #xa724 #xa724
+        #xa726 #xa726 #xa728 #xa728 #xa72a #xa72a #xa72c #xa72c #xa72e #xa72e
+        #xa732 #xa732 #xa734 #xa734 #xa736 #xa736 #xa738 #xa738 #xa73a #xa73a
+        #xa73c #xa73c #xa73e #xa73e #xa740 #xa740 #xa742 #xa742 #xa744 #xa744
+        #xa746 #xa746 #xa748 #xa748 #xa74a #xa74a #xa74c #xa74c #xa74e #xa74e
+        #xa750 #xa750 #xa752 #xa752 #xa754 #xa754 #xa756 #xa756 #xa758 #xa758
+        #xa75a #xa75a #xa75c #xa75c #xa75e #xa75e #xa760 #xa760 #xa762 #xa762
+        #xa764 #xa764 #xa766 #xa766 #xa768 #xa768 #xa76a #xa76a #xa76c #xa76c
+        #xa76e #xa76e #xa779 #xa779 #xa77b #xa77b #xa77d #xa77e #xa780 #xa780
+        #xa782 #xa782 #xa784 #xa784 #xa786 #xa786 #xa78b #xa78b #xa78d #xa78d
+        #xa790 #xa790 #xa792 #xa792 #xa796 #xa796 #xa798 #xa798 #xa79a #xa79a
+        #xa79c #xa79c #xa79e #xa79e #xa7a0 #xa7a0 #xa7a2 #xa7a2 #xa7a4 #xa7a4
+        #xa7a6 #xa7a6 #xa7a8 #xa7a8 #xa7aa #xa7ae #xa7b0 #xa7b4 #xa7b6 #xa7b6
+        #xa7b8 #xa7b8 #xa7ba #xa7ba #xa7bc #xa7bc #xa7be #xa7be #xa7c0 #xa7c0
+        #xa7c2 #xa7c2 #xa7c4 #xa7c7 #xa7c9 #xa7c9 #xa7cb #xa7cc #xa7ce #xa7ce
+        #xa7d0 #xa7d0 #xa7d2 #xa7d2 #xa7d4 #xa7d4 #xa7d6 #xa7d6 #xa7d8 #xa7d8
+        #xa7da #xa7da #xa7dc #xa7dc #xa7f5 #xa7f5 #xff21 #xff3a #x10400 #x10427
         #x104b0 #x104d3 #x10570 #x1057a #x1057c #x1058a #x1058c #x10592 #x10594
         #x10595 #x10c80 #x10cb2 #x10d50 #x10d65 #x118a0 #x118bf #x16e40 #x16e5f
         #x16ea0 #x16eb8 #x1d400 #x1d419 #x1d434 #x1d44d #x1d468 #x1d481 #x1d49c
@@ -340,8 +419,36 @@
         #x1d7ca #x1e900 #x1e921 #x1f130 #x1f149 #x1f150 #x1f169 #x1f170 #x1f189
         ))
 
-    ;; Inclusive ranges carrying the Unicode Lowercase property.
-    (define consent-unicode-lowercase-ranges
+    ;; Private entry offsets by BMP page or supplementary plane.
+    (define %unicode-uppercase-index
+      #(
+        #x0 #x3 #x6e #x90 #xac #xf8 #x111 #x111 #x111 #x111 #x111 #x111 #x111
+        #x111 #x111 #x111 #x111 #x114 #x114 #x114 #x115 #x115 #x115 #x115 #x115
+        #x115 #x115 #x115 #x115 #x118 #x118 #x194 #x1a3 #x1a3 #x1b2 #x1b2 #x1b2
+        #x1b3 #x1b3 #x1b3 #x1b3 #x1b3 #x1b3 #x1b3 #x1b3 #x1f1 #x1f1 #x1f1 #x1f1
+        #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1
+        #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1
+        #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1
+        #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1
+        #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1
+        #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1
+        #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1
+        #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1
+        #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1
+        #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x1f1 #x216 #x266
+        #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266
+        #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266
+        #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266
+        #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266
+        #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266
+        #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266
+        #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266 #x266
+        #x266 #x266 #x266 #x267 #x295 #x295 #x295 #x295 #x295 #x295 #x295 #x295
+        #x295 #x295 #x295 #x295 #x295 #x295 #x295 #x295
+        ))
+
+    ;; Private indexed ranges carrying the Lowercase property.
+    (define %unicode-lowercase-ranges
       #(
         #x61 #x7a #xaa #xaa #xb5 #xb5 #xba #xba #xdf #xf6 #xf8 #xff #x101 #x101
         #x103 #x103 #x105 #x105 #x107 #x107 #x109 #x109 #x10b #x10b #x10d #x10d
@@ -414,2354 +521,1092 @@
         #x1edb #x1edd #x1edd #x1edf #x1edf #x1ee1 #x1ee1 #x1ee3 #x1ee3 #x1ee5
         #x1ee5 #x1ee7 #x1ee7 #x1ee9 #x1ee9 #x1eeb #x1eeb #x1eed #x1eed #x1eef
         #x1eef #x1ef1 #x1ef1 #x1ef3 #x1ef3 #x1ef5 #x1ef5 #x1ef7 #x1ef7 #x1ef9
-        #x1ef9 #x1efb #x1efb #x1efd #x1efd #x1eff #x1f07 #x1f10 #x1f15 #x1f20
-        #x1f27 #x1f30 #x1f37 #x1f40 #x1f45 #x1f50 #x1f57 #x1f60 #x1f67 #x1f70
-        #x1f7d #x1f80 #x1f87 #x1f90 #x1f97 #x1fa0 #x1fa7 #x1fb0 #x1fb4 #x1fb6
-        #x1fb7 #x1fbe #x1fbe #x1fc2 #x1fc4 #x1fc6 #x1fc7 #x1fd0 #x1fd3 #x1fd6
-        #x1fd7 #x1fe0 #x1fe7 #x1ff2 #x1ff4 #x1ff6 #x1ff7 #x2071 #x2071 #x207f
-        #x207f #x2090 #x209c #x210a #x210a #x210e #x210f #x2113 #x2113 #x212f
-        #x212f #x2134 #x2134 #x2139 #x2139 #x213c #x213d #x2146 #x2149 #x214e
-        #x214e #x2170 #x217f #x2184 #x2184 #x24d0 #x24e9 #x2c30 #x2c5f #x2c61
-        #x2c61 #x2c65 #x2c66 #x2c68 #x2c68 #x2c6a #x2c6a #x2c6c #x2c6c #x2c71
-        #x2c71 #x2c73 #x2c74 #x2c76 #x2c7d #x2c81 #x2c81 #x2c83 #x2c83 #x2c85
-        #x2c85 #x2c87 #x2c87 #x2c89 #x2c89 #x2c8b #x2c8b #x2c8d #x2c8d #x2c8f
-        #x2c8f #x2c91 #x2c91 #x2c93 #x2c93 #x2c95 #x2c95 #x2c97 #x2c97 #x2c99
-        #x2c99 #x2c9b #x2c9b #x2c9d #x2c9d #x2c9f #x2c9f #x2ca1 #x2ca1 #x2ca3
-        #x2ca3 #x2ca5 #x2ca5 #x2ca7 #x2ca7 #x2ca9 #x2ca9 #x2cab #x2cab #x2cad
-        #x2cad #x2caf #x2caf #x2cb1 #x2cb1 #x2cb3 #x2cb3 #x2cb5 #x2cb5 #x2cb7
-        #x2cb7 #x2cb9 #x2cb9 #x2cbb #x2cbb #x2cbd #x2cbd #x2cbf #x2cbf #x2cc1
-        #x2cc1 #x2cc3 #x2cc3 #x2cc5 #x2cc5 #x2cc7 #x2cc7 #x2cc9 #x2cc9 #x2ccb
-        #x2ccb #x2ccd #x2ccd #x2ccf #x2ccf #x2cd1 #x2cd1 #x2cd3 #x2cd3 #x2cd5
-        #x2cd5 #x2cd7 #x2cd7 #x2cd9 #x2cd9 #x2cdb #x2cdb #x2cdd #x2cdd #x2cdf
-        #x2cdf #x2ce1 #x2ce1 #x2ce3 #x2ce4 #x2cec #x2cec #x2cee #x2cee #x2cf3
-        #x2cf3 #x2d00 #x2d25 #x2d27 #x2d27 #x2d2d #x2d2d #xa641 #xa641 #xa643
-        #xa643 #xa645 #xa645 #xa647 #xa647 #xa649 #xa649 #xa64b #xa64b #xa64d
-        #xa64d #xa64f #xa64f #xa651 #xa651 #xa653 #xa653 #xa655 #xa655 #xa657
-        #xa657 #xa659 #xa659 #xa65b #xa65b #xa65d #xa65d #xa65f #xa65f #xa661
-        #xa661 #xa663 #xa663 #xa665 #xa665 #xa667 #xa667 #xa669 #xa669 #xa66b
-        #xa66b #xa66d #xa66d #xa681 #xa681 #xa683 #xa683 #xa685 #xa685 #xa687
-        #xa687 #xa689 #xa689 #xa68b #xa68b #xa68d #xa68d #xa68f #xa68f #xa691
-        #xa691 #xa693 #xa693 #xa695 #xa695 #xa697 #xa697 #xa699 #xa699 #xa69b
-        #xa69d #xa723 #xa723 #xa725 #xa725 #xa727 #xa727 #xa729 #xa729 #xa72b
-        #xa72b #xa72d #xa72d #xa72f #xa731 #xa733 #xa733 #xa735 #xa735 #xa737
-        #xa737 #xa739 #xa739 #xa73b #xa73b #xa73d #xa73d #xa73f #xa73f #xa741
-        #xa741 #xa743 #xa743 #xa745 #xa745 #xa747 #xa747 #xa749 #xa749 #xa74b
-        #xa74b #xa74d #xa74d #xa74f #xa74f #xa751 #xa751 #xa753 #xa753 #xa755
-        #xa755 #xa757 #xa757 #xa759 #xa759 #xa75b #xa75b #xa75d #xa75d #xa75f
-        #xa75f #xa761 #xa761 #xa763 #xa763 #xa765 #xa765 #xa767 #xa767 #xa769
-        #xa769 #xa76b #xa76b #xa76d #xa76d #xa76f #xa778 #xa77a #xa77a #xa77c
-        #xa77c #xa77f #xa77f #xa781 #xa781 #xa783 #xa783 #xa785 #xa785 #xa787
-        #xa787 #xa78c #xa78c #xa78e #xa78e #xa791 #xa791 #xa793 #xa795 #xa797
-        #xa797 #xa799 #xa799 #xa79b #xa79b #xa79d #xa79d #xa79f #xa79f #xa7a1
-        #xa7a1 #xa7a3 #xa7a3 #xa7a5 #xa7a5 #xa7a7 #xa7a7 #xa7a9 #xa7a9 #xa7af
-        #xa7af #xa7b5 #xa7b5 #xa7b7 #xa7b7 #xa7b9 #xa7b9 #xa7bb #xa7bb #xa7bd
-        #xa7bd #xa7bf #xa7bf #xa7c1 #xa7c1 #xa7c3 #xa7c3 #xa7c8 #xa7c8 #xa7ca
-        #xa7ca #xa7cd #xa7cd #xa7cf #xa7cf #xa7d1 #xa7d1 #xa7d3 #xa7d3 #xa7d5
-        #xa7d5 #xa7d7 #xa7d7 #xa7d9 #xa7d9 #xa7db #xa7db #xa7f1 #xa7f4 #xa7f6
-        #xa7f6 #xa7f8 #xa7fa #xab30 #xab5a #xab5c #xab69 #xab70 #xabbf #xfb00
-        #xfb06 #xfb13 #xfb17 #xff41 #xff5a #x10428 #x1044f #x104d8 #x104fb
-        #x10597 #x105a1 #x105a3 #x105b1 #x105b3 #x105b9 #x105bb #x105bc #x10780
-        #x10780 #x10783 #x10785 #x10787 #x107b0 #x107b2 #x107ba #x10cc0 #x10cf2
-        #x10d70 #x10d85 #x118c0 #x118df #x16e60 #x16e7f #x16ebb #x16ed3 #x1d41a
-        #x1d433 #x1d44e #x1d454 #x1d456 #x1d467 #x1d482 #x1d49b #x1d4b6 #x1d4b9
-        #x1d4bb #x1d4bb #x1d4bd #x1d4c3 #x1d4c5 #x1d4cf #x1d4ea #x1d503 #x1d51e
-        #x1d537 #x1d552 #x1d56b #x1d586 #x1d59f #x1d5ba #x1d5d3 #x1d5ee #x1d607
-        #x1d622 #x1d63b #x1d656 #x1d66f #x1d68a #x1d6a5 #x1d6c2 #x1d6da #x1d6dc
-        #x1d6e1 #x1d6fc #x1d714 #x1d716 #x1d71b #x1d736 #x1d74e #x1d750 #x1d755
-        #x1d770 #x1d788 #x1d78a #x1d78f #x1d7aa #x1d7c2 #x1d7c4 #x1d7c9 #x1d7cb
-        #x1d7cb #x1df00 #x1df09 #x1df0b #x1df1e #x1df25 #x1df2a #x1e030 #x1e06d
-        #x1e922 #x1e943
+        #x1ef9 #x1efb #x1efb #x1efd #x1efd #x1eff #x1eff #x1f00 #x1f07 #x1f10
+        #x1f15 #x1f20 #x1f27 #x1f30 #x1f37 #x1f40 #x1f45 #x1f50 #x1f57 #x1f60
+        #x1f67 #x1f70 #x1f7d #x1f80 #x1f87 #x1f90 #x1f97 #x1fa0 #x1fa7 #x1fb0
+        #x1fb4 #x1fb6 #x1fb7 #x1fbe #x1fbe #x1fc2 #x1fc4 #x1fc6 #x1fc7 #x1fd0
+        #x1fd3 #x1fd6 #x1fd7 #x1fe0 #x1fe7 #x1ff2 #x1ff4 #x1ff6 #x1ff7 #x2071
+        #x2071 #x207f #x207f #x2090 #x209c #x210a #x210a #x210e #x210f #x2113
+        #x2113 #x212f #x212f #x2134 #x2134 #x2139 #x2139 #x213c #x213d #x2146
+        #x2149 #x214e #x214e #x2170 #x217f #x2184 #x2184 #x24d0 #x24e9 #x2c30
+        #x2c5f #x2c61 #x2c61 #x2c65 #x2c66 #x2c68 #x2c68 #x2c6a #x2c6a #x2c6c
+        #x2c6c #x2c71 #x2c71 #x2c73 #x2c74 #x2c76 #x2c7d #x2c81 #x2c81 #x2c83
+        #x2c83 #x2c85 #x2c85 #x2c87 #x2c87 #x2c89 #x2c89 #x2c8b #x2c8b #x2c8d
+        #x2c8d #x2c8f #x2c8f #x2c91 #x2c91 #x2c93 #x2c93 #x2c95 #x2c95 #x2c97
+        #x2c97 #x2c99 #x2c99 #x2c9b #x2c9b #x2c9d #x2c9d #x2c9f #x2c9f #x2ca1
+        #x2ca1 #x2ca3 #x2ca3 #x2ca5 #x2ca5 #x2ca7 #x2ca7 #x2ca9 #x2ca9 #x2cab
+        #x2cab #x2cad #x2cad #x2caf #x2caf #x2cb1 #x2cb1 #x2cb3 #x2cb3 #x2cb5
+        #x2cb5 #x2cb7 #x2cb7 #x2cb9 #x2cb9 #x2cbb #x2cbb #x2cbd #x2cbd #x2cbf
+        #x2cbf #x2cc1 #x2cc1 #x2cc3 #x2cc3 #x2cc5 #x2cc5 #x2cc7 #x2cc7 #x2cc9
+        #x2cc9 #x2ccb #x2ccb #x2ccd #x2ccd #x2ccf #x2ccf #x2cd1 #x2cd1 #x2cd3
+        #x2cd3 #x2cd5 #x2cd5 #x2cd7 #x2cd7 #x2cd9 #x2cd9 #x2cdb #x2cdb #x2cdd
+        #x2cdd #x2cdf #x2cdf #x2ce1 #x2ce1 #x2ce3 #x2ce4 #x2cec #x2cec #x2cee
+        #x2cee #x2cf3 #x2cf3 #x2d00 #x2d25 #x2d27 #x2d27 #x2d2d #x2d2d #xa641
+        #xa641 #xa643 #xa643 #xa645 #xa645 #xa647 #xa647 #xa649 #xa649 #xa64b
+        #xa64b #xa64d #xa64d #xa64f #xa64f #xa651 #xa651 #xa653 #xa653 #xa655
+        #xa655 #xa657 #xa657 #xa659 #xa659 #xa65b #xa65b #xa65d #xa65d #xa65f
+        #xa65f #xa661 #xa661 #xa663 #xa663 #xa665 #xa665 #xa667 #xa667 #xa669
+        #xa669 #xa66b #xa66b #xa66d #xa66d #xa681 #xa681 #xa683 #xa683 #xa685
+        #xa685 #xa687 #xa687 #xa689 #xa689 #xa68b #xa68b #xa68d #xa68d #xa68f
+        #xa68f #xa691 #xa691 #xa693 #xa693 #xa695 #xa695 #xa697 #xa697 #xa699
+        #xa699 #xa69b #xa69d #xa723 #xa723 #xa725 #xa725 #xa727 #xa727 #xa729
+        #xa729 #xa72b #xa72b #xa72d #xa72d #xa72f #xa731 #xa733 #xa733 #xa735
+        #xa735 #xa737 #xa737 #xa739 #xa739 #xa73b #xa73b #xa73d #xa73d #xa73f
+        #xa73f #xa741 #xa741 #xa743 #xa743 #xa745 #xa745 #xa747 #xa747 #xa749
+        #xa749 #xa74b #xa74b #xa74d #xa74d #xa74f #xa74f #xa751 #xa751 #xa753
+        #xa753 #xa755 #xa755 #xa757 #xa757 #xa759 #xa759 #xa75b #xa75b #xa75d
+        #xa75d #xa75f #xa75f #xa761 #xa761 #xa763 #xa763 #xa765 #xa765 #xa767
+        #xa767 #xa769 #xa769 #xa76b #xa76b #xa76d #xa76d #xa76f #xa778 #xa77a
+        #xa77a #xa77c #xa77c #xa77f #xa77f #xa781 #xa781 #xa783 #xa783 #xa785
+        #xa785 #xa787 #xa787 #xa78c #xa78c #xa78e #xa78e #xa791 #xa791 #xa793
+        #xa795 #xa797 #xa797 #xa799 #xa799 #xa79b #xa79b #xa79d #xa79d #xa79f
+        #xa79f #xa7a1 #xa7a1 #xa7a3 #xa7a3 #xa7a5 #xa7a5 #xa7a7 #xa7a7 #xa7a9
+        #xa7a9 #xa7af #xa7af #xa7b5 #xa7b5 #xa7b7 #xa7b7 #xa7b9 #xa7b9 #xa7bb
+        #xa7bb #xa7bd #xa7bd #xa7bf #xa7bf #xa7c1 #xa7c1 #xa7c3 #xa7c3 #xa7c8
+        #xa7c8 #xa7ca #xa7ca #xa7cd #xa7cd #xa7cf #xa7cf #xa7d1 #xa7d1 #xa7d3
+        #xa7d3 #xa7d5 #xa7d5 #xa7d7 #xa7d7 #xa7d9 #xa7d9 #xa7db #xa7db #xa7f1
+        #xa7f4 #xa7f6 #xa7f6 #xa7f8 #xa7fa #xab30 #xab5a #xab5c #xab69 #xab70
+        #xabbf #xfb00 #xfb06 #xfb13 #xfb17 #xff41 #xff5a #x10428 #x1044f
+        #x104d8 #x104fb #x10597 #x105a1 #x105a3 #x105b1 #x105b3 #x105b9 #x105bb
+        #x105bc #x10780 #x10780 #x10783 #x10785 #x10787 #x107b0 #x107b2 #x107ba
+        #x10cc0 #x10cf2 #x10d70 #x10d85 #x118c0 #x118df #x16e60 #x16e7f #x16ebb
+        #x16ed3 #x1d41a #x1d433 #x1d44e #x1d454 #x1d456 #x1d467 #x1d482 #x1d49b
+        #x1d4b6 #x1d4b9 #x1d4bb #x1d4bb #x1d4bd #x1d4c3 #x1d4c5 #x1d4cf #x1d4ea
+        #x1d503 #x1d51e #x1d537 #x1d552 #x1d56b #x1d586 #x1d59f #x1d5ba #x1d5d3
+        #x1d5ee #x1d607 #x1d622 #x1d63b #x1d656 #x1d66f #x1d68a #x1d6a5 #x1d6c2
+        #x1d6da #x1d6dc #x1d6e1 #x1d6fc #x1d714 #x1d716 #x1d71b #x1d736 #x1d74e
+        #x1d750 #x1d755 #x1d770 #x1d788 #x1d78a #x1d78f #x1d7aa #x1d7c2 #x1d7c4
+        #x1d7c9 #x1d7cb #x1d7cb #x1df00 #x1df09 #x1df0b #x1df1e #x1df25 #x1df2a
+        #x1e030 #x1e06d #x1e922 #x1e943
         ))
 
-    ;; Inclusive ranges carrying the Unicode White_Space property.
-    (define consent-unicode-whitespace-ranges
+    ;; Private entry offsets by BMP page or supplementary plane.
+    (define %unicode-lowercase-index
+      #(
+        #x0 #x6 #x71 #x96 #xae #xfa #x113 #x113 #x113 #x113 #x113 #x113 #x113
+        #x113 #x113 #x113 #x113 #x115 #x115 #x115 #x116 #x116 #x116 #x116 #x116
+        #x116 #x116 #x116 #x116 #x118 #x119 #x195 #x1aa #x1ad #x1b8 #x1b8 #x1b8
+        #x1b9 #x1b9 #x1b9 #x1b9 #x1b9 #x1b9 #x1b9 #x1b9 #x1f7 #x1fa #x1fa #x1fa
+        #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa
+        #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa
+        #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa
+        #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa
+        #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa
+        #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa
+        #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa
+        #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa
+        #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa
+        #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x1fa #x21f #x270
+        #x270 #x270 #x270 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273
+        #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273
+        #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273
+        #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273
+        #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273
+        #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273
+        #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x273 #x275
+        #x275 #x275 #x275 #x276 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6
+        #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6
+        ))
+
+    ;; Private indexed ranges carrying the White_Space property.
+    (define %unicode-whitespace-ranges
       #(
         #x9 #xd #x20 #x20 #x85 #x85 #xa0 #xa0 #x1680 #x1680 #x2000 #x200a
         #x2028 #x2029 #x202f #x202f #x205f #x205f #x3000 #x3000
         ))
 
-    ;; Code-point and Numeric_Type=Decimal value pairs.
-    (define consent-unicode-decimal-values
+    ;; Private entry offsets by BMP page or supplementary plane.
+    (define %unicode-whitespace-index
       #(
-        #x30 #x0 #x31 #x1 #x32 #x2 #x33 #x3 #x34 #x4 #x35 #x5 #x36 #x6 #x37 #x7
-        #x38 #x8 #x39 #x9 #x660 #x0 #x661 #x1 #x662 #x2 #x663 #x3 #x664 #x4
-        #x665 #x5 #x666 #x6 #x667 #x7 #x668 #x8 #x669 #x9 #x6f0 #x0 #x6f1 #x1
-        #x6f2 #x2 #x6f3 #x3 #x6f4 #x4 #x6f5 #x5 #x6f6 #x6 #x6f7 #x7 #x6f8 #x8
-        #x6f9 #x9 #x7c0 #x0 #x7c1 #x1 #x7c2 #x2 #x7c3 #x3 #x7c4 #x4 #x7c5 #x5
-        #x7c6 #x6 #x7c7 #x7 #x7c8 #x8 #x7c9 #x9 #x966 #x0 #x967 #x1 #x968 #x2
-        #x969 #x3 #x96a #x4 #x96b #x5 #x96c #x6 #x96d #x7 #x96e #x8 #x96f #x9
-        #x9e6 #x0 #x9e7 #x1 #x9e8 #x2 #x9e9 #x3 #x9ea #x4 #x9eb #x5 #x9ec #x6
-        #x9ed #x7 #x9ee #x8 #x9ef #x9 #xa66 #x0 #xa67 #x1 #xa68 #x2 #xa69 #x3
-        #xa6a #x4 #xa6b #x5 #xa6c #x6 #xa6d #x7 #xa6e #x8 #xa6f #x9 #xae6 #x0
-        #xae7 #x1 #xae8 #x2 #xae9 #x3 #xaea #x4 #xaeb #x5 #xaec #x6 #xaed #x7
-        #xaee #x8 #xaef #x9 #xb66 #x0 #xb67 #x1 #xb68 #x2 #xb69 #x3 #xb6a #x4
-        #xb6b #x5 #xb6c #x6 #xb6d #x7 #xb6e #x8 #xb6f #x9 #xbe6 #x0 #xbe7 #x1
-        #xbe8 #x2 #xbe9 #x3 #xbea #x4 #xbeb #x5 #xbec #x6 #xbed #x7 #xbee #x8
-        #xbef #x9 #xc66 #x0 #xc67 #x1 #xc68 #x2 #xc69 #x3 #xc6a #x4 #xc6b #x5
-        #xc6c #x6 #xc6d #x7 #xc6e #x8 #xc6f #x9 #xce6 #x0 #xce7 #x1 #xce8 #x2
-        #xce9 #x3 #xcea #x4 #xceb #x5 #xcec #x6 #xced #x7 #xcee #x8 #xcef #x9
-        #xd66 #x0 #xd67 #x1 #xd68 #x2 #xd69 #x3 #xd6a #x4 #xd6b #x5 #xd6c #x6
-        #xd6d #x7 #xd6e #x8 #xd6f #x9 #xde6 #x0 #xde7 #x1 #xde8 #x2 #xde9 #x3
-        #xdea #x4 #xdeb #x5 #xdec #x6 #xded #x7 #xdee #x8 #xdef #x9 #xe50 #x0
-        #xe51 #x1 #xe52 #x2 #xe53 #x3 #xe54 #x4 #xe55 #x5 #xe56 #x6 #xe57 #x7
-        #xe58 #x8 #xe59 #x9 #xed0 #x0 #xed1 #x1 #xed2 #x2 #xed3 #x3 #xed4 #x4
-        #xed5 #x5 #xed6 #x6 #xed7 #x7 #xed8 #x8 #xed9 #x9 #xf20 #x0 #xf21 #x1
-        #xf22 #x2 #xf23 #x3 #xf24 #x4 #xf25 #x5 #xf26 #x6 #xf27 #x7 #xf28 #x8
-        #xf29 #x9 #x1040 #x0 #x1041 #x1 #x1042 #x2 #x1043 #x3 #x1044 #x4 #x1045
-        #x5 #x1046 #x6 #x1047 #x7 #x1048 #x8 #x1049 #x9 #x1090 #x0 #x1091 #x1
-        #x1092 #x2 #x1093 #x3 #x1094 #x4 #x1095 #x5 #x1096 #x6 #x1097 #x7
-        #x1098 #x8 #x1099 #x9 #x17e0 #x0 #x17e1 #x1 #x17e2 #x2 #x17e3 #x3
-        #x17e4 #x4 #x17e5 #x5 #x17e6 #x6 #x17e7 #x7 #x17e8 #x8 #x17e9 #x9
-        #x1810 #x0 #x1811 #x1 #x1812 #x2 #x1813 #x3 #x1814 #x4 #x1815 #x5
-        #x1816 #x6 #x1817 #x7 #x1818 #x8 #x1819 #x9 #x1946 #x0 #x1947 #x1
-        #x1948 #x2 #x1949 #x3 #x194a #x4 #x194b #x5 #x194c #x6 #x194d #x7
-        #x194e #x8 #x194f #x9 #x19d0 #x0 #x19d1 #x1 #x19d2 #x2 #x19d3 #x3
-        #x19d4 #x4 #x19d5 #x5 #x19d6 #x6 #x19d7 #x7 #x19d8 #x8 #x19d9 #x9
-        #x1a80 #x0 #x1a81 #x1 #x1a82 #x2 #x1a83 #x3 #x1a84 #x4 #x1a85 #x5
-        #x1a86 #x6 #x1a87 #x7 #x1a88 #x8 #x1a89 #x9 #x1a90 #x0 #x1a91 #x1
-        #x1a92 #x2 #x1a93 #x3 #x1a94 #x4 #x1a95 #x5 #x1a96 #x6 #x1a97 #x7
-        #x1a98 #x8 #x1a99 #x9 #x1b50 #x0 #x1b51 #x1 #x1b52 #x2 #x1b53 #x3
-        #x1b54 #x4 #x1b55 #x5 #x1b56 #x6 #x1b57 #x7 #x1b58 #x8 #x1b59 #x9
-        #x1bb0 #x0 #x1bb1 #x1 #x1bb2 #x2 #x1bb3 #x3 #x1bb4 #x4 #x1bb5 #x5
-        #x1bb6 #x6 #x1bb7 #x7 #x1bb8 #x8 #x1bb9 #x9 #x1c40 #x0 #x1c41 #x1
-        #x1c42 #x2 #x1c43 #x3 #x1c44 #x4 #x1c45 #x5 #x1c46 #x6 #x1c47 #x7
-        #x1c48 #x8 #x1c49 #x9 #x1c50 #x0 #x1c51 #x1 #x1c52 #x2 #x1c53 #x3
-        #x1c54 #x4 #x1c55 #x5 #x1c56 #x6 #x1c57 #x7 #x1c58 #x8 #x1c59 #x9
-        #xa620 #x0 #xa621 #x1 #xa622 #x2 #xa623 #x3 #xa624 #x4 #xa625 #x5
-        #xa626 #x6 #xa627 #x7 #xa628 #x8 #xa629 #x9 #xa8d0 #x0 #xa8d1 #x1
-        #xa8d2 #x2 #xa8d3 #x3 #xa8d4 #x4 #xa8d5 #x5 #xa8d6 #x6 #xa8d7 #x7
-        #xa8d8 #x8 #xa8d9 #x9 #xa900 #x0 #xa901 #x1 #xa902 #x2 #xa903 #x3
-        #xa904 #x4 #xa905 #x5 #xa906 #x6 #xa907 #x7 #xa908 #x8 #xa909 #x9
-        #xa9d0 #x0 #xa9d1 #x1 #xa9d2 #x2 #xa9d3 #x3 #xa9d4 #x4 #xa9d5 #x5
-        #xa9d6 #x6 #xa9d7 #x7 #xa9d8 #x8 #xa9d9 #x9 #xa9f0 #x0 #xa9f1 #x1
-        #xa9f2 #x2 #xa9f3 #x3 #xa9f4 #x4 #xa9f5 #x5 #xa9f6 #x6 #xa9f7 #x7
-        #xa9f8 #x8 #xa9f9 #x9 #xaa50 #x0 #xaa51 #x1 #xaa52 #x2 #xaa53 #x3
-        #xaa54 #x4 #xaa55 #x5 #xaa56 #x6 #xaa57 #x7 #xaa58 #x8 #xaa59 #x9
-        #xabf0 #x0 #xabf1 #x1 #xabf2 #x2 #xabf3 #x3 #xabf4 #x4 #xabf5 #x5
-        #xabf6 #x6 #xabf7 #x7 #xabf8 #x8 #xabf9 #x9 #xff10 #x0 #xff11 #x1
-        #xff12 #x2 #xff13 #x3 #xff14 #x4 #xff15 #x5 #xff16 #x6 #xff17 #x7
-        #xff18 #x8 #xff19 #x9 #x104a0 #x0 #x104a1 #x1 #x104a2 #x2 #x104a3 #x3
-        #x104a4 #x4 #x104a5 #x5 #x104a6 #x6 #x104a7 #x7 #x104a8 #x8 #x104a9 #x9
-        #x10d30 #x0 #x10d31 #x1 #x10d32 #x2 #x10d33 #x3 #x10d34 #x4 #x10d35 #x5
-        #x10d36 #x6 #x10d37 #x7 #x10d38 #x8 #x10d39 #x9 #x10d40 #x0 #x10d41 #x1
-        #x10d42 #x2 #x10d43 #x3 #x10d44 #x4 #x10d45 #x5 #x10d46 #x6 #x10d47 #x7
-        #x10d48 #x8 #x10d49 #x9 #x11066 #x0 #x11067 #x1 #x11068 #x2 #x11069 #x3
-        #x1106a #x4 #x1106b #x5 #x1106c #x6 #x1106d #x7 #x1106e #x8 #x1106f #x9
-        #x110f0 #x0 #x110f1 #x1 #x110f2 #x2 #x110f3 #x3 #x110f4 #x4 #x110f5 #x5
-        #x110f6 #x6 #x110f7 #x7 #x110f8 #x8 #x110f9 #x9 #x11136 #x0 #x11137 #x1
-        #x11138 #x2 #x11139 #x3 #x1113a #x4 #x1113b #x5 #x1113c #x6 #x1113d #x7
-        #x1113e #x8 #x1113f #x9 #x111d0 #x0 #x111d1 #x1 #x111d2 #x2 #x111d3 #x3
-        #x111d4 #x4 #x111d5 #x5 #x111d6 #x6 #x111d7 #x7 #x111d8 #x8 #x111d9 #x9
-        #x112f0 #x0 #x112f1 #x1 #x112f2 #x2 #x112f3 #x3 #x112f4 #x4 #x112f5 #x5
-        #x112f6 #x6 #x112f7 #x7 #x112f8 #x8 #x112f9 #x9 #x11450 #x0 #x11451 #x1
-        #x11452 #x2 #x11453 #x3 #x11454 #x4 #x11455 #x5 #x11456 #x6 #x11457 #x7
-        #x11458 #x8 #x11459 #x9 #x114d0 #x0 #x114d1 #x1 #x114d2 #x2 #x114d3 #x3
-        #x114d4 #x4 #x114d5 #x5 #x114d6 #x6 #x114d7 #x7 #x114d8 #x8 #x114d9 #x9
-        #x11650 #x0 #x11651 #x1 #x11652 #x2 #x11653 #x3 #x11654 #x4 #x11655 #x5
-        #x11656 #x6 #x11657 #x7 #x11658 #x8 #x11659 #x9 #x116c0 #x0 #x116c1 #x1
-        #x116c2 #x2 #x116c3 #x3 #x116c4 #x4 #x116c5 #x5 #x116c6 #x6 #x116c7 #x7
-        #x116c8 #x8 #x116c9 #x9 #x116d0 #x0 #x116d1 #x1 #x116d2 #x2 #x116d3 #x3
-        #x116d4 #x4 #x116d5 #x5 #x116d6 #x6 #x116d7 #x7 #x116d8 #x8 #x116d9 #x9
-        #x116da #x0 #x116db #x1 #x116dc #x2 #x116dd #x3 #x116de #x4 #x116df #x5
-        #x116e0 #x6 #x116e1 #x7 #x116e2 #x8 #x116e3 #x9 #x11730 #x0 #x11731 #x1
-        #x11732 #x2 #x11733 #x3 #x11734 #x4 #x11735 #x5 #x11736 #x6 #x11737 #x7
-        #x11738 #x8 #x11739 #x9 #x118e0 #x0 #x118e1 #x1 #x118e2 #x2 #x118e3 #x3
-        #x118e4 #x4 #x118e5 #x5 #x118e6 #x6 #x118e7 #x7 #x118e8 #x8 #x118e9 #x9
-        #x11950 #x0 #x11951 #x1 #x11952 #x2 #x11953 #x3 #x11954 #x4 #x11955 #x5
-        #x11956 #x6 #x11957 #x7 #x11958 #x8 #x11959 #x9 #x11bf0 #x0 #x11bf1 #x1
-        #x11bf2 #x2 #x11bf3 #x3 #x11bf4 #x4 #x11bf5 #x5 #x11bf6 #x6 #x11bf7 #x7
-        #x11bf8 #x8 #x11bf9 #x9 #x11c50 #x0 #x11c51 #x1 #x11c52 #x2 #x11c53 #x3
-        #x11c54 #x4 #x11c55 #x5 #x11c56 #x6 #x11c57 #x7 #x11c58 #x8 #x11c59 #x9
-        #x11d50 #x0 #x11d51 #x1 #x11d52 #x2 #x11d53 #x3 #x11d54 #x4 #x11d55 #x5
-        #x11d56 #x6 #x11d57 #x7 #x11d58 #x8 #x11d59 #x9 #x11da0 #x0 #x11da1 #x1
-        #x11da2 #x2 #x11da3 #x3 #x11da4 #x4 #x11da5 #x5 #x11da6 #x6 #x11da7 #x7
-        #x11da8 #x8 #x11da9 #x9 #x11de0 #x0 #x11de1 #x1 #x11de2 #x2 #x11de3 #x3
-        #x11de4 #x4 #x11de5 #x5 #x11de6 #x6 #x11de7 #x7 #x11de8 #x8 #x11de9 #x9
-        #x11f50 #x0 #x11f51 #x1 #x11f52 #x2 #x11f53 #x3 #x11f54 #x4 #x11f55 #x5
-        #x11f56 #x6 #x11f57 #x7 #x11f58 #x8 #x11f59 #x9 #x16130 #x0 #x16131 #x1
-        #x16132 #x2 #x16133 #x3 #x16134 #x4 #x16135 #x5 #x16136 #x6 #x16137 #x7
-        #x16138 #x8 #x16139 #x9 #x16a60 #x0 #x16a61 #x1 #x16a62 #x2 #x16a63 #x3
-        #x16a64 #x4 #x16a65 #x5 #x16a66 #x6 #x16a67 #x7 #x16a68 #x8 #x16a69 #x9
-        #x16ac0 #x0 #x16ac1 #x1 #x16ac2 #x2 #x16ac3 #x3 #x16ac4 #x4 #x16ac5 #x5
-        #x16ac6 #x6 #x16ac7 #x7 #x16ac8 #x8 #x16ac9 #x9 #x16b50 #x0 #x16b51 #x1
-        #x16b52 #x2 #x16b53 #x3 #x16b54 #x4 #x16b55 #x5 #x16b56 #x6 #x16b57 #x7
-        #x16b58 #x8 #x16b59 #x9 #x16d70 #x0 #x16d71 #x1 #x16d72 #x2 #x16d73 #x3
-        #x16d74 #x4 #x16d75 #x5 #x16d76 #x6 #x16d77 #x7 #x16d78 #x8 #x16d79 #x9
-        #x1ccf0 #x0 #x1ccf1 #x1 #x1ccf2 #x2 #x1ccf3 #x3 #x1ccf4 #x4 #x1ccf5 #x5
-        #x1ccf6 #x6 #x1ccf7 #x7 #x1ccf8 #x8 #x1ccf9 #x9 #x1d7ce #x0 #x1d7cf #x1
-        #x1d7d0 #x2 #x1d7d1 #x3 #x1d7d2 #x4 #x1d7d3 #x5 #x1d7d4 #x6 #x1d7d5 #x7
-        #x1d7d6 #x8 #x1d7d7 #x9 #x1d7d8 #x0 #x1d7d9 #x1 #x1d7da #x2 #x1d7db #x3
-        #x1d7dc #x4 #x1d7dd #x5 #x1d7de #x6 #x1d7df #x7 #x1d7e0 #x8 #x1d7e1 #x9
-        #x1d7e2 #x0 #x1d7e3 #x1 #x1d7e4 #x2 #x1d7e5 #x3 #x1d7e6 #x4 #x1d7e7 #x5
-        #x1d7e8 #x6 #x1d7e9 #x7 #x1d7ea #x8 #x1d7eb #x9 #x1d7ec #x0 #x1d7ed #x1
-        #x1d7ee #x2 #x1d7ef #x3 #x1d7f0 #x4 #x1d7f1 #x5 #x1d7f2 #x6 #x1d7f3 #x7
-        #x1d7f4 #x8 #x1d7f5 #x9 #x1d7f6 #x0 #x1d7f7 #x1 #x1d7f8 #x2 #x1d7f9 #x3
-        #x1d7fa #x4 #x1d7fb #x5 #x1d7fc #x6 #x1d7fd #x7 #x1d7fe #x8 #x1d7ff #x9
-        #x1e140 #x0 #x1e141 #x1 #x1e142 #x2 #x1e143 #x3 #x1e144 #x4 #x1e145 #x5
-        #x1e146 #x6 #x1e147 #x7 #x1e148 #x8 #x1e149 #x9 #x1e2f0 #x0 #x1e2f1 #x1
-        #x1e2f2 #x2 #x1e2f3 #x3 #x1e2f4 #x4 #x1e2f5 #x5 #x1e2f6 #x6 #x1e2f7 #x7
-        #x1e2f8 #x8 #x1e2f9 #x9 #x1e4f0 #x0 #x1e4f1 #x1 #x1e4f2 #x2 #x1e4f3 #x3
-        #x1e4f4 #x4 #x1e4f5 #x5 #x1e4f6 #x6 #x1e4f7 #x7 #x1e4f8 #x8 #x1e4f9 #x9
-        #x1e5f1 #x0 #x1e5f2 #x1 #x1e5f3 #x2 #x1e5f4 #x3 #x1e5f5 #x4 #x1e5f6 #x5
-        #x1e5f7 #x6 #x1e5f8 #x7 #x1e5f9 #x8 #x1e5fa #x9 #x1e950 #x0 #x1e951 #x1
-        #x1e952 #x2 #x1e953 #x3 #x1e954 #x4 #x1e955 #x5 #x1e956 #x6 #x1e957 #x7
-        #x1e958 #x8 #x1e959 #x9 #x1fbf0 #x0 #x1fbf1 #x1 #x1fbf2 #x2 #x1fbf3 #x3
-        #x1fbf4 #x4 #x1fbf5 #x5 #x1fbf6 #x6 #x1fbf7 #x7 #x1fbf8 #x8 #x1fbf9 #x9
+        #x0 #x4 #x4 #x4 #x4 #x4 #x4 #x4 #x4 #x4 #x4 #x4 #x4 #x4 #x4 #x4 #x4 #x4
+        #x4 #x4 #x4 #x4 #x4 #x5 #x5 #x5 #x5 #x5 #x5 #x5 #x5 #x5 #x5 #x9 #x9 #x9
+        #x9 #x9 #x9 #x9 #x9 #x9 #x9 #x9 #x9 #x9 #x9 #x9 #x9 #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa #xa
+        #xa #xa #xa
         ))
 
-    ;; Code-point pairs for Unicode simple uppercase mappings.
-    (define consent-unicode-simple-uppercase-mappings
+    ;; Private starts of contiguous ten-code-point decimal blocks.
+    (define %unicode-decimal-block-starts
       #(
-        #x61 #x41 #x62 #x42 #x63 #x43 #x64 #x44 #x65 #x45 #x66 #x46 #x67 #x47
-        #x68 #x48 #x69 #x49 #x6a #x4a #x6b #x4b #x6c #x4c #x6d #x4d #x6e #x4e
-        #x6f #x4f #x70 #x50 #x71 #x51 #x72 #x52 #x73 #x53 #x74 #x54 #x75 #x55
-        #x76 #x56 #x77 #x57 #x78 #x58 #x79 #x59 #x7a #x5a #xb5 #x39c #xe0 #xc0
-        #xe1 #xc1 #xe2 #xc2 #xe3 #xc3 #xe4 #xc4 #xe5 #xc5 #xe6 #xc6 #xe7 #xc7
-        #xe8 #xc8 #xe9 #xc9 #xea #xca #xeb #xcb #xec #xcc #xed #xcd #xee #xce
-        #xef #xcf #xf0 #xd0 #xf1 #xd1 #xf2 #xd2 #xf3 #xd3 #xf4 #xd4 #xf5 #xd5
-        #xf6 #xd6 #xf8 #xd8 #xf9 #xd9 #xfa #xda #xfb #xdb #xfc #xdc #xfd #xdd
-        #xfe #xde #xff #x178 #x101 #x100 #x103 #x102 #x105 #x104 #x107 #x106
-        #x109 #x108 #x10b #x10a #x10d #x10c #x10f #x10e #x111 #x110 #x113 #x112
-        #x115 #x114 #x117 #x116 #x119 #x118 #x11b #x11a #x11d #x11c #x11f #x11e
-        #x121 #x120 #x123 #x122 #x125 #x124 #x127 #x126 #x129 #x128 #x12b #x12a
-        #x12d #x12c #x12f #x12e #x131 #x49 #x133 #x132 #x135 #x134 #x137 #x136
-        #x13a #x139 #x13c #x13b #x13e #x13d #x140 #x13f #x142 #x141 #x144 #x143
-        #x146 #x145 #x148 #x147 #x14b #x14a #x14d #x14c #x14f #x14e #x151 #x150
-        #x153 #x152 #x155 #x154 #x157 #x156 #x159 #x158 #x15b #x15a #x15d #x15c
-        #x15f #x15e #x161 #x160 #x163 #x162 #x165 #x164 #x167 #x166 #x169 #x168
-        #x16b #x16a #x16d #x16c #x16f #x16e #x171 #x170 #x173 #x172 #x175 #x174
-        #x177 #x176 #x17a #x179 #x17c #x17b #x17e #x17d #x17f #x53 #x180 #x243
-        #x183 #x182 #x185 #x184 #x188 #x187 #x18c #x18b #x192 #x191 #x195 #x1f6
-        #x199 #x198 #x19a #x23d #x19b #xa7dc #x19e #x220 #x1a1 #x1a0 #x1a3
-        #x1a2 #x1a5 #x1a4 #x1a8 #x1a7 #x1ad #x1ac #x1b0 #x1af #x1b4 #x1b3 #x1b6
-        #x1b5 #x1b9 #x1b8 #x1bd #x1bc #x1bf #x1f7 #x1c5 #x1c4 #x1c6 #x1c4 #x1c8
-        #x1c7 #x1c9 #x1c7 #x1cb #x1ca #x1cc #x1ca #x1ce #x1cd #x1d0 #x1cf #x1d2
-        #x1d1 #x1d4 #x1d3 #x1d6 #x1d5 #x1d8 #x1d7 #x1da #x1d9 #x1dc #x1db #x1dd
-        #x18e #x1df #x1de #x1e1 #x1e0 #x1e3 #x1e2 #x1e5 #x1e4 #x1e7 #x1e6 #x1e9
-        #x1e8 #x1eb #x1ea #x1ed #x1ec #x1ef #x1ee #x1f2 #x1f1 #x1f3 #x1f1 #x1f5
-        #x1f4 #x1f9 #x1f8 #x1fb #x1fa #x1fd #x1fc #x1ff #x1fe #x201 #x200 #x203
-        #x202 #x205 #x204 #x207 #x206 #x209 #x208 #x20b #x20a #x20d #x20c #x20f
-        #x20e #x211 #x210 #x213 #x212 #x215 #x214 #x217 #x216 #x219 #x218 #x21b
-        #x21a #x21d #x21c #x21f #x21e #x223 #x222 #x225 #x224 #x227 #x226 #x229
-        #x228 #x22b #x22a #x22d #x22c #x22f #x22e #x231 #x230 #x233 #x232 #x23c
-        #x23b #x23f #x2c7e #x240 #x2c7f #x242 #x241 #x247 #x246 #x249 #x248
-        #x24b #x24a #x24d #x24c #x24f #x24e #x250 #x2c6f #x251 #x2c6d #x252
-        #x2c70 #x253 #x181 #x254 #x186 #x256 #x189 #x257 #x18a #x259 #x18f
-        #x25b #x190 #x25c #xa7ab #x260 #x193 #x261 #xa7ac #x263 #x194 #x264
-        #xa7cb #x265 #xa78d #x266 #xa7aa #x268 #x197 #x269 #x196 #x26a #xa7ae
-        #x26b #x2c62 #x26c #xa7ad #x26f #x19c #x271 #x2c6e #x272 #x19d #x275
-        #x19f #x27d #x2c64 #x280 #x1a6 #x282 #xa7c5 #x283 #x1a9 #x287 #xa7b1
-        #x288 #x1ae #x289 #x244 #x28a #x1b1 #x28b #x1b2 #x28c #x245 #x292 #x1b7
-        #x29d #xa7b2 #x29e #xa7b0 #x345 #x399 #x371 #x370 #x373 #x372 #x377
-        #x376 #x37b #x3fd #x37c #x3fe #x37d #x3ff #x3ac #x386 #x3ad #x388 #x3ae
-        #x389 #x3af #x38a #x3b1 #x391 #x3b2 #x392 #x3b3 #x393 #x3b4 #x394 #x3b5
-        #x395 #x3b6 #x396 #x3b7 #x397 #x3b8 #x398 #x3b9 #x399 #x3ba #x39a #x3bb
-        #x39b #x3bc #x39c #x3bd #x39d #x3be #x39e #x3bf #x39f #x3c0 #x3a0 #x3c1
-        #x3a1 #x3c2 #x3a3 #x3c3 #x3a3 #x3c4 #x3a4 #x3c5 #x3a5 #x3c6 #x3a6 #x3c7
-        #x3a7 #x3c8 #x3a8 #x3c9 #x3a9 #x3ca #x3aa #x3cb #x3ab #x3cc #x38c #x3cd
-        #x38e #x3ce #x38f #x3d0 #x392 #x3d1 #x398 #x3d5 #x3a6 #x3d6 #x3a0 #x3d7
-        #x3cf #x3d9 #x3d8 #x3db #x3da #x3dd #x3dc #x3df #x3de #x3e1 #x3e0 #x3e3
-        #x3e2 #x3e5 #x3e4 #x3e7 #x3e6 #x3e9 #x3e8 #x3eb #x3ea #x3ed #x3ec #x3ef
-        #x3ee #x3f0 #x39a #x3f1 #x3a1 #x3f2 #x3f9 #x3f3 #x37f #x3f5 #x395 #x3f8
-        #x3f7 #x3fb #x3fa #x430 #x410 #x431 #x411 #x432 #x412 #x433 #x413 #x434
-        #x414 #x435 #x415 #x436 #x416 #x437 #x417 #x438 #x418 #x439 #x419 #x43a
-        #x41a #x43b #x41b #x43c #x41c #x43d #x41d #x43e #x41e #x43f #x41f #x440
-        #x420 #x441 #x421 #x442 #x422 #x443 #x423 #x444 #x424 #x445 #x425 #x446
-        #x426 #x447 #x427 #x448 #x428 #x449 #x429 #x44a #x42a #x44b #x42b #x44c
-        #x42c #x44d #x42d #x44e #x42e #x44f #x42f #x450 #x400 #x451 #x401 #x452
-        #x402 #x453 #x403 #x454 #x404 #x455 #x405 #x456 #x406 #x457 #x407 #x458
-        #x408 #x459 #x409 #x45a #x40a #x45b #x40b #x45c #x40c #x45d #x40d #x45e
-        #x40e #x45f #x40f #x461 #x460 #x463 #x462 #x465 #x464 #x467 #x466 #x469
-        #x468 #x46b #x46a #x46d #x46c #x46f #x46e #x471 #x470 #x473 #x472 #x475
-        #x474 #x477 #x476 #x479 #x478 #x47b #x47a #x47d #x47c #x47f #x47e #x481
-        #x480 #x48b #x48a #x48d #x48c #x48f #x48e #x491 #x490 #x493 #x492 #x495
-        #x494 #x497 #x496 #x499 #x498 #x49b #x49a #x49d #x49c #x49f #x49e #x4a1
-        #x4a0 #x4a3 #x4a2 #x4a5 #x4a4 #x4a7 #x4a6 #x4a9 #x4a8 #x4ab #x4aa #x4ad
-        #x4ac #x4af #x4ae #x4b1 #x4b0 #x4b3 #x4b2 #x4b5 #x4b4 #x4b7 #x4b6 #x4b9
-        #x4b8 #x4bb #x4ba #x4bd #x4bc #x4bf #x4be #x4c2 #x4c1 #x4c4 #x4c3 #x4c6
-        #x4c5 #x4c8 #x4c7 #x4ca #x4c9 #x4cc #x4cb #x4ce #x4cd #x4cf #x4c0 #x4d1
-        #x4d0 #x4d3 #x4d2 #x4d5 #x4d4 #x4d7 #x4d6 #x4d9 #x4d8 #x4db #x4da #x4dd
-        #x4dc #x4df #x4de #x4e1 #x4e0 #x4e3 #x4e2 #x4e5 #x4e4 #x4e7 #x4e6 #x4e9
-        #x4e8 #x4eb #x4ea #x4ed #x4ec #x4ef #x4ee #x4f1 #x4f0 #x4f3 #x4f2 #x4f5
-        #x4f4 #x4f7 #x4f6 #x4f9 #x4f8 #x4fb #x4fa #x4fd #x4fc #x4ff #x4fe #x501
-        #x500 #x503 #x502 #x505 #x504 #x507 #x506 #x509 #x508 #x50b #x50a #x50d
-        #x50c #x50f #x50e #x511 #x510 #x513 #x512 #x515 #x514 #x517 #x516 #x519
-        #x518 #x51b #x51a #x51d #x51c #x51f #x51e #x521 #x520 #x523 #x522 #x525
-        #x524 #x527 #x526 #x529 #x528 #x52b #x52a #x52d #x52c #x52f #x52e #x561
-        #x531 #x562 #x532 #x563 #x533 #x564 #x534 #x565 #x535 #x566 #x536 #x567
-        #x537 #x568 #x538 #x569 #x539 #x56a #x53a #x56b #x53b #x56c #x53c #x56d
-        #x53d #x56e #x53e #x56f #x53f #x570 #x540 #x571 #x541 #x572 #x542 #x573
-        #x543 #x574 #x544 #x575 #x545 #x576 #x546 #x577 #x547 #x578 #x548 #x579
-        #x549 #x57a #x54a #x57b #x54b #x57c #x54c #x57d #x54d #x57e #x54e #x57f
-        #x54f #x580 #x550 #x581 #x551 #x582 #x552 #x583 #x553 #x584 #x554 #x585
-        #x555 #x586 #x556 #x10d0 #x1c90 #x10d1 #x1c91 #x10d2 #x1c92 #x10d3
-        #x1c93 #x10d4 #x1c94 #x10d5 #x1c95 #x10d6 #x1c96 #x10d7 #x1c97 #x10d8
-        #x1c98 #x10d9 #x1c99 #x10da #x1c9a #x10db #x1c9b #x10dc #x1c9c #x10dd
-        #x1c9d #x10de #x1c9e #x10df #x1c9f #x10e0 #x1ca0 #x10e1 #x1ca1 #x10e2
-        #x1ca2 #x10e3 #x1ca3 #x10e4 #x1ca4 #x10e5 #x1ca5 #x10e6 #x1ca6 #x10e7
-        #x1ca7 #x10e8 #x1ca8 #x10e9 #x1ca9 #x10ea #x1caa #x10eb #x1cab #x10ec
-        #x1cac #x10ed #x1cad #x10ee #x1cae #x10ef #x1caf #x10f0 #x1cb0 #x10f1
-        #x1cb1 #x10f2 #x1cb2 #x10f3 #x1cb3 #x10f4 #x1cb4 #x10f5 #x1cb5 #x10f6
-        #x1cb6 #x10f7 #x1cb7 #x10f8 #x1cb8 #x10f9 #x1cb9 #x10fa #x1cba #x10fd
-        #x1cbd #x10fe #x1cbe #x10ff #x1cbf #x13f8 #x13f0 #x13f9 #x13f1 #x13fa
-        #x13f2 #x13fb #x13f3 #x13fc #x13f4 #x13fd #x13f5 #x1c80 #x412 #x1c81
-        #x414 #x1c82 #x41e #x1c83 #x421 #x1c84 #x422 #x1c85 #x422 #x1c86 #x42a
-        #x1c87 #x462 #x1c88 #xa64a #x1c8a #x1c89 #x1d79 #xa77d #x1d7d #x2c63
-        #x1d8e #xa7c6 #x1e01 #x1e00 #x1e03 #x1e02 #x1e05 #x1e04 #x1e07 #x1e06
-        #x1e09 #x1e08 #x1e0b #x1e0a #x1e0d #x1e0c #x1e0f #x1e0e #x1e11 #x1e10
-        #x1e13 #x1e12 #x1e15 #x1e14 #x1e17 #x1e16 #x1e19 #x1e18 #x1e1b #x1e1a
-        #x1e1d #x1e1c #x1e1f #x1e1e #x1e21 #x1e20 #x1e23 #x1e22 #x1e25 #x1e24
-        #x1e27 #x1e26 #x1e29 #x1e28 #x1e2b #x1e2a #x1e2d #x1e2c #x1e2f #x1e2e
-        #x1e31 #x1e30 #x1e33 #x1e32 #x1e35 #x1e34 #x1e37 #x1e36 #x1e39 #x1e38
-        #x1e3b #x1e3a #x1e3d #x1e3c #x1e3f #x1e3e #x1e41 #x1e40 #x1e43 #x1e42
-        #x1e45 #x1e44 #x1e47 #x1e46 #x1e49 #x1e48 #x1e4b #x1e4a #x1e4d #x1e4c
-        #x1e4f #x1e4e #x1e51 #x1e50 #x1e53 #x1e52 #x1e55 #x1e54 #x1e57 #x1e56
-        #x1e59 #x1e58 #x1e5b #x1e5a #x1e5d #x1e5c #x1e5f #x1e5e #x1e61 #x1e60
-        #x1e63 #x1e62 #x1e65 #x1e64 #x1e67 #x1e66 #x1e69 #x1e68 #x1e6b #x1e6a
-        #x1e6d #x1e6c #x1e6f #x1e6e #x1e71 #x1e70 #x1e73 #x1e72 #x1e75 #x1e74
-        #x1e77 #x1e76 #x1e79 #x1e78 #x1e7b #x1e7a #x1e7d #x1e7c #x1e7f #x1e7e
-        #x1e81 #x1e80 #x1e83 #x1e82 #x1e85 #x1e84 #x1e87 #x1e86 #x1e89 #x1e88
-        #x1e8b #x1e8a #x1e8d #x1e8c #x1e8f #x1e8e #x1e91 #x1e90 #x1e93 #x1e92
-        #x1e95 #x1e94 #x1e9b #x1e60 #x1ea1 #x1ea0 #x1ea3 #x1ea2 #x1ea5 #x1ea4
-        #x1ea7 #x1ea6 #x1ea9 #x1ea8 #x1eab #x1eaa #x1ead #x1eac #x1eaf #x1eae
-        #x1eb1 #x1eb0 #x1eb3 #x1eb2 #x1eb5 #x1eb4 #x1eb7 #x1eb6 #x1eb9 #x1eb8
-        #x1ebb #x1eba #x1ebd #x1ebc #x1ebf #x1ebe #x1ec1 #x1ec0 #x1ec3 #x1ec2
-        #x1ec5 #x1ec4 #x1ec7 #x1ec6 #x1ec9 #x1ec8 #x1ecb #x1eca #x1ecd #x1ecc
-        #x1ecf #x1ece #x1ed1 #x1ed0 #x1ed3 #x1ed2 #x1ed5 #x1ed4 #x1ed7 #x1ed6
-        #x1ed9 #x1ed8 #x1edb #x1eda #x1edd #x1edc #x1edf #x1ede #x1ee1 #x1ee0
-        #x1ee3 #x1ee2 #x1ee5 #x1ee4 #x1ee7 #x1ee6 #x1ee9 #x1ee8 #x1eeb #x1eea
-        #x1eed #x1eec #x1eef #x1eee #x1ef1 #x1ef0 #x1ef3 #x1ef2 #x1ef5 #x1ef4
-        #x1ef7 #x1ef6 #x1ef9 #x1ef8 #x1efb #x1efa #x1efd #x1efc #x1eff #x1efe
-        #x1f00 #x1f08 #x1f01 #x1f09 #x1f02 #x1f0a #x1f03 #x1f0b #x1f04 #x1f0c
-        #x1f05 #x1f0d #x1f06 #x1f0e #x1f07 #x1f0f #x1f10 #x1f18 #x1f11 #x1f19
-        #x1f12 #x1f1a #x1f13 #x1f1b #x1f14 #x1f1c #x1f15 #x1f1d #x1f20 #x1f28
-        #x1f21 #x1f29 #x1f22 #x1f2a #x1f23 #x1f2b #x1f24 #x1f2c #x1f25 #x1f2d
-        #x1f26 #x1f2e #x1f27 #x1f2f #x1f30 #x1f38 #x1f31 #x1f39 #x1f32 #x1f3a
-        #x1f33 #x1f3b #x1f34 #x1f3c #x1f35 #x1f3d #x1f36 #x1f3e #x1f37 #x1f3f
-        #x1f40 #x1f48 #x1f41 #x1f49 #x1f42 #x1f4a #x1f43 #x1f4b #x1f44 #x1f4c
-        #x1f45 #x1f4d #x1f51 #x1f59 #x1f53 #x1f5b #x1f55 #x1f5d #x1f57 #x1f5f
-        #x1f60 #x1f68 #x1f61 #x1f69 #x1f62 #x1f6a #x1f63 #x1f6b #x1f64 #x1f6c
-        #x1f65 #x1f6d #x1f66 #x1f6e #x1f67 #x1f6f #x1f70 #x1fba #x1f71 #x1fbb
-        #x1f72 #x1fc8 #x1f73 #x1fc9 #x1f74 #x1fca #x1f75 #x1fcb #x1f76 #x1fda
-        #x1f77 #x1fdb #x1f78 #x1ff8 #x1f79 #x1ff9 #x1f7a #x1fea #x1f7b #x1feb
-        #x1f7c #x1ffa #x1f7d #x1ffb #x1f80 #x1f88 #x1f81 #x1f89 #x1f82 #x1f8a
-        #x1f83 #x1f8b #x1f84 #x1f8c #x1f85 #x1f8d #x1f86 #x1f8e #x1f87 #x1f8f
-        #x1f90 #x1f98 #x1f91 #x1f99 #x1f92 #x1f9a #x1f93 #x1f9b #x1f94 #x1f9c
-        #x1f95 #x1f9d #x1f96 #x1f9e #x1f97 #x1f9f #x1fa0 #x1fa8 #x1fa1 #x1fa9
-        #x1fa2 #x1faa #x1fa3 #x1fab #x1fa4 #x1fac #x1fa5 #x1fad #x1fa6 #x1fae
-        #x1fa7 #x1faf #x1fb0 #x1fb8 #x1fb1 #x1fb9 #x1fb3 #x1fbc #x1fbe #x399
-        #x1fc3 #x1fcc #x1fd0 #x1fd8 #x1fd1 #x1fd9 #x1fe0 #x1fe8 #x1fe1 #x1fe9
-        #x1fe5 #x1fec #x1ff3 #x1ffc #x214e #x2132 #x2170 #x2160 #x2171 #x2161
-        #x2172 #x2162 #x2173 #x2163 #x2174 #x2164 #x2175 #x2165 #x2176 #x2166
-        #x2177 #x2167 #x2178 #x2168 #x2179 #x2169 #x217a #x216a #x217b #x216b
-        #x217c #x216c #x217d #x216d #x217e #x216e #x217f #x216f #x2184 #x2183
-        #x24d0 #x24b6 #x24d1 #x24b7 #x24d2 #x24b8 #x24d3 #x24b9 #x24d4 #x24ba
-        #x24d5 #x24bb #x24d6 #x24bc #x24d7 #x24bd #x24d8 #x24be #x24d9 #x24bf
-        #x24da #x24c0 #x24db #x24c1 #x24dc #x24c2 #x24dd #x24c3 #x24de #x24c4
-        #x24df #x24c5 #x24e0 #x24c6 #x24e1 #x24c7 #x24e2 #x24c8 #x24e3 #x24c9
-        #x24e4 #x24ca #x24e5 #x24cb #x24e6 #x24cc #x24e7 #x24cd #x24e8 #x24ce
-        #x24e9 #x24cf #x2c30 #x2c00 #x2c31 #x2c01 #x2c32 #x2c02 #x2c33 #x2c03
-        #x2c34 #x2c04 #x2c35 #x2c05 #x2c36 #x2c06 #x2c37 #x2c07 #x2c38 #x2c08
-        #x2c39 #x2c09 #x2c3a #x2c0a #x2c3b #x2c0b #x2c3c #x2c0c #x2c3d #x2c0d
-        #x2c3e #x2c0e #x2c3f #x2c0f #x2c40 #x2c10 #x2c41 #x2c11 #x2c42 #x2c12
-        #x2c43 #x2c13 #x2c44 #x2c14 #x2c45 #x2c15 #x2c46 #x2c16 #x2c47 #x2c17
-        #x2c48 #x2c18 #x2c49 #x2c19 #x2c4a #x2c1a #x2c4b #x2c1b #x2c4c #x2c1c
-        #x2c4d #x2c1d #x2c4e #x2c1e #x2c4f #x2c1f #x2c50 #x2c20 #x2c51 #x2c21
-        #x2c52 #x2c22 #x2c53 #x2c23 #x2c54 #x2c24 #x2c55 #x2c25 #x2c56 #x2c26
-        #x2c57 #x2c27 #x2c58 #x2c28 #x2c59 #x2c29 #x2c5a #x2c2a #x2c5b #x2c2b
-        #x2c5c #x2c2c #x2c5d #x2c2d #x2c5e #x2c2e #x2c5f #x2c2f #x2c61 #x2c60
-        #x2c65 #x23a #x2c66 #x23e #x2c68 #x2c67 #x2c6a #x2c69 #x2c6c #x2c6b
-        #x2c73 #x2c72 #x2c76 #x2c75 #x2c81 #x2c80 #x2c83 #x2c82 #x2c85 #x2c84
-        #x2c87 #x2c86 #x2c89 #x2c88 #x2c8b #x2c8a #x2c8d #x2c8c #x2c8f #x2c8e
-        #x2c91 #x2c90 #x2c93 #x2c92 #x2c95 #x2c94 #x2c97 #x2c96 #x2c99 #x2c98
-        #x2c9b #x2c9a #x2c9d #x2c9c #x2c9f #x2c9e #x2ca1 #x2ca0 #x2ca3 #x2ca2
-        #x2ca5 #x2ca4 #x2ca7 #x2ca6 #x2ca9 #x2ca8 #x2cab #x2caa #x2cad #x2cac
-        #x2caf #x2cae #x2cb1 #x2cb0 #x2cb3 #x2cb2 #x2cb5 #x2cb4 #x2cb7 #x2cb6
-        #x2cb9 #x2cb8 #x2cbb #x2cba #x2cbd #x2cbc #x2cbf #x2cbe #x2cc1 #x2cc0
-        #x2cc3 #x2cc2 #x2cc5 #x2cc4 #x2cc7 #x2cc6 #x2cc9 #x2cc8 #x2ccb #x2cca
-        #x2ccd #x2ccc #x2ccf #x2cce #x2cd1 #x2cd0 #x2cd3 #x2cd2 #x2cd5 #x2cd4
-        #x2cd7 #x2cd6 #x2cd9 #x2cd8 #x2cdb #x2cda #x2cdd #x2cdc #x2cdf #x2cde
-        #x2ce1 #x2ce0 #x2ce3 #x2ce2 #x2cec #x2ceb #x2cee #x2ced #x2cf3 #x2cf2
-        #x2d00 #x10a0 #x2d01 #x10a1 #x2d02 #x10a2 #x2d03 #x10a3 #x2d04 #x10a4
-        #x2d05 #x10a5 #x2d06 #x10a6 #x2d07 #x10a7 #x2d08 #x10a8 #x2d09 #x10a9
-        #x2d0a #x10aa #x2d0b #x10ab #x2d0c #x10ac #x2d0d #x10ad #x2d0e #x10ae
-        #x2d0f #x10af #x2d10 #x10b0 #x2d11 #x10b1 #x2d12 #x10b2 #x2d13 #x10b3
-        #x2d14 #x10b4 #x2d15 #x10b5 #x2d16 #x10b6 #x2d17 #x10b7 #x2d18 #x10b8
-        #x2d19 #x10b9 #x2d1a #x10ba #x2d1b #x10bb #x2d1c #x10bc #x2d1d #x10bd
-        #x2d1e #x10be #x2d1f #x10bf #x2d20 #x10c0 #x2d21 #x10c1 #x2d22 #x10c2
-        #x2d23 #x10c3 #x2d24 #x10c4 #x2d25 #x10c5 #x2d27 #x10c7 #x2d2d #x10cd
-        #xa641 #xa640 #xa643 #xa642 #xa645 #xa644 #xa647 #xa646 #xa649 #xa648
-        #xa64b #xa64a #xa64d #xa64c #xa64f #xa64e #xa651 #xa650 #xa653 #xa652
-        #xa655 #xa654 #xa657 #xa656 #xa659 #xa658 #xa65b #xa65a #xa65d #xa65c
-        #xa65f #xa65e #xa661 #xa660 #xa663 #xa662 #xa665 #xa664 #xa667 #xa666
-        #xa669 #xa668 #xa66b #xa66a #xa66d #xa66c #xa681 #xa680 #xa683 #xa682
-        #xa685 #xa684 #xa687 #xa686 #xa689 #xa688 #xa68b #xa68a #xa68d #xa68c
-        #xa68f #xa68e #xa691 #xa690 #xa693 #xa692 #xa695 #xa694 #xa697 #xa696
-        #xa699 #xa698 #xa69b #xa69a #xa723 #xa722 #xa725 #xa724 #xa727 #xa726
-        #xa729 #xa728 #xa72b #xa72a #xa72d #xa72c #xa72f #xa72e #xa733 #xa732
-        #xa735 #xa734 #xa737 #xa736 #xa739 #xa738 #xa73b #xa73a #xa73d #xa73c
-        #xa73f #xa73e #xa741 #xa740 #xa743 #xa742 #xa745 #xa744 #xa747 #xa746
-        #xa749 #xa748 #xa74b #xa74a #xa74d #xa74c #xa74f #xa74e #xa751 #xa750
-        #xa753 #xa752 #xa755 #xa754 #xa757 #xa756 #xa759 #xa758 #xa75b #xa75a
-        #xa75d #xa75c #xa75f #xa75e #xa761 #xa760 #xa763 #xa762 #xa765 #xa764
-        #xa767 #xa766 #xa769 #xa768 #xa76b #xa76a #xa76d #xa76c #xa76f #xa76e
-        #xa77a #xa779 #xa77c #xa77b #xa77f #xa77e #xa781 #xa780 #xa783 #xa782
-        #xa785 #xa784 #xa787 #xa786 #xa78c #xa78b #xa791 #xa790 #xa793 #xa792
-        #xa794 #xa7c4 #xa797 #xa796 #xa799 #xa798 #xa79b #xa79a #xa79d #xa79c
-        #xa79f #xa79e #xa7a1 #xa7a0 #xa7a3 #xa7a2 #xa7a5 #xa7a4 #xa7a7 #xa7a6
-        #xa7a9 #xa7a8 #xa7b5 #xa7b4 #xa7b7 #xa7b6 #xa7b9 #xa7b8 #xa7bb #xa7ba
-        #xa7bd #xa7bc #xa7bf #xa7be #xa7c1 #xa7c0 #xa7c3 #xa7c2 #xa7c8 #xa7c7
-        #xa7ca #xa7c9 #xa7cd #xa7cc #xa7cf #xa7ce #xa7d1 #xa7d0 #xa7d3 #xa7d2
-        #xa7d5 #xa7d4 #xa7d7 #xa7d6 #xa7d9 #xa7d8 #xa7db #xa7da #xa7f6 #xa7f5
-        #xab53 #xa7b3 #xab70 #x13a0 #xab71 #x13a1 #xab72 #x13a2 #xab73 #x13a3
-        #xab74 #x13a4 #xab75 #x13a5 #xab76 #x13a6 #xab77 #x13a7 #xab78 #x13a8
-        #xab79 #x13a9 #xab7a #x13aa #xab7b #x13ab #xab7c #x13ac #xab7d #x13ad
-        #xab7e #x13ae #xab7f #x13af #xab80 #x13b0 #xab81 #x13b1 #xab82 #x13b2
-        #xab83 #x13b3 #xab84 #x13b4 #xab85 #x13b5 #xab86 #x13b6 #xab87 #x13b7
-        #xab88 #x13b8 #xab89 #x13b9 #xab8a #x13ba #xab8b #x13bb #xab8c #x13bc
-        #xab8d #x13bd #xab8e #x13be #xab8f #x13bf #xab90 #x13c0 #xab91 #x13c1
-        #xab92 #x13c2 #xab93 #x13c3 #xab94 #x13c4 #xab95 #x13c5 #xab96 #x13c6
-        #xab97 #x13c7 #xab98 #x13c8 #xab99 #x13c9 #xab9a #x13ca #xab9b #x13cb
-        #xab9c #x13cc #xab9d #x13cd #xab9e #x13ce #xab9f #x13cf #xaba0 #x13d0
-        #xaba1 #x13d1 #xaba2 #x13d2 #xaba3 #x13d3 #xaba4 #x13d4 #xaba5 #x13d5
-        #xaba6 #x13d6 #xaba7 #x13d7 #xaba8 #x13d8 #xaba9 #x13d9 #xabaa #x13da
-        #xabab #x13db #xabac #x13dc #xabad #x13dd #xabae #x13de #xabaf #x13df
-        #xabb0 #x13e0 #xabb1 #x13e1 #xabb2 #x13e2 #xabb3 #x13e3 #xabb4 #x13e4
-        #xabb5 #x13e5 #xabb6 #x13e6 #xabb7 #x13e7 #xabb8 #x13e8 #xabb9 #x13e9
-        #xabba #x13ea #xabbb #x13eb #xabbc #x13ec #xabbd #x13ed #xabbe #x13ee
-        #xabbf #x13ef #xff41 #xff21 #xff42 #xff22 #xff43 #xff23 #xff44 #xff24
-        #xff45 #xff25 #xff46 #xff26 #xff47 #xff27 #xff48 #xff28 #xff49 #xff29
-        #xff4a #xff2a #xff4b #xff2b #xff4c #xff2c #xff4d #xff2d #xff4e #xff2e
-        #xff4f #xff2f #xff50 #xff30 #xff51 #xff31 #xff52 #xff32 #xff53 #xff33
-        #xff54 #xff34 #xff55 #xff35 #xff56 #xff36 #xff57 #xff37 #xff58 #xff38
-        #xff59 #xff39 #xff5a #xff3a #x10428 #x10400 #x10429 #x10401 #x1042a
-        #x10402 #x1042b #x10403 #x1042c #x10404 #x1042d #x10405 #x1042e #x10406
-        #x1042f #x10407 #x10430 #x10408 #x10431 #x10409 #x10432 #x1040a #x10433
-        #x1040b #x10434 #x1040c #x10435 #x1040d #x10436 #x1040e #x10437 #x1040f
-        #x10438 #x10410 #x10439 #x10411 #x1043a #x10412 #x1043b #x10413 #x1043c
-        #x10414 #x1043d #x10415 #x1043e #x10416 #x1043f #x10417 #x10440 #x10418
-        #x10441 #x10419 #x10442 #x1041a #x10443 #x1041b #x10444 #x1041c #x10445
-        #x1041d #x10446 #x1041e #x10447 #x1041f #x10448 #x10420 #x10449 #x10421
-        #x1044a #x10422 #x1044b #x10423 #x1044c #x10424 #x1044d #x10425 #x1044e
-        #x10426 #x1044f #x10427 #x104d8 #x104b0 #x104d9 #x104b1 #x104da #x104b2
-        #x104db #x104b3 #x104dc #x104b4 #x104dd #x104b5 #x104de #x104b6 #x104df
-        #x104b7 #x104e0 #x104b8 #x104e1 #x104b9 #x104e2 #x104ba #x104e3 #x104bb
-        #x104e4 #x104bc #x104e5 #x104bd #x104e6 #x104be #x104e7 #x104bf #x104e8
-        #x104c0 #x104e9 #x104c1 #x104ea #x104c2 #x104eb #x104c3 #x104ec #x104c4
-        #x104ed #x104c5 #x104ee #x104c6 #x104ef #x104c7 #x104f0 #x104c8 #x104f1
-        #x104c9 #x104f2 #x104ca #x104f3 #x104cb #x104f4 #x104cc #x104f5 #x104cd
-        #x104f6 #x104ce #x104f7 #x104cf #x104f8 #x104d0 #x104f9 #x104d1 #x104fa
-        #x104d2 #x104fb #x104d3 #x10597 #x10570 #x10598 #x10571 #x10599 #x10572
-        #x1059a #x10573 #x1059b #x10574 #x1059c #x10575 #x1059d #x10576 #x1059e
-        #x10577 #x1059f #x10578 #x105a0 #x10579 #x105a1 #x1057a #x105a3 #x1057c
-        #x105a4 #x1057d #x105a5 #x1057e #x105a6 #x1057f #x105a7 #x10580 #x105a8
-        #x10581 #x105a9 #x10582 #x105aa #x10583 #x105ab #x10584 #x105ac #x10585
-        #x105ad #x10586 #x105ae #x10587 #x105af #x10588 #x105b0 #x10589 #x105b1
-        #x1058a #x105b3 #x1058c #x105b4 #x1058d #x105b5 #x1058e #x105b6 #x1058f
-        #x105b7 #x10590 #x105b8 #x10591 #x105b9 #x10592 #x105bb #x10594 #x105bc
-        #x10595 #x10cc0 #x10c80 #x10cc1 #x10c81 #x10cc2 #x10c82 #x10cc3 #x10c83
-        #x10cc4 #x10c84 #x10cc5 #x10c85 #x10cc6 #x10c86 #x10cc7 #x10c87 #x10cc8
-        #x10c88 #x10cc9 #x10c89 #x10cca #x10c8a #x10ccb #x10c8b #x10ccc #x10c8c
-        #x10ccd #x10c8d #x10cce #x10c8e #x10ccf #x10c8f #x10cd0 #x10c90 #x10cd1
-        #x10c91 #x10cd2 #x10c92 #x10cd3 #x10c93 #x10cd4 #x10c94 #x10cd5 #x10c95
-        #x10cd6 #x10c96 #x10cd7 #x10c97 #x10cd8 #x10c98 #x10cd9 #x10c99 #x10cda
-        #x10c9a #x10cdb #x10c9b #x10cdc #x10c9c #x10cdd #x10c9d #x10cde #x10c9e
-        #x10cdf #x10c9f #x10ce0 #x10ca0 #x10ce1 #x10ca1 #x10ce2 #x10ca2 #x10ce3
-        #x10ca3 #x10ce4 #x10ca4 #x10ce5 #x10ca5 #x10ce6 #x10ca6 #x10ce7 #x10ca7
-        #x10ce8 #x10ca8 #x10ce9 #x10ca9 #x10cea #x10caa #x10ceb #x10cab #x10cec
-        #x10cac #x10ced #x10cad #x10cee #x10cae #x10cef #x10caf #x10cf0 #x10cb0
-        #x10cf1 #x10cb1 #x10cf2 #x10cb2 #x10d70 #x10d50 #x10d71 #x10d51 #x10d72
-        #x10d52 #x10d73 #x10d53 #x10d74 #x10d54 #x10d75 #x10d55 #x10d76 #x10d56
-        #x10d77 #x10d57 #x10d78 #x10d58 #x10d79 #x10d59 #x10d7a #x10d5a #x10d7b
-        #x10d5b #x10d7c #x10d5c #x10d7d #x10d5d #x10d7e #x10d5e #x10d7f #x10d5f
-        #x10d80 #x10d60 #x10d81 #x10d61 #x10d82 #x10d62 #x10d83 #x10d63 #x10d84
-        #x10d64 #x10d85 #x10d65 #x118c0 #x118a0 #x118c1 #x118a1 #x118c2 #x118a2
-        #x118c3 #x118a3 #x118c4 #x118a4 #x118c5 #x118a5 #x118c6 #x118a6 #x118c7
-        #x118a7 #x118c8 #x118a8 #x118c9 #x118a9 #x118ca #x118aa #x118cb #x118ab
-        #x118cc #x118ac #x118cd #x118ad #x118ce #x118ae #x118cf #x118af #x118d0
-        #x118b0 #x118d1 #x118b1 #x118d2 #x118b2 #x118d3 #x118b3 #x118d4 #x118b4
-        #x118d5 #x118b5 #x118d6 #x118b6 #x118d7 #x118b7 #x118d8 #x118b8 #x118d9
-        #x118b9 #x118da #x118ba #x118db #x118bb #x118dc #x118bc #x118dd #x118bd
-        #x118de #x118be #x118df #x118bf #x16e60 #x16e40 #x16e61 #x16e41 #x16e62
-        #x16e42 #x16e63 #x16e43 #x16e64 #x16e44 #x16e65 #x16e45 #x16e66 #x16e46
-        #x16e67 #x16e47 #x16e68 #x16e48 #x16e69 #x16e49 #x16e6a #x16e4a #x16e6b
-        #x16e4b #x16e6c #x16e4c #x16e6d #x16e4d #x16e6e #x16e4e #x16e6f #x16e4f
-        #x16e70 #x16e50 #x16e71 #x16e51 #x16e72 #x16e52 #x16e73 #x16e53 #x16e74
-        #x16e54 #x16e75 #x16e55 #x16e76 #x16e56 #x16e77 #x16e57 #x16e78 #x16e58
-        #x16e79 #x16e59 #x16e7a #x16e5a #x16e7b #x16e5b #x16e7c #x16e5c #x16e7d
-        #x16e5d #x16e7e #x16e5e #x16e7f #x16e5f #x16ebb #x16ea0 #x16ebc #x16ea1
-        #x16ebd #x16ea2 #x16ebe #x16ea3 #x16ebf #x16ea4 #x16ec0 #x16ea5 #x16ec1
-        #x16ea6 #x16ec2 #x16ea7 #x16ec3 #x16ea8 #x16ec4 #x16ea9 #x16ec5 #x16eaa
-        #x16ec6 #x16eab #x16ec7 #x16eac #x16ec8 #x16ead #x16ec9 #x16eae #x16eca
-        #x16eaf #x16ecb #x16eb0 #x16ecc #x16eb1 #x16ecd #x16eb2 #x16ece #x16eb3
-        #x16ecf #x16eb4 #x16ed0 #x16eb5 #x16ed1 #x16eb6 #x16ed2 #x16eb7 #x16ed3
-        #x16eb8 #x1e922 #x1e900 #x1e923 #x1e901 #x1e924 #x1e902 #x1e925 #x1e903
-        #x1e926 #x1e904 #x1e927 #x1e905 #x1e928 #x1e906 #x1e929 #x1e907 #x1e92a
-        #x1e908 #x1e92b #x1e909 #x1e92c #x1e90a #x1e92d #x1e90b #x1e92e #x1e90c
-        #x1e92f #x1e90d #x1e930 #x1e90e #x1e931 #x1e90f #x1e932 #x1e910 #x1e933
-        #x1e911 #x1e934 #x1e912 #x1e935 #x1e913 #x1e936 #x1e914 #x1e937 #x1e915
-        #x1e938 #x1e916 #x1e939 #x1e917 #x1e93a #x1e918 #x1e93b #x1e919 #x1e93c
-        #x1e91a #x1e93d #x1e91b #x1e93e #x1e91c #x1e93f #x1e91d #x1e940 #x1e91e
-        #x1e941 #x1e91f #x1e942 #x1e920 #x1e943 #x1e921
+        #x30 #x660 #x6f0 #x7c0 #x966 #x9e6 #xa66 #xae6 #xb66 #xbe6 #xc66 #xce6
+        #xd66 #xde6 #xe50 #xed0 #xf20 #x1040 #x1090 #x17e0 #x1810 #x1946 #x19d0
+        #x1a80 #x1a90 #x1b50 #x1bb0 #x1c40 #x1c50 #xa620 #xa8d0 #xa900 #xa9d0
+        #xa9f0 #xaa50 #xabf0 #xff10 #x104a0 #x10d30 #x10d40 #x11066 #x110f0
+        #x11136 #x111d0 #x112f0 #x11450 #x114d0 #x11650 #x116c0 #x116d0 #x116da
+        #x11730 #x118e0 #x11950 #x11bf0 #x11c50 #x11d50 #x11da0 #x11de0 #x11f50
+        #x16130 #x16a60 #x16ac0 #x16b50 #x16d70 #x1ccf0 #x1d7ce #x1d7d8 #x1d7e2
+        #x1d7ec #x1d7f6 #x1e140 #x1e2f0 #x1e4f0 #x1e5f1 #x1e950 #x1fbf0
         ))
 
-    ;; Code-point pairs for Unicode simple lowercase mappings.
-    (define consent-unicode-simple-lowercase-mappings
+    ;; Private simple uppercase lower, upper, and delta segments.
+    (define %unicode-simple-uppercase-segments
       #(
-        #x41 #x61 #x42 #x62 #x43 #x63 #x44 #x64 #x45 #x65 #x46 #x66 #x47 #x67
-        #x48 #x68 #x49 #x69 #x4a #x6a #x4b #x6b #x4c #x6c #x4d #x6d #x4e #x6e
-        #x4f #x6f #x50 #x70 #x51 #x71 #x52 #x72 #x53 #x73 #x54 #x74 #x55 #x75
-        #x56 #x76 #x57 #x77 #x58 #x78 #x59 #x79 #x5a #x7a #xc0 #xe0 #xc1 #xe1
-        #xc2 #xe2 #xc3 #xe3 #xc4 #xe4 #xc5 #xe5 #xc6 #xe6 #xc7 #xe7 #xc8 #xe8
-        #xc9 #xe9 #xca #xea #xcb #xeb #xcc #xec #xcd #xed #xce #xee #xcf #xef
-        #xd0 #xf0 #xd1 #xf1 #xd2 #xf2 #xd3 #xf3 #xd4 #xf4 #xd5 #xf5 #xd6 #xf6
-        #xd8 #xf8 #xd9 #xf9 #xda #xfa #xdb #xfb #xdc #xfc #xdd #xfd #xde #xfe
-        #x100 #x101 #x102 #x103 #x104 #x105 #x106 #x107 #x108 #x109 #x10a #x10b
-        #x10c #x10d #x10e #x10f #x110 #x111 #x112 #x113 #x114 #x115 #x116 #x117
-        #x118 #x119 #x11a #x11b #x11c #x11d #x11e #x11f #x120 #x121 #x122 #x123
-        #x124 #x125 #x126 #x127 #x128 #x129 #x12a #x12b #x12c #x12d #x12e #x12f
-        #x130 #x69 #x132 #x133 #x134 #x135 #x136 #x137 #x139 #x13a #x13b #x13c
-        #x13d #x13e #x13f #x140 #x141 #x142 #x143 #x144 #x145 #x146 #x147 #x148
-        #x14a #x14b #x14c #x14d #x14e #x14f #x150 #x151 #x152 #x153 #x154 #x155
-        #x156 #x157 #x158 #x159 #x15a #x15b #x15c #x15d #x15e #x15f #x160 #x161
-        #x162 #x163 #x164 #x165 #x166 #x167 #x168 #x169 #x16a #x16b #x16c #x16d
-        #x16e #x16f #x170 #x171 #x172 #x173 #x174 #x175 #x176 #x177 #x178 #xff
-        #x179 #x17a #x17b #x17c #x17d #x17e #x181 #x253 #x182 #x183 #x184 #x185
-        #x186 #x254 #x187 #x188 #x189 #x256 #x18a #x257 #x18b #x18c #x18e #x1dd
-        #x18f #x259 #x190 #x25b #x191 #x192 #x193 #x260 #x194 #x263 #x196 #x269
-        #x197 #x268 #x198 #x199 #x19c #x26f #x19d #x272 #x19f #x275 #x1a0 #x1a1
-        #x1a2 #x1a3 #x1a4 #x1a5 #x1a6 #x280 #x1a7 #x1a8 #x1a9 #x283 #x1ac #x1ad
-        #x1ae #x288 #x1af #x1b0 #x1b1 #x28a #x1b2 #x28b #x1b3 #x1b4 #x1b5 #x1b6
-        #x1b7 #x292 #x1b8 #x1b9 #x1bc #x1bd #x1c4 #x1c6 #x1c5 #x1c6 #x1c7 #x1c9
-        #x1c8 #x1c9 #x1ca #x1cc #x1cb #x1cc #x1cd #x1ce #x1cf #x1d0 #x1d1 #x1d2
-        #x1d3 #x1d4 #x1d5 #x1d6 #x1d7 #x1d8 #x1d9 #x1da #x1db #x1dc #x1de #x1df
-        #x1e0 #x1e1 #x1e2 #x1e3 #x1e4 #x1e5 #x1e6 #x1e7 #x1e8 #x1e9 #x1ea #x1eb
-        #x1ec #x1ed #x1ee #x1ef #x1f1 #x1f3 #x1f2 #x1f3 #x1f4 #x1f5 #x1f6 #x195
-        #x1f7 #x1bf #x1f8 #x1f9 #x1fa #x1fb #x1fc #x1fd #x1fe #x1ff #x200 #x201
-        #x202 #x203 #x204 #x205 #x206 #x207 #x208 #x209 #x20a #x20b #x20c #x20d
-        #x20e #x20f #x210 #x211 #x212 #x213 #x214 #x215 #x216 #x217 #x218 #x219
-        #x21a #x21b #x21c #x21d #x21e #x21f #x220 #x19e #x222 #x223 #x224 #x225
-        #x226 #x227 #x228 #x229 #x22a #x22b #x22c #x22d #x22e #x22f #x230 #x231
-        #x232 #x233 #x23a #x2c65 #x23b #x23c #x23d #x19a #x23e #x2c66 #x241
-        #x242 #x243 #x180 #x244 #x289 #x245 #x28c #x246 #x247 #x248 #x249 #x24a
-        #x24b #x24c #x24d #x24e #x24f #x370 #x371 #x372 #x373 #x376 #x377 #x37f
-        #x3f3 #x386 #x3ac #x388 #x3ad #x389 #x3ae #x38a #x3af #x38c #x3cc #x38e
-        #x3cd #x38f #x3ce #x391 #x3b1 #x392 #x3b2 #x393 #x3b3 #x394 #x3b4 #x395
-        #x3b5 #x396 #x3b6 #x397 #x3b7 #x398 #x3b8 #x399 #x3b9 #x39a #x3ba #x39b
-        #x3bb #x39c #x3bc #x39d #x3bd #x39e #x3be #x39f #x3bf #x3a0 #x3c0 #x3a1
-        #x3c1 #x3a3 #x3c3 #x3a4 #x3c4 #x3a5 #x3c5 #x3a6 #x3c6 #x3a7 #x3c7 #x3a8
-        #x3c8 #x3a9 #x3c9 #x3aa #x3ca #x3ab #x3cb #x3cf #x3d7 #x3d8 #x3d9 #x3da
-        #x3db #x3dc #x3dd #x3de #x3df #x3e0 #x3e1 #x3e2 #x3e3 #x3e4 #x3e5 #x3e6
-        #x3e7 #x3e8 #x3e9 #x3ea #x3eb #x3ec #x3ed #x3ee #x3ef #x3f4 #x3b8 #x3f7
-        #x3f8 #x3f9 #x3f2 #x3fa #x3fb #x3fd #x37b #x3fe #x37c #x3ff #x37d #x400
-        #x450 #x401 #x451 #x402 #x452 #x403 #x453 #x404 #x454 #x405 #x455 #x406
-        #x456 #x407 #x457 #x408 #x458 #x409 #x459 #x40a #x45a #x40b #x45b #x40c
-        #x45c #x40d #x45d #x40e #x45e #x40f #x45f #x410 #x430 #x411 #x431 #x412
-        #x432 #x413 #x433 #x414 #x434 #x415 #x435 #x416 #x436 #x417 #x437 #x418
-        #x438 #x419 #x439 #x41a #x43a #x41b #x43b #x41c #x43c #x41d #x43d #x41e
-        #x43e #x41f #x43f #x420 #x440 #x421 #x441 #x422 #x442 #x423 #x443 #x424
-        #x444 #x425 #x445 #x426 #x446 #x427 #x447 #x428 #x448 #x429 #x449 #x42a
-        #x44a #x42b #x44b #x42c #x44c #x42d #x44d #x42e #x44e #x42f #x44f #x460
-        #x461 #x462 #x463 #x464 #x465 #x466 #x467 #x468 #x469 #x46a #x46b #x46c
-        #x46d #x46e #x46f #x470 #x471 #x472 #x473 #x474 #x475 #x476 #x477 #x478
-        #x479 #x47a #x47b #x47c #x47d #x47e #x47f #x480 #x481 #x48a #x48b #x48c
-        #x48d #x48e #x48f #x490 #x491 #x492 #x493 #x494 #x495 #x496 #x497 #x498
-        #x499 #x49a #x49b #x49c #x49d #x49e #x49f #x4a0 #x4a1 #x4a2 #x4a3 #x4a4
-        #x4a5 #x4a6 #x4a7 #x4a8 #x4a9 #x4aa #x4ab #x4ac #x4ad #x4ae #x4af #x4b0
-        #x4b1 #x4b2 #x4b3 #x4b4 #x4b5 #x4b6 #x4b7 #x4b8 #x4b9 #x4ba #x4bb #x4bc
-        #x4bd #x4be #x4bf #x4c0 #x4cf #x4c1 #x4c2 #x4c3 #x4c4 #x4c5 #x4c6 #x4c7
-        #x4c8 #x4c9 #x4ca #x4cb #x4cc #x4cd #x4ce #x4d0 #x4d1 #x4d2 #x4d3 #x4d4
-        #x4d5 #x4d6 #x4d7 #x4d8 #x4d9 #x4da #x4db #x4dc #x4dd #x4de #x4df #x4e0
-        #x4e1 #x4e2 #x4e3 #x4e4 #x4e5 #x4e6 #x4e7 #x4e8 #x4e9 #x4ea #x4eb #x4ec
-        #x4ed #x4ee #x4ef #x4f0 #x4f1 #x4f2 #x4f3 #x4f4 #x4f5 #x4f6 #x4f7 #x4f8
-        #x4f9 #x4fa #x4fb #x4fc #x4fd #x4fe #x4ff #x500 #x501 #x502 #x503 #x504
-        #x505 #x506 #x507 #x508 #x509 #x50a #x50b #x50c #x50d #x50e #x50f #x510
-        #x511 #x512 #x513 #x514 #x515 #x516 #x517 #x518 #x519 #x51a #x51b #x51c
-        #x51d #x51e #x51f #x520 #x521 #x522 #x523 #x524 #x525 #x526 #x527 #x528
-        #x529 #x52a #x52b #x52c #x52d #x52e #x52f #x531 #x561 #x532 #x562 #x533
-        #x563 #x534 #x564 #x535 #x565 #x536 #x566 #x537 #x567 #x538 #x568 #x539
-        #x569 #x53a #x56a #x53b #x56b #x53c #x56c #x53d #x56d #x53e #x56e #x53f
-        #x56f #x540 #x570 #x541 #x571 #x542 #x572 #x543 #x573 #x544 #x574 #x545
-        #x575 #x546 #x576 #x547 #x577 #x548 #x578 #x549 #x579 #x54a #x57a #x54b
-        #x57b #x54c #x57c #x54d #x57d #x54e #x57e #x54f #x57f #x550 #x580 #x551
-        #x581 #x552 #x582 #x553 #x583 #x554 #x584 #x555 #x585 #x556 #x586
-        #x10a0 #x2d00 #x10a1 #x2d01 #x10a2 #x2d02 #x10a3 #x2d03 #x10a4 #x2d04
-        #x10a5 #x2d05 #x10a6 #x2d06 #x10a7 #x2d07 #x10a8 #x2d08 #x10a9 #x2d09
-        #x10aa #x2d0a #x10ab #x2d0b #x10ac #x2d0c #x10ad #x2d0d #x10ae #x2d0e
-        #x10af #x2d0f #x10b0 #x2d10 #x10b1 #x2d11 #x10b2 #x2d12 #x10b3 #x2d13
-        #x10b4 #x2d14 #x10b5 #x2d15 #x10b6 #x2d16 #x10b7 #x2d17 #x10b8 #x2d18
-        #x10b9 #x2d19 #x10ba #x2d1a #x10bb #x2d1b #x10bc #x2d1c #x10bd #x2d1d
-        #x10be #x2d1e #x10bf #x2d1f #x10c0 #x2d20 #x10c1 #x2d21 #x10c2 #x2d22
-        #x10c3 #x2d23 #x10c4 #x2d24 #x10c5 #x2d25 #x10c7 #x2d27 #x10cd #x2d2d
-        #x13a0 #xab70 #x13a1 #xab71 #x13a2 #xab72 #x13a3 #xab73 #x13a4 #xab74
-        #x13a5 #xab75 #x13a6 #xab76 #x13a7 #xab77 #x13a8 #xab78 #x13a9 #xab79
-        #x13aa #xab7a #x13ab #xab7b #x13ac #xab7c #x13ad #xab7d #x13ae #xab7e
-        #x13af #xab7f #x13b0 #xab80 #x13b1 #xab81 #x13b2 #xab82 #x13b3 #xab83
-        #x13b4 #xab84 #x13b5 #xab85 #x13b6 #xab86 #x13b7 #xab87 #x13b8 #xab88
-        #x13b9 #xab89 #x13ba #xab8a #x13bb #xab8b #x13bc #xab8c #x13bd #xab8d
-        #x13be #xab8e #x13bf #xab8f #x13c0 #xab90 #x13c1 #xab91 #x13c2 #xab92
-        #x13c3 #xab93 #x13c4 #xab94 #x13c5 #xab95 #x13c6 #xab96 #x13c7 #xab97
-        #x13c8 #xab98 #x13c9 #xab99 #x13ca #xab9a #x13cb #xab9b #x13cc #xab9c
-        #x13cd #xab9d #x13ce #xab9e #x13cf #xab9f #x13d0 #xaba0 #x13d1 #xaba1
-        #x13d2 #xaba2 #x13d3 #xaba3 #x13d4 #xaba4 #x13d5 #xaba5 #x13d6 #xaba6
-        #x13d7 #xaba7 #x13d8 #xaba8 #x13d9 #xaba9 #x13da #xabaa #x13db #xabab
-        #x13dc #xabac #x13dd #xabad #x13de #xabae #x13df #xabaf #x13e0 #xabb0
-        #x13e1 #xabb1 #x13e2 #xabb2 #x13e3 #xabb3 #x13e4 #xabb4 #x13e5 #xabb5
-        #x13e6 #xabb6 #x13e7 #xabb7 #x13e8 #xabb8 #x13e9 #xabb9 #x13ea #xabba
-        #x13eb #xabbb #x13ec #xabbc #x13ed #xabbd #x13ee #xabbe #x13ef #xabbf
-        #x13f0 #x13f8 #x13f1 #x13f9 #x13f2 #x13fa #x13f3 #x13fb #x13f4 #x13fc
-        #x13f5 #x13fd #x1c89 #x1c8a #x1c90 #x10d0 #x1c91 #x10d1 #x1c92 #x10d2
-        #x1c93 #x10d3 #x1c94 #x10d4 #x1c95 #x10d5 #x1c96 #x10d6 #x1c97 #x10d7
-        #x1c98 #x10d8 #x1c99 #x10d9 #x1c9a #x10da #x1c9b #x10db #x1c9c #x10dc
-        #x1c9d #x10dd #x1c9e #x10de #x1c9f #x10df #x1ca0 #x10e0 #x1ca1 #x10e1
-        #x1ca2 #x10e2 #x1ca3 #x10e3 #x1ca4 #x10e4 #x1ca5 #x10e5 #x1ca6 #x10e6
-        #x1ca7 #x10e7 #x1ca8 #x10e8 #x1ca9 #x10e9 #x1caa #x10ea #x1cab #x10eb
-        #x1cac #x10ec #x1cad #x10ed #x1cae #x10ee #x1caf #x10ef #x1cb0 #x10f0
-        #x1cb1 #x10f1 #x1cb2 #x10f2 #x1cb3 #x10f3 #x1cb4 #x10f4 #x1cb5 #x10f5
-        #x1cb6 #x10f6 #x1cb7 #x10f7 #x1cb8 #x10f8 #x1cb9 #x10f9 #x1cba #x10fa
-        #x1cbd #x10fd #x1cbe #x10fe #x1cbf #x10ff #x1e00 #x1e01 #x1e02 #x1e03
-        #x1e04 #x1e05 #x1e06 #x1e07 #x1e08 #x1e09 #x1e0a #x1e0b #x1e0c #x1e0d
-        #x1e0e #x1e0f #x1e10 #x1e11 #x1e12 #x1e13 #x1e14 #x1e15 #x1e16 #x1e17
-        #x1e18 #x1e19 #x1e1a #x1e1b #x1e1c #x1e1d #x1e1e #x1e1f #x1e20 #x1e21
-        #x1e22 #x1e23 #x1e24 #x1e25 #x1e26 #x1e27 #x1e28 #x1e29 #x1e2a #x1e2b
-        #x1e2c #x1e2d #x1e2e #x1e2f #x1e30 #x1e31 #x1e32 #x1e33 #x1e34 #x1e35
-        #x1e36 #x1e37 #x1e38 #x1e39 #x1e3a #x1e3b #x1e3c #x1e3d #x1e3e #x1e3f
-        #x1e40 #x1e41 #x1e42 #x1e43 #x1e44 #x1e45 #x1e46 #x1e47 #x1e48 #x1e49
-        #x1e4a #x1e4b #x1e4c #x1e4d #x1e4e #x1e4f #x1e50 #x1e51 #x1e52 #x1e53
-        #x1e54 #x1e55 #x1e56 #x1e57 #x1e58 #x1e59 #x1e5a #x1e5b #x1e5c #x1e5d
-        #x1e5e #x1e5f #x1e60 #x1e61 #x1e62 #x1e63 #x1e64 #x1e65 #x1e66 #x1e67
-        #x1e68 #x1e69 #x1e6a #x1e6b #x1e6c #x1e6d #x1e6e #x1e6f #x1e70 #x1e71
-        #x1e72 #x1e73 #x1e74 #x1e75 #x1e76 #x1e77 #x1e78 #x1e79 #x1e7a #x1e7b
-        #x1e7c #x1e7d #x1e7e #x1e7f #x1e80 #x1e81 #x1e82 #x1e83 #x1e84 #x1e85
-        #x1e86 #x1e87 #x1e88 #x1e89 #x1e8a #x1e8b #x1e8c #x1e8d #x1e8e #x1e8f
-        #x1e90 #x1e91 #x1e92 #x1e93 #x1e94 #x1e95 #x1e9e #xdf #x1ea0 #x1ea1
-        #x1ea2 #x1ea3 #x1ea4 #x1ea5 #x1ea6 #x1ea7 #x1ea8 #x1ea9 #x1eaa #x1eab
-        #x1eac #x1ead #x1eae #x1eaf #x1eb0 #x1eb1 #x1eb2 #x1eb3 #x1eb4 #x1eb5
-        #x1eb6 #x1eb7 #x1eb8 #x1eb9 #x1eba #x1ebb #x1ebc #x1ebd #x1ebe #x1ebf
-        #x1ec0 #x1ec1 #x1ec2 #x1ec3 #x1ec4 #x1ec5 #x1ec6 #x1ec7 #x1ec8 #x1ec9
-        #x1eca #x1ecb #x1ecc #x1ecd #x1ece #x1ecf #x1ed0 #x1ed1 #x1ed2 #x1ed3
-        #x1ed4 #x1ed5 #x1ed6 #x1ed7 #x1ed8 #x1ed9 #x1eda #x1edb #x1edc #x1edd
-        #x1ede #x1edf #x1ee0 #x1ee1 #x1ee2 #x1ee3 #x1ee4 #x1ee5 #x1ee6 #x1ee7
-        #x1ee8 #x1ee9 #x1eea #x1eeb #x1eec #x1eed #x1eee #x1eef #x1ef0 #x1ef1
-        #x1ef2 #x1ef3 #x1ef4 #x1ef5 #x1ef6 #x1ef7 #x1ef8 #x1ef9 #x1efa #x1efb
-        #x1efc #x1efd #x1efe #x1eff #x1f08 #x1f00 #x1f09 #x1f01 #x1f0a #x1f02
-        #x1f0b #x1f03 #x1f0c #x1f04 #x1f0d #x1f05 #x1f0e #x1f06 #x1f0f #x1f07
-        #x1f18 #x1f10 #x1f19 #x1f11 #x1f1a #x1f12 #x1f1b #x1f13 #x1f1c #x1f14
-        #x1f1d #x1f15 #x1f28 #x1f20 #x1f29 #x1f21 #x1f2a #x1f22 #x1f2b #x1f23
-        #x1f2c #x1f24 #x1f2d #x1f25 #x1f2e #x1f26 #x1f2f #x1f27 #x1f38 #x1f30
-        #x1f39 #x1f31 #x1f3a #x1f32 #x1f3b #x1f33 #x1f3c #x1f34 #x1f3d #x1f35
-        #x1f3e #x1f36 #x1f3f #x1f37 #x1f48 #x1f40 #x1f49 #x1f41 #x1f4a #x1f42
-        #x1f4b #x1f43 #x1f4c #x1f44 #x1f4d #x1f45 #x1f59 #x1f51 #x1f5b #x1f53
-        #x1f5d #x1f55 #x1f5f #x1f57 #x1f68 #x1f60 #x1f69 #x1f61 #x1f6a #x1f62
-        #x1f6b #x1f63 #x1f6c #x1f64 #x1f6d #x1f65 #x1f6e #x1f66 #x1f6f #x1f67
-        #x1f88 #x1f80 #x1f89 #x1f81 #x1f8a #x1f82 #x1f8b #x1f83 #x1f8c #x1f84
-        #x1f8d #x1f85 #x1f8e #x1f86 #x1f8f #x1f87 #x1f98 #x1f90 #x1f99 #x1f91
-        #x1f9a #x1f92 #x1f9b #x1f93 #x1f9c #x1f94 #x1f9d #x1f95 #x1f9e #x1f96
-        #x1f9f #x1f97 #x1fa8 #x1fa0 #x1fa9 #x1fa1 #x1faa #x1fa2 #x1fab #x1fa3
-        #x1fac #x1fa4 #x1fad #x1fa5 #x1fae #x1fa6 #x1faf #x1fa7 #x1fb8 #x1fb0
-        #x1fb9 #x1fb1 #x1fba #x1f70 #x1fbb #x1f71 #x1fbc #x1fb3 #x1fc8 #x1f72
-        #x1fc9 #x1f73 #x1fca #x1f74 #x1fcb #x1f75 #x1fcc #x1fc3 #x1fd8 #x1fd0
-        #x1fd9 #x1fd1 #x1fda #x1f76 #x1fdb #x1f77 #x1fe8 #x1fe0 #x1fe9 #x1fe1
-        #x1fea #x1f7a #x1feb #x1f7b #x1fec #x1fe5 #x1ff8 #x1f78 #x1ff9 #x1f79
-        #x1ffa #x1f7c #x1ffb #x1f7d #x1ffc #x1ff3 #x2126 #x3c9 #x212a #x6b
-        #x212b #xe5 #x2132 #x214e #x2160 #x2170 #x2161 #x2171 #x2162 #x2172
-        #x2163 #x2173 #x2164 #x2174 #x2165 #x2175 #x2166 #x2176 #x2167 #x2177
-        #x2168 #x2178 #x2169 #x2179 #x216a #x217a #x216b #x217b #x216c #x217c
-        #x216d #x217d #x216e #x217e #x216f #x217f #x2183 #x2184 #x24b6 #x24d0
-        #x24b7 #x24d1 #x24b8 #x24d2 #x24b9 #x24d3 #x24ba #x24d4 #x24bb #x24d5
-        #x24bc #x24d6 #x24bd #x24d7 #x24be #x24d8 #x24bf #x24d9 #x24c0 #x24da
-        #x24c1 #x24db #x24c2 #x24dc #x24c3 #x24dd #x24c4 #x24de #x24c5 #x24df
-        #x24c6 #x24e0 #x24c7 #x24e1 #x24c8 #x24e2 #x24c9 #x24e3 #x24ca #x24e4
-        #x24cb #x24e5 #x24cc #x24e6 #x24cd #x24e7 #x24ce #x24e8 #x24cf #x24e9
-        #x2c00 #x2c30 #x2c01 #x2c31 #x2c02 #x2c32 #x2c03 #x2c33 #x2c04 #x2c34
-        #x2c05 #x2c35 #x2c06 #x2c36 #x2c07 #x2c37 #x2c08 #x2c38 #x2c09 #x2c39
-        #x2c0a #x2c3a #x2c0b #x2c3b #x2c0c #x2c3c #x2c0d #x2c3d #x2c0e #x2c3e
-        #x2c0f #x2c3f #x2c10 #x2c40 #x2c11 #x2c41 #x2c12 #x2c42 #x2c13 #x2c43
-        #x2c14 #x2c44 #x2c15 #x2c45 #x2c16 #x2c46 #x2c17 #x2c47 #x2c18 #x2c48
-        #x2c19 #x2c49 #x2c1a #x2c4a #x2c1b #x2c4b #x2c1c #x2c4c #x2c1d #x2c4d
-        #x2c1e #x2c4e #x2c1f #x2c4f #x2c20 #x2c50 #x2c21 #x2c51 #x2c22 #x2c52
-        #x2c23 #x2c53 #x2c24 #x2c54 #x2c25 #x2c55 #x2c26 #x2c56 #x2c27 #x2c57
-        #x2c28 #x2c58 #x2c29 #x2c59 #x2c2a #x2c5a #x2c2b #x2c5b #x2c2c #x2c5c
-        #x2c2d #x2c5d #x2c2e #x2c5e #x2c2f #x2c5f #x2c60 #x2c61 #x2c62 #x26b
-        #x2c63 #x1d7d #x2c64 #x27d #x2c67 #x2c68 #x2c69 #x2c6a #x2c6b #x2c6c
-        #x2c6d #x251 #x2c6e #x271 #x2c6f #x250 #x2c70 #x252 #x2c72 #x2c73
-        #x2c75 #x2c76 #x2c7e #x23f #x2c7f #x240 #x2c80 #x2c81 #x2c82 #x2c83
-        #x2c84 #x2c85 #x2c86 #x2c87 #x2c88 #x2c89 #x2c8a #x2c8b #x2c8c #x2c8d
-        #x2c8e #x2c8f #x2c90 #x2c91 #x2c92 #x2c93 #x2c94 #x2c95 #x2c96 #x2c97
-        #x2c98 #x2c99 #x2c9a #x2c9b #x2c9c #x2c9d #x2c9e #x2c9f #x2ca0 #x2ca1
-        #x2ca2 #x2ca3 #x2ca4 #x2ca5 #x2ca6 #x2ca7 #x2ca8 #x2ca9 #x2caa #x2cab
-        #x2cac #x2cad #x2cae #x2caf #x2cb0 #x2cb1 #x2cb2 #x2cb3 #x2cb4 #x2cb5
-        #x2cb6 #x2cb7 #x2cb8 #x2cb9 #x2cba #x2cbb #x2cbc #x2cbd #x2cbe #x2cbf
-        #x2cc0 #x2cc1 #x2cc2 #x2cc3 #x2cc4 #x2cc5 #x2cc6 #x2cc7 #x2cc8 #x2cc9
-        #x2cca #x2ccb #x2ccc #x2ccd #x2cce #x2ccf #x2cd0 #x2cd1 #x2cd2 #x2cd3
-        #x2cd4 #x2cd5 #x2cd6 #x2cd7 #x2cd8 #x2cd9 #x2cda #x2cdb #x2cdc #x2cdd
-        #x2cde #x2cdf #x2ce0 #x2ce1 #x2ce2 #x2ce3 #x2ceb #x2cec #x2ced #x2cee
-        #x2cf2 #x2cf3 #xa640 #xa641 #xa642 #xa643 #xa644 #xa645 #xa646 #xa647
-        #xa648 #xa649 #xa64a #xa64b #xa64c #xa64d #xa64e #xa64f #xa650 #xa651
-        #xa652 #xa653 #xa654 #xa655 #xa656 #xa657 #xa658 #xa659 #xa65a #xa65b
-        #xa65c #xa65d #xa65e #xa65f #xa660 #xa661 #xa662 #xa663 #xa664 #xa665
-        #xa666 #xa667 #xa668 #xa669 #xa66a #xa66b #xa66c #xa66d #xa680 #xa681
-        #xa682 #xa683 #xa684 #xa685 #xa686 #xa687 #xa688 #xa689 #xa68a #xa68b
-        #xa68c #xa68d #xa68e #xa68f #xa690 #xa691 #xa692 #xa693 #xa694 #xa695
-        #xa696 #xa697 #xa698 #xa699 #xa69a #xa69b #xa722 #xa723 #xa724 #xa725
-        #xa726 #xa727 #xa728 #xa729 #xa72a #xa72b #xa72c #xa72d #xa72e #xa72f
-        #xa732 #xa733 #xa734 #xa735 #xa736 #xa737 #xa738 #xa739 #xa73a #xa73b
-        #xa73c #xa73d #xa73e #xa73f #xa740 #xa741 #xa742 #xa743 #xa744 #xa745
-        #xa746 #xa747 #xa748 #xa749 #xa74a #xa74b #xa74c #xa74d #xa74e #xa74f
-        #xa750 #xa751 #xa752 #xa753 #xa754 #xa755 #xa756 #xa757 #xa758 #xa759
-        #xa75a #xa75b #xa75c #xa75d #xa75e #xa75f #xa760 #xa761 #xa762 #xa763
-        #xa764 #xa765 #xa766 #xa767 #xa768 #xa769 #xa76a #xa76b #xa76c #xa76d
-        #xa76e #xa76f #xa779 #xa77a #xa77b #xa77c #xa77d #x1d79 #xa77e #xa77f
-        #xa780 #xa781 #xa782 #xa783 #xa784 #xa785 #xa786 #xa787 #xa78b #xa78c
-        #xa78d #x265 #xa790 #xa791 #xa792 #xa793 #xa796 #xa797 #xa798 #xa799
-        #xa79a #xa79b #xa79c #xa79d #xa79e #xa79f #xa7a0 #xa7a1 #xa7a2 #xa7a3
-        #xa7a4 #xa7a5 #xa7a6 #xa7a7 #xa7a8 #xa7a9 #xa7aa #x266 #xa7ab #x25c
-        #xa7ac #x261 #xa7ad #x26c #xa7ae #x26a #xa7b0 #x29e #xa7b1 #x287 #xa7b2
-        #x29d #xa7b3 #xab53 #xa7b4 #xa7b5 #xa7b6 #xa7b7 #xa7b8 #xa7b9 #xa7ba
-        #xa7bb #xa7bc #xa7bd #xa7be #xa7bf #xa7c0 #xa7c1 #xa7c2 #xa7c3 #xa7c4
-        #xa794 #xa7c5 #x282 #xa7c6 #x1d8e #xa7c7 #xa7c8 #xa7c9 #xa7ca #xa7cb
-        #x264 #xa7cc #xa7cd #xa7ce #xa7cf #xa7d0 #xa7d1 #xa7d2 #xa7d3 #xa7d4
-        #xa7d5 #xa7d6 #xa7d7 #xa7d8 #xa7d9 #xa7da #xa7db #xa7dc #x19b #xa7f5
-        #xa7f6 #xff21 #xff41 #xff22 #xff42 #xff23 #xff43 #xff24 #xff44 #xff25
-        #xff45 #xff26 #xff46 #xff27 #xff47 #xff28 #xff48 #xff29 #xff49 #xff2a
-        #xff4a #xff2b #xff4b #xff2c #xff4c #xff2d #xff4d #xff2e #xff4e #xff2f
-        #xff4f #xff30 #xff50 #xff31 #xff51 #xff32 #xff52 #xff33 #xff53 #xff34
-        #xff54 #xff35 #xff55 #xff36 #xff56 #xff37 #xff57 #xff38 #xff58 #xff39
-        #xff59 #xff3a #xff5a #x10400 #x10428 #x10401 #x10429 #x10402 #x1042a
-        #x10403 #x1042b #x10404 #x1042c #x10405 #x1042d #x10406 #x1042e #x10407
-        #x1042f #x10408 #x10430 #x10409 #x10431 #x1040a #x10432 #x1040b #x10433
-        #x1040c #x10434 #x1040d #x10435 #x1040e #x10436 #x1040f #x10437 #x10410
-        #x10438 #x10411 #x10439 #x10412 #x1043a #x10413 #x1043b #x10414 #x1043c
-        #x10415 #x1043d #x10416 #x1043e #x10417 #x1043f #x10418 #x10440 #x10419
-        #x10441 #x1041a #x10442 #x1041b #x10443 #x1041c #x10444 #x1041d #x10445
-        #x1041e #x10446 #x1041f #x10447 #x10420 #x10448 #x10421 #x10449 #x10422
-        #x1044a #x10423 #x1044b #x10424 #x1044c #x10425 #x1044d #x10426 #x1044e
-        #x10427 #x1044f #x104b0 #x104d8 #x104b1 #x104d9 #x104b2 #x104da #x104b3
-        #x104db #x104b4 #x104dc #x104b5 #x104dd #x104b6 #x104de #x104b7 #x104df
-        #x104b8 #x104e0 #x104b9 #x104e1 #x104ba #x104e2 #x104bb #x104e3 #x104bc
-        #x104e4 #x104bd #x104e5 #x104be #x104e6 #x104bf #x104e7 #x104c0 #x104e8
-        #x104c1 #x104e9 #x104c2 #x104ea #x104c3 #x104eb #x104c4 #x104ec #x104c5
-        #x104ed #x104c6 #x104ee #x104c7 #x104ef #x104c8 #x104f0 #x104c9 #x104f1
-        #x104ca #x104f2 #x104cb #x104f3 #x104cc #x104f4 #x104cd #x104f5 #x104ce
-        #x104f6 #x104cf #x104f7 #x104d0 #x104f8 #x104d1 #x104f9 #x104d2 #x104fa
-        #x104d3 #x104fb #x10570 #x10597 #x10571 #x10598 #x10572 #x10599 #x10573
-        #x1059a #x10574 #x1059b #x10575 #x1059c #x10576 #x1059d #x10577 #x1059e
-        #x10578 #x1059f #x10579 #x105a0 #x1057a #x105a1 #x1057c #x105a3 #x1057d
-        #x105a4 #x1057e #x105a5 #x1057f #x105a6 #x10580 #x105a7 #x10581 #x105a8
-        #x10582 #x105a9 #x10583 #x105aa #x10584 #x105ab #x10585 #x105ac #x10586
-        #x105ad #x10587 #x105ae #x10588 #x105af #x10589 #x105b0 #x1058a #x105b1
-        #x1058c #x105b3 #x1058d #x105b4 #x1058e #x105b5 #x1058f #x105b6 #x10590
-        #x105b7 #x10591 #x105b8 #x10592 #x105b9 #x10594 #x105bb #x10595 #x105bc
-        #x10c80 #x10cc0 #x10c81 #x10cc1 #x10c82 #x10cc2 #x10c83 #x10cc3 #x10c84
-        #x10cc4 #x10c85 #x10cc5 #x10c86 #x10cc6 #x10c87 #x10cc7 #x10c88 #x10cc8
-        #x10c89 #x10cc9 #x10c8a #x10cca #x10c8b #x10ccb #x10c8c #x10ccc #x10c8d
-        #x10ccd #x10c8e #x10cce #x10c8f #x10ccf #x10c90 #x10cd0 #x10c91 #x10cd1
-        #x10c92 #x10cd2 #x10c93 #x10cd3 #x10c94 #x10cd4 #x10c95 #x10cd5 #x10c96
-        #x10cd6 #x10c97 #x10cd7 #x10c98 #x10cd8 #x10c99 #x10cd9 #x10c9a #x10cda
-        #x10c9b #x10cdb #x10c9c #x10cdc #x10c9d #x10cdd #x10c9e #x10cde #x10c9f
-        #x10cdf #x10ca0 #x10ce0 #x10ca1 #x10ce1 #x10ca2 #x10ce2 #x10ca3 #x10ce3
-        #x10ca4 #x10ce4 #x10ca5 #x10ce5 #x10ca6 #x10ce6 #x10ca7 #x10ce7 #x10ca8
-        #x10ce8 #x10ca9 #x10ce9 #x10caa #x10cea #x10cab #x10ceb #x10cac #x10cec
-        #x10cad #x10ced #x10cae #x10cee #x10caf #x10cef #x10cb0 #x10cf0 #x10cb1
-        #x10cf1 #x10cb2 #x10cf2 #x10d50 #x10d70 #x10d51 #x10d71 #x10d52 #x10d72
-        #x10d53 #x10d73 #x10d54 #x10d74 #x10d55 #x10d75 #x10d56 #x10d76 #x10d57
-        #x10d77 #x10d58 #x10d78 #x10d59 #x10d79 #x10d5a #x10d7a #x10d5b #x10d7b
-        #x10d5c #x10d7c #x10d5d #x10d7d #x10d5e #x10d7e #x10d5f #x10d7f #x10d60
-        #x10d80 #x10d61 #x10d81 #x10d62 #x10d82 #x10d63 #x10d83 #x10d64 #x10d84
-        #x10d65 #x10d85 #x118a0 #x118c0 #x118a1 #x118c1 #x118a2 #x118c2 #x118a3
-        #x118c3 #x118a4 #x118c4 #x118a5 #x118c5 #x118a6 #x118c6 #x118a7 #x118c7
-        #x118a8 #x118c8 #x118a9 #x118c9 #x118aa #x118ca #x118ab #x118cb #x118ac
-        #x118cc #x118ad #x118cd #x118ae #x118ce #x118af #x118cf #x118b0 #x118d0
-        #x118b1 #x118d1 #x118b2 #x118d2 #x118b3 #x118d3 #x118b4 #x118d4 #x118b5
-        #x118d5 #x118b6 #x118d6 #x118b7 #x118d7 #x118b8 #x118d8 #x118b9 #x118d9
-        #x118ba #x118da #x118bb #x118db #x118bc #x118dc #x118bd #x118dd #x118be
-        #x118de #x118bf #x118df #x16e40 #x16e60 #x16e41 #x16e61 #x16e42 #x16e62
-        #x16e43 #x16e63 #x16e44 #x16e64 #x16e45 #x16e65 #x16e46 #x16e66 #x16e47
-        #x16e67 #x16e48 #x16e68 #x16e49 #x16e69 #x16e4a #x16e6a #x16e4b #x16e6b
-        #x16e4c #x16e6c #x16e4d #x16e6d #x16e4e #x16e6e #x16e4f #x16e6f #x16e50
-        #x16e70 #x16e51 #x16e71 #x16e52 #x16e72 #x16e53 #x16e73 #x16e54 #x16e74
-        #x16e55 #x16e75 #x16e56 #x16e76 #x16e57 #x16e77 #x16e58 #x16e78 #x16e59
-        #x16e79 #x16e5a #x16e7a #x16e5b #x16e7b #x16e5c #x16e7c #x16e5d #x16e7d
-        #x16e5e #x16e7e #x16e5f #x16e7f #x16ea0 #x16ebb #x16ea1 #x16ebc #x16ea2
-        #x16ebd #x16ea3 #x16ebe #x16ea4 #x16ebf #x16ea5 #x16ec0 #x16ea6 #x16ec1
-        #x16ea7 #x16ec2 #x16ea8 #x16ec3 #x16ea9 #x16ec4 #x16eaa #x16ec5 #x16eab
-        #x16ec6 #x16eac #x16ec7 #x16ead #x16ec8 #x16eae #x16ec9 #x16eaf #x16eca
-        #x16eb0 #x16ecb #x16eb1 #x16ecc #x16eb2 #x16ecd #x16eb3 #x16ece #x16eb4
-        #x16ecf #x16eb5 #x16ed0 #x16eb6 #x16ed1 #x16eb7 #x16ed2 #x16eb8 #x16ed3
-        #x1e900 #x1e922 #x1e901 #x1e923 #x1e902 #x1e924 #x1e903 #x1e925 #x1e904
-        #x1e926 #x1e905 #x1e927 #x1e906 #x1e928 #x1e907 #x1e929 #x1e908 #x1e92a
-        #x1e909 #x1e92b #x1e90a #x1e92c #x1e90b #x1e92d #x1e90c #x1e92e #x1e90d
-        #x1e92f #x1e90e #x1e930 #x1e90f #x1e931 #x1e910 #x1e932 #x1e911 #x1e933
-        #x1e912 #x1e934 #x1e913 #x1e935 #x1e914 #x1e936 #x1e915 #x1e937 #x1e916
-        #x1e938 #x1e917 #x1e939 #x1e918 #x1e93a #x1e919 #x1e93b #x1e91a #x1e93c
-        #x1e91b #x1e93d #x1e91c #x1e93e #x1e91d #x1e93f #x1e91e #x1e940 #x1e91f
-        #x1e941 #x1e920 #x1e942 #x1e921 #x1e943
+        #x61 #x7a #x-20 #xb5 #xb5 #x2e7 #xe0 #xf6 #x-20 #xf8 #xfe #x-20 #xff
+        #xff #x79 #x101 #x101 #x-1 #x103 #x103 #x-1 #x105 #x105 #x-1 #x107
+        #x107 #x-1 #x109 #x109 #x-1 #x10b #x10b #x-1 #x10d #x10d #x-1 #x10f
+        #x10f #x-1 #x111 #x111 #x-1 #x113 #x113 #x-1 #x115 #x115 #x-1 #x117
+        #x117 #x-1 #x119 #x119 #x-1 #x11b #x11b #x-1 #x11d #x11d #x-1 #x11f
+        #x11f #x-1 #x121 #x121 #x-1 #x123 #x123 #x-1 #x125 #x125 #x-1 #x127
+        #x127 #x-1 #x129 #x129 #x-1 #x12b #x12b #x-1 #x12d #x12d #x-1 #x12f
+        #x12f #x-1 #x131 #x131 #x-e8 #x133 #x133 #x-1 #x135 #x135 #x-1 #x137
+        #x137 #x-1 #x13a #x13a #x-1 #x13c #x13c #x-1 #x13e #x13e #x-1 #x140
+        #x140 #x-1 #x142 #x142 #x-1 #x144 #x144 #x-1 #x146 #x146 #x-1 #x148
+        #x148 #x-1 #x14b #x14b #x-1 #x14d #x14d #x-1 #x14f #x14f #x-1 #x151
+        #x151 #x-1 #x153 #x153 #x-1 #x155 #x155 #x-1 #x157 #x157 #x-1 #x159
+        #x159 #x-1 #x15b #x15b #x-1 #x15d #x15d #x-1 #x15f #x15f #x-1 #x161
+        #x161 #x-1 #x163 #x163 #x-1 #x165 #x165 #x-1 #x167 #x167 #x-1 #x169
+        #x169 #x-1 #x16b #x16b #x-1 #x16d #x16d #x-1 #x16f #x16f #x-1 #x171
+        #x171 #x-1 #x173 #x173 #x-1 #x175 #x175 #x-1 #x177 #x177 #x-1 #x17a
+        #x17a #x-1 #x17c #x17c #x-1 #x17e #x17e #x-1 #x17f #x17f #x-12c #x180
+        #x180 #xc3 #x183 #x183 #x-1 #x185 #x185 #x-1 #x188 #x188 #x-1 #x18c
+        #x18c #x-1 #x192 #x192 #x-1 #x195 #x195 #x61 #x199 #x199 #x-1 #x19a
+        #x19a #xa3 #x19b #x19b #xa641 #x19e #x19e #x82 #x1a1 #x1a1 #x-1 #x1a3
+        #x1a3 #x-1 #x1a5 #x1a5 #x-1 #x1a8 #x1a8 #x-1 #x1ad #x1ad #x-1 #x1b0
+        #x1b0 #x-1 #x1b4 #x1b4 #x-1 #x1b6 #x1b6 #x-1 #x1b9 #x1b9 #x-1 #x1bd
+        #x1bd #x-1 #x1bf #x1bf #x38 #x1c5 #x1c5 #x-1 #x1c6 #x1c6 #x-2 #x1c8
+        #x1c8 #x-1 #x1c9 #x1c9 #x-2 #x1cb #x1cb #x-1 #x1cc #x1cc #x-2 #x1ce
+        #x1ce #x-1 #x1d0 #x1d0 #x-1 #x1d2 #x1d2 #x-1 #x1d4 #x1d4 #x-1 #x1d6
+        #x1d6 #x-1 #x1d8 #x1d8 #x-1 #x1da #x1da #x-1 #x1dc #x1dc #x-1 #x1dd
+        #x1dd #x-4f #x1df #x1df #x-1 #x1e1 #x1e1 #x-1 #x1e3 #x1e3 #x-1 #x1e5
+        #x1e5 #x-1 #x1e7 #x1e7 #x-1 #x1e9 #x1e9 #x-1 #x1eb #x1eb #x-1 #x1ed
+        #x1ed #x-1 #x1ef #x1ef #x-1 #x1f2 #x1f2 #x-1 #x1f3 #x1f3 #x-2 #x1f5
+        #x1f5 #x-1 #x1f9 #x1f9 #x-1 #x1fb #x1fb #x-1 #x1fd #x1fd #x-1 #x1ff
+        #x1ff #x-1 #x201 #x201 #x-1 #x203 #x203 #x-1 #x205 #x205 #x-1 #x207
+        #x207 #x-1 #x209 #x209 #x-1 #x20b #x20b #x-1 #x20d #x20d #x-1 #x20f
+        #x20f #x-1 #x211 #x211 #x-1 #x213 #x213 #x-1 #x215 #x215 #x-1 #x217
+        #x217 #x-1 #x219 #x219 #x-1 #x21b #x21b #x-1 #x21d #x21d #x-1 #x21f
+        #x21f #x-1 #x223 #x223 #x-1 #x225 #x225 #x-1 #x227 #x227 #x-1 #x229
+        #x229 #x-1 #x22b #x22b #x-1 #x22d #x22d #x-1 #x22f #x22f #x-1 #x231
+        #x231 #x-1 #x233 #x233 #x-1 #x23c #x23c #x-1 #x23f #x240 #x2a3f #x242
+        #x242 #x-1 #x247 #x247 #x-1 #x249 #x249 #x-1 #x24b #x24b #x-1 #x24d
+        #x24d #x-1 #x24f #x24f #x-1 #x250 #x250 #x2a1f #x251 #x251 #x2a1c #x252
+        #x252 #x2a1e #x253 #x253 #x-d2 #x254 #x254 #x-ce #x256 #x257 #x-cd
+        #x259 #x259 #x-ca #x25b #x25b #x-cb #x25c #x25c #xa54f #x260 #x260
+        #x-cd #x261 #x261 #xa54b #x263 #x263 #x-cf #x264 #x264 #xa567 #x265
+        #x265 #xa528 #x266 #x266 #xa544 #x268 #x268 #x-d1 #x269 #x269 #x-d3
+        #x26a #x26a #xa544 #x26b #x26b #x29f7 #x26c #x26c #xa541 #x26f #x26f
+        #x-d3 #x271 #x271 #x29fd #x272 #x272 #x-d5 #x275 #x275 #x-d6 #x27d
+        #x27d #x29e7 #x280 #x280 #x-da #x282 #x282 #xa543 #x283 #x283 #x-da
+        #x287 #x287 #xa52a #x288 #x288 #x-da #x289 #x289 #x-45 #x28a #x28b
+        #x-d9 #x28c #x28c #x-47 #x292 #x292 #x-db #x29d #x29d #xa515 #x29e
+        #x29e #xa512 #x345 #x345 #x54 #x371 #x371 #x-1 #x373 #x373 #x-1 #x377
+        #x377 #x-1 #x37b #x37d #x82 #x3ac #x3ac #x-26 #x3ad #x3af #x-25 #x3b1
+        #x3c1 #x-20 #x3c2 #x3c2 #x-1f #x3c3 #x3cb #x-20 #x3cc #x3cc #x-40 #x3cd
+        #x3ce #x-3f #x3d0 #x3d0 #x-3e #x3d1 #x3d1 #x-39 #x3d5 #x3d5 #x-2f #x3d6
+        #x3d6 #x-36 #x3d7 #x3d7 #x-8 #x3d9 #x3d9 #x-1 #x3db #x3db #x-1 #x3dd
+        #x3dd #x-1 #x3df #x3df #x-1 #x3e1 #x3e1 #x-1 #x3e3 #x3e3 #x-1 #x3e5
+        #x3e5 #x-1 #x3e7 #x3e7 #x-1 #x3e9 #x3e9 #x-1 #x3eb #x3eb #x-1 #x3ed
+        #x3ed #x-1 #x3ef #x3ef #x-1 #x3f0 #x3f0 #x-56 #x3f1 #x3f1 #x-50 #x3f2
+        #x3f2 #x7 #x3f3 #x3f3 #x-74 #x3f5 #x3f5 #x-60 #x3f8 #x3f8 #x-1 #x3fb
+        #x3fb #x-1 #x430 #x44f #x-20 #x450 #x45f #x-50 #x461 #x461 #x-1 #x463
+        #x463 #x-1 #x465 #x465 #x-1 #x467 #x467 #x-1 #x469 #x469 #x-1 #x46b
+        #x46b #x-1 #x46d #x46d #x-1 #x46f #x46f #x-1 #x471 #x471 #x-1 #x473
+        #x473 #x-1 #x475 #x475 #x-1 #x477 #x477 #x-1 #x479 #x479 #x-1 #x47b
+        #x47b #x-1 #x47d #x47d #x-1 #x47f #x47f #x-1 #x481 #x481 #x-1 #x48b
+        #x48b #x-1 #x48d #x48d #x-1 #x48f #x48f #x-1 #x491 #x491 #x-1 #x493
+        #x493 #x-1 #x495 #x495 #x-1 #x497 #x497 #x-1 #x499 #x499 #x-1 #x49b
+        #x49b #x-1 #x49d #x49d #x-1 #x49f #x49f #x-1 #x4a1 #x4a1 #x-1 #x4a3
+        #x4a3 #x-1 #x4a5 #x4a5 #x-1 #x4a7 #x4a7 #x-1 #x4a9 #x4a9 #x-1 #x4ab
+        #x4ab #x-1 #x4ad #x4ad #x-1 #x4af #x4af #x-1 #x4b1 #x4b1 #x-1 #x4b3
+        #x4b3 #x-1 #x4b5 #x4b5 #x-1 #x4b7 #x4b7 #x-1 #x4b9 #x4b9 #x-1 #x4bb
+        #x4bb #x-1 #x4bd #x4bd #x-1 #x4bf #x4bf #x-1 #x4c2 #x4c2 #x-1 #x4c4
+        #x4c4 #x-1 #x4c6 #x4c6 #x-1 #x4c8 #x4c8 #x-1 #x4ca #x4ca #x-1 #x4cc
+        #x4cc #x-1 #x4ce #x4ce #x-1 #x4cf #x4cf #x-f #x4d1 #x4d1 #x-1 #x4d3
+        #x4d3 #x-1 #x4d5 #x4d5 #x-1 #x4d7 #x4d7 #x-1 #x4d9 #x4d9 #x-1 #x4db
+        #x4db #x-1 #x4dd #x4dd #x-1 #x4df #x4df #x-1 #x4e1 #x4e1 #x-1 #x4e3
+        #x4e3 #x-1 #x4e5 #x4e5 #x-1 #x4e7 #x4e7 #x-1 #x4e9 #x4e9 #x-1 #x4eb
+        #x4eb #x-1 #x4ed #x4ed #x-1 #x4ef #x4ef #x-1 #x4f1 #x4f1 #x-1 #x4f3
+        #x4f3 #x-1 #x4f5 #x4f5 #x-1 #x4f7 #x4f7 #x-1 #x4f9 #x4f9 #x-1 #x4fb
+        #x4fb #x-1 #x4fd #x4fd #x-1 #x4ff #x4ff #x-1 #x501 #x501 #x-1 #x503
+        #x503 #x-1 #x505 #x505 #x-1 #x507 #x507 #x-1 #x509 #x509 #x-1 #x50b
+        #x50b #x-1 #x50d #x50d #x-1 #x50f #x50f #x-1 #x511 #x511 #x-1 #x513
+        #x513 #x-1 #x515 #x515 #x-1 #x517 #x517 #x-1 #x519 #x519 #x-1 #x51b
+        #x51b #x-1 #x51d #x51d #x-1 #x51f #x51f #x-1 #x521 #x521 #x-1 #x523
+        #x523 #x-1 #x525 #x525 #x-1 #x527 #x527 #x-1 #x529 #x529 #x-1 #x52b
+        #x52b #x-1 #x52d #x52d #x-1 #x52f #x52f #x-1 #x561 #x586 #x-30 #x10d0
+        #x10fa #xbc0 #x10fd #x10ff #xbc0 #x13f8 #x13fd #x-8 #x1c80 #x1c80
+        #x-186e #x1c81 #x1c81 #x-186d #x1c82 #x1c82 #x-1864 #x1c83 #x1c84
+        #x-1862 #x1c85 #x1c85 #x-1863 #x1c86 #x1c86 #x-185c #x1c87 #x1c87
+        #x-1825 #x1c88 #x1c88 #x89c2 #x1c8a #x1c8a #x-1 #x1d79 #x1d79 #x8a04
+        #x1d7d #x1d7d #xee6 #x1d8e #x1d8e #x8a38 #x1e01 #x1e01 #x-1 #x1e03
+        #x1e03 #x-1 #x1e05 #x1e05 #x-1 #x1e07 #x1e07 #x-1 #x1e09 #x1e09 #x-1
+        #x1e0b #x1e0b #x-1 #x1e0d #x1e0d #x-1 #x1e0f #x1e0f #x-1 #x1e11 #x1e11
+        #x-1 #x1e13 #x1e13 #x-1 #x1e15 #x1e15 #x-1 #x1e17 #x1e17 #x-1 #x1e19
+        #x1e19 #x-1 #x1e1b #x1e1b #x-1 #x1e1d #x1e1d #x-1 #x1e1f #x1e1f #x-1
+        #x1e21 #x1e21 #x-1 #x1e23 #x1e23 #x-1 #x1e25 #x1e25 #x-1 #x1e27 #x1e27
+        #x-1 #x1e29 #x1e29 #x-1 #x1e2b #x1e2b #x-1 #x1e2d #x1e2d #x-1 #x1e2f
+        #x1e2f #x-1 #x1e31 #x1e31 #x-1 #x1e33 #x1e33 #x-1 #x1e35 #x1e35 #x-1
+        #x1e37 #x1e37 #x-1 #x1e39 #x1e39 #x-1 #x1e3b #x1e3b #x-1 #x1e3d #x1e3d
+        #x-1 #x1e3f #x1e3f #x-1 #x1e41 #x1e41 #x-1 #x1e43 #x1e43 #x-1 #x1e45
+        #x1e45 #x-1 #x1e47 #x1e47 #x-1 #x1e49 #x1e49 #x-1 #x1e4b #x1e4b #x-1
+        #x1e4d #x1e4d #x-1 #x1e4f #x1e4f #x-1 #x1e51 #x1e51 #x-1 #x1e53 #x1e53
+        #x-1 #x1e55 #x1e55 #x-1 #x1e57 #x1e57 #x-1 #x1e59 #x1e59 #x-1 #x1e5b
+        #x1e5b #x-1 #x1e5d #x1e5d #x-1 #x1e5f #x1e5f #x-1 #x1e61 #x1e61 #x-1
+        #x1e63 #x1e63 #x-1 #x1e65 #x1e65 #x-1 #x1e67 #x1e67 #x-1 #x1e69 #x1e69
+        #x-1 #x1e6b #x1e6b #x-1 #x1e6d #x1e6d #x-1 #x1e6f #x1e6f #x-1 #x1e71
+        #x1e71 #x-1 #x1e73 #x1e73 #x-1 #x1e75 #x1e75 #x-1 #x1e77 #x1e77 #x-1
+        #x1e79 #x1e79 #x-1 #x1e7b #x1e7b #x-1 #x1e7d #x1e7d #x-1 #x1e7f #x1e7f
+        #x-1 #x1e81 #x1e81 #x-1 #x1e83 #x1e83 #x-1 #x1e85 #x1e85 #x-1 #x1e87
+        #x1e87 #x-1 #x1e89 #x1e89 #x-1 #x1e8b #x1e8b #x-1 #x1e8d #x1e8d #x-1
+        #x1e8f #x1e8f #x-1 #x1e91 #x1e91 #x-1 #x1e93 #x1e93 #x-1 #x1e95 #x1e95
+        #x-1 #x1e9b #x1e9b #x-3b #x1ea1 #x1ea1 #x-1 #x1ea3 #x1ea3 #x-1 #x1ea5
+        #x1ea5 #x-1 #x1ea7 #x1ea7 #x-1 #x1ea9 #x1ea9 #x-1 #x1eab #x1eab #x-1
+        #x1ead #x1ead #x-1 #x1eaf #x1eaf #x-1 #x1eb1 #x1eb1 #x-1 #x1eb3 #x1eb3
+        #x-1 #x1eb5 #x1eb5 #x-1 #x1eb7 #x1eb7 #x-1 #x1eb9 #x1eb9 #x-1 #x1ebb
+        #x1ebb #x-1 #x1ebd #x1ebd #x-1 #x1ebf #x1ebf #x-1 #x1ec1 #x1ec1 #x-1
+        #x1ec3 #x1ec3 #x-1 #x1ec5 #x1ec5 #x-1 #x1ec7 #x1ec7 #x-1 #x1ec9 #x1ec9
+        #x-1 #x1ecb #x1ecb #x-1 #x1ecd #x1ecd #x-1 #x1ecf #x1ecf #x-1 #x1ed1
+        #x1ed1 #x-1 #x1ed3 #x1ed3 #x-1 #x1ed5 #x1ed5 #x-1 #x1ed7 #x1ed7 #x-1
+        #x1ed9 #x1ed9 #x-1 #x1edb #x1edb #x-1 #x1edd #x1edd #x-1 #x1edf #x1edf
+        #x-1 #x1ee1 #x1ee1 #x-1 #x1ee3 #x1ee3 #x-1 #x1ee5 #x1ee5 #x-1 #x1ee7
+        #x1ee7 #x-1 #x1ee9 #x1ee9 #x-1 #x1eeb #x1eeb #x-1 #x1eed #x1eed #x-1
+        #x1eef #x1eef #x-1 #x1ef1 #x1ef1 #x-1 #x1ef3 #x1ef3 #x-1 #x1ef5 #x1ef5
+        #x-1 #x1ef7 #x1ef7 #x-1 #x1ef9 #x1ef9 #x-1 #x1efb #x1efb #x-1 #x1efd
+        #x1efd #x-1 #x1eff #x1eff #x-1 #x1f00 #x1f07 #x8 #x1f10 #x1f15 #x8
+        #x1f20 #x1f27 #x8 #x1f30 #x1f37 #x8 #x1f40 #x1f45 #x8 #x1f51 #x1f51 #x8
+        #x1f53 #x1f53 #x8 #x1f55 #x1f55 #x8 #x1f57 #x1f57 #x8 #x1f60 #x1f67 #x8
+        #x1f70 #x1f71 #x4a #x1f72 #x1f75 #x56 #x1f76 #x1f77 #x64 #x1f78 #x1f79
+        #x80 #x1f7a #x1f7b #x70 #x1f7c #x1f7d #x7e #x1f80 #x1f87 #x8 #x1f90
+        #x1f97 #x8 #x1fa0 #x1fa7 #x8 #x1fb0 #x1fb1 #x8 #x1fb3 #x1fb3 #x9 #x1fbe
+        #x1fbe #x-1c25 #x1fc3 #x1fc3 #x9 #x1fd0 #x1fd1 #x8 #x1fe0 #x1fe1 #x8
+        #x1fe5 #x1fe5 #x7 #x1ff3 #x1ff3 #x9 #x214e #x214e #x-1c #x2170 #x217f
+        #x-10 #x2184 #x2184 #x-1 #x24d0 #x24e9 #x-1a #x2c30 #x2c5f #x-30 #x2c61
+        #x2c61 #x-1 #x2c65 #x2c65 #x-2a2b #x2c66 #x2c66 #x-2a28 #x2c68 #x2c68
+        #x-1 #x2c6a #x2c6a #x-1 #x2c6c #x2c6c #x-1 #x2c73 #x2c73 #x-1 #x2c76
+        #x2c76 #x-1 #x2c81 #x2c81 #x-1 #x2c83 #x2c83 #x-1 #x2c85 #x2c85 #x-1
+        #x2c87 #x2c87 #x-1 #x2c89 #x2c89 #x-1 #x2c8b #x2c8b #x-1 #x2c8d #x2c8d
+        #x-1 #x2c8f #x2c8f #x-1 #x2c91 #x2c91 #x-1 #x2c93 #x2c93 #x-1 #x2c95
+        #x2c95 #x-1 #x2c97 #x2c97 #x-1 #x2c99 #x2c99 #x-1 #x2c9b #x2c9b #x-1
+        #x2c9d #x2c9d #x-1 #x2c9f #x2c9f #x-1 #x2ca1 #x2ca1 #x-1 #x2ca3 #x2ca3
+        #x-1 #x2ca5 #x2ca5 #x-1 #x2ca7 #x2ca7 #x-1 #x2ca9 #x2ca9 #x-1 #x2cab
+        #x2cab #x-1 #x2cad #x2cad #x-1 #x2caf #x2caf #x-1 #x2cb1 #x2cb1 #x-1
+        #x2cb3 #x2cb3 #x-1 #x2cb5 #x2cb5 #x-1 #x2cb7 #x2cb7 #x-1 #x2cb9 #x2cb9
+        #x-1 #x2cbb #x2cbb #x-1 #x2cbd #x2cbd #x-1 #x2cbf #x2cbf #x-1 #x2cc1
+        #x2cc1 #x-1 #x2cc3 #x2cc3 #x-1 #x2cc5 #x2cc5 #x-1 #x2cc7 #x2cc7 #x-1
+        #x2cc9 #x2cc9 #x-1 #x2ccb #x2ccb #x-1 #x2ccd #x2ccd #x-1 #x2ccf #x2ccf
+        #x-1 #x2cd1 #x2cd1 #x-1 #x2cd3 #x2cd3 #x-1 #x2cd5 #x2cd5 #x-1 #x2cd7
+        #x2cd7 #x-1 #x2cd9 #x2cd9 #x-1 #x2cdb #x2cdb #x-1 #x2cdd #x2cdd #x-1
+        #x2cdf #x2cdf #x-1 #x2ce1 #x2ce1 #x-1 #x2ce3 #x2ce3 #x-1 #x2cec #x2cec
+        #x-1 #x2cee #x2cee #x-1 #x2cf3 #x2cf3 #x-1 #x2d00 #x2d25 #x-1c60 #x2d27
+        #x2d27 #x-1c60 #x2d2d #x2d2d #x-1c60 #xa641 #xa641 #x-1 #xa643 #xa643
+        #x-1 #xa645 #xa645 #x-1 #xa647 #xa647 #x-1 #xa649 #xa649 #x-1 #xa64b
+        #xa64b #x-1 #xa64d #xa64d #x-1 #xa64f #xa64f #x-1 #xa651 #xa651 #x-1
+        #xa653 #xa653 #x-1 #xa655 #xa655 #x-1 #xa657 #xa657 #x-1 #xa659 #xa659
+        #x-1 #xa65b #xa65b #x-1 #xa65d #xa65d #x-1 #xa65f #xa65f #x-1 #xa661
+        #xa661 #x-1 #xa663 #xa663 #x-1 #xa665 #xa665 #x-1 #xa667 #xa667 #x-1
+        #xa669 #xa669 #x-1 #xa66b #xa66b #x-1 #xa66d #xa66d #x-1 #xa681 #xa681
+        #x-1 #xa683 #xa683 #x-1 #xa685 #xa685 #x-1 #xa687 #xa687 #x-1 #xa689
+        #xa689 #x-1 #xa68b #xa68b #x-1 #xa68d #xa68d #x-1 #xa68f #xa68f #x-1
+        #xa691 #xa691 #x-1 #xa693 #xa693 #x-1 #xa695 #xa695 #x-1 #xa697 #xa697
+        #x-1 #xa699 #xa699 #x-1 #xa69b #xa69b #x-1 #xa723 #xa723 #x-1 #xa725
+        #xa725 #x-1 #xa727 #xa727 #x-1 #xa729 #xa729 #x-1 #xa72b #xa72b #x-1
+        #xa72d #xa72d #x-1 #xa72f #xa72f #x-1 #xa733 #xa733 #x-1 #xa735 #xa735
+        #x-1 #xa737 #xa737 #x-1 #xa739 #xa739 #x-1 #xa73b #xa73b #x-1 #xa73d
+        #xa73d #x-1 #xa73f #xa73f #x-1 #xa741 #xa741 #x-1 #xa743 #xa743 #x-1
+        #xa745 #xa745 #x-1 #xa747 #xa747 #x-1 #xa749 #xa749 #x-1 #xa74b #xa74b
+        #x-1 #xa74d #xa74d #x-1 #xa74f #xa74f #x-1 #xa751 #xa751 #x-1 #xa753
+        #xa753 #x-1 #xa755 #xa755 #x-1 #xa757 #xa757 #x-1 #xa759 #xa759 #x-1
+        #xa75b #xa75b #x-1 #xa75d #xa75d #x-1 #xa75f #xa75f #x-1 #xa761 #xa761
+        #x-1 #xa763 #xa763 #x-1 #xa765 #xa765 #x-1 #xa767 #xa767 #x-1 #xa769
+        #xa769 #x-1 #xa76b #xa76b #x-1 #xa76d #xa76d #x-1 #xa76f #xa76f #x-1
+        #xa77a #xa77a #x-1 #xa77c #xa77c #x-1 #xa77f #xa77f #x-1 #xa781 #xa781
+        #x-1 #xa783 #xa783 #x-1 #xa785 #xa785 #x-1 #xa787 #xa787 #x-1 #xa78c
+        #xa78c #x-1 #xa791 #xa791 #x-1 #xa793 #xa793 #x-1 #xa794 #xa794 #x30
+        #xa797 #xa797 #x-1 #xa799 #xa799 #x-1 #xa79b #xa79b #x-1 #xa79d #xa79d
+        #x-1 #xa79f #xa79f #x-1 #xa7a1 #xa7a1 #x-1 #xa7a3 #xa7a3 #x-1 #xa7a5
+        #xa7a5 #x-1 #xa7a7 #xa7a7 #x-1 #xa7a9 #xa7a9 #x-1 #xa7b5 #xa7b5 #x-1
+        #xa7b7 #xa7b7 #x-1 #xa7b9 #xa7b9 #x-1 #xa7bb #xa7bb #x-1 #xa7bd #xa7bd
+        #x-1 #xa7bf #xa7bf #x-1 #xa7c1 #xa7c1 #x-1 #xa7c3 #xa7c3 #x-1 #xa7c8
+        #xa7c8 #x-1 #xa7ca #xa7ca #x-1 #xa7cd #xa7cd #x-1 #xa7cf #xa7cf #x-1
+        #xa7d1 #xa7d1 #x-1 #xa7d3 #xa7d3 #x-1 #xa7d5 #xa7d5 #x-1 #xa7d7 #xa7d7
+        #x-1 #xa7d9 #xa7d9 #x-1 #xa7db #xa7db #x-1 #xa7f6 #xa7f6 #x-1 #xab53
+        #xab53 #x-3a0 #xab70 #xabbf #x-97d0 #xff41 #xff5a #x-20 #x10428 #x1044f
+        #x-28 #x104d8 #x104fb #x-28 #x10597 #x105a1 #x-27 #x105a3 #x105b1 #x-27
+        #x105b3 #x105b9 #x-27 #x105bb #x105bc #x-27 #x10cc0 #x10cf2 #x-40
+        #x10d70 #x10d85 #x-20 #x118c0 #x118df #x-20 #x16e60 #x16e7f #x-20
+        #x16ebb #x16ed3 #x-1b #x1e922 #x1e943 #x-22
         ))
 
-    ;; Code-point pairs for default Unicode simple case folding.
-    (define consent-unicode-simple-foldcase-mappings
+    ;; Private entry offsets by BMP page or supplementary plane.
+    (define %unicode-simple-uppercase-index
       #(
-        #x41 #x61 #x42 #x62 #x43 #x63 #x44 #x64 #x45 #x65 #x46 #x66 #x47 #x67
-        #x48 #x68 #x49 #x69 #x4a #x6a #x4b #x6b #x4c #x6c #x4d #x6d #x4e #x6e
-        #x4f #x6f #x50 #x70 #x51 #x71 #x52 #x72 #x53 #x73 #x54 #x74 #x55 #x75
-        #x56 #x76 #x57 #x77 #x58 #x78 #x59 #x79 #x5a #x7a #xb5 #x3bc #xc0 #xe0
-        #xc1 #xe1 #xc2 #xe2 #xc3 #xe3 #xc4 #xe4 #xc5 #xe5 #xc6 #xe6 #xc7 #xe7
-        #xc8 #xe8 #xc9 #xe9 #xca #xea #xcb #xeb #xcc #xec #xcd #xed #xce #xee
-        #xcf #xef #xd0 #xf0 #xd1 #xf1 #xd2 #xf2 #xd3 #xf3 #xd4 #xf4 #xd5 #xf5
-        #xd6 #xf6 #xd8 #xf8 #xd9 #xf9 #xda #xfa #xdb #xfb #xdc #xfc #xdd #xfd
-        #xde #xfe #x100 #x101 #x102 #x103 #x104 #x105 #x106 #x107 #x108 #x109
-        #x10a #x10b #x10c #x10d #x10e #x10f #x110 #x111 #x112 #x113 #x114 #x115
-        #x116 #x117 #x118 #x119 #x11a #x11b #x11c #x11d #x11e #x11f #x120 #x121
-        #x122 #x123 #x124 #x125 #x126 #x127 #x128 #x129 #x12a #x12b #x12c #x12d
-        #x12e #x12f #x132 #x133 #x134 #x135 #x136 #x137 #x139 #x13a #x13b #x13c
-        #x13d #x13e #x13f #x140 #x141 #x142 #x143 #x144 #x145 #x146 #x147 #x148
-        #x14a #x14b #x14c #x14d #x14e #x14f #x150 #x151 #x152 #x153 #x154 #x155
-        #x156 #x157 #x158 #x159 #x15a #x15b #x15c #x15d #x15e #x15f #x160 #x161
-        #x162 #x163 #x164 #x165 #x166 #x167 #x168 #x169 #x16a #x16b #x16c #x16d
-        #x16e #x16f #x170 #x171 #x172 #x173 #x174 #x175 #x176 #x177 #x178 #xff
-        #x179 #x17a #x17b #x17c #x17d #x17e #x17f #x73 #x181 #x253 #x182 #x183
-        #x184 #x185 #x186 #x254 #x187 #x188 #x189 #x256 #x18a #x257 #x18b #x18c
-        #x18e #x1dd #x18f #x259 #x190 #x25b #x191 #x192 #x193 #x260 #x194 #x263
-        #x196 #x269 #x197 #x268 #x198 #x199 #x19c #x26f #x19d #x272 #x19f #x275
-        #x1a0 #x1a1 #x1a2 #x1a3 #x1a4 #x1a5 #x1a6 #x280 #x1a7 #x1a8 #x1a9 #x283
-        #x1ac #x1ad #x1ae #x288 #x1af #x1b0 #x1b1 #x28a #x1b2 #x28b #x1b3 #x1b4
-        #x1b5 #x1b6 #x1b7 #x292 #x1b8 #x1b9 #x1bc #x1bd #x1c4 #x1c6 #x1c5 #x1c6
-        #x1c7 #x1c9 #x1c8 #x1c9 #x1ca #x1cc #x1cb #x1cc #x1cd #x1ce #x1cf #x1d0
-        #x1d1 #x1d2 #x1d3 #x1d4 #x1d5 #x1d6 #x1d7 #x1d8 #x1d9 #x1da #x1db #x1dc
-        #x1de #x1df #x1e0 #x1e1 #x1e2 #x1e3 #x1e4 #x1e5 #x1e6 #x1e7 #x1e8 #x1e9
-        #x1ea #x1eb #x1ec #x1ed #x1ee #x1ef #x1f1 #x1f3 #x1f2 #x1f3 #x1f4 #x1f5
-        #x1f6 #x195 #x1f7 #x1bf #x1f8 #x1f9 #x1fa #x1fb #x1fc #x1fd #x1fe #x1ff
-        #x200 #x201 #x202 #x203 #x204 #x205 #x206 #x207 #x208 #x209 #x20a #x20b
-        #x20c #x20d #x20e #x20f #x210 #x211 #x212 #x213 #x214 #x215 #x216 #x217
-        #x218 #x219 #x21a #x21b #x21c #x21d #x21e #x21f #x220 #x19e #x222 #x223
-        #x224 #x225 #x226 #x227 #x228 #x229 #x22a #x22b #x22c #x22d #x22e #x22f
-        #x230 #x231 #x232 #x233 #x23a #x2c65 #x23b #x23c #x23d #x19a #x23e
-        #x2c66 #x241 #x242 #x243 #x180 #x244 #x289 #x245 #x28c #x246 #x247
-        #x248 #x249 #x24a #x24b #x24c #x24d #x24e #x24f #x345 #x3b9 #x370 #x371
-        #x372 #x373 #x376 #x377 #x37f #x3f3 #x386 #x3ac #x388 #x3ad #x389 #x3ae
-        #x38a #x3af #x38c #x3cc #x38e #x3cd #x38f #x3ce #x391 #x3b1 #x392 #x3b2
-        #x393 #x3b3 #x394 #x3b4 #x395 #x3b5 #x396 #x3b6 #x397 #x3b7 #x398 #x3b8
-        #x399 #x3b9 #x39a #x3ba #x39b #x3bb #x39c #x3bc #x39d #x3bd #x39e #x3be
-        #x39f #x3bf #x3a0 #x3c0 #x3a1 #x3c1 #x3a3 #x3c3 #x3a4 #x3c4 #x3a5 #x3c5
-        #x3a6 #x3c6 #x3a7 #x3c7 #x3a8 #x3c8 #x3a9 #x3c9 #x3aa #x3ca #x3ab #x3cb
-        #x3c2 #x3c3 #x3cf #x3d7 #x3d0 #x3b2 #x3d1 #x3b8 #x3d5 #x3c6 #x3d6 #x3c0
-        #x3d8 #x3d9 #x3da #x3db #x3dc #x3dd #x3de #x3df #x3e0 #x3e1 #x3e2 #x3e3
-        #x3e4 #x3e5 #x3e6 #x3e7 #x3e8 #x3e9 #x3ea #x3eb #x3ec #x3ed #x3ee #x3ef
-        #x3f0 #x3ba #x3f1 #x3c1 #x3f4 #x3b8 #x3f5 #x3b5 #x3f7 #x3f8 #x3f9 #x3f2
-        #x3fa #x3fb #x3fd #x37b #x3fe #x37c #x3ff #x37d #x400 #x450 #x401 #x451
-        #x402 #x452 #x403 #x453 #x404 #x454 #x405 #x455 #x406 #x456 #x407 #x457
-        #x408 #x458 #x409 #x459 #x40a #x45a #x40b #x45b #x40c #x45c #x40d #x45d
-        #x40e #x45e #x40f #x45f #x410 #x430 #x411 #x431 #x412 #x432 #x413 #x433
-        #x414 #x434 #x415 #x435 #x416 #x436 #x417 #x437 #x418 #x438 #x419 #x439
-        #x41a #x43a #x41b #x43b #x41c #x43c #x41d #x43d #x41e #x43e #x41f #x43f
-        #x420 #x440 #x421 #x441 #x422 #x442 #x423 #x443 #x424 #x444 #x425 #x445
-        #x426 #x446 #x427 #x447 #x428 #x448 #x429 #x449 #x42a #x44a #x42b #x44b
-        #x42c #x44c #x42d #x44d #x42e #x44e #x42f #x44f #x460 #x461 #x462 #x463
-        #x464 #x465 #x466 #x467 #x468 #x469 #x46a #x46b #x46c #x46d #x46e #x46f
-        #x470 #x471 #x472 #x473 #x474 #x475 #x476 #x477 #x478 #x479 #x47a #x47b
-        #x47c #x47d #x47e #x47f #x480 #x481 #x48a #x48b #x48c #x48d #x48e #x48f
-        #x490 #x491 #x492 #x493 #x494 #x495 #x496 #x497 #x498 #x499 #x49a #x49b
-        #x49c #x49d #x49e #x49f #x4a0 #x4a1 #x4a2 #x4a3 #x4a4 #x4a5 #x4a6 #x4a7
-        #x4a8 #x4a9 #x4aa #x4ab #x4ac #x4ad #x4ae #x4af #x4b0 #x4b1 #x4b2 #x4b3
-        #x4b4 #x4b5 #x4b6 #x4b7 #x4b8 #x4b9 #x4ba #x4bb #x4bc #x4bd #x4be #x4bf
-        #x4c0 #x4cf #x4c1 #x4c2 #x4c3 #x4c4 #x4c5 #x4c6 #x4c7 #x4c8 #x4c9 #x4ca
-        #x4cb #x4cc #x4cd #x4ce #x4d0 #x4d1 #x4d2 #x4d3 #x4d4 #x4d5 #x4d6 #x4d7
-        #x4d8 #x4d9 #x4da #x4db #x4dc #x4dd #x4de #x4df #x4e0 #x4e1 #x4e2 #x4e3
-        #x4e4 #x4e5 #x4e6 #x4e7 #x4e8 #x4e9 #x4ea #x4eb #x4ec #x4ed #x4ee #x4ef
-        #x4f0 #x4f1 #x4f2 #x4f3 #x4f4 #x4f5 #x4f6 #x4f7 #x4f8 #x4f9 #x4fa #x4fb
-        #x4fc #x4fd #x4fe #x4ff #x500 #x501 #x502 #x503 #x504 #x505 #x506 #x507
-        #x508 #x509 #x50a #x50b #x50c #x50d #x50e #x50f #x510 #x511 #x512 #x513
-        #x514 #x515 #x516 #x517 #x518 #x519 #x51a #x51b #x51c #x51d #x51e #x51f
-        #x520 #x521 #x522 #x523 #x524 #x525 #x526 #x527 #x528 #x529 #x52a #x52b
-        #x52c #x52d #x52e #x52f #x531 #x561 #x532 #x562 #x533 #x563 #x534 #x564
-        #x535 #x565 #x536 #x566 #x537 #x567 #x538 #x568 #x539 #x569 #x53a #x56a
-        #x53b #x56b #x53c #x56c #x53d #x56d #x53e #x56e #x53f #x56f #x540 #x570
-        #x541 #x571 #x542 #x572 #x543 #x573 #x544 #x574 #x545 #x575 #x546 #x576
-        #x547 #x577 #x548 #x578 #x549 #x579 #x54a #x57a #x54b #x57b #x54c #x57c
-        #x54d #x57d #x54e #x57e #x54f #x57f #x550 #x580 #x551 #x581 #x552 #x582
-        #x553 #x583 #x554 #x584 #x555 #x585 #x556 #x586 #x10a0 #x2d00 #x10a1
-        #x2d01 #x10a2 #x2d02 #x10a3 #x2d03 #x10a4 #x2d04 #x10a5 #x2d05 #x10a6
-        #x2d06 #x10a7 #x2d07 #x10a8 #x2d08 #x10a9 #x2d09 #x10aa #x2d0a #x10ab
-        #x2d0b #x10ac #x2d0c #x10ad #x2d0d #x10ae #x2d0e #x10af #x2d0f #x10b0
-        #x2d10 #x10b1 #x2d11 #x10b2 #x2d12 #x10b3 #x2d13 #x10b4 #x2d14 #x10b5
-        #x2d15 #x10b6 #x2d16 #x10b7 #x2d17 #x10b8 #x2d18 #x10b9 #x2d19 #x10ba
-        #x2d1a #x10bb #x2d1b #x10bc #x2d1c #x10bd #x2d1d #x10be #x2d1e #x10bf
-        #x2d1f #x10c0 #x2d20 #x10c1 #x2d21 #x10c2 #x2d22 #x10c3 #x2d23 #x10c4
-        #x2d24 #x10c5 #x2d25 #x10c7 #x2d27 #x10cd #x2d2d #x13f8 #x13f0 #x13f9
-        #x13f1 #x13fa #x13f2 #x13fb #x13f3 #x13fc #x13f4 #x13fd #x13f5 #x1c80
-        #x432 #x1c81 #x434 #x1c82 #x43e #x1c83 #x441 #x1c84 #x442 #x1c85 #x442
-        #x1c86 #x44a #x1c87 #x463 #x1c88 #xa64b #x1c89 #x1c8a #x1c90 #x10d0
-        #x1c91 #x10d1 #x1c92 #x10d2 #x1c93 #x10d3 #x1c94 #x10d4 #x1c95 #x10d5
-        #x1c96 #x10d6 #x1c97 #x10d7 #x1c98 #x10d8 #x1c99 #x10d9 #x1c9a #x10da
-        #x1c9b #x10db #x1c9c #x10dc #x1c9d #x10dd #x1c9e #x10de #x1c9f #x10df
-        #x1ca0 #x10e0 #x1ca1 #x10e1 #x1ca2 #x10e2 #x1ca3 #x10e3 #x1ca4 #x10e4
-        #x1ca5 #x10e5 #x1ca6 #x10e6 #x1ca7 #x10e7 #x1ca8 #x10e8 #x1ca9 #x10e9
-        #x1caa #x10ea #x1cab #x10eb #x1cac #x10ec #x1cad #x10ed #x1cae #x10ee
-        #x1caf #x10ef #x1cb0 #x10f0 #x1cb1 #x10f1 #x1cb2 #x10f2 #x1cb3 #x10f3
-        #x1cb4 #x10f4 #x1cb5 #x10f5 #x1cb6 #x10f6 #x1cb7 #x10f7 #x1cb8 #x10f8
-        #x1cb9 #x10f9 #x1cba #x10fa #x1cbd #x10fd #x1cbe #x10fe #x1cbf #x10ff
-        #x1e00 #x1e01 #x1e02 #x1e03 #x1e04 #x1e05 #x1e06 #x1e07 #x1e08 #x1e09
-        #x1e0a #x1e0b #x1e0c #x1e0d #x1e0e #x1e0f #x1e10 #x1e11 #x1e12 #x1e13
-        #x1e14 #x1e15 #x1e16 #x1e17 #x1e18 #x1e19 #x1e1a #x1e1b #x1e1c #x1e1d
-        #x1e1e #x1e1f #x1e20 #x1e21 #x1e22 #x1e23 #x1e24 #x1e25 #x1e26 #x1e27
-        #x1e28 #x1e29 #x1e2a #x1e2b #x1e2c #x1e2d #x1e2e #x1e2f #x1e30 #x1e31
-        #x1e32 #x1e33 #x1e34 #x1e35 #x1e36 #x1e37 #x1e38 #x1e39 #x1e3a #x1e3b
-        #x1e3c #x1e3d #x1e3e #x1e3f #x1e40 #x1e41 #x1e42 #x1e43 #x1e44 #x1e45
-        #x1e46 #x1e47 #x1e48 #x1e49 #x1e4a #x1e4b #x1e4c #x1e4d #x1e4e #x1e4f
-        #x1e50 #x1e51 #x1e52 #x1e53 #x1e54 #x1e55 #x1e56 #x1e57 #x1e58 #x1e59
-        #x1e5a #x1e5b #x1e5c #x1e5d #x1e5e #x1e5f #x1e60 #x1e61 #x1e62 #x1e63
-        #x1e64 #x1e65 #x1e66 #x1e67 #x1e68 #x1e69 #x1e6a #x1e6b #x1e6c #x1e6d
-        #x1e6e #x1e6f #x1e70 #x1e71 #x1e72 #x1e73 #x1e74 #x1e75 #x1e76 #x1e77
-        #x1e78 #x1e79 #x1e7a #x1e7b #x1e7c #x1e7d #x1e7e #x1e7f #x1e80 #x1e81
-        #x1e82 #x1e83 #x1e84 #x1e85 #x1e86 #x1e87 #x1e88 #x1e89 #x1e8a #x1e8b
-        #x1e8c #x1e8d #x1e8e #x1e8f #x1e90 #x1e91 #x1e92 #x1e93 #x1e94 #x1e95
-        #x1e9b #x1e61 #x1e9e #xdf #x1ea0 #x1ea1 #x1ea2 #x1ea3 #x1ea4 #x1ea5
-        #x1ea6 #x1ea7 #x1ea8 #x1ea9 #x1eaa #x1eab #x1eac #x1ead #x1eae #x1eaf
-        #x1eb0 #x1eb1 #x1eb2 #x1eb3 #x1eb4 #x1eb5 #x1eb6 #x1eb7 #x1eb8 #x1eb9
-        #x1eba #x1ebb #x1ebc #x1ebd #x1ebe #x1ebf #x1ec0 #x1ec1 #x1ec2 #x1ec3
-        #x1ec4 #x1ec5 #x1ec6 #x1ec7 #x1ec8 #x1ec9 #x1eca #x1ecb #x1ecc #x1ecd
-        #x1ece #x1ecf #x1ed0 #x1ed1 #x1ed2 #x1ed3 #x1ed4 #x1ed5 #x1ed6 #x1ed7
-        #x1ed8 #x1ed9 #x1eda #x1edb #x1edc #x1edd #x1ede #x1edf #x1ee0 #x1ee1
-        #x1ee2 #x1ee3 #x1ee4 #x1ee5 #x1ee6 #x1ee7 #x1ee8 #x1ee9 #x1eea #x1eeb
-        #x1eec #x1eed #x1eee #x1eef #x1ef0 #x1ef1 #x1ef2 #x1ef3 #x1ef4 #x1ef5
-        #x1ef6 #x1ef7 #x1ef8 #x1ef9 #x1efa #x1efb #x1efc #x1efd #x1efe #x1eff
-        #x1f08 #x1f00 #x1f09 #x1f01 #x1f0a #x1f02 #x1f0b #x1f03 #x1f0c #x1f04
-        #x1f0d #x1f05 #x1f0e #x1f06 #x1f0f #x1f07 #x1f18 #x1f10 #x1f19 #x1f11
-        #x1f1a #x1f12 #x1f1b #x1f13 #x1f1c #x1f14 #x1f1d #x1f15 #x1f28 #x1f20
-        #x1f29 #x1f21 #x1f2a #x1f22 #x1f2b #x1f23 #x1f2c #x1f24 #x1f2d #x1f25
-        #x1f2e #x1f26 #x1f2f #x1f27 #x1f38 #x1f30 #x1f39 #x1f31 #x1f3a #x1f32
-        #x1f3b #x1f33 #x1f3c #x1f34 #x1f3d #x1f35 #x1f3e #x1f36 #x1f3f #x1f37
-        #x1f48 #x1f40 #x1f49 #x1f41 #x1f4a #x1f42 #x1f4b #x1f43 #x1f4c #x1f44
-        #x1f4d #x1f45 #x1f59 #x1f51 #x1f5b #x1f53 #x1f5d #x1f55 #x1f5f #x1f57
-        #x1f68 #x1f60 #x1f69 #x1f61 #x1f6a #x1f62 #x1f6b #x1f63 #x1f6c #x1f64
-        #x1f6d #x1f65 #x1f6e #x1f66 #x1f6f #x1f67 #x1f88 #x1f80 #x1f89 #x1f81
-        #x1f8a #x1f82 #x1f8b #x1f83 #x1f8c #x1f84 #x1f8d #x1f85 #x1f8e #x1f86
-        #x1f8f #x1f87 #x1f98 #x1f90 #x1f99 #x1f91 #x1f9a #x1f92 #x1f9b #x1f93
-        #x1f9c #x1f94 #x1f9d #x1f95 #x1f9e #x1f96 #x1f9f #x1f97 #x1fa8 #x1fa0
-        #x1fa9 #x1fa1 #x1faa #x1fa2 #x1fab #x1fa3 #x1fac #x1fa4 #x1fad #x1fa5
-        #x1fae #x1fa6 #x1faf #x1fa7 #x1fb8 #x1fb0 #x1fb9 #x1fb1 #x1fba #x1f70
-        #x1fbb #x1f71 #x1fbc #x1fb3 #x1fbe #x3b9 #x1fc8 #x1f72 #x1fc9 #x1f73
-        #x1fca #x1f74 #x1fcb #x1f75 #x1fcc #x1fc3 #x1fd3 #x390 #x1fd8 #x1fd0
-        #x1fd9 #x1fd1 #x1fda #x1f76 #x1fdb #x1f77 #x1fe3 #x3b0 #x1fe8 #x1fe0
-        #x1fe9 #x1fe1 #x1fea #x1f7a #x1feb #x1f7b #x1fec #x1fe5 #x1ff8 #x1f78
-        #x1ff9 #x1f79 #x1ffa #x1f7c #x1ffb #x1f7d #x1ffc #x1ff3 #x2126 #x3c9
-        #x212a #x6b #x212b #xe5 #x2132 #x214e #x2160 #x2170 #x2161 #x2171
-        #x2162 #x2172 #x2163 #x2173 #x2164 #x2174 #x2165 #x2175 #x2166 #x2176
-        #x2167 #x2177 #x2168 #x2178 #x2169 #x2179 #x216a #x217a #x216b #x217b
-        #x216c #x217c #x216d #x217d #x216e #x217e #x216f #x217f #x2183 #x2184
-        #x24b6 #x24d0 #x24b7 #x24d1 #x24b8 #x24d2 #x24b9 #x24d3 #x24ba #x24d4
-        #x24bb #x24d5 #x24bc #x24d6 #x24bd #x24d7 #x24be #x24d8 #x24bf #x24d9
-        #x24c0 #x24da #x24c1 #x24db #x24c2 #x24dc #x24c3 #x24dd #x24c4 #x24de
-        #x24c5 #x24df #x24c6 #x24e0 #x24c7 #x24e1 #x24c8 #x24e2 #x24c9 #x24e3
-        #x24ca #x24e4 #x24cb #x24e5 #x24cc #x24e6 #x24cd #x24e7 #x24ce #x24e8
-        #x24cf #x24e9 #x2c00 #x2c30 #x2c01 #x2c31 #x2c02 #x2c32 #x2c03 #x2c33
-        #x2c04 #x2c34 #x2c05 #x2c35 #x2c06 #x2c36 #x2c07 #x2c37 #x2c08 #x2c38
-        #x2c09 #x2c39 #x2c0a #x2c3a #x2c0b #x2c3b #x2c0c #x2c3c #x2c0d #x2c3d
-        #x2c0e #x2c3e #x2c0f #x2c3f #x2c10 #x2c40 #x2c11 #x2c41 #x2c12 #x2c42
-        #x2c13 #x2c43 #x2c14 #x2c44 #x2c15 #x2c45 #x2c16 #x2c46 #x2c17 #x2c47
-        #x2c18 #x2c48 #x2c19 #x2c49 #x2c1a #x2c4a #x2c1b #x2c4b #x2c1c #x2c4c
-        #x2c1d #x2c4d #x2c1e #x2c4e #x2c1f #x2c4f #x2c20 #x2c50 #x2c21 #x2c51
-        #x2c22 #x2c52 #x2c23 #x2c53 #x2c24 #x2c54 #x2c25 #x2c55 #x2c26 #x2c56
-        #x2c27 #x2c57 #x2c28 #x2c58 #x2c29 #x2c59 #x2c2a #x2c5a #x2c2b #x2c5b
-        #x2c2c #x2c5c #x2c2d #x2c5d #x2c2e #x2c5e #x2c2f #x2c5f #x2c60 #x2c61
-        #x2c62 #x26b #x2c63 #x1d7d #x2c64 #x27d #x2c67 #x2c68 #x2c69 #x2c6a
-        #x2c6b #x2c6c #x2c6d #x251 #x2c6e #x271 #x2c6f #x250 #x2c70 #x252
-        #x2c72 #x2c73 #x2c75 #x2c76 #x2c7e #x23f #x2c7f #x240 #x2c80 #x2c81
-        #x2c82 #x2c83 #x2c84 #x2c85 #x2c86 #x2c87 #x2c88 #x2c89 #x2c8a #x2c8b
-        #x2c8c #x2c8d #x2c8e #x2c8f #x2c90 #x2c91 #x2c92 #x2c93 #x2c94 #x2c95
-        #x2c96 #x2c97 #x2c98 #x2c99 #x2c9a #x2c9b #x2c9c #x2c9d #x2c9e #x2c9f
-        #x2ca0 #x2ca1 #x2ca2 #x2ca3 #x2ca4 #x2ca5 #x2ca6 #x2ca7 #x2ca8 #x2ca9
-        #x2caa #x2cab #x2cac #x2cad #x2cae #x2caf #x2cb0 #x2cb1 #x2cb2 #x2cb3
-        #x2cb4 #x2cb5 #x2cb6 #x2cb7 #x2cb8 #x2cb9 #x2cba #x2cbb #x2cbc #x2cbd
-        #x2cbe #x2cbf #x2cc0 #x2cc1 #x2cc2 #x2cc3 #x2cc4 #x2cc5 #x2cc6 #x2cc7
-        #x2cc8 #x2cc9 #x2cca #x2ccb #x2ccc #x2ccd #x2cce #x2ccf #x2cd0 #x2cd1
-        #x2cd2 #x2cd3 #x2cd4 #x2cd5 #x2cd6 #x2cd7 #x2cd8 #x2cd9 #x2cda #x2cdb
-        #x2cdc #x2cdd #x2cde #x2cdf #x2ce0 #x2ce1 #x2ce2 #x2ce3 #x2ceb #x2cec
-        #x2ced #x2cee #x2cf2 #x2cf3 #xa640 #xa641 #xa642 #xa643 #xa644 #xa645
-        #xa646 #xa647 #xa648 #xa649 #xa64a #xa64b #xa64c #xa64d #xa64e #xa64f
-        #xa650 #xa651 #xa652 #xa653 #xa654 #xa655 #xa656 #xa657 #xa658 #xa659
-        #xa65a #xa65b #xa65c #xa65d #xa65e #xa65f #xa660 #xa661 #xa662 #xa663
-        #xa664 #xa665 #xa666 #xa667 #xa668 #xa669 #xa66a #xa66b #xa66c #xa66d
-        #xa680 #xa681 #xa682 #xa683 #xa684 #xa685 #xa686 #xa687 #xa688 #xa689
-        #xa68a #xa68b #xa68c #xa68d #xa68e #xa68f #xa690 #xa691 #xa692 #xa693
-        #xa694 #xa695 #xa696 #xa697 #xa698 #xa699 #xa69a #xa69b #xa722 #xa723
-        #xa724 #xa725 #xa726 #xa727 #xa728 #xa729 #xa72a #xa72b #xa72c #xa72d
-        #xa72e #xa72f #xa732 #xa733 #xa734 #xa735 #xa736 #xa737 #xa738 #xa739
-        #xa73a #xa73b #xa73c #xa73d #xa73e #xa73f #xa740 #xa741 #xa742 #xa743
-        #xa744 #xa745 #xa746 #xa747 #xa748 #xa749 #xa74a #xa74b #xa74c #xa74d
-        #xa74e #xa74f #xa750 #xa751 #xa752 #xa753 #xa754 #xa755 #xa756 #xa757
-        #xa758 #xa759 #xa75a #xa75b #xa75c #xa75d #xa75e #xa75f #xa760 #xa761
-        #xa762 #xa763 #xa764 #xa765 #xa766 #xa767 #xa768 #xa769 #xa76a #xa76b
-        #xa76c #xa76d #xa76e #xa76f #xa779 #xa77a #xa77b #xa77c #xa77d #x1d79
-        #xa77e #xa77f #xa780 #xa781 #xa782 #xa783 #xa784 #xa785 #xa786 #xa787
-        #xa78b #xa78c #xa78d #x265 #xa790 #xa791 #xa792 #xa793 #xa796 #xa797
-        #xa798 #xa799 #xa79a #xa79b #xa79c #xa79d #xa79e #xa79f #xa7a0 #xa7a1
-        #xa7a2 #xa7a3 #xa7a4 #xa7a5 #xa7a6 #xa7a7 #xa7a8 #xa7a9 #xa7aa #x266
-        #xa7ab #x25c #xa7ac #x261 #xa7ad #x26c #xa7ae #x26a #xa7b0 #x29e #xa7b1
-        #x287 #xa7b2 #x29d #xa7b3 #xab53 #xa7b4 #xa7b5 #xa7b6 #xa7b7 #xa7b8
-        #xa7b9 #xa7ba #xa7bb #xa7bc #xa7bd #xa7be #xa7bf #xa7c0 #xa7c1 #xa7c2
-        #xa7c3 #xa7c4 #xa794 #xa7c5 #x282 #xa7c6 #x1d8e #xa7c7 #xa7c8 #xa7c9
-        #xa7ca #xa7cb #x264 #xa7cc #xa7cd #xa7ce #xa7cf #xa7d0 #xa7d1 #xa7d2
-        #xa7d3 #xa7d4 #xa7d5 #xa7d6 #xa7d7 #xa7d8 #xa7d9 #xa7da #xa7db #xa7dc
-        #x19b #xa7f5 #xa7f6 #xab70 #x13a0 #xab71 #x13a1 #xab72 #x13a2 #xab73
-        #x13a3 #xab74 #x13a4 #xab75 #x13a5 #xab76 #x13a6 #xab77 #x13a7 #xab78
-        #x13a8 #xab79 #x13a9 #xab7a #x13aa #xab7b #x13ab #xab7c #x13ac #xab7d
-        #x13ad #xab7e #x13ae #xab7f #x13af #xab80 #x13b0 #xab81 #x13b1 #xab82
-        #x13b2 #xab83 #x13b3 #xab84 #x13b4 #xab85 #x13b5 #xab86 #x13b6 #xab87
-        #x13b7 #xab88 #x13b8 #xab89 #x13b9 #xab8a #x13ba #xab8b #x13bb #xab8c
-        #x13bc #xab8d #x13bd #xab8e #x13be #xab8f #x13bf #xab90 #x13c0 #xab91
-        #x13c1 #xab92 #x13c2 #xab93 #x13c3 #xab94 #x13c4 #xab95 #x13c5 #xab96
-        #x13c6 #xab97 #x13c7 #xab98 #x13c8 #xab99 #x13c9 #xab9a #x13ca #xab9b
-        #x13cb #xab9c #x13cc #xab9d #x13cd #xab9e #x13ce #xab9f #x13cf #xaba0
-        #x13d0 #xaba1 #x13d1 #xaba2 #x13d2 #xaba3 #x13d3 #xaba4 #x13d4 #xaba5
-        #x13d5 #xaba6 #x13d6 #xaba7 #x13d7 #xaba8 #x13d8 #xaba9 #x13d9 #xabaa
-        #x13da #xabab #x13db #xabac #x13dc #xabad #x13dd #xabae #x13de #xabaf
-        #x13df #xabb0 #x13e0 #xabb1 #x13e1 #xabb2 #x13e2 #xabb3 #x13e3 #xabb4
-        #x13e4 #xabb5 #x13e5 #xabb6 #x13e6 #xabb7 #x13e7 #xabb8 #x13e8 #xabb9
-        #x13e9 #xabba #x13ea #xabbb #x13eb #xabbc #x13ec #xabbd #x13ed #xabbe
-        #x13ee #xabbf #x13ef #xfb05 #xfb06 #xff21 #xff41 #xff22 #xff42 #xff23
-        #xff43 #xff24 #xff44 #xff25 #xff45 #xff26 #xff46 #xff27 #xff47 #xff28
-        #xff48 #xff29 #xff49 #xff2a #xff4a #xff2b #xff4b #xff2c #xff4c #xff2d
-        #xff4d #xff2e #xff4e #xff2f #xff4f #xff30 #xff50 #xff31 #xff51 #xff32
-        #xff52 #xff33 #xff53 #xff34 #xff54 #xff35 #xff55 #xff36 #xff56 #xff37
-        #xff57 #xff38 #xff58 #xff39 #xff59 #xff3a #xff5a #x10400 #x10428
-        #x10401 #x10429 #x10402 #x1042a #x10403 #x1042b #x10404 #x1042c #x10405
-        #x1042d #x10406 #x1042e #x10407 #x1042f #x10408 #x10430 #x10409 #x10431
-        #x1040a #x10432 #x1040b #x10433 #x1040c #x10434 #x1040d #x10435 #x1040e
-        #x10436 #x1040f #x10437 #x10410 #x10438 #x10411 #x10439 #x10412 #x1043a
-        #x10413 #x1043b #x10414 #x1043c #x10415 #x1043d #x10416 #x1043e #x10417
-        #x1043f #x10418 #x10440 #x10419 #x10441 #x1041a #x10442 #x1041b #x10443
-        #x1041c #x10444 #x1041d #x10445 #x1041e #x10446 #x1041f #x10447 #x10420
-        #x10448 #x10421 #x10449 #x10422 #x1044a #x10423 #x1044b #x10424 #x1044c
-        #x10425 #x1044d #x10426 #x1044e #x10427 #x1044f #x104b0 #x104d8 #x104b1
-        #x104d9 #x104b2 #x104da #x104b3 #x104db #x104b4 #x104dc #x104b5 #x104dd
-        #x104b6 #x104de #x104b7 #x104df #x104b8 #x104e0 #x104b9 #x104e1 #x104ba
-        #x104e2 #x104bb #x104e3 #x104bc #x104e4 #x104bd #x104e5 #x104be #x104e6
-        #x104bf #x104e7 #x104c0 #x104e8 #x104c1 #x104e9 #x104c2 #x104ea #x104c3
-        #x104eb #x104c4 #x104ec #x104c5 #x104ed #x104c6 #x104ee #x104c7 #x104ef
-        #x104c8 #x104f0 #x104c9 #x104f1 #x104ca #x104f2 #x104cb #x104f3 #x104cc
-        #x104f4 #x104cd #x104f5 #x104ce #x104f6 #x104cf #x104f7 #x104d0 #x104f8
-        #x104d1 #x104f9 #x104d2 #x104fa #x104d3 #x104fb #x10570 #x10597 #x10571
-        #x10598 #x10572 #x10599 #x10573 #x1059a #x10574 #x1059b #x10575 #x1059c
-        #x10576 #x1059d #x10577 #x1059e #x10578 #x1059f #x10579 #x105a0 #x1057a
-        #x105a1 #x1057c #x105a3 #x1057d #x105a4 #x1057e #x105a5 #x1057f #x105a6
-        #x10580 #x105a7 #x10581 #x105a8 #x10582 #x105a9 #x10583 #x105aa #x10584
-        #x105ab #x10585 #x105ac #x10586 #x105ad #x10587 #x105ae #x10588 #x105af
-        #x10589 #x105b0 #x1058a #x105b1 #x1058c #x105b3 #x1058d #x105b4 #x1058e
-        #x105b5 #x1058f #x105b6 #x10590 #x105b7 #x10591 #x105b8 #x10592 #x105b9
-        #x10594 #x105bb #x10595 #x105bc #x10c80 #x10cc0 #x10c81 #x10cc1 #x10c82
-        #x10cc2 #x10c83 #x10cc3 #x10c84 #x10cc4 #x10c85 #x10cc5 #x10c86 #x10cc6
-        #x10c87 #x10cc7 #x10c88 #x10cc8 #x10c89 #x10cc9 #x10c8a #x10cca #x10c8b
-        #x10ccb #x10c8c #x10ccc #x10c8d #x10ccd #x10c8e #x10cce #x10c8f #x10ccf
-        #x10c90 #x10cd0 #x10c91 #x10cd1 #x10c92 #x10cd2 #x10c93 #x10cd3 #x10c94
-        #x10cd4 #x10c95 #x10cd5 #x10c96 #x10cd6 #x10c97 #x10cd7 #x10c98 #x10cd8
-        #x10c99 #x10cd9 #x10c9a #x10cda #x10c9b #x10cdb #x10c9c #x10cdc #x10c9d
-        #x10cdd #x10c9e #x10cde #x10c9f #x10cdf #x10ca0 #x10ce0 #x10ca1 #x10ce1
-        #x10ca2 #x10ce2 #x10ca3 #x10ce3 #x10ca4 #x10ce4 #x10ca5 #x10ce5 #x10ca6
-        #x10ce6 #x10ca7 #x10ce7 #x10ca8 #x10ce8 #x10ca9 #x10ce9 #x10caa #x10cea
-        #x10cab #x10ceb #x10cac #x10cec #x10cad #x10ced #x10cae #x10cee #x10caf
-        #x10cef #x10cb0 #x10cf0 #x10cb1 #x10cf1 #x10cb2 #x10cf2 #x10d50 #x10d70
-        #x10d51 #x10d71 #x10d52 #x10d72 #x10d53 #x10d73 #x10d54 #x10d74 #x10d55
-        #x10d75 #x10d56 #x10d76 #x10d57 #x10d77 #x10d58 #x10d78 #x10d59 #x10d79
-        #x10d5a #x10d7a #x10d5b #x10d7b #x10d5c #x10d7c #x10d5d #x10d7d #x10d5e
-        #x10d7e #x10d5f #x10d7f #x10d60 #x10d80 #x10d61 #x10d81 #x10d62 #x10d82
-        #x10d63 #x10d83 #x10d64 #x10d84 #x10d65 #x10d85 #x118a0 #x118c0 #x118a1
-        #x118c1 #x118a2 #x118c2 #x118a3 #x118c3 #x118a4 #x118c4 #x118a5 #x118c5
-        #x118a6 #x118c6 #x118a7 #x118c7 #x118a8 #x118c8 #x118a9 #x118c9 #x118aa
-        #x118ca #x118ab #x118cb #x118ac #x118cc #x118ad #x118cd #x118ae #x118ce
-        #x118af #x118cf #x118b0 #x118d0 #x118b1 #x118d1 #x118b2 #x118d2 #x118b3
-        #x118d3 #x118b4 #x118d4 #x118b5 #x118d5 #x118b6 #x118d6 #x118b7 #x118d7
-        #x118b8 #x118d8 #x118b9 #x118d9 #x118ba #x118da #x118bb #x118db #x118bc
-        #x118dc #x118bd #x118dd #x118be #x118de #x118bf #x118df #x16e40 #x16e60
-        #x16e41 #x16e61 #x16e42 #x16e62 #x16e43 #x16e63 #x16e44 #x16e64 #x16e45
-        #x16e65 #x16e46 #x16e66 #x16e47 #x16e67 #x16e48 #x16e68 #x16e49 #x16e69
-        #x16e4a #x16e6a #x16e4b #x16e6b #x16e4c #x16e6c #x16e4d #x16e6d #x16e4e
-        #x16e6e #x16e4f #x16e6f #x16e50 #x16e70 #x16e51 #x16e71 #x16e52 #x16e72
-        #x16e53 #x16e73 #x16e54 #x16e74 #x16e55 #x16e75 #x16e56 #x16e76 #x16e57
-        #x16e77 #x16e58 #x16e78 #x16e59 #x16e79 #x16e5a #x16e7a #x16e5b #x16e7b
-        #x16e5c #x16e7c #x16e5d #x16e7d #x16e5e #x16e7e #x16e5f #x16e7f #x16ea0
-        #x16ebb #x16ea1 #x16ebc #x16ea2 #x16ebd #x16ea3 #x16ebe #x16ea4 #x16ebf
-        #x16ea5 #x16ec0 #x16ea6 #x16ec1 #x16ea7 #x16ec2 #x16ea8 #x16ec3 #x16ea9
-        #x16ec4 #x16eaa #x16ec5 #x16eab #x16ec6 #x16eac #x16ec7 #x16ead #x16ec8
-        #x16eae #x16ec9 #x16eaf #x16eca #x16eb0 #x16ecb #x16eb1 #x16ecc #x16eb2
-        #x16ecd #x16eb3 #x16ece #x16eb4 #x16ecf #x16eb5 #x16ed0 #x16eb6 #x16ed1
-        #x16eb7 #x16ed2 #x16eb8 #x16ed3 #x1e900 #x1e922 #x1e901 #x1e923 #x1e902
-        #x1e924 #x1e903 #x1e925 #x1e904 #x1e926 #x1e905 #x1e927 #x1e906 #x1e928
-        #x1e907 #x1e929 #x1e908 #x1e92a #x1e909 #x1e92b #x1e90a #x1e92c #x1e90b
-        #x1e92d #x1e90c #x1e92e #x1e90d #x1e92f #x1e90e #x1e930 #x1e90f #x1e931
-        #x1e910 #x1e932 #x1e911 #x1e933 #x1e912 #x1e934 #x1e913 #x1e935 #x1e914
-        #x1e936 #x1e915 #x1e937 #x1e916 #x1e938 #x1e917 #x1e939 #x1e918 #x1e93a
-        #x1e919 #x1e93b #x1e91a #x1e93c #x1e91b #x1e93d #x1e91c #x1e93e #x1e91d
-        #x1e93f #x1e91e #x1e940 #x1e91f #x1e941 #x1e920 #x1e942 #x1e921 #x1e943
+        #x0 #x5 #x79 #xbe #xe2 #x130 #x149 #x149 #x149 #x149 #x149 #x149 #x149
+        #x149 #x149 #x149 #x149 #x14b #x14b #x14b #x14c #x14c #x14c #x14c #x14c
+        #x14c #x14c #x14c #x14c #x155 #x158 #x1d4 #x1ef #x1ef #x1f2 #x1f2 #x1f2
+        #x1f3 #x1f3 #x1f3 #x1f3 #x1f3 #x1f3 #x1f3 #x1f3 #x231 #x234 #x234 #x234
+        #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234
+        #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234
+        #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234
+        #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234
+        #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234
+        #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234
+        #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234
+        #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234
+        #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234
+        #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x234 #x259 #x2a7
+        #x2a7 #x2a7 #x2a7 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9
+        #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9
+        #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9
+        #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9
+        #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9
+        #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9
+        #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9 #x2a9
+        #x2a9 #x2a9 #x2a9 #x2aa #x2b6 #x2b6 #x2b6 #x2b6 #x2b6 #x2b6 #x2b6 #x2b6
+        #x2b6 #x2b6 #x2b6 #x2b6 #x2b6 #x2b6 #x2b6 #x2b6
         ))
 
-    ;; Full default uppercase mappings, including expansions.
-    (define consent-unicode-full-uppercase-mappings
+    ;; Private simple lowercase lower, upper, and delta segments.
+    (define %unicode-simple-lowercase-segments
       #(
-        #(#x61 #x41) #(#x62 #x42) #(#x63 #x43) #(#x64 #x44) #(#x65 #x45)
-        #(#x66 #x46) #(#x67 #x47) #(#x68 #x48) #(#x69 #x49) #(#x6a #x4a)
-        #(#x6b #x4b) #(#x6c #x4c) #(#x6d #x4d) #(#x6e #x4e) #(#x6f #x4f)
-        #(#x70 #x50) #(#x71 #x51) #(#x72 #x52) #(#x73 #x53) #(#x74 #x54)
-        #(#x75 #x55) #(#x76 #x56) #(#x77 #x57) #(#x78 #x58) #(#x79 #x59)
-        #(#x7a #x5a) #(#xb5 #x39c) #(#xdf #x53 #x53) #(#xe0 #xc0) #(#xe1 #xc1)
-        #(#xe2 #xc2) #(#xe3 #xc3) #(#xe4 #xc4) #(#xe5 #xc5) #(#xe6 #xc6)
-        #(#xe7 #xc7) #(#xe8 #xc8) #(#xe9 #xc9) #(#xea #xca) #(#xeb #xcb)
-        #(#xec #xcc) #(#xed #xcd) #(#xee #xce) #(#xef #xcf) #(#xf0 #xd0)
-        #(#xf1 #xd1) #(#xf2 #xd2) #(#xf3 #xd3) #(#xf4 #xd4) #(#xf5 #xd5)
-        #(#xf6 #xd6) #(#xf8 #xd8) #(#xf9 #xd9) #(#xfa #xda) #(#xfb #xdb)
-        #(#xfc #xdc) #(#xfd #xdd) #(#xfe #xde) #(#xff #x178) #(#x101 #x100)
-        #(#x103 #x102) #(#x105 #x104) #(#x107 #x106) #(#x109 #x108)
-        #(#x10b #x10a) #(#x10d #x10c) #(#x10f #x10e) #(#x111 #x110)
-        #(#x113 #x112) #(#x115 #x114) #(#x117 #x116) #(#x119 #x118)
-        #(#x11b #x11a) #(#x11d #x11c) #(#x11f #x11e) #(#x121 #x120)
-        #(#x123 #x122) #(#x125 #x124) #(#x127 #x126) #(#x129 #x128)
-        #(#x12b #x12a) #(#x12d #x12c) #(#x12f #x12e) #(#x131 #x49)
-        #(#x133 #x132) #(#x135 #x134) #(#x137 #x136) #(#x13a #x139)
-        #(#x13c #x13b) #(#x13e #x13d) #(#x140 #x13f) #(#x142 #x141)
-        #(#x144 #x143) #(#x146 #x145) #(#x148 #x147) #(#x149 #x2bc #x4e)
-        #(#x14b #x14a) #(#x14d #x14c) #(#x14f #x14e) #(#x151 #x150)
-        #(#x153 #x152) #(#x155 #x154) #(#x157 #x156) #(#x159 #x158)
-        #(#x15b #x15a) #(#x15d #x15c) #(#x15f #x15e) #(#x161 #x160)
-        #(#x163 #x162) #(#x165 #x164) #(#x167 #x166) #(#x169 #x168)
-        #(#x16b #x16a) #(#x16d #x16c) #(#x16f #x16e) #(#x171 #x170)
-        #(#x173 #x172) #(#x175 #x174) #(#x177 #x176) #(#x17a #x179)
-        #(#x17c #x17b) #(#x17e #x17d) #(#x17f #x53) #(#x180 #x243)
-        #(#x183 #x182) #(#x185 #x184) #(#x188 #x187) #(#x18c #x18b)
-        #(#x192 #x191) #(#x195 #x1f6) #(#x199 #x198) #(#x19a #x23d)
-        #(#x19b #xa7dc) #(#x19e #x220) #(#x1a1 #x1a0) #(#x1a3 #x1a2)
-        #(#x1a5 #x1a4) #(#x1a8 #x1a7) #(#x1ad #x1ac) #(#x1b0 #x1af)
-        #(#x1b4 #x1b3) #(#x1b6 #x1b5) #(#x1b9 #x1b8) #(#x1bd #x1bc)
-        #(#x1bf #x1f7) #(#x1c5 #x1c4) #(#x1c6 #x1c4) #(#x1c8 #x1c7)
-        #(#x1c9 #x1c7) #(#x1cb #x1ca) #(#x1cc #x1ca) #(#x1ce #x1cd)
-        #(#x1d0 #x1cf) #(#x1d2 #x1d1) #(#x1d4 #x1d3) #(#x1d6 #x1d5)
-        #(#x1d8 #x1d7) #(#x1da #x1d9) #(#x1dc #x1db) #(#x1dd #x18e)
-        #(#x1df #x1de) #(#x1e1 #x1e0) #(#x1e3 #x1e2) #(#x1e5 #x1e4)
-        #(#x1e7 #x1e6) #(#x1e9 #x1e8) #(#x1eb #x1ea) #(#x1ed #x1ec)
-        #(#x1ef #x1ee) #(#x1f0 #x4a #x30c) #(#x1f2 #x1f1) #(#x1f3 #x1f1)
-        #(#x1f5 #x1f4) #(#x1f9 #x1f8) #(#x1fb #x1fa) #(#x1fd #x1fc)
-        #(#x1ff #x1fe) #(#x201 #x200) #(#x203 #x202) #(#x205 #x204)
-        #(#x207 #x206) #(#x209 #x208) #(#x20b #x20a) #(#x20d #x20c)
-        #(#x20f #x20e) #(#x211 #x210) #(#x213 #x212) #(#x215 #x214)
-        #(#x217 #x216) #(#x219 #x218) #(#x21b #x21a) #(#x21d #x21c)
-        #(#x21f #x21e) #(#x223 #x222) #(#x225 #x224) #(#x227 #x226)
-        #(#x229 #x228) #(#x22b #x22a) #(#x22d #x22c) #(#x22f #x22e)
-        #(#x231 #x230) #(#x233 #x232) #(#x23c #x23b) #(#x23f #x2c7e)
-        #(#x240 #x2c7f) #(#x242 #x241) #(#x247 #x246) #(#x249 #x248)
-        #(#x24b #x24a) #(#x24d #x24c) #(#x24f #x24e) #(#x250 #x2c6f)
-        #(#x251 #x2c6d) #(#x252 #x2c70) #(#x253 #x181) #(#x254 #x186)
-        #(#x256 #x189) #(#x257 #x18a) #(#x259 #x18f) #(#x25b #x190)
-        #(#x25c #xa7ab) #(#x260 #x193) #(#x261 #xa7ac) #(#x263 #x194)
-        #(#x264 #xa7cb) #(#x265 #xa78d) #(#x266 #xa7aa) #(#x268 #x197)
-        #(#x269 #x196) #(#x26a #xa7ae) #(#x26b #x2c62) #(#x26c #xa7ad)
-        #(#x26f #x19c) #(#x271 #x2c6e) #(#x272 #x19d) #(#x275 #x19f)
-        #(#x27d #x2c64) #(#x280 #x1a6) #(#x282 #xa7c5) #(#x283 #x1a9)
-        #(#x287 #xa7b1) #(#x288 #x1ae) #(#x289 #x244) #(#x28a #x1b1)
-        #(#x28b #x1b2) #(#x28c #x245) #(#x292 #x1b7) #(#x29d #xa7b2)
-        #(#x29e #xa7b0) #(#x345 #x399) #(#x371 #x370) #(#x373 #x372)
-        #(#x377 #x376) #(#x37b #x3fd) #(#x37c #x3fe) #(#x37d #x3ff)
-        #(#x390 #x399 #x308 #x301) #(#x3ac #x386) #(#x3ad #x388) #(#x3ae #x389)
-        #(#x3af #x38a) #(#x3b0 #x3a5 #x308 #x301) #(#x3b1 #x391) #(#x3b2 #x392)
-        #(#x3b3 #x393) #(#x3b4 #x394) #(#x3b5 #x395) #(#x3b6 #x396)
-        #(#x3b7 #x397) #(#x3b8 #x398) #(#x3b9 #x399) #(#x3ba #x39a)
-        #(#x3bb #x39b) #(#x3bc #x39c) #(#x3bd #x39d) #(#x3be #x39e)
-        #(#x3bf #x39f) #(#x3c0 #x3a0) #(#x3c1 #x3a1) #(#x3c2 #x3a3)
-        #(#x3c3 #x3a3) #(#x3c4 #x3a4) #(#x3c5 #x3a5) #(#x3c6 #x3a6)
-        #(#x3c7 #x3a7) #(#x3c8 #x3a8) #(#x3c9 #x3a9) #(#x3ca #x3aa)
-        #(#x3cb #x3ab) #(#x3cc #x38c) #(#x3cd #x38e) #(#x3ce #x38f)
-        #(#x3d0 #x392) #(#x3d1 #x398) #(#x3d5 #x3a6) #(#x3d6 #x3a0)
-        #(#x3d7 #x3cf) #(#x3d9 #x3d8) #(#x3db #x3da) #(#x3dd #x3dc)
-        #(#x3df #x3de) #(#x3e1 #x3e0) #(#x3e3 #x3e2) #(#x3e5 #x3e4)
-        #(#x3e7 #x3e6) #(#x3e9 #x3e8) #(#x3eb #x3ea) #(#x3ed #x3ec)
-        #(#x3ef #x3ee) #(#x3f0 #x39a) #(#x3f1 #x3a1) #(#x3f2 #x3f9)
-        #(#x3f3 #x37f) #(#x3f5 #x395) #(#x3f8 #x3f7) #(#x3fb #x3fa)
-        #(#x430 #x410) #(#x431 #x411) #(#x432 #x412) #(#x433 #x413)
-        #(#x434 #x414) #(#x435 #x415) #(#x436 #x416) #(#x437 #x417)
-        #(#x438 #x418) #(#x439 #x419) #(#x43a #x41a) #(#x43b #x41b)
-        #(#x43c #x41c) #(#x43d #x41d) #(#x43e #x41e) #(#x43f #x41f)
-        #(#x440 #x420) #(#x441 #x421) #(#x442 #x422) #(#x443 #x423)
-        #(#x444 #x424) #(#x445 #x425) #(#x446 #x426) #(#x447 #x427)
-        #(#x448 #x428) #(#x449 #x429) #(#x44a #x42a) #(#x44b #x42b)
-        #(#x44c #x42c) #(#x44d #x42d) #(#x44e #x42e) #(#x44f #x42f)
-        #(#x450 #x400) #(#x451 #x401) #(#x452 #x402) #(#x453 #x403)
-        #(#x454 #x404) #(#x455 #x405) #(#x456 #x406) #(#x457 #x407)
-        #(#x458 #x408) #(#x459 #x409) #(#x45a #x40a) #(#x45b #x40b)
-        #(#x45c #x40c) #(#x45d #x40d) #(#x45e #x40e) #(#x45f #x40f)
-        #(#x461 #x460) #(#x463 #x462) #(#x465 #x464) #(#x467 #x466)
-        #(#x469 #x468) #(#x46b #x46a) #(#x46d #x46c) #(#x46f #x46e)
-        #(#x471 #x470) #(#x473 #x472) #(#x475 #x474) #(#x477 #x476)
-        #(#x479 #x478) #(#x47b #x47a) #(#x47d #x47c) #(#x47f #x47e)
-        #(#x481 #x480) #(#x48b #x48a) #(#x48d #x48c) #(#x48f #x48e)
-        #(#x491 #x490) #(#x493 #x492) #(#x495 #x494) #(#x497 #x496)
-        #(#x499 #x498) #(#x49b #x49a) #(#x49d #x49c) #(#x49f #x49e)
-        #(#x4a1 #x4a0) #(#x4a3 #x4a2) #(#x4a5 #x4a4) #(#x4a7 #x4a6)
-        #(#x4a9 #x4a8) #(#x4ab #x4aa) #(#x4ad #x4ac) #(#x4af #x4ae)
-        #(#x4b1 #x4b0) #(#x4b3 #x4b2) #(#x4b5 #x4b4) #(#x4b7 #x4b6)
-        #(#x4b9 #x4b8) #(#x4bb #x4ba) #(#x4bd #x4bc) #(#x4bf #x4be)
-        #(#x4c2 #x4c1) #(#x4c4 #x4c3) #(#x4c6 #x4c5) #(#x4c8 #x4c7)
-        #(#x4ca #x4c9) #(#x4cc #x4cb) #(#x4ce #x4cd) #(#x4cf #x4c0)
-        #(#x4d1 #x4d0) #(#x4d3 #x4d2) #(#x4d5 #x4d4) #(#x4d7 #x4d6)
-        #(#x4d9 #x4d8) #(#x4db #x4da) #(#x4dd #x4dc) #(#x4df #x4de)
-        #(#x4e1 #x4e0) #(#x4e3 #x4e2) #(#x4e5 #x4e4) #(#x4e7 #x4e6)
-        #(#x4e9 #x4e8) #(#x4eb #x4ea) #(#x4ed #x4ec) #(#x4ef #x4ee)
-        #(#x4f1 #x4f0) #(#x4f3 #x4f2) #(#x4f5 #x4f4) #(#x4f7 #x4f6)
-        #(#x4f9 #x4f8) #(#x4fb #x4fa) #(#x4fd #x4fc) #(#x4ff #x4fe)
-        #(#x501 #x500) #(#x503 #x502) #(#x505 #x504) #(#x507 #x506)
-        #(#x509 #x508) #(#x50b #x50a) #(#x50d #x50c) #(#x50f #x50e)
-        #(#x511 #x510) #(#x513 #x512) #(#x515 #x514) #(#x517 #x516)
-        #(#x519 #x518) #(#x51b #x51a) #(#x51d #x51c) #(#x51f #x51e)
-        #(#x521 #x520) #(#x523 #x522) #(#x525 #x524) #(#x527 #x526)
-        #(#x529 #x528) #(#x52b #x52a) #(#x52d #x52c) #(#x52f #x52e)
-        #(#x561 #x531) #(#x562 #x532) #(#x563 #x533) #(#x564 #x534)
-        #(#x565 #x535) #(#x566 #x536) #(#x567 #x537) #(#x568 #x538)
-        #(#x569 #x539) #(#x56a #x53a) #(#x56b #x53b) #(#x56c #x53c)
-        #(#x56d #x53d) #(#x56e #x53e) #(#x56f #x53f) #(#x570 #x540)
-        #(#x571 #x541) #(#x572 #x542) #(#x573 #x543) #(#x574 #x544)
-        #(#x575 #x545) #(#x576 #x546) #(#x577 #x547) #(#x578 #x548)
-        #(#x579 #x549) #(#x57a #x54a) #(#x57b #x54b) #(#x57c #x54c)
-        #(#x57d #x54d) #(#x57e #x54e) #(#x57f #x54f) #(#x580 #x550)
-        #(#x581 #x551) #(#x582 #x552) #(#x583 #x553) #(#x584 #x554)
-        #(#x585 #x555) #(#x586 #x556) #(#x587 #x535 #x552) #(#x10d0 #x1c90)
-        #(#x10d1 #x1c91) #(#x10d2 #x1c92) #(#x10d3 #x1c93) #(#x10d4 #x1c94)
-        #(#x10d5 #x1c95) #(#x10d6 #x1c96) #(#x10d7 #x1c97) #(#x10d8 #x1c98)
-        #(#x10d9 #x1c99) #(#x10da #x1c9a) #(#x10db #x1c9b) #(#x10dc #x1c9c)
-        #(#x10dd #x1c9d) #(#x10de #x1c9e) #(#x10df #x1c9f) #(#x10e0 #x1ca0)
-        #(#x10e1 #x1ca1) #(#x10e2 #x1ca2) #(#x10e3 #x1ca3) #(#x10e4 #x1ca4)
-        #(#x10e5 #x1ca5) #(#x10e6 #x1ca6) #(#x10e7 #x1ca7) #(#x10e8 #x1ca8)
-        #(#x10e9 #x1ca9) #(#x10ea #x1caa) #(#x10eb #x1cab) #(#x10ec #x1cac)
-        #(#x10ed #x1cad) #(#x10ee #x1cae) #(#x10ef #x1caf) #(#x10f0 #x1cb0)
-        #(#x10f1 #x1cb1) #(#x10f2 #x1cb2) #(#x10f3 #x1cb3) #(#x10f4 #x1cb4)
-        #(#x10f5 #x1cb5) #(#x10f6 #x1cb6) #(#x10f7 #x1cb7) #(#x10f8 #x1cb8)
-        #(#x10f9 #x1cb9) #(#x10fa #x1cba) #(#x10fd #x1cbd) #(#x10fe #x1cbe)
-        #(#x10ff #x1cbf) #(#x13f8 #x13f0) #(#x13f9 #x13f1) #(#x13fa #x13f2)
-        #(#x13fb #x13f3) #(#x13fc #x13f4) #(#x13fd #x13f5) #(#x1c80 #x412)
-        #(#x1c81 #x414) #(#x1c82 #x41e) #(#x1c83 #x421) #(#x1c84 #x422)
-        #(#x1c85 #x422) #(#x1c86 #x42a) #(#x1c87 #x462) #(#x1c88 #xa64a)
-        #(#x1c8a #x1c89) #(#x1d79 #xa77d) #(#x1d7d #x2c63) #(#x1d8e #xa7c6)
-        #(#x1e01 #x1e00) #(#x1e03 #x1e02) #(#x1e05 #x1e04) #(#x1e07 #x1e06)
-        #(#x1e09 #x1e08) #(#x1e0b #x1e0a) #(#x1e0d #x1e0c) #(#x1e0f #x1e0e)
-        #(#x1e11 #x1e10) #(#x1e13 #x1e12) #(#x1e15 #x1e14) #(#x1e17 #x1e16)
-        #(#x1e19 #x1e18) #(#x1e1b #x1e1a) #(#x1e1d #x1e1c) #(#x1e1f #x1e1e)
-        #(#x1e21 #x1e20) #(#x1e23 #x1e22) #(#x1e25 #x1e24) #(#x1e27 #x1e26)
-        #(#x1e29 #x1e28) #(#x1e2b #x1e2a) #(#x1e2d #x1e2c) #(#x1e2f #x1e2e)
-        #(#x1e31 #x1e30) #(#x1e33 #x1e32) #(#x1e35 #x1e34) #(#x1e37 #x1e36)
-        #(#x1e39 #x1e38) #(#x1e3b #x1e3a) #(#x1e3d #x1e3c) #(#x1e3f #x1e3e)
-        #(#x1e41 #x1e40) #(#x1e43 #x1e42) #(#x1e45 #x1e44) #(#x1e47 #x1e46)
-        #(#x1e49 #x1e48) #(#x1e4b #x1e4a) #(#x1e4d #x1e4c) #(#x1e4f #x1e4e)
-        #(#x1e51 #x1e50) #(#x1e53 #x1e52) #(#x1e55 #x1e54) #(#x1e57 #x1e56)
-        #(#x1e59 #x1e58) #(#x1e5b #x1e5a) #(#x1e5d #x1e5c) #(#x1e5f #x1e5e)
-        #(#x1e61 #x1e60) #(#x1e63 #x1e62) #(#x1e65 #x1e64) #(#x1e67 #x1e66)
-        #(#x1e69 #x1e68) #(#x1e6b #x1e6a) #(#x1e6d #x1e6c) #(#x1e6f #x1e6e)
-        #(#x1e71 #x1e70) #(#x1e73 #x1e72) #(#x1e75 #x1e74) #(#x1e77 #x1e76)
-        #(#x1e79 #x1e78) #(#x1e7b #x1e7a) #(#x1e7d #x1e7c) #(#x1e7f #x1e7e)
-        #(#x1e81 #x1e80) #(#x1e83 #x1e82) #(#x1e85 #x1e84) #(#x1e87 #x1e86)
-        #(#x1e89 #x1e88) #(#x1e8b #x1e8a) #(#x1e8d #x1e8c) #(#x1e8f #x1e8e)
-        #(#x1e91 #x1e90) #(#x1e93 #x1e92) #(#x1e95 #x1e94) #(#x1e96 #x48 #x331)
-        #(#x1e97 #x54 #x308) #(#x1e98 #x57 #x30a) #(#x1e99 #x59 #x30a)
-        #(#x1e9a #x41 #x2be) #(#x1e9b #x1e60) #(#x1ea1 #x1ea0) #(#x1ea3 #x1ea2)
-        #(#x1ea5 #x1ea4) #(#x1ea7 #x1ea6) #(#x1ea9 #x1ea8) #(#x1eab #x1eaa)
-        #(#x1ead #x1eac) #(#x1eaf #x1eae) #(#x1eb1 #x1eb0) #(#x1eb3 #x1eb2)
-        #(#x1eb5 #x1eb4) #(#x1eb7 #x1eb6) #(#x1eb9 #x1eb8) #(#x1ebb #x1eba)
-        #(#x1ebd #x1ebc) #(#x1ebf #x1ebe) #(#x1ec1 #x1ec0) #(#x1ec3 #x1ec2)
-        #(#x1ec5 #x1ec4) #(#x1ec7 #x1ec6) #(#x1ec9 #x1ec8) #(#x1ecb #x1eca)
-        #(#x1ecd #x1ecc) #(#x1ecf #x1ece) #(#x1ed1 #x1ed0) #(#x1ed3 #x1ed2)
-        #(#x1ed5 #x1ed4) #(#x1ed7 #x1ed6) #(#x1ed9 #x1ed8) #(#x1edb #x1eda)
-        #(#x1edd #x1edc) #(#x1edf #x1ede) #(#x1ee1 #x1ee0) #(#x1ee3 #x1ee2)
-        #(#x1ee5 #x1ee4) #(#x1ee7 #x1ee6) #(#x1ee9 #x1ee8) #(#x1eeb #x1eea)
-        #(#x1eed #x1eec) #(#x1eef #x1eee) #(#x1ef1 #x1ef0) #(#x1ef3 #x1ef2)
-        #(#x1ef5 #x1ef4) #(#x1ef7 #x1ef6) #(#x1ef9 #x1ef8) #(#x1efb #x1efa)
-        #(#x1efd #x1efc) #(#x1eff #x1efe) #(#x1f00 #x1f08) #(#x1f01 #x1f09)
-        #(#x1f02 #x1f0a) #(#x1f03 #x1f0b) #(#x1f04 #x1f0c) #(#x1f05 #x1f0d)
-        #(#x1f06 #x1f0e) #(#x1f07 #x1f0f) #(#x1f10 #x1f18) #(#x1f11 #x1f19)
-        #(#x1f12 #x1f1a) #(#x1f13 #x1f1b) #(#x1f14 #x1f1c) #(#x1f15 #x1f1d)
-        #(#x1f20 #x1f28) #(#x1f21 #x1f29) #(#x1f22 #x1f2a) #(#x1f23 #x1f2b)
-        #(#x1f24 #x1f2c) #(#x1f25 #x1f2d) #(#x1f26 #x1f2e) #(#x1f27 #x1f2f)
-        #(#x1f30 #x1f38) #(#x1f31 #x1f39) #(#x1f32 #x1f3a) #(#x1f33 #x1f3b)
-        #(#x1f34 #x1f3c) #(#x1f35 #x1f3d) #(#x1f36 #x1f3e) #(#x1f37 #x1f3f)
-        #(#x1f40 #x1f48) #(#x1f41 #x1f49) #(#x1f42 #x1f4a) #(#x1f43 #x1f4b)
-        #(#x1f44 #x1f4c) #(#x1f45 #x1f4d) #(#x1f50 #x3a5 #x313)
-        #(#x1f51 #x1f59) #(#x1f52 #x3a5 #x313 #x300) #(#x1f53 #x1f5b)
-        #(#x1f54 #x3a5 #x313 #x301) #(#x1f55 #x1f5d)
-        #(#x1f56 #x3a5 #x313 #x342) #(#x1f57 #x1f5f) #(#x1f60 #x1f68)
-        #(#x1f61 #x1f69) #(#x1f62 #x1f6a) #(#x1f63 #x1f6b) #(#x1f64 #x1f6c)
-        #(#x1f65 #x1f6d) #(#x1f66 #x1f6e) #(#x1f67 #x1f6f) #(#x1f70 #x1fba)
-        #(#x1f71 #x1fbb) #(#x1f72 #x1fc8) #(#x1f73 #x1fc9) #(#x1f74 #x1fca)
-        #(#x1f75 #x1fcb) #(#x1f76 #x1fda) #(#x1f77 #x1fdb) #(#x1f78 #x1ff8)
-        #(#x1f79 #x1ff9) #(#x1f7a #x1fea) #(#x1f7b #x1feb) #(#x1f7c #x1ffa)
-        #(#x1f7d #x1ffb) #(#x1f80 #x1f08 #x399) #(#x1f81 #x1f09 #x399)
-        #(#x1f82 #x1f0a #x399) #(#x1f83 #x1f0b #x399) #(#x1f84 #x1f0c #x399)
-        #(#x1f85 #x1f0d #x399) #(#x1f86 #x1f0e #x399) #(#x1f87 #x1f0f #x399)
-        #(#x1f88 #x1f08 #x399) #(#x1f89 #x1f09 #x399) #(#x1f8a #x1f0a #x399)
-        #(#x1f8b #x1f0b #x399) #(#x1f8c #x1f0c #x399) #(#x1f8d #x1f0d #x399)
-        #(#x1f8e #x1f0e #x399) #(#x1f8f #x1f0f #x399) #(#x1f90 #x1f28 #x399)
-        #(#x1f91 #x1f29 #x399) #(#x1f92 #x1f2a #x399) #(#x1f93 #x1f2b #x399)
-        #(#x1f94 #x1f2c #x399) #(#x1f95 #x1f2d #x399) #(#x1f96 #x1f2e #x399)
-        #(#x1f97 #x1f2f #x399) #(#x1f98 #x1f28 #x399) #(#x1f99 #x1f29 #x399)
-        #(#x1f9a #x1f2a #x399) #(#x1f9b #x1f2b #x399) #(#x1f9c #x1f2c #x399)
-        #(#x1f9d #x1f2d #x399) #(#x1f9e #x1f2e #x399) #(#x1f9f #x1f2f #x399)
-        #(#x1fa0 #x1f68 #x399) #(#x1fa1 #x1f69 #x399) #(#x1fa2 #x1f6a #x399)
-        #(#x1fa3 #x1f6b #x399) #(#x1fa4 #x1f6c #x399) #(#x1fa5 #x1f6d #x399)
-        #(#x1fa6 #x1f6e #x399) #(#x1fa7 #x1f6f #x399) #(#x1fa8 #x1f68 #x399)
-        #(#x1fa9 #x1f69 #x399) #(#x1faa #x1f6a #x399) #(#x1fab #x1f6b #x399)
-        #(#x1fac #x1f6c #x399) #(#x1fad #x1f6d #x399) #(#x1fae #x1f6e #x399)
-        #(#x1faf #x1f6f #x399) #(#x1fb0 #x1fb8) #(#x1fb1 #x1fb9)
+        #x41 #x5a #x20 #xc0 #xd6 #x20 #xd8 #xde #x20 #x100 #x100 #x1 #x102
+        #x102 #x1 #x104 #x104 #x1 #x106 #x106 #x1 #x108 #x108 #x1 #x10a #x10a
+        #x1 #x10c #x10c #x1 #x10e #x10e #x1 #x110 #x110 #x1 #x112 #x112 #x1
+        #x114 #x114 #x1 #x116 #x116 #x1 #x118 #x118 #x1 #x11a #x11a #x1 #x11c
+        #x11c #x1 #x11e #x11e #x1 #x120 #x120 #x1 #x122 #x122 #x1 #x124 #x124
+        #x1 #x126 #x126 #x1 #x128 #x128 #x1 #x12a #x12a #x1 #x12c #x12c #x1
+        #x12e #x12e #x1 #x130 #x130 #x-c7 #x132 #x132 #x1 #x134 #x134 #x1 #x136
+        #x136 #x1 #x139 #x139 #x1 #x13b #x13b #x1 #x13d #x13d #x1 #x13f #x13f
+        #x1 #x141 #x141 #x1 #x143 #x143 #x1 #x145 #x145 #x1 #x147 #x147 #x1
+        #x14a #x14a #x1 #x14c #x14c #x1 #x14e #x14e #x1 #x150 #x150 #x1 #x152
+        #x152 #x1 #x154 #x154 #x1 #x156 #x156 #x1 #x158 #x158 #x1 #x15a #x15a
+        #x1 #x15c #x15c #x1 #x15e #x15e #x1 #x160 #x160 #x1 #x162 #x162 #x1
+        #x164 #x164 #x1 #x166 #x166 #x1 #x168 #x168 #x1 #x16a #x16a #x1 #x16c
+        #x16c #x1 #x16e #x16e #x1 #x170 #x170 #x1 #x172 #x172 #x1 #x174 #x174
+        #x1 #x176 #x176 #x1 #x178 #x178 #x-79 #x179 #x179 #x1 #x17b #x17b #x1
+        #x17d #x17d #x1 #x181 #x181 #xd2 #x182 #x182 #x1 #x184 #x184 #x1 #x186
+        #x186 #xce #x187 #x187 #x1 #x189 #x18a #xcd #x18b #x18b #x1 #x18e #x18e
+        #x4f #x18f #x18f #xca #x190 #x190 #xcb #x191 #x191 #x1 #x193 #x193 #xcd
+        #x194 #x194 #xcf #x196 #x196 #xd3 #x197 #x197 #xd1 #x198 #x198 #x1
+        #x19c #x19c #xd3 #x19d #x19d #xd5 #x19f #x19f #xd6 #x1a0 #x1a0 #x1
+        #x1a2 #x1a2 #x1 #x1a4 #x1a4 #x1 #x1a6 #x1a6 #xda #x1a7 #x1a7 #x1 #x1a9
+        #x1a9 #xda #x1ac #x1ac #x1 #x1ae #x1ae #xda #x1af #x1af #x1 #x1b1 #x1b2
+        #xd9 #x1b3 #x1b3 #x1 #x1b5 #x1b5 #x1 #x1b7 #x1b7 #xdb #x1b8 #x1b8 #x1
+        #x1bc #x1bc #x1 #x1c4 #x1c4 #x2 #x1c5 #x1c5 #x1 #x1c7 #x1c7 #x2 #x1c8
+        #x1c8 #x1 #x1ca #x1ca #x2 #x1cb #x1cb #x1 #x1cd #x1cd #x1 #x1cf #x1cf
+        #x1 #x1d1 #x1d1 #x1 #x1d3 #x1d3 #x1 #x1d5 #x1d5 #x1 #x1d7 #x1d7 #x1
+        #x1d9 #x1d9 #x1 #x1db #x1db #x1 #x1de #x1de #x1 #x1e0 #x1e0 #x1 #x1e2
+        #x1e2 #x1 #x1e4 #x1e4 #x1 #x1e6 #x1e6 #x1 #x1e8 #x1e8 #x1 #x1ea #x1ea
+        #x1 #x1ec #x1ec #x1 #x1ee #x1ee #x1 #x1f1 #x1f1 #x2 #x1f2 #x1f2 #x1
+        #x1f4 #x1f4 #x1 #x1f6 #x1f6 #x-61 #x1f7 #x1f7 #x-38 #x1f8 #x1f8 #x1
+        #x1fa #x1fa #x1 #x1fc #x1fc #x1 #x1fe #x1fe #x1 #x200 #x200 #x1 #x202
+        #x202 #x1 #x204 #x204 #x1 #x206 #x206 #x1 #x208 #x208 #x1 #x20a #x20a
+        #x1 #x20c #x20c #x1 #x20e #x20e #x1 #x210 #x210 #x1 #x212 #x212 #x1
+        #x214 #x214 #x1 #x216 #x216 #x1 #x218 #x218 #x1 #x21a #x21a #x1 #x21c
+        #x21c #x1 #x21e #x21e #x1 #x220 #x220 #x-82 #x222 #x222 #x1 #x224 #x224
+        #x1 #x226 #x226 #x1 #x228 #x228 #x1 #x22a #x22a #x1 #x22c #x22c #x1
+        #x22e #x22e #x1 #x230 #x230 #x1 #x232 #x232 #x1 #x23a #x23a #x2a2b
+        #x23b #x23b #x1 #x23d #x23d #x-a3 #x23e #x23e #x2a28 #x241 #x241 #x1
+        #x243 #x243 #x-c3 #x244 #x244 #x45 #x245 #x245 #x47 #x246 #x246 #x1
+        #x248 #x248 #x1 #x24a #x24a #x1 #x24c #x24c #x1 #x24e #x24e #x1 #x370
+        #x370 #x1 #x372 #x372 #x1 #x376 #x376 #x1 #x37f #x37f #x74 #x386 #x386
+        #x26 #x388 #x38a #x25 #x38c #x38c #x40 #x38e #x38f #x3f #x391 #x3a1
+        #x20 #x3a3 #x3ab #x20 #x3cf #x3cf #x8 #x3d8 #x3d8 #x1 #x3da #x3da #x1
+        #x3dc #x3dc #x1 #x3de #x3de #x1 #x3e0 #x3e0 #x1 #x3e2 #x3e2 #x1 #x3e4
+        #x3e4 #x1 #x3e6 #x3e6 #x1 #x3e8 #x3e8 #x1 #x3ea #x3ea #x1 #x3ec #x3ec
+        #x1 #x3ee #x3ee #x1 #x3f4 #x3f4 #x-3c #x3f7 #x3f7 #x1 #x3f9 #x3f9 #x-7
+        #x3fa #x3fa #x1 #x3fd #x3ff #x-82 #x400 #x40f #x50 #x410 #x42f #x20
+        #x460 #x460 #x1 #x462 #x462 #x1 #x464 #x464 #x1 #x466 #x466 #x1 #x468
+        #x468 #x1 #x46a #x46a #x1 #x46c #x46c #x1 #x46e #x46e #x1 #x470 #x470
+        #x1 #x472 #x472 #x1 #x474 #x474 #x1 #x476 #x476 #x1 #x478 #x478 #x1
+        #x47a #x47a #x1 #x47c #x47c #x1 #x47e #x47e #x1 #x480 #x480 #x1 #x48a
+        #x48a #x1 #x48c #x48c #x1 #x48e #x48e #x1 #x490 #x490 #x1 #x492 #x492
+        #x1 #x494 #x494 #x1 #x496 #x496 #x1 #x498 #x498 #x1 #x49a #x49a #x1
+        #x49c #x49c #x1 #x49e #x49e #x1 #x4a0 #x4a0 #x1 #x4a2 #x4a2 #x1 #x4a4
+        #x4a4 #x1 #x4a6 #x4a6 #x1 #x4a8 #x4a8 #x1 #x4aa #x4aa #x1 #x4ac #x4ac
+        #x1 #x4ae #x4ae #x1 #x4b0 #x4b0 #x1 #x4b2 #x4b2 #x1 #x4b4 #x4b4 #x1
+        #x4b6 #x4b6 #x1 #x4b8 #x4b8 #x1 #x4ba #x4ba #x1 #x4bc #x4bc #x1 #x4be
+        #x4be #x1 #x4c0 #x4c0 #xf #x4c1 #x4c1 #x1 #x4c3 #x4c3 #x1 #x4c5 #x4c5
+        #x1 #x4c7 #x4c7 #x1 #x4c9 #x4c9 #x1 #x4cb #x4cb #x1 #x4cd #x4cd #x1
+        #x4d0 #x4d0 #x1 #x4d2 #x4d2 #x1 #x4d4 #x4d4 #x1 #x4d6 #x4d6 #x1 #x4d8
+        #x4d8 #x1 #x4da #x4da #x1 #x4dc #x4dc #x1 #x4de #x4de #x1 #x4e0 #x4e0
+        #x1 #x4e2 #x4e2 #x1 #x4e4 #x4e4 #x1 #x4e6 #x4e6 #x1 #x4e8 #x4e8 #x1
+        #x4ea #x4ea #x1 #x4ec #x4ec #x1 #x4ee #x4ee #x1 #x4f0 #x4f0 #x1 #x4f2
+        #x4f2 #x1 #x4f4 #x4f4 #x1 #x4f6 #x4f6 #x1 #x4f8 #x4f8 #x1 #x4fa #x4fa
+        #x1 #x4fc #x4fc #x1 #x4fe #x4fe #x1 #x500 #x500 #x1 #x502 #x502 #x1
+        #x504 #x504 #x1 #x506 #x506 #x1 #x508 #x508 #x1 #x50a #x50a #x1 #x50c
+        #x50c #x1 #x50e #x50e #x1 #x510 #x510 #x1 #x512 #x512 #x1 #x514 #x514
+        #x1 #x516 #x516 #x1 #x518 #x518 #x1 #x51a #x51a #x1 #x51c #x51c #x1
+        #x51e #x51e #x1 #x520 #x520 #x1 #x522 #x522 #x1 #x524 #x524 #x1 #x526
+        #x526 #x1 #x528 #x528 #x1 #x52a #x52a #x1 #x52c #x52c #x1 #x52e #x52e
+        #x1 #x531 #x556 #x30 #x10a0 #x10c5 #x1c60 #x10c7 #x10c7 #x1c60 #x10cd
+        #x10cd #x1c60 #x13a0 #x13ef #x97d0 #x13f0 #x13f5 #x8 #x1c89 #x1c89 #x1
+        #x1c90 #x1cba #x-bc0 #x1cbd #x1cbf #x-bc0 #x1e00 #x1e00 #x1 #x1e02
+        #x1e02 #x1 #x1e04 #x1e04 #x1 #x1e06 #x1e06 #x1 #x1e08 #x1e08 #x1 #x1e0a
+        #x1e0a #x1 #x1e0c #x1e0c #x1 #x1e0e #x1e0e #x1 #x1e10 #x1e10 #x1 #x1e12
+        #x1e12 #x1 #x1e14 #x1e14 #x1 #x1e16 #x1e16 #x1 #x1e18 #x1e18 #x1 #x1e1a
+        #x1e1a #x1 #x1e1c #x1e1c #x1 #x1e1e #x1e1e #x1 #x1e20 #x1e20 #x1 #x1e22
+        #x1e22 #x1 #x1e24 #x1e24 #x1 #x1e26 #x1e26 #x1 #x1e28 #x1e28 #x1 #x1e2a
+        #x1e2a #x1 #x1e2c #x1e2c #x1 #x1e2e #x1e2e #x1 #x1e30 #x1e30 #x1 #x1e32
+        #x1e32 #x1 #x1e34 #x1e34 #x1 #x1e36 #x1e36 #x1 #x1e38 #x1e38 #x1 #x1e3a
+        #x1e3a #x1 #x1e3c #x1e3c #x1 #x1e3e #x1e3e #x1 #x1e40 #x1e40 #x1 #x1e42
+        #x1e42 #x1 #x1e44 #x1e44 #x1 #x1e46 #x1e46 #x1 #x1e48 #x1e48 #x1 #x1e4a
+        #x1e4a #x1 #x1e4c #x1e4c #x1 #x1e4e #x1e4e #x1 #x1e50 #x1e50 #x1 #x1e52
+        #x1e52 #x1 #x1e54 #x1e54 #x1 #x1e56 #x1e56 #x1 #x1e58 #x1e58 #x1 #x1e5a
+        #x1e5a #x1 #x1e5c #x1e5c #x1 #x1e5e #x1e5e #x1 #x1e60 #x1e60 #x1 #x1e62
+        #x1e62 #x1 #x1e64 #x1e64 #x1 #x1e66 #x1e66 #x1 #x1e68 #x1e68 #x1 #x1e6a
+        #x1e6a #x1 #x1e6c #x1e6c #x1 #x1e6e #x1e6e #x1 #x1e70 #x1e70 #x1 #x1e72
+        #x1e72 #x1 #x1e74 #x1e74 #x1 #x1e76 #x1e76 #x1 #x1e78 #x1e78 #x1 #x1e7a
+        #x1e7a #x1 #x1e7c #x1e7c #x1 #x1e7e #x1e7e #x1 #x1e80 #x1e80 #x1 #x1e82
+        #x1e82 #x1 #x1e84 #x1e84 #x1 #x1e86 #x1e86 #x1 #x1e88 #x1e88 #x1 #x1e8a
+        #x1e8a #x1 #x1e8c #x1e8c #x1 #x1e8e #x1e8e #x1 #x1e90 #x1e90 #x1 #x1e92
+        #x1e92 #x1 #x1e94 #x1e94 #x1 #x1e9e #x1e9e #x-1dbf #x1ea0 #x1ea0 #x1
+        #x1ea2 #x1ea2 #x1 #x1ea4 #x1ea4 #x1 #x1ea6 #x1ea6 #x1 #x1ea8 #x1ea8 #x1
+        #x1eaa #x1eaa #x1 #x1eac #x1eac #x1 #x1eae #x1eae #x1 #x1eb0 #x1eb0 #x1
+        #x1eb2 #x1eb2 #x1 #x1eb4 #x1eb4 #x1 #x1eb6 #x1eb6 #x1 #x1eb8 #x1eb8 #x1
+        #x1eba #x1eba #x1 #x1ebc #x1ebc #x1 #x1ebe #x1ebe #x1 #x1ec0 #x1ec0 #x1
+        #x1ec2 #x1ec2 #x1 #x1ec4 #x1ec4 #x1 #x1ec6 #x1ec6 #x1 #x1ec8 #x1ec8 #x1
+        #x1eca #x1eca #x1 #x1ecc #x1ecc #x1 #x1ece #x1ece #x1 #x1ed0 #x1ed0 #x1
+        #x1ed2 #x1ed2 #x1 #x1ed4 #x1ed4 #x1 #x1ed6 #x1ed6 #x1 #x1ed8 #x1ed8 #x1
+        #x1eda #x1eda #x1 #x1edc #x1edc #x1 #x1ede #x1ede #x1 #x1ee0 #x1ee0 #x1
+        #x1ee2 #x1ee2 #x1 #x1ee4 #x1ee4 #x1 #x1ee6 #x1ee6 #x1 #x1ee8 #x1ee8 #x1
+        #x1eea #x1eea #x1 #x1eec #x1eec #x1 #x1eee #x1eee #x1 #x1ef0 #x1ef0 #x1
+        #x1ef2 #x1ef2 #x1 #x1ef4 #x1ef4 #x1 #x1ef6 #x1ef6 #x1 #x1ef8 #x1ef8 #x1
+        #x1efa #x1efa #x1 #x1efc #x1efc #x1 #x1efe #x1efe #x1 #x1f08 #x1f0f
+        #x-8 #x1f18 #x1f1d #x-8 #x1f28 #x1f2f #x-8 #x1f38 #x1f3f #x-8 #x1f48
+        #x1f4d #x-8 #x1f59 #x1f59 #x-8 #x1f5b #x1f5b #x-8 #x1f5d #x1f5d #x-8
+        #x1f5f #x1f5f #x-8 #x1f68 #x1f6f #x-8 #x1f88 #x1f8f #x-8 #x1f98 #x1f9f
+        #x-8 #x1fa8 #x1faf #x-8 #x1fb8 #x1fb9 #x-8 #x1fba #x1fbb #x-4a #x1fbc
+        #x1fbc #x-9 #x1fc8 #x1fcb #x-56 #x1fcc #x1fcc #x-9 #x1fd8 #x1fd9 #x-8
+        #x1fda #x1fdb #x-64 #x1fe8 #x1fe9 #x-8 #x1fea #x1feb #x-70 #x1fec
+        #x1fec #x-7 #x1ff8 #x1ff9 #x-80 #x1ffa #x1ffb #x-7e #x1ffc #x1ffc #x-9
+        #x2126 #x2126 #x-1d5d #x212a #x212a #x-20bf #x212b #x212b #x-2046
+        #x2132 #x2132 #x1c #x2160 #x216f #x10 #x2183 #x2183 #x1 #x24b6 #x24cf
+        #x1a #x2c00 #x2c2f #x30 #x2c60 #x2c60 #x1 #x2c62 #x2c62 #x-29f7 #x2c63
+        #x2c63 #x-ee6 #x2c64 #x2c64 #x-29e7 #x2c67 #x2c67 #x1 #x2c69 #x2c69 #x1
+        #x2c6b #x2c6b #x1 #x2c6d #x2c6d #x-2a1c #x2c6e #x2c6e #x-29fd #x2c6f
+        #x2c6f #x-2a1f #x2c70 #x2c70 #x-2a1e #x2c72 #x2c72 #x1 #x2c75 #x2c75
+        #x1 #x2c7e #x2c7f #x-2a3f #x2c80 #x2c80 #x1 #x2c82 #x2c82 #x1 #x2c84
+        #x2c84 #x1 #x2c86 #x2c86 #x1 #x2c88 #x2c88 #x1 #x2c8a #x2c8a #x1 #x2c8c
+        #x2c8c #x1 #x2c8e #x2c8e #x1 #x2c90 #x2c90 #x1 #x2c92 #x2c92 #x1 #x2c94
+        #x2c94 #x1 #x2c96 #x2c96 #x1 #x2c98 #x2c98 #x1 #x2c9a #x2c9a #x1 #x2c9c
+        #x2c9c #x1 #x2c9e #x2c9e #x1 #x2ca0 #x2ca0 #x1 #x2ca2 #x2ca2 #x1 #x2ca4
+        #x2ca4 #x1 #x2ca6 #x2ca6 #x1 #x2ca8 #x2ca8 #x1 #x2caa #x2caa #x1 #x2cac
+        #x2cac #x1 #x2cae #x2cae #x1 #x2cb0 #x2cb0 #x1 #x2cb2 #x2cb2 #x1 #x2cb4
+        #x2cb4 #x1 #x2cb6 #x2cb6 #x1 #x2cb8 #x2cb8 #x1 #x2cba #x2cba #x1 #x2cbc
+        #x2cbc #x1 #x2cbe #x2cbe #x1 #x2cc0 #x2cc0 #x1 #x2cc2 #x2cc2 #x1 #x2cc4
+        #x2cc4 #x1 #x2cc6 #x2cc6 #x1 #x2cc8 #x2cc8 #x1 #x2cca #x2cca #x1 #x2ccc
+        #x2ccc #x1 #x2cce #x2cce #x1 #x2cd0 #x2cd0 #x1 #x2cd2 #x2cd2 #x1 #x2cd4
+        #x2cd4 #x1 #x2cd6 #x2cd6 #x1 #x2cd8 #x2cd8 #x1 #x2cda #x2cda #x1 #x2cdc
+        #x2cdc #x1 #x2cde #x2cde #x1 #x2ce0 #x2ce0 #x1 #x2ce2 #x2ce2 #x1 #x2ceb
+        #x2ceb #x1 #x2ced #x2ced #x1 #x2cf2 #x2cf2 #x1 #xa640 #xa640 #x1 #xa642
+        #xa642 #x1 #xa644 #xa644 #x1 #xa646 #xa646 #x1 #xa648 #xa648 #x1 #xa64a
+        #xa64a #x1 #xa64c #xa64c #x1 #xa64e #xa64e #x1 #xa650 #xa650 #x1 #xa652
+        #xa652 #x1 #xa654 #xa654 #x1 #xa656 #xa656 #x1 #xa658 #xa658 #x1 #xa65a
+        #xa65a #x1 #xa65c #xa65c #x1 #xa65e #xa65e #x1 #xa660 #xa660 #x1 #xa662
+        #xa662 #x1 #xa664 #xa664 #x1 #xa666 #xa666 #x1 #xa668 #xa668 #x1 #xa66a
+        #xa66a #x1 #xa66c #xa66c #x1 #xa680 #xa680 #x1 #xa682 #xa682 #x1 #xa684
+        #xa684 #x1 #xa686 #xa686 #x1 #xa688 #xa688 #x1 #xa68a #xa68a #x1 #xa68c
+        #xa68c #x1 #xa68e #xa68e #x1 #xa690 #xa690 #x1 #xa692 #xa692 #x1 #xa694
+        #xa694 #x1 #xa696 #xa696 #x1 #xa698 #xa698 #x1 #xa69a #xa69a #x1 #xa722
+        #xa722 #x1 #xa724 #xa724 #x1 #xa726 #xa726 #x1 #xa728 #xa728 #x1 #xa72a
+        #xa72a #x1 #xa72c #xa72c #x1 #xa72e #xa72e #x1 #xa732 #xa732 #x1 #xa734
+        #xa734 #x1 #xa736 #xa736 #x1 #xa738 #xa738 #x1 #xa73a #xa73a #x1 #xa73c
+        #xa73c #x1 #xa73e #xa73e #x1 #xa740 #xa740 #x1 #xa742 #xa742 #x1 #xa744
+        #xa744 #x1 #xa746 #xa746 #x1 #xa748 #xa748 #x1 #xa74a #xa74a #x1 #xa74c
+        #xa74c #x1 #xa74e #xa74e #x1 #xa750 #xa750 #x1 #xa752 #xa752 #x1 #xa754
+        #xa754 #x1 #xa756 #xa756 #x1 #xa758 #xa758 #x1 #xa75a #xa75a #x1 #xa75c
+        #xa75c #x1 #xa75e #xa75e #x1 #xa760 #xa760 #x1 #xa762 #xa762 #x1 #xa764
+        #xa764 #x1 #xa766 #xa766 #x1 #xa768 #xa768 #x1 #xa76a #xa76a #x1 #xa76c
+        #xa76c #x1 #xa76e #xa76e #x1 #xa779 #xa779 #x1 #xa77b #xa77b #x1 #xa77d
+        #xa77d #x-8a04 #xa77e #xa77e #x1 #xa780 #xa780 #x1 #xa782 #xa782 #x1
+        #xa784 #xa784 #x1 #xa786 #xa786 #x1 #xa78b #xa78b #x1 #xa78d #xa78d
+        #x-a528 #xa790 #xa790 #x1 #xa792 #xa792 #x1 #xa796 #xa796 #x1 #xa798
+        #xa798 #x1 #xa79a #xa79a #x1 #xa79c #xa79c #x1 #xa79e #xa79e #x1 #xa7a0
+        #xa7a0 #x1 #xa7a2 #xa7a2 #x1 #xa7a4 #xa7a4 #x1 #xa7a6 #xa7a6 #x1 #xa7a8
+        #xa7a8 #x1 #xa7aa #xa7aa #x-a544 #xa7ab #xa7ab #x-a54f #xa7ac #xa7ac
+        #x-a54b #xa7ad #xa7ad #x-a541 #xa7ae #xa7ae #x-a544 #xa7b0 #xa7b0
+        #x-a512 #xa7b1 #xa7b1 #x-a52a #xa7b2 #xa7b2 #x-a515 #xa7b3 #xa7b3 #x3a0
+        #xa7b4 #xa7b4 #x1 #xa7b6 #xa7b6 #x1 #xa7b8 #xa7b8 #x1 #xa7ba #xa7ba #x1
+        #xa7bc #xa7bc #x1 #xa7be #xa7be #x1 #xa7c0 #xa7c0 #x1 #xa7c2 #xa7c2 #x1
+        #xa7c4 #xa7c4 #x-30 #xa7c5 #xa7c5 #x-a543 #xa7c6 #xa7c6 #x-8a38 #xa7c7
+        #xa7c7 #x1 #xa7c9 #xa7c9 #x1 #xa7cb #xa7cb #x-a567 #xa7cc #xa7cc #x1
+        #xa7ce #xa7ce #x1 #xa7d0 #xa7d0 #x1 #xa7d2 #xa7d2 #x1 #xa7d4 #xa7d4 #x1
+        #xa7d6 #xa7d6 #x1 #xa7d8 #xa7d8 #x1 #xa7da #xa7da #x1 #xa7dc #xa7dc
+        #x-a641 #xa7f5 #xa7f5 #x1 #xff21 #xff3a #x20 #x10400 #x10427 #x28
+        #x104b0 #x104d3 #x28 #x10570 #x1057a #x27 #x1057c #x1058a #x27 #x1058c
+        #x10592 #x27 #x10594 #x10595 #x27 #x10c80 #x10cb2 #x40 #x10d50 #x10d65
+        #x20 #x118a0 #x118bf #x20 #x16e40 #x16e5f #x20 #x16ea0 #x16eb8 #x1b
+        #x1e900 #x1e921 #x22
+        ))
+
+    ;; Private entry offsets by BMP page or supplementary plane.
+    (define %unicode-simple-lowercase-index
+      #(
+        #x0 #x3 #x84 #xab #xc7 #x115 #x12e #x12e #x12e #x12e #x12e #x12e #x12e
+        #x12e #x12e #x12e #x12e #x131 #x131 #x131 #x133 #x133 #x133 #x133 #x133
+        #x133 #x133 #x133 #x133 #x136 #x136 #x1b2 #x1cc #x1cc #x1d2 #x1d2 #x1d2
+        #x1d3 #x1d3 #x1d3 #x1d3 #x1d3 #x1d3 #x1d3 #x1d3 #x217 #x217 #x217 #x217
+        #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217
+        #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217
+        #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217
+        #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217
+        #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217
+        #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217
+        #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217
+        #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217
+        #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217
+        #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x217 #x23c #x299
+        #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299
+        #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299
+        #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299
+        #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299
+        #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299
+        #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299
+        #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299 #x299
+        #x299 #x299 #x299 #x29a #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6
+        #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6 #x2a6
+        ))
+
+    ;; Private simple foldcase lower, upper, and delta segments.
+    (define %unicode-simple-foldcase-segments
+      #(
+        #x41 #x5a #x20 #xb5 #xb5 #x307 #xc0 #xd6 #x20 #xd8 #xde #x20 #x100
+        #x100 #x1 #x102 #x102 #x1 #x104 #x104 #x1 #x106 #x106 #x1 #x108 #x108
+        #x1 #x10a #x10a #x1 #x10c #x10c #x1 #x10e #x10e #x1 #x110 #x110 #x1
+        #x112 #x112 #x1 #x114 #x114 #x1 #x116 #x116 #x1 #x118 #x118 #x1 #x11a
+        #x11a #x1 #x11c #x11c #x1 #x11e #x11e #x1 #x120 #x120 #x1 #x122 #x122
+        #x1 #x124 #x124 #x1 #x126 #x126 #x1 #x128 #x128 #x1 #x12a #x12a #x1
+        #x12c #x12c #x1 #x12e #x12e #x1 #x132 #x132 #x1 #x134 #x134 #x1 #x136
+        #x136 #x1 #x139 #x139 #x1 #x13b #x13b #x1 #x13d #x13d #x1 #x13f #x13f
+        #x1 #x141 #x141 #x1 #x143 #x143 #x1 #x145 #x145 #x1 #x147 #x147 #x1
+        #x14a #x14a #x1 #x14c #x14c #x1 #x14e #x14e #x1 #x150 #x150 #x1 #x152
+        #x152 #x1 #x154 #x154 #x1 #x156 #x156 #x1 #x158 #x158 #x1 #x15a #x15a
+        #x1 #x15c #x15c #x1 #x15e #x15e #x1 #x160 #x160 #x1 #x162 #x162 #x1
+        #x164 #x164 #x1 #x166 #x166 #x1 #x168 #x168 #x1 #x16a #x16a #x1 #x16c
+        #x16c #x1 #x16e #x16e #x1 #x170 #x170 #x1 #x172 #x172 #x1 #x174 #x174
+        #x1 #x176 #x176 #x1 #x178 #x178 #x-79 #x179 #x179 #x1 #x17b #x17b #x1
+        #x17d #x17d #x1 #x17f #x17f #x-10c #x181 #x181 #xd2 #x182 #x182 #x1
+        #x184 #x184 #x1 #x186 #x186 #xce #x187 #x187 #x1 #x189 #x18a #xcd #x18b
+        #x18b #x1 #x18e #x18e #x4f #x18f #x18f #xca #x190 #x190 #xcb #x191
+        #x191 #x1 #x193 #x193 #xcd #x194 #x194 #xcf #x196 #x196 #xd3 #x197
+        #x197 #xd1 #x198 #x198 #x1 #x19c #x19c #xd3 #x19d #x19d #xd5 #x19f
+        #x19f #xd6 #x1a0 #x1a0 #x1 #x1a2 #x1a2 #x1 #x1a4 #x1a4 #x1 #x1a6 #x1a6
+        #xda #x1a7 #x1a7 #x1 #x1a9 #x1a9 #xda #x1ac #x1ac #x1 #x1ae #x1ae #xda
+        #x1af #x1af #x1 #x1b1 #x1b2 #xd9 #x1b3 #x1b3 #x1 #x1b5 #x1b5 #x1 #x1b7
+        #x1b7 #xdb #x1b8 #x1b8 #x1 #x1bc #x1bc #x1 #x1c4 #x1c4 #x2 #x1c5 #x1c5
+        #x1 #x1c7 #x1c7 #x2 #x1c8 #x1c8 #x1 #x1ca #x1ca #x2 #x1cb #x1cb #x1
+        #x1cd #x1cd #x1 #x1cf #x1cf #x1 #x1d1 #x1d1 #x1 #x1d3 #x1d3 #x1 #x1d5
+        #x1d5 #x1 #x1d7 #x1d7 #x1 #x1d9 #x1d9 #x1 #x1db #x1db #x1 #x1de #x1de
+        #x1 #x1e0 #x1e0 #x1 #x1e2 #x1e2 #x1 #x1e4 #x1e4 #x1 #x1e6 #x1e6 #x1
+        #x1e8 #x1e8 #x1 #x1ea #x1ea #x1 #x1ec #x1ec #x1 #x1ee #x1ee #x1 #x1f1
+        #x1f1 #x2 #x1f2 #x1f2 #x1 #x1f4 #x1f4 #x1 #x1f6 #x1f6 #x-61 #x1f7 #x1f7
+        #x-38 #x1f8 #x1f8 #x1 #x1fa #x1fa #x1 #x1fc #x1fc #x1 #x1fe #x1fe #x1
+        #x200 #x200 #x1 #x202 #x202 #x1 #x204 #x204 #x1 #x206 #x206 #x1 #x208
+        #x208 #x1 #x20a #x20a #x1 #x20c #x20c #x1 #x20e #x20e #x1 #x210 #x210
+        #x1 #x212 #x212 #x1 #x214 #x214 #x1 #x216 #x216 #x1 #x218 #x218 #x1
+        #x21a #x21a #x1 #x21c #x21c #x1 #x21e #x21e #x1 #x220 #x220 #x-82 #x222
+        #x222 #x1 #x224 #x224 #x1 #x226 #x226 #x1 #x228 #x228 #x1 #x22a #x22a
+        #x1 #x22c #x22c #x1 #x22e #x22e #x1 #x230 #x230 #x1 #x232 #x232 #x1
+        #x23a #x23a #x2a2b #x23b #x23b #x1 #x23d #x23d #x-a3 #x23e #x23e #x2a28
+        #x241 #x241 #x1 #x243 #x243 #x-c3 #x244 #x244 #x45 #x245 #x245 #x47
+        #x246 #x246 #x1 #x248 #x248 #x1 #x24a #x24a #x1 #x24c #x24c #x1 #x24e
+        #x24e #x1 #x345 #x345 #x74 #x370 #x370 #x1 #x372 #x372 #x1 #x376 #x376
+        #x1 #x37f #x37f #x74 #x386 #x386 #x26 #x388 #x38a #x25 #x38c #x38c #x40
+        #x38e #x38f #x3f #x391 #x3a1 #x20 #x3a3 #x3ab #x20 #x3c2 #x3c2 #x1
+        #x3cf #x3cf #x8 #x3d0 #x3d0 #x-1e #x3d1 #x3d1 #x-19 #x3d5 #x3d5 #x-f
+        #x3d6 #x3d6 #x-16 #x3d8 #x3d8 #x1 #x3da #x3da #x1 #x3dc #x3dc #x1 #x3de
+        #x3de #x1 #x3e0 #x3e0 #x1 #x3e2 #x3e2 #x1 #x3e4 #x3e4 #x1 #x3e6 #x3e6
+        #x1 #x3e8 #x3e8 #x1 #x3ea #x3ea #x1 #x3ec #x3ec #x1 #x3ee #x3ee #x1
+        #x3f0 #x3f0 #x-36 #x3f1 #x3f1 #x-30 #x3f4 #x3f4 #x-3c #x3f5 #x3f5 #x-40
+        #x3f7 #x3f7 #x1 #x3f9 #x3f9 #x-7 #x3fa #x3fa #x1 #x3fd #x3ff #x-82
+        #x400 #x40f #x50 #x410 #x42f #x20 #x460 #x460 #x1 #x462 #x462 #x1 #x464
+        #x464 #x1 #x466 #x466 #x1 #x468 #x468 #x1 #x46a #x46a #x1 #x46c #x46c
+        #x1 #x46e #x46e #x1 #x470 #x470 #x1 #x472 #x472 #x1 #x474 #x474 #x1
+        #x476 #x476 #x1 #x478 #x478 #x1 #x47a #x47a #x1 #x47c #x47c #x1 #x47e
+        #x47e #x1 #x480 #x480 #x1 #x48a #x48a #x1 #x48c #x48c #x1 #x48e #x48e
+        #x1 #x490 #x490 #x1 #x492 #x492 #x1 #x494 #x494 #x1 #x496 #x496 #x1
+        #x498 #x498 #x1 #x49a #x49a #x1 #x49c #x49c #x1 #x49e #x49e #x1 #x4a0
+        #x4a0 #x1 #x4a2 #x4a2 #x1 #x4a4 #x4a4 #x1 #x4a6 #x4a6 #x1 #x4a8 #x4a8
+        #x1 #x4aa #x4aa #x1 #x4ac #x4ac #x1 #x4ae #x4ae #x1 #x4b0 #x4b0 #x1
+        #x4b2 #x4b2 #x1 #x4b4 #x4b4 #x1 #x4b6 #x4b6 #x1 #x4b8 #x4b8 #x1 #x4ba
+        #x4ba #x1 #x4bc #x4bc #x1 #x4be #x4be #x1 #x4c0 #x4c0 #xf #x4c1 #x4c1
+        #x1 #x4c3 #x4c3 #x1 #x4c5 #x4c5 #x1 #x4c7 #x4c7 #x1 #x4c9 #x4c9 #x1
+        #x4cb #x4cb #x1 #x4cd #x4cd #x1 #x4d0 #x4d0 #x1 #x4d2 #x4d2 #x1 #x4d4
+        #x4d4 #x1 #x4d6 #x4d6 #x1 #x4d8 #x4d8 #x1 #x4da #x4da #x1 #x4dc #x4dc
+        #x1 #x4de #x4de #x1 #x4e0 #x4e0 #x1 #x4e2 #x4e2 #x1 #x4e4 #x4e4 #x1
+        #x4e6 #x4e6 #x1 #x4e8 #x4e8 #x1 #x4ea #x4ea #x1 #x4ec #x4ec #x1 #x4ee
+        #x4ee #x1 #x4f0 #x4f0 #x1 #x4f2 #x4f2 #x1 #x4f4 #x4f4 #x1 #x4f6 #x4f6
+        #x1 #x4f8 #x4f8 #x1 #x4fa #x4fa #x1 #x4fc #x4fc #x1 #x4fe #x4fe #x1
+        #x500 #x500 #x1 #x502 #x502 #x1 #x504 #x504 #x1 #x506 #x506 #x1 #x508
+        #x508 #x1 #x50a #x50a #x1 #x50c #x50c #x1 #x50e #x50e #x1 #x510 #x510
+        #x1 #x512 #x512 #x1 #x514 #x514 #x1 #x516 #x516 #x1 #x518 #x518 #x1
+        #x51a #x51a #x1 #x51c #x51c #x1 #x51e #x51e #x1 #x520 #x520 #x1 #x522
+        #x522 #x1 #x524 #x524 #x1 #x526 #x526 #x1 #x528 #x528 #x1 #x52a #x52a
+        #x1 #x52c #x52c #x1 #x52e #x52e #x1 #x531 #x556 #x30 #x10a0 #x10c5
+        #x1c60 #x10c7 #x10c7 #x1c60 #x10cd #x10cd #x1c60 #x13f8 #x13fd #x-8
+        #x1c80 #x1c80 #x-184e #x1c81 #x1c81 #x-184d #x1c82 #x1c82 #x-1844
+        #x1c83 #x1c84 #x-1842 #x1c85 #x1c85 #x-1843 #x1c86 #x1c86 #x-183c
+        #x1c87 #x1c87 #x-1824 #x1c88 #x1c88 #x89c3 #x1c89 #x1c89 #x1 #x1c90
+        #x1cba #x-bc0 #x1cbd #x1cbf #x-bc0 #x1e00 #x1e00 #x1 #x1e02 #x1e02 #x1
+        #x1e04 #x1e04 #x1 #x1e06 #x1e06 #x1 #x1e08 #x1e08 #x1 #x1e0a #x1e0a #x1
+        #x1e0c #x1e0c #x1 #x1e0e #x1e0e #x1 #x1e10 #x1e10 #x1 #x1e12 #x1e12 #x1
+        #x1e14 #x1e14 #x1 #x1e16 #x1e16 #x1 #x1e18 #x1e18 #x1 #x1e1a #x1e1a #x1
+        #x1e1c #x1e1c #x1 #x1e1e #x1e1e #x1 #x1e20 #x1e20 #x1 #x1e22 #x1e22 #x1
+        #x1e24 #x1e24 #x1 #x1e26 #x1e26 #x1 #x1e28 #x1e28 #x1 #x1e2a #x1e2a #x1
+        #x1e2c #x1e2c #x1 #x1e2e #x1e2e #x1 #x1e30 #x1e30 #x1 #x1e32 #x1e32 #x1
+        #x1e34 #x1e34 #x1 #x1e36 #x1e36 #x1 #x1e38 #x1e38 #x1 #x1e3a #x1e3a #x1
+        #x1e3c #x1e3c #x1 #x1e3e #x1e3e #x1 #x1e40 #x1e40 #x1 #x1e42 #x1e42 #x1
+        #x1e44 #x1e44 #x1 #x1e46 #x1e46 #x1 #x1e48 #x1e48 #x1 #x1e4a #x1e4a #x1
+        #x1e4c #x1e4c #x1 #x1e4e #x1e4e #x1 #x1e50 #x1e50 #x1 #x1e52 #x1e52 #x1
+        #x1e54 #x1e54 #x1 #x1e56 #x1e56 #x1 #x1e58 #x1e58 #x1 #x1e5a #x1e5a #x1
+        #x1e5c #x1e5c #x1 #x1e5e #x1e5e #x1 #x1e60 #x1e60 #x1 #x1e62 #x1e62 #x1
+        #x1e64 #x1e64 #x1 #x1e66 #x1e66 #x1 #x1e68 #x1e68 #x1 #x1e6a #x1e6a #x1
+        #x1e6c #x1e6c #x1 #x1e6e #x1e6e #x1 #x1e70 #x1e70 #x1 #x1e72 #x1e72 #x1
+        #x1e74 #x1e74 #x1 #x1e76 #x1e76 #x1 #x1e78 #x1e78 #x1 #x1e7a #x1e7a #x1
+        #x1e7c #x1e7c #x1 #x1e7e #x1e7e #x1 #x1e80 #x1e80 #x1 #x1e82 #x1e82 #x1
+        #x1e84 #x1e84 #x1 #x1e86 #x1e86 #x1 #x1e88 #x1e88 #x1 #x1e8a #x1e8a #x1
+        #x1e8c #x1e8c #x1 #x1e8e #x1e8e #x1 #x1e90 #x1e90 #x1 #x1e92 #x1e92 #x1
+        #x1e94 #x1e94 #x1 #x1e9b #x1e9b #x-3a #x1e9e #x1e9e #x-1dbf #x1ea0
+        #x1ea0 #x1 #x1ea2 #x1ea2 #x1 #x1ea4 #x1ea4 #x1 #x1ea6 #x1ea6 #x1 #x1ea8
+        #x1ea8 #x1 #x1eaa #x1eaa #x1 #x1eac #x1eac #x1 #x1eae #x1eae #x1 #x1eb0
+        #x1eb0 #x1 #x1eb2 #x1eb2 #x1 #x1eb4 #x1eb4 #x1 #x1eb6 #x1eb6 #x1 #x1eb8
+        #x1eb8 #x1 #x1eba #x1eba #x1 #x1ebc #x1ebc #x1 #x1ebe #x1ebe #x1 #x1ec0
+        #x1ec0 #x1 #x1ec2 #x1ec2 #x1 #x1ec4 #x1ec4 #x1 #x1ec6 #x1ec6 #x1 #x1ec8
+        #x1ec8 #x1 #x1eca #x1eca #x1 #x1ecc #x1ecc #x1 #x1ece #x1ece #x1 #x1ed0
+        #x1ed0 #x1 #x1ed2 #x1ed2 #x1 #x1ed4 #x1ed4 #x1 #x1ed6 #x1ed6 #x1 #x1ed8
+        #x1ed8 #x1 #x1eda #x1eda #x1 #x1edc #x1edc #x1 #x1ede #x1ede #x1 #x1ee0
+        #x1ee0 #x1 #x1ee2 #x1ee2 #x1 #x1ee4 #x1ee4 #x1 #x1ee6 #x1ee6 #x1 #x1ee8
+        #x1ee8 #x1 #x1eea #x1eea #x1 #x1eec #x1eec #x1 #x1eee #x1eee #x1 #x1ef0
+        #x1ef0 #x1 #x1ef2 #x1ef2 #x1 #x1ef4 #x1ef4 #x1 #x1ef6 #x1ef6 #x1 #x1ef8
+        #x1ef8 #x1 #x1efa #x1efa #x1 #x1efc #x1efc #x1 #x1efe #x1efe #x1 #x1f08
+        #x1f0f #x-8 #x1f18 #x1f1d #x-8 #x1f28 #x1f2f #x-8 #x1f38 #x1f3f #x-8
+        #x1f48 #x1f4d #x-8 #x1f59 #x1f59 #x-8 #x1f5b #x1f5b #x-8 #x1f5d #x1f5d
+        #x-8 #x1f5f #x1f5f #x-8 #x1f68 #x1f6f #x-8 #x1f88 #x1f8f #x-8 #x1f98
+        #x1f9f #x-8 #x1fa8 #x1faf #x-8 #x1fb8 #x1fb9 #x-8 #x1fba #x1fbb #x-4a
+        #x1fbc #x1fbc #x-9 #x1fbe #x1fbe #x-1c05 #x1fc8 #x1fcb #x-56 #x1fcc
+        #x1fcc #x-9 #x1fd3 #x1fd3 #x-1c43 #x1fd8 #x1fd9 #x-8 #x1fda #x1fdb
+        #x-64 #x1fe3 #x1fe3 #x-1c33 #x1fe8 #x1fe9 #x-8 #x1fea #x1feb #x-70
+        #x1fec #x1fec #x-7 #x1ff8 #x1ff9 #x-80 #x1ffa #x1ffb #x-7e #x1ffc
+        #x1ffc #x-9 #x2126 #x2126 #x-1d5d #x212a #x212a #x-20bf #x212b #x212b
+        #x-2046 #x2132 #x2132 #x1c #x2160 #x216f #x10 #x2183 #x2183 #x1 #x24b6
+        #x24cf #x1a #x2c00 #x2c2f #x30 #x2c60 #x2c60 #x1 #x2c62 #x2c62 #x-29f7
+        #x2c63 #x2c63 #x-ee6 #x2c64 #x2c64 #x-29e7 #x2c67 #x2c67 #x1 #x2c69
+        #x2c69 #x1 #x2c6b #x2c6b #x1 #x2c6d #x2c6d #x-2a1c #x2c6e #x2c6e
+        #x-29fd #x2c6f #x2c6f #x-2a1f #x2c70 #x2c70 #x-2a1e #x2c72 #x2c72 #x1
+        #x2c75 #x2c75 #x1 #x2c7e #x2c7f #x-2a3f #x2c80 #x2c80 #x1 #x2c82 #x2c82
+        #x1 #x2c84 #x2c84 #x1 #x2c86 #x2c86 #x1 #x2c88 #x2c88 #x1 #x2c8a #x2c8a
+        #x1 #x2c8c #x2c8c #x1 #x2c8e #x2c8e #x1 #x2c90 #x2c90 #x1 #x2c92 #x2c92
+        #x1 #x2c94 #x2c94 #x1 #x2c96 #x2c96 #x1 #x2c98 #x2c98 #x1 #x2c9a #x2c9a
+        #x1 #x2c9c #x2c9c #x1 #x2c9e #x2c9e #x1 #x2ca0 #x2ca0 #x1 #x2ca2 #x2ca2
+        #x1 #x2ca4 #x2ca4 #x1 #x2ca6 #x2ca6 #x1 #x2ca8 #x2ca8 #x1 #x2caa #x2caa
+        #x1 #x2cac #x2cac #x1 #x2cae #x2cae #x1 #x2cb0 #x2cb0 #x1 #x2cb2 #x2cb2
+        #x1 #x2cb4 #x2cb4 #x1 #x2cb6 #x2cb6 #x1 #x2cb8 #x2cb8 #x1 #x2cba #x2cba
+        #x1 #x2cbc #x2cbc #x1 #x2cbe #x2cbe #x1 #x2cc0 #x2cc0 #x1 #x2cc2 #x2cc2
+        #x1 #x2cc4 #x2cc4 #x1 #x2cc6 #x2cc6 #x1 #x2cc8 #x2cc8 #x1 #x2cca #x2cca
+        #x1 #x2ccc #x2ccc #x1 #x2cce #x2cce #x1 #x2cd0 #x2cd0 #x1 #x2cd2 #x2cd2
+        #x1 #x2cd4 #x2cd4 #x1 #x2cd6 #x2cd6 #x1 #x2cd8 #x2cd8 #x1 #x2cda #x2cda
+        #x1 #x2cdc #x2cdc #x1 #x2cde #x2cde #x1 #x2ce0 #x2ce0 #x1 #x2ce2 #x2ce2
+        #x1 #x2ceb #x2ceb #x1 #x2ced #x2ced #x1 #x2cf2 #x2cf2 #x1 #xa640 #xa640
+        #x1 #xa642 #xa642 #x1 #xa644 #xa644 #x1 #xa646 #xa646 #x1 #xa648 #xa648
+        #x1 #xa64a #xa64a #x1 #xa64c #xa64c #x1 #xa64e #xa64e #x1 #xa650 #xa650
+        #x1 #xa652 #xa652 #x1 #xa654 #xa654 #x1 #xa656 #xa656 #x1 #xa658 #xa658
+        #x1 #xa65a #xa65a #x1 #xa65c #xa65c #x1 #xa65e #xa65e #x1 #xa660 #xa660
+        #x1 #xa662 #xa662 #x1 #xa664 #xa664 #x1 #xa666 #xa666 #x1 #xa668 #xa668
+        #x1 #xa66a #xa66a #x1 #xa66c #xa66c #x1 #xa680 #xa680 #x1 #xa682 #xa682
+        #x1 #xa684 #xa684 #x1 #xa686 #xa686 #x1 #xa688 #xa688 #x1 #xa68a #xa68a
+        #x1 #xa68c #xa68c #x1 #xa68e #xa68e #x1 #xa690 #xa690 #x1 #xa692 #xa692
+        #x1 #xa694 #xa694 #x1 #xa696 #xa696 #x1 #xa698 #xa698 #x1 #xa69a #xa69a
+        #x1 #xa722 #xa722 #x1 #xa724 #xa724 #x1 #xa726 #xa726 #x1 #xa728 #xa728
+        #x1 #xa72a #xa72a #x1 #xa72c #xa72c #x1 #xa72e #xa72e #x1 #xa732 #xa732
+        #x1 #xa734 #xa734 #x1 #xa736 #xa736 #x1 #xa738 #xa738 #x1 #xa73a #xa73a
+        #x1 #xa73c #xa73c #x1 #xa73e #xa73e #x1 #xa740 #xa740 #x1 #xa742 #xa742
+        #x1 #xa744 #xa744 #x1 #xa746 #xa746 #x1 #xa748 #xa748 #x1 #xa74a #xa74a
+        #x1 #xa74c #xa74c #x1 #xa74e #xa74e #x1 #xa750 #xa750 #x1 #xa752 #xa752
+        #x1 #xa754 #xa754 #x1 #xa756 #xa756 #x1 #xa758 #xa758 #x1 #xa75a #xa75a
+        #x1 #xa75c #xa75c #x1 #xa75e #xa75e #x1 #xa760 #xa760 #x1 #xa762 #xa762
+        #x1 #xa764 #xa764 #x1 #xa766 #xa766 #x1 #xa768 #xa768 #x1 #xa76a #xa76a
+        #x1 #xa76c #xa76c #x1 #xa76e #xa76e #x1 #xa779 #xa779 #x1 #xa77b #xa77b
+        #x1 #xa77d #xa77d #x-8a04 #xa77e #xa77e #x1 #xa780 #xa780 #x1 #xa782
+        #xa782 #x1 #xa784 #xa784 #x1 #xa786 #xa786 #x1 #xa78b #xa78b #x1 #xa78d
+        #xa78d #x-a528 #xa790 #xa790 #x1 #xa792 #xa792 #x1 #xa796 #xa796 #x1
+        #xa798 #xa798 #x1 #xa79a #xa79a #x1 #xa79c #xa79c #x1 #xa79e #xa79e #x1
+        #xa7a0 #xa7a0 #x1 #xa7a2 #xa7a2 #x1 #xa7a4 #xa7a4 #x1 #xa7a6 #xa7a6 #x1
+        #xa7a8 #xa7a8 #x1 #xa7aa #xa7aa #x-a544 #xa7ab #xa7ab #x-a54f #xa7ac
+        #xa7ac #x-a54b #xa7ad #xa7ad #x-a541 #xa7ae #xa7ae #x-a544 #xa7b0
+        #xa7b0 #x-a512 #xa7b1 #xa7b1 #x-a52a #xa7b2 #xa7b2 #x-a515 #xa7b3
+        #xa7b3 #x3a0 #xa7b4 #xa7b4 #x1 #xa7b6 #xa7b6 #x1 #xa7b8 #xa7b8 #x1
+        #xa7ba #xa7ba #x1 #xa7bc #xa7bc #x1 #xa7be #xa7be #x1 #xa7c0 #xa7c0 #x1
+        #xa7c2 #xa7c2 #x1 #xa7c4 #xa7c4 #x-30 #xa7c5 #xa7c5 #x-a543 #xa7c6
+        #xa7c6 #x-8a38 #xa7c7 #xa7c7 #x1 #xa7c9 #xa7c9 #x1 #xa7cb #xa7cb
+        #x-a567 #xa7cc #xa7cc #x1 #xa7ce #xa7ce #x1 #xa7d0 #xa7d0 #x1 #xa7d2
+        #xa7d2 #x1 #xa7d4 #xa7d4 #x1 #xa7d6 #xa7d6 #x1 #xa7d8 #xa7d8 #x1 #xa7da
+        #xa7da #x1 #xa7dc #xa7dc #x-a641 #xa7f5 #xa7f5 #x1 #xab70 #xabbf
+        #x-97d0 #xfb05 #xfb05 #x1 #xff21 #xff3a #x20 #x10400 #x10427 #x28
+        #x104b0 #x104d3 #x28 #x10570 #x1057a #x27 #x1057c #x1058a #x27 #x1058c
+        #x10592 #x27 #x10594 #x10595 #x27 #x10c80 #x10cb2 #x40 #x10d50 #x10d65
+        #x20 #x118a0 #x118bf #x20 #x16e40 #x16e5f #x20 #x16ea0 #x16eb8 #x1b
+        #x1e900 #x1e921 #x22
+        ))
+
+    ;; Private entry offsets by BMP page or supplementary plane.
+    (define %unicode-simple-foldcase-index
+      #(
+        #x0 #x4 #x85 #xac #xd1 #x11f #x138 #x138 #x138 #x138 #x138 #x138 #x138
+        #x138 #x138 #x138 #x138 #x13b #x13b #x13b #x13c #x13c #x13c #x13c #x13c
+        #x13c #x13c #x13c #x13c #x147 #x147 #x1c4 #x1e1 #x1e1 #x1e7 #x1e7 #x1e7
+        #x1e8 #x1e8 #x1e8 #x1e8 #x1e8 #x1e8 #x1e8 #x1e8 #x22c #x22c #x22c #x22c
+        #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c
+        #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c
+        #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c
+        #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c
+        #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c
+        #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c
+        #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c
+        #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c
+        #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c
+        #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x22c #x251 #x2ae
+        #x2ae #x2ae #x2ae #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af
+        #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af
+        #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af
+        #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af
+        #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af
+        #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af
+        #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2af #x2b0
+        #x2b0 #x2b0 #x2b0 #x2b1 #x2bd #x2bd #x2bd #x2bd #x2bd #x2bd #x2bd #x2bd
+        #x2bd #x2bd #x2bd #x2bd #x2bd #x2bd #x2bd #x2bd
+        ))
+
+    ;; Private full uppercase overrides, including expansions.
+    (define %unicode-full-uppercase-overrides
+      #(
+        #(#xdf #x53 #x53) #(#x149 #x2bc #x4e) #(#x1f0 #x4a #x30c)
+        #(#x390 #x399 #x308 #x301) #(#x3b0 #x3a5 #x308 #x301)
+        #(#x587 #x535 #x552) #(#x1e96 #x48 #x331) #(#x1e97 #x54 #x308)
+        #(#x1e98 #x57 #x30a) #(#x1e99 #x59 #x30a) #(#x1e9a #x41 #x2be)
+        #(#x1f50 #x3a5 #x313) #(#x1f52 #x3a5 #x313 #x300)
+        #(#x1f54 #x3a5 #x313 #x301) #(#x1f56 #x3a5 #x313 #x342)
+        #(#x1f80 #x1f08 #x399) #(#x1f81 #x1f09 #x399) #(#x1f82 #x1f0a #x399)
+        #(#x1f83 #x1f0b #x399) #(#x1f84 #x1f0c #x399) #(#x1f85 #x1f0d #x399)
+        #(#x1f86 #x1f0e #x399) #(#x1f87 #x1f0f #x399) #(#x1f88 #x1f08 #x399)
+        #(#x1f89 #x1f09 #x399) #(#x1f8a #x1f0a #x399) #(#x1f8b #x1f0b #x399)
+        #(#x1f8c #x1f0c #x399) #(#x1f8d #x1f0d #x399) #(#x1f8e #x1f0e #x399)
+        #(#x1f8f #x1f0f #x399) #(#x1f90 #x1f28 #x399) #(#x1f91 #x1f29 #x399)
+        #(#x1f92 #x1f2a #x399) #(#x1f93 #x1f2b #x399) #(#x1f94 #x1f2c #x399)
+        #(#x1f95 #x1f2d #x399) #(#x1f96 #x1f2e #x399) #(#x1f97 #x1f2f #x399)
+        #(#x1f98 #x1f28 #x399) #(#x1f99 #x1f29 #x399) #(#x1f9a #x1f2a #x399)
+        #(#x1f9b #x1f2b #x399) #(#x1f9c #x1f2c #x399) #(#x1f9d #x1f2d #x399)
+        #(#x1f9e #x1f2e #x399) #(#x1f9f #x1f2f #x399) #(#x1fa0 #x1f68 #x399)
+        #(#x1fa1 #x1f69 #x399) #(#x1fa2 #x1f6a #x399) #(#x1fa3 #x1f6b #x399)
+        #(#x1fa4 #x1f6c #x399) #(#x1fa5 #x1f6d #x399) #(#x1fa6 #x1f6e #x399)
+        #(#x1fa7 #x1f6f #x399) #(#x1fa8 #x1f68 #x399) #(#x1fa9 #x1f69 #x399)
+        #(#x1faa #x1f6a #x399) #(#x1fab #x1f6b #x399) #(#x1fac #x1f6c #x399)
+        #(#x1fad #x1f6d #x399) #(#x1fae #x1f6e #x399) #(#x1faf #x1f6f #x399)
         #(#x1fb2 #x1fba #x399) #(#x1fb3 #x391 #x399) #(#x1fb4 #x386 #x399)
         #(#x1fb6 #x391 #x342) #(#x1fb7 #x391 #x342 #x399) #(#x1fbc #x391 #x399)
-        #(#x1fbe #x399) #(#x1fc2 #x1fca #x399) #(#x1fc3 #x397 #x399)
-        #(#x1fc4 #x389 #x399) #(#x1fc6 #x397 #x342) #(#x1fc7 #x397 #x342 #x399)
-        #(#x1fcc #x397 #x399) #(#x1fd0 #x1fd8) #(#x1fd1 #x1fd9)
+        #(#x1fc2 #x1fca #x399) #(#x1fc3 #x397 #x399) #(#x1fc4 #x389 #x399)
+        #(#x1fc6 #x397 #x342) #(#x1fc7 #x397 #x342 #x399) #(#x1fcc #x397 #x399)
         #(#x1fd2 #x399 #x308 #x300) #(#x1fd3 #x399 #x308 #x301)
-        #(#x1fd6 #x399 #x342) #(#x1fd7 #x399 #x308 #x342) #(#x1fe0 #x1fe8)
-        #(#x1fe1 #x1fe9) #(#x1fe2 #x3a5 #x308 #x300)
-        #(#x1fe3 #x3a5 #x308 #x301) #(#x1fe4 #x3a1 #x313) #(#x1fe5 #x1fec)
-        #(#x1fe6 #x3a5 #x342) #(#x1fe7 #x3a5 #x308 #x342)
+        #(#x1fd6 #x399 #x342) #(#x1fd7 #x399 #x308 #x342)
+        #(#x1fe2 #x3a5 #x308 #x300) #(#x1fe3 #x3a5 #x308 #x301)
+        #(#x1fe4 #x3a1 #x313) #(#x1fe6 #x3a5 #x342) #(#x1fe7 #x3a5 #x308 #x342)
         #(#x1ff2 #x1ffa #x399) #(#x1ff3 #x3a9 #x399) #(#x1ff4 #x38f #x399)
         #(#x1ff6 #x3a9 #x342) #(#x1ff7 #x3a9 #x342 #x399) #(#x1ffc #x3a9 #x399)
-        #(#x214e #x2132) #(#x2170 #x2160) #(#x2171 #x2161) #(#x2172 #x2162)
-        #(#x2173 #x2163) #(#x2174 #x2164) #(#x2175 #x2165) #(#x2176 #x2166)
-        #(#x2177 #x2167) #(#x2178 #x2168) #(#x2179 #x2169) #(#x217a #x216a)
-        #(#x217b #x216b) #(#x217c #x216c) #(#x217d #x216d) #(#x217e #x216e)
-        #(#x217f #x216f) #(#x2184 #x2183) #(#x24d0 #x24b6) #(#x24d1 #x24b7)
-        #(#x24d2 #x24b8) #(#x24d3 #x24b9) #(#x24d4 #x24ba) #(#x24d5 #x24bb)
-        #(#x24d6 #x24bc) #(#x24d7 #x24bd) #(#x24d8 #x24be) #(#x24d9 #x24bf)
-        #(#x24da #x24c0) #(#x24db #x24c1) #(#x24dc #x24c2) #(#x24dd #x24c3)
-        #(#x24de #x24c4) #(#x24df #x24c5) #(#x24e0 #x24c6) #(#x24e1 #x24c7)
-        #(#x24e2 #x24c8) #(#x24e3 #x24c9) #(#x24e4 #x24ca) #(#x24e5 #x24cb)
-        #(#x24e6 #x24cc) #(#x24e7 #x24cd) #(#x24e8 #x24ce) #(#x24e9 #x24cf)
-        #(#x2c30 #x2c00) #(#x2c31 #x2c01) #(#x2c32 #x2c02) #(#x2c33 #x2c03)
-        #(#x2c34 #x2c04) #(#x2c35 #x2c05) #(#x2c36 #x2c06) #(#x2c37 #x2c07)
-        #(#x2c38 #x2c08) #(#x2c39 #x2c09) #(#x2c3a #x2c0a) #(#x2c3b #x2c0b)
-        #(#x2c3c #x2c0c) #(#x2c3d #x2c0d) #(#x2c3e #x2c0e) #(#x2c3f #x2c0f)
-        #(#x2c40 #x2c10) #(#x2c41 #x2c11) #(#x2c42 #x2c12) #(#x2c43 #x2c13)
-        #(#x2c44 #x2c14) #(#x2c45 #x2c15) #(#x2c46 #x2c16) #(#x2c47 #x2c17)
-        #(#x2c48 #x2c18) #(#x2c49 #x2c19) #(#x2c4a #x2c1a) #(#x2c4b #x2c1b)
-        #(#x2c4c #x2c1c) #(#x2c4d #x2c1d) #(#x2c4e #x2c1e) #(#x2c4f #x2c1f)
-        #(#x2c50 #x2c20) #(#x2c51 #x2c21) #(#x2c52 #x2c22) #(#x2c53 #x2c23)
-        #(#x2c54 #x2c24) #(#x2c55 #x2c25) #(#x2c56 #x2c26) #(#x2c57 #x2c27)
-        #(#x2c58 #x2c28) #(#x2c59 #x2c29) #(#x2c5a #x2c2a) #(#x2c5b #x2c2b)
-        #(#x2c5c #x2c2c) #(#x2c5d #x2c2d) #(#x2c5e #x2c2e) #(#x2c5f #x2c2f)
-        #(#x2c61 #x2c60) #(#x2c65 #x23a) #(#x2c66 #x23e) #(#x2c68 #x2c67)
-        #(#x2c6a #x2c69) #(#x2c6c #x2c6b) #(#x2c73 #x2c72) #(#x2c76 #x2c75)
-        #(#x2c81 #x2c80) #(#x2c83 #x2c82) #(#x2c85 #x2c84) #(#x2c87 #x2c86)
-        #(#x2c89 #x2c88) #(#x2c8b #x2c8a) #(#x2c8d #x2c8c) #(#x2c8f #x2c8e)
-        #(#x2c91 #x2c90) #(#x2c93 #x2c92) #(#x2c95 #x2c94) #(#x2c97 #x2c96)
-        #(#x2c99 #x2c98) #(#x2c9b #x2c9a) #(#x2c9d #x2c9c) #(#x2c9f #x2c9e)
-        #(#x2ca1 #x2ca0) #(#x2ca3 #x2ca2) #(#x2ca5 #x2ca4) #(#x2ca7 #x2ca6)
-        #(#x2ca9 #x2ca8) #(#x2cab #x2caa) #(#x2cad #x2cac) #(#x2caf #x2cae)
-        #(#x2cb1 #x2cb0) #(#x2cb3 #x2cb2) #(#x2cb5 #x2cb4) #(#x2cb7 #x2cb6)
-        #(#x2cb9 #x2cb8) #(#x2cbb #x2cba) #(#x2cbd #x2cbc) #(#x2cbf #x2cbe)
-        #(#x2cc1 #x2cc0) #(#x2cc3 #x2cc2) #(#x2cc5 #x2cc4) #(#x2cc7 #x2cc6)
-        #(#x2cc9 #x2cc8) #(#x2ccb #x2cca) #(#x2ccd #x2ccc) #(#x2ccf #x2cce)
-        #(#x2cd1 #x2cd0) #(#x2cd3 #x2cd2) #(#x2cd5 #x2cd4) #(#x2cd7 #x2cd6)
-        #(#x2cd9 #x2cd8) #(#x2cdb #x2cda) #(#x2cdd #x2cdc) #(#x2cdf #x2cde)
-        #(#x2ce1 #x2ce0) #(#x2ce3 #x2ce2) #(#x2cec #x2ceb) #(#x2cee #x2ced)
-        #(#x2cf3 #x2cf2) #(#x2d00 #x10a0) #(#x2d01 #x10a1) #(#x2d02 #x10a2)
-        #(#x2d03 #x10a3) #(#x2d04 #x10a4) #(#x2d05 #x10a5) #(#x2d06 #x10a6)
-        #(#x2d07 #x10a7) #(#x2d08 #x10a8) #(#x2d09 #x10a9) #(#x2d0a #x10aa)
-        #(#x2d0b #x10ab) #(#x2d0c #x10ac) #(#x2d0d #x10ad) #(#x2d0e #x10ae)
-        #(#x2d0f #x10af) #(#x2d10 #x10b0) #(#x2d11 #x10b1) #(#x2d12 #x10b2)
-        #(#x2d13 #x10b3) #(#x2d14 #x10b4) #(#x2d15 #x10b5) #(#x2d16 #x10b6)
-        #(#x2d17 #x10b7) #(#x2d18 #x10b8) #(#x2d19 #x10b9) #(#x2d1a #x10ba)
-        #(#x2d1b #x10bb) #(#x2d1c #x10bc) #(#x2d1d #x10bd) #(#x2d1e #x10be)
-        #(#x2d1f #x10bf) #(#x2d20 #x10c0) #(#x2d21 #x10c1) #(#x2d22 #x10c2)
-        #(#x2d23 #x10c3) #(#x2d24 #x10c4) #(#x2d25 #x10c5) #(#x2d27 #x10c7)
-        #(#x2d2d #x10cd) #(#xa641 #xa640) #(#xa643 #xa642) #(#xa645 #xa644)
-        #(#xa647 #xa646) #(#xa649 #xa648) #(#xa64b #xa64a) #(#xa64d #xa64c)
-        #(#xa64f #xa64e) #(#xa651 #xa650) #(#xa653 #xa652) #(#xa655 #xa654)
-        #(#xa657 #xa656) #(#xa659 #xa658) #(#xa65b #xa65a) #(#xa65d #xa65c)
-        #(#xa65f #xa65e) #(#xa661 #xa660) #(#xa663 #xa662) #(#xa665 #xa664)
-        #(#xa667 #xa666) #(#xa669 #xa668) #(#xa66b #xa66a) #(#xa66d #xa66c)
-        #(#xa681 #xa680) #(#xa683 #xa682) #(#xa685 #xa684) #(#xa687 #xa686)
-        #(#xa689 #xa688) #(#xa68b #xa68a) #(#xa68d #xa68c) #(#xa68f #xa68e)
-        #(#xa691 #xa690) #(#xa693 #xa692) #(#xa695 #xa694) #(#xa697 #xa696)
-        #(#xa699 #xa698) #(#xa69b #xa69a) #(#xa723 #xa722) #(#xa725 #xa724)
-        #(#xa727 #xa726) #(#xa729 #xa728) #(#xa72b #xa72a) #(#xa72d #xa72c)
-        #(#xa72f #xa72e) #(#xa733 #xa732) #(#xa735 #xa734) #(#xa737 #xa736)
-        #(#xa739 #xa738) #(#xa73b #xa73a) #(#xa73d #xa73c) #(#xa73f #xa73e)
-        #(#xa741 #xa740) #(#xa743 #xa742) #(#xa745 #xa744) #(#xa747 #xa746)
-        #(#xa749 #xa748) #(#xa74b #xa74a) #(#xa74d #xa74c) #(#xa74f #xa74e)
-        #(#xa751 #xa750) #(#xa753 #xa752) #(#xa755 #xa754) #(#xa757 #xa756)
-        #(#xa759 #xa758) #(#xa75b #xa75a) #(#xa75d #xa75c) #(#xa75f #xa75e)
-        #(#xa761 #xa760) #(#xa763 #xa762) #(#xa765 #xa764) #(#xa767 #xa766)
-        #(#xa769 #xa768) #(#xa76b #xa76a) #(#xa76d #xa76c) #(#xa76f #xa76e)
-        #(#xa77a #xa779) #(#xa77c #xa77b) #(#xa77f #xa77e) #(#xa781 #xa780)
-        #(#xa783 #xa782) #(#xa785 #xa784) #(#xa787 #xa786) #(#xa78c #xa78b)
-        #(#xa791 #xa790) #(#xa793 #xa792) #(#xa794 #xa7c4) #(#xa797 #xa796)
-        #(#xa799 #xa798) #(#xa79b #xa79a) #(#xa79d #xa79c) #(#xa79f #xa79e)
-        #(#xa7a1 #xa7a0) #(#xa7a3 #xa7a2) #(#xa7a5 #xa7a4) #(#xa7a7 #xa7a6)
-        #(#xa7a9 #xa7a8) #(#xa7b5 #xa7b4) #(#xa7b7 #xa7b6) #(#xa7b9 #xa7b8)
-        #(#xa7bb #xa7ba) #(#xa7bd #xa7bc) #(#xa7bf #xa7be) #(#xa7c1 #xa7c0)
-        #(#xa7c3 #xa7c2) #(#xa7c8 #xa7c7) #(#xa7ca #xa7c9) #(#xa7cd #xa7cc)
-        #(#xa7cf #xa7ce) #(#xa7d1 #xa7d0) #(#xa7d3 #xa7d2) #(#xa7d5 #xa7d4)
-        #(#xa7d7 #xa7d6) #(#xa7d9 #xa7d8) #(#xa7db #xa7da) #(#xa7f6 #xa7f5)
-        #(#xab53 #xa7b3) #(#xab70 #x13a0) #(#xab71 #x13a1) #(#xab72 #x13a2)
-        #(#xab73 #x13a3) #(#xab74 #x13a4) #(#xab75 #x13a5) #(#xab76 #x13a6)
-        #(#xab77 #x13a7) #(#xab78 #x13a8) #(#xab79 #x13a9) #(#xab7a #x13aa)
-        #(#xab7b #x13ab) #(#xab7c #x13ac) #(#xab7d #x13ad) #(#xab7e #x13ae)
-        #(#xab7f #x13af) #(#xab80 #x13b0) #(#xab81 #x13b1) #(#xab82 #x13b2)
-        #(#xab83 #x13b3) #(#xab84 #x13b4) #(#xab85 #x13b5) #(#xab86 #x13b6)
-        #(#xab87 #x13b7) #(#xab88 #x13b8) #(#xab89 #x13b9) #(#xab8a #x13ba)
-        #(#xab8b #x13bb) #(#xab8c #x13bc) #(#xab8d #x13bd) #(#xab8e #x13be)
-        #(#xab8f #x13bf) #(#xab90 #x13c0) #(#xab91 #x13c1) #(#xab92 #x13c2)
-        #(#xab93 #x13c3) #(#xab94 #x13c4) #(#xab95 #x13c5) #(#xab96 #x13c6)
-        #(#xab97 #x13c7) #(#xab98 #x13c8) #(#xab99 #x13c9) #(#xab9a #x13ca)
-        #(#xab9b #x13cb) #(#xab9c #x13cc) #(#xab9d #x13cd) #(#xab9e #x13ce)
-        #(#xab9f #x13cf) #(#xaba0 #x13d0) #(#xaba1 #x13d1) #(#xaba2 #x13d2)
-        #(#xaba3 #x13d3) #(#xaba4 #x13d4) #(#xaba5 #x13d5) #(#xaba6 #x13d6)
-        #(#xaba7 #x13d7) #(#xaba8 #x13d8) #(#xaba9 #x13d9) #(#xabaa #x13da)
-        #(#xabab #x13db) #(#xabac #x13dc) #(#xabad #x13dd) #(#xabae #x13de)
-        #(#xabaf #x13df) #(#xabb0 #x13e0) #(#xabb1 #x13e1) #(#xabb2 #x13e2)
-        #(#xabb3 #x13e3) #(#xabb4 #x13e4) #(#xabb5 #x13e5) #(#xabb6 #x13e6)
-        #(#xabb7 #x13e7) #(#xabb8 #x13e8) #(#xabb9 #x13e9) #(#xabba #x13ea)
-        #(#xabbb #x13eb) #(#xabbc #x13ec) #(#xabbd #x13ed) #(#xabbe #x13ee)
-        #(#xabbf #x13ef) #(#xfb00 #x46 #x46) #(#xfb01 #x46 #x49)
-        #(#xfb02 #x46 #x4c) #(#xfb03 #x46 #x46 #x49) #(#xfb04 #x46 #x46 #x4c)
-        #(#xfb05 #x53 #x54) #(#xfb06 #x53 #x54) #(#xfb13 #x544 #x546)
-        #(#xfb14 #x544 #x535) #(#xfb15 #x544 #x53b) #(#xfb16 #x54e #x546)
-        #(#xfb17 #x544 #x53d) #(#xff41 #xff21) #(#xff42 #xff22)
-        #(#xff43 #xff23) #(#xff44 #xff24) #(#xff45 #xff25) #(#xff46 #xff26)
-        #(#xff47 #xff27) #(#xff48 #xff28) #(#xff49 #xff29) #(#xff4a #xff2a)
-        #(#xff4b #xff2b) #(#xff4c #xff2c) #(#xff4d #xff2d) #(#xff4e #xff2e)
-        #(#xff4f #xff2f) #(#xff50 #xff30) #(#xff51 #xff31) #(#xff52 #xff32)
-        #(#xff53 #xff33) #(#xff54 #xff34) #(#xff55 #xff35) #(#xff56 #xff36)
-        #(#xff57 #xff37) #(#xff58 #xff38) #(#xff59 #xff39) #(#xff5a #xff3a)
-        #(#x10428 #x10400) #(#x10429 #x10401) #(#x1042a #x10402)
-        #(#x1042b #x10403) #(#x1042c #x10404) #(#x1042d #x10405)
-        #(#x1042e #x10406) #(#x1042f #x10407) #(#x10430 #x10408)
-        #(#x10431 #x10409) #(#x10432 #x1040a) #(#x10433 #x1040b)
-        #(#x10434 #x1040c) #(#x10435 #x1040d) #(#x10436 #x1040e)
-        #(#x10437 #x1040f) #(#x10438 #x10410) #(#x10439 #x10411)
-        #(#x1043a #x10412) #(#x1043b #x10413) #(#x1043c #x10414)
-        #(#x1043d #x10415) #(#x1043e #x10416) #(#x1043f #x10417)
-        #(#x10440 #x10418) #(#x10441 #x10419) #(#x10442 #x1041a)
-        #(#x10443 #x1041b) #(#x10444 #x1041c) #(#x10445 #x1041d)
-        #(#x10446 #x1041e) #(#x10447 #x1041f) #(#x10448 #x10420)
-        #(#x10449 #x10421) #(#x1044a #x10422) #(#x1044b #x10423)
-        #(#x1044c #x10424) #(#x1044d #x10425) #(#x1044e #x10426)
-        #(#x1044f #x10427) #(#x104d8 #x104b0) #(#x104d9 #x104b1)
-        #(#x104da #x104b2) #(#x104db #x104b3) #(#x104dc #x104b4)
-        #(#x104dd #x104b5) #(#x104de #x104b6) #(#x104df #x104b7)
-        #(#x104e0 #x104b8) #(#x104e1 #x104b9) #(#x104e2 #x104ba)
-        #(#x104e3 #x104bb) #(#x104e4 #x104bc) #(#x104e5 #x104bd)
-        #(#x104e6 #x104be) #(#x104e7 #x104bf) #(#x104e8 #x104c0)
-        #(#x104e9 #x104c1) #(#x104ea #x104c2) #(#x104eb #x104c3)
-        #(#x104ec #x104c4) #(#x104ed #x104c5) #(#x104ee #x104c6)
-        #(#x104ef #x104c7) #(#x104f0 #x104c8) #(#x104f1 #x104c9)
-        #(#x104f2 #x104ca) #(#x104f3 #x104cb) #(#x104f4 #x104cc)
-        #(#x104f5 #x104cd) #(#x104f6 #x104ce) #(#x104f7 #x104cf)
-        #(#x104f8 #x104d0) #(#x104f9 #x104d1) #(#x104fa #x104d2)
-        #(#x104fb #x104d3) #(#x10597 #x10570) #(#x10598 #x10571)
-        #(#x10599 #x10572) #(#x1059a #x10573) #(#x1059b #x10574)
-        #(#x1059c #x10575) #(#x1059d #x10576) #(#x1059e #x10577)
-        #(#x1059f #x10578) #(#x105a0 #x10579) #(#x105a1 #x1057a)
-        #(#x105a3 #x1057c) #(#x105a4 #x1057d) #(#x105a5 #x1057e)
-        #(#x105a6 #x1057f) #(#x105a7 #x10580) #(#x105a8 #x10581)
-        #(#x105a9 #x10582) #(#x105aa #x10583) #(#x105ab #x10584)
-        #(#x105ac #x10585) #(#x105ad #x10586) #(#x105ae #x10587)
-        #(#x105af #x10588) #(#x105b0 #x10589) #(#x105b1 #x1058a)
-        #(#x105b3 #x1058c) #(#x105b4 #x1058d) #(#x105b5 #x1058e)
-        #(#x105b6 #x1058f) #(#x105b7 #x10590) #(#x105b8 #x10591)
-        #(#x105b9 #x10592) #(#x105bb #x10594) #(#x105bc #x10595)
-        #(#x10cc0 #x10c80) #(#x10cc1 #x10c81) #(#x10cc2 #x10c82)
-        #(#x10cc3 #x10c83) #(#x10cc4 #x10c84) #(#x10cc5 #x10c85)
-        #(#x10cc6 #x10c86) #(#x10cc7 #x10c87) #(#x10cc8 #x10c88)
-        #(#x10cc9 #x10c89) #(#x10cca #x10c8a) #(#x10ccb #x10c8b)
-        #(#x10ccc #x10c8c) #(#x10ccd #x10c8d) #(#x10cce #x10c8e)
-        #(#x10ccf #x10c8f) #(#x10cd0 #x10c90) #(#x10cd1 #x10c91)
-        #(#x10cd2 #x10c92) #(#x10cd3 #x10c93) #(#x10cd4 #x10c94)
-        #(#x10cd5 #x10c95) #(#x10cd6 #x10c96) #(#x10cd7 #x10c97)
-        #(#x10cd8 #x10c98) #(#x10cd9 #x10c99) #(#x10cda #x10c9a)
-        #(#x10cdb #x10c9b) #(#x10cdc #x10c9c) #(#x10cdd #x10c9d)
-        #(#x10cde #x10c9e) #(#x10cdf #x10c9f) #(#x10ce0 #x10ca0)
-        #(#x10ce1 #x10ca1) #(#x10ce2 #x10ca2) #(#x10ce3 #x10ca3)
-        #(#x10ce4 #x10ca4) #(#x10ce5 #x10ca5) #(#x10ce6 #x10ca6)
-        #(#x10ce7 #x10ca7) #(#x10ce8 #x10ca8) #(#x10ce9 #x10ca9)
-        #(#x10cea #x10caa) #(#x10ceb #x10cab) #(#x10cec #x10cac)
-        #(#x10ced #x10cad) #(#x10cee #x10cae) #(#x10cef #x10caf)
-        #(#x10cf0 #x10cb0) #(#x10cf1 #x10cb1) #(#x10cf2 #x10cb2)
-        #(#x10d70 #x10d50) #(#x10d71 #x10d51) #(#x10d72 #x10d52)
-        #(#x10d73 #x10d53) #(#x10d74 #x10d54) #(#x10d75 #x10d55)
-        #(#x10d76 #x10d56) #(#x10d77 #x10d57) #(#x10d78 #x10d58)
-        #(#x10d79 #x10d59) #(#x10d7a #x10d5a) #(#x10d7b #x10d5b)
-        #(#x10d7c #x10d5c) #(#x10d7d #x10d5d) #(#x10d7e #x10d5e)
-        #(#x10d7f #x10d5f) #(#x10d80 #x10d60) #(#x10d81 #x10d61)
-        #(#x10d82 #x10d62) #(#x10d83 #x10d63) #(#x10d84 #x10d64)
-        #(#x10d85 #x10d65) #(#x118c0 #x118a0) #(#x118c1 #x118a1)
-        #(#x118c2 #x118a2) #(#x118c3 #x118a3) #(#x118c4 #x118a4)
-        #(#x118c5 #x118a5) #(#x118c6 #x118a6) #(#x118c7 #x118a7)
-        #(#x118c8 #x118a8) #(#x118c9 #x118a9) #(#x118ca #x118aa)
-        #(#x118cb #x118ab) #(#x118cc #x118ac) #(#x118cd #x118ad)
-        #(#x118ce #x118ae) #(#x118cf #x118af) #(#x118d0 #x118b0)
-        #(#x118d1 #x118b1) #(#x118d2 #x118b2) #(#x118d3 #x118b3)
-        #(#x118d4 #x118b4) #(#x118d5 #x118b5) #(#x118d6 #x118b6)
-        #(#x118d7 #x118b7) #(#x118d8 #x118b8) #(#x118d9 #x118b9)
-        #(#x118da #x118ba) #(#x118db #x118bb) #(#x118dc #x118bc)
-        #(#x118dd #x118bd) #(#x118de #x118be) #(#x118df #x118bf)
-        #(#x16e60 #x16e40) #(#x16e61 #x16e41) #(#x16e62 #x16e42)
-        #(#x16e63 #x16e43) #(#x16e64 #x16e44) #(#x16e65 #x16e45)
-        #(#x16e66 #x16e46) #(#x16e67 #x16e47) #(#x16e68 #x16e48)
-        #(#x16e69 #x16e49) #(#x16e6a #x16e4a) #(#x16e6b #x16e4b)
-        #(#x16e6c #x16e4c) #(#x16e6d #x16e4d) #(#x16e6e #x16e4e)
-        #(#x16e6f #x16e4f) #(#x16e70 #x16e50) #(#x16e71 #x16e51)
-        #(#x16e72 #x16e52) #(#x16e73 #x16e53) #(#x16e74 #x16e54)
-        #(#x16e75 #x16e55) #(#x16e76 #x16e56) #(#x16e77 #x16e57)
-        #(#x16e78 #x16e58) #(#x16e79 #x16e59) #(#x16e7a #x16e5a)
-        #(#x16e7b #x16e5b) #(#x16e7c #x16e5c) #(#x16e7d #x16e5d)
-        #(#x16e7e #x16e5e) #(#x16e7f #x16e5f) #(#x16ebb #x16ea0)
-        #(#x16ebc #x16ea1) #(#x16ebd #x16ea2) #(#x16ebe #x16ea3)
-        #(#x16ebf #x16ea4) #(#x16ec0 #x16ea5) #(#x16ec1 #x16ea6)
-        #(#x16ec2 #x16ea7) #(#x16ec3 #x16ea8) #(#x16ec4 #x16ea9)
-        #(#x16ec5 #x16eaa) #(#x16ec6 #x16eab) #(#x16ec7 #x16eac)
-        #(#x16ec8 #x16ead) #(#x16ec9 #x16eae) #(#x16eca #x16eaf)
-        #(#x16ecb #x16eb0) #(#x16ecc #x16eb1) #(#x16ecd #x16eb2)
-        #(#x16ece #x16eb3) #(#x16ecf #x16eb4) #(#x16ed0 #x16eb5)
-        #(#x16ed1 #x16eb6) #(#x16ed2 #x16eb7) #(#x16ed3 #x16eb8)
-        #(#x1e922 #x1e900) #(#x1e923 #x1e901) #(#x1e924 #x1e902)
-        #(#x1e925 #x1e903) #(#x1e926 #x1e904) #(#x1e927 #x1e905)
-        #(#x1e928 #x1e906) #(#x1e929 #x1e907) #(#x1e92a #x1e908)
-        #(#x1e92b #x1e909) #(#x1e92c #x1e90a) #(#x1e92d #x1e90b)
-        #(#x1e92e #x1e90c) #(#x1e92f #x1e90d) #(#x1e930 #x1e90e)
-        #(#x1e931 #x1e90f) #(#x1e932 #x1e910) #(#x1e933 #x1e911)
-        #(#x1e934 #x1e912) #(#x1e935 #x1e913) #(#x1e936 #x1e914)
-        #(#x1e937 #x1e915) #(#x1e938 #x1e916) #(#x1e939 #x1e917)
-        #(#x1e93a #x1e918) #(#x1e93b #x1e919) #(#x1e93c #x1e91a)
-        #(#x1e93d #x1e91b) #(#x1e93e #x1e91c) #(#x1e93f #x1e91d)
-        #(#x1e940 #x1e91e) #(#x1e941 #x1e91f) #(#x1e942 #x1e920)
-        #(#x1e943 #x1e921)
+        #(#xfb00 #x46 #x46) #(#xfb01 #x46 #x49) #(#xfb02 #x46 #x4c)
+        #(#xfb03 #x46 #x46 #x49) #(#xfb04 #x46 #x46 #x4c) #(#xfb05 #x53 #x54)
+        #(#xfb06 #x53 #x54) #(#xfb13 #x544 #x546) #(#xfb14 #x544 #x535)
+        #(#xfb15 #x544 #x53b) #(#xfb16 #x54e #x546) #(#xfb17 #x544 #x53d)
         ))
 
-    ;; Full default lowercase mappings, including expansions.
-    (define consent-unicode-full-lowercase-mappings
+    ;; Private full lowercase overrides, including expansions.
+    (define %unicode-full-lowercase-overrides
       #(
-        #(#x41 #x61) #(#x42 #x62) #(#x43 #x63) #(#x44 #x64) #(#x45 #x65)
-        #(#x46 #x66) #(#x47 #x67) #(#x48 #x68) #(#x49 #x69) #(#x4a #x6a)
-        #(#x4b #x6b) #(#x4c #x6c) #(#x4d #x6d) #(#x4e #x6e) #(#x4f #x6f)
-        #(#x50 #x70) #(#x51 #x71) #(#x52 #x72) #(#x53 #x73) #(#x54 #x74)
-        #(#x55 #x75) #(#x56 #x76) #(#x57 #x77) #(#x58 #x78) #(#x59 #x79)
-        #(#x5a #x7a) #(#xc0 #xe0) #(#xc1 #xe1) #(#xc2 #xe2) #(#xc3 #xe3)
-        #(#xc4 #xe4) #(#xc5 #xe5) #(#xc6 #xe6) #(#xc7 #xe7) #(#xc8 #xe8)
-        #(#xc9 #xe9) #(#xca #xea) #(#xcb #xeb) #(#xcc #xec) #(#xcd #xed)
-        #(#xce #xee) #(#xcf #xef) #(#xd0 #xf0) #(#xd1 #xf1) #(#xd2 #xf2)
-        #(#xd3 #xf3) #(#xd4 #xf4) #(#xd5 #xf5) #(#xd6 #xf6) #(#xd8 #xf8)
-        #(#xd9 #xf9) #(#xda #xfa) #(#xdb #xfb) #(#xdc #xfc) #(#xdd #xfd)
-        #(#xde #xfe) #(#x100 #x101) #(#x102 #x103) #(#x104 #x105)
-        #(#x106 #x107) #(#x108 #x109) #(#x10a #x10b) #(#x10c #x10d)
-        #(#x10e #x10f) #(#x110 #x111) #(#x112 #x113) #(#x114 #x115)
-        #(#x116 #x117) #(#x118 #x119) #(#x11a #x11b) #(#x11c #x11d)
-        #(#x11e #x11f) #(#x120 #x121) #(#x122 #x123) #(#x124 #x125)
-        #(#x126 #x127) #(#x128 #x129) #(#x12a #x12b) #(#x12c #x12d)
-        #(#x12e #x12f) #(#x130 #x69 #x307) #(#x132 #x133) #(#x134 #x135)
-        #(#x136 #x137) #(#x139 #x13a) #(#x13b #x13c) #(#x13d #x13e)
-        #(#x13f #x140) #(#x141 #x142) #(#x143 #x144) #(#x145 #x146)
-        #(#x147 #x148) #(#x14a #x14b) #(#x14c #x14d) #(#x14e #x14f)
-        #(#x150 #x151) #(#x152 #x153) #(#x154 #x155) #(#x156 #x157)
-        #(#x158 #x159) #(#x15a #x15b) #(#x15c #x15d) #(#x15e #x15f)
-        #(#x160 #x161) #(#x162 #x163) #(#x164 #x165) #(#x166 #x167)
-        #(#x168 #x169) #(#x16a #x16b) #(#x16c #x16d) #(#x16e #x16f)
-        #(#x170 #x171) #(#x172 #x173) #(#x174 #x175) #(#x176 #x177)
-        #(#x178 #xff) #(#x179 #x17a) #(#x17b #x17c) #(#x17d #x17e)
-        #(#x181 #x253) #(#x182 #x183) #(#x184 #x185) #(#x186 #x254)
-        #(#x187 #x188) #(#x189 #x256) #(#x18a #x257) #(#x18b #x18c)
-        #(#x18e #x1dd) #(#x18f #x259) #(#x190 #x25b) #(#x191 #x192)
-        #(#x193 #x260) #(#x194 #x263) #(#x196 #x269) #(#x197 #x268)
-        #(#x198 #x199) #(#x19c #x26f) #(#x19d #x272) #(#x19f #x275)
-        #(#x1a0 #x1a1) #(#x1a2 #x1a3) #(#x1a4 #x1a5) #(#x1a6 #x280)
-        #(#x1a7 #x1a8) #(#x1a9 #x283) #(#x1ac #x1ad) #(#x1ae #x288)
-        #(#x1af #x1b0) #(#x1b1 #x28a) #(#x1b2 #x28b) #(#x1b3 #x1b4)
-        #(#x1b5 #x1b6) #(#x1b7 #x292) #(#x1b8 #x1b9) #(#x1bc #x1bd)
-        #(#x1c4 #x1c6) #(#x1c5 #x1c6) #(#x1c7 #x1c9) #(#x1c8 #x1c9)
-        #(#x1ca #x1cc) #(#x1cb #x1cc) #(#x1cd #x1ce) #(#x1cf #x1d0)
-        #(#x1d1 #x1d2) #(#x1d3 #x1d4) #(#x1d5 #x1d6) #(#x1d7 #x1d8)
-        #(#x1d9 #x1da) #(#x1db #x1dc) #(#x1de #x1df) #(#x1e0 #x1e1)
-        #(#x1e2 #x1e3) #(#x1e4 #x1e5) #(#x1e6 #x1e7) #(#x1e8 #x1e9)
-        #(#x1ea #x1eb) #(#x1ec #x1ed) #(#x1ee #x1ef) #(#x1f1 #x1f3)
-        #(#x1f2 #x1f3) #(#x1f4 #x1f5) #(#x1f6 #x195) #(#x1f7 #x1bf)
-        #(#x1f8 #x1f9) #(#x1fa #x1fb) #(#x1fc #x1fd) #(#x1fe #x1ff)
-        #(#x200 #x201) #(#x202 #x203) #(#x204 #x205) #(#x206 #x207)
-        #(#x208 #x209) #(#x20a #x20b) #(#x20c #x20d) #(#x20e #x20f)
-        #(#x210 #x211) #(#x212 #x213) #(#x214 #x215) #(#x216 #x217)
-        #(#x218 #x219) #(#x21a #x21b) #(#x21c #x21d) #(#x21e #x21f)
-        #(#x220 #x19e) #(#x222 #x223) #(#x224 #x225) #(#x226 #x227)
-        #(#x228 #x229) #(#x22a #x22b) #(#x22c #x22d) #(#x22e #x22f)
-        #(#x230 #x231) #(#x232 #x233) #(#x23a #x2c65) #(#x23b #x23c)
-        #(#x23d #x19a) #(#x23e #x2c66) #(#x241 #x242) #(#x243 #x180)
-        #(#x244 #x289) #(#x245 #x28c) #(#x246 #x247) #(#x248 #x249)
-        #(#x24a #x24b) #(#x24c #x24d) #(#x24e #x24f) #(#x370 #x371)
-        #(#x372 #x373) #(#x376 #x377) #(#x37f #x3f3) #(#x386 #x3ac)
-        #(#x388 #x3ad) #(#x389 #x3ae) #(#x38a #x3af) #(#x38c #x3cc)
-        #(#x38e #x3cd) #(#x38f #x3ce) #(#x391 #x3b1) #(#x392 #x3b2)
-        #(#x393 #x3b3) #(#x394 #x3b4) #(#x395 #x3b5) #(#x396 #x3b6)
-        #(#x397 #x3b7) #(#x398 #x3b8) #(#x399 #x3b9) #(#x39a #x3ba)
-        #(#x39b #x3bb) #(#x39c #x3bc) #(#x39d #x3bd) #(#x39e #x3be)
-        #(#x39f #x3bf) #(#x3a0 #x3c0) #(#x3a1 #x3c1) #(#x3a3 #x3c3)
-        #(#x3a4 #x3c4) #(#x3a5 #x3c5) #(#x3a6 #x3c6) #(#x3a7 #x3c7)
-        #(#x3a8 #x3c8) #(#x3a9 #x3c9) #(#x3aa #x3ca) #(#x3ab #x3cb)
-        #(#x3cf #x3d7) #(#x3d8 #x3d9) #(#x3da #x3db) #(#x3dc #x3dd)
-        #(#x3de #x3df) #(#x3e0 #x3e1) #(#x3e2 #x3e3) #(#x3e4 #x3e5)
-        #(#x3e6 #x3e7) #(#x3e8 #x3e9) #(#x3ea #x3eb) #(#x3ec #x3ed)
-        #(#x3ee #x3ef) #(#x3f4 #x3b8) #(#x3f7 #x3f8) #(#x3f9 #x3f2)
-        #(#x3fa #x3fb) #(#x3fd #x37b) #(#x3fe #x37c) #(#x3ff #x37d)
-        #(#x400 #x450) #(#x401 #x451) #(#x402 #x452) #(#x403 #x453)
-        #(#x404 #x454) #(#x405 #x455) #(#x406 #x456) #(#x407 #x457)
-        #(#x408 #x458) #(#x409 #x459) #(#x40a #x45a) #(#x40b #x45b)
-        #(#x40c #x45c) #(#x40d #x45d) #(#x40e #x45e) #(#x40f #x45f)
-        #(#x410 #x430) #(#x411 #x431) #(#x412 #x432) #(#x413 #x433)
-        #(#x414 #x434) #(#x415 #x435) #(#x416 #x436) #(#x417 #x437)
-        #(#x418 #x438) #(#x419 #x439) #(#x41a #x43a) #(#x41b #x43b)
-        #(#x41c #x43c) #(#x41d #x43d) #(#x41e #x43e) #(#x41f #x43f)
-        #(#x420 #x440) #(#x421 #x441) #(#x422 #x442) #(#x423 #x443)
-        #(#x424 #x444) #(#x425 #x445) #(#x426 #x446) #(#x427 #x447)
-        #(#x428 #x448) #(#x429 #x449) #(#x42a #x44a) #(#x42b #x44b)
-        #(#x42c #x44c) #(#x42d #x44d) #(#x42e #x44e) #(#x42f #x44f)
-        #(#x460 #x461) #(#x462 #x463) #(#x464 #x465) #(#x466 #x467)
-        #(#x468 #x469) #(#x46a #x46b) #(#x46c #x46d) #(#x46e #x46f)
-        #(#x470 #x471) #(#x472 #x473) #(#x474 #x475) #(#x476 #x477)
-        #(#x478 #x479) #(#x47a #x47b) #(#x47c #x47d) #(#x47e #x47f)
-        #(#x480 #x481) #(#x48a #x48b) #(#x48c #x48d) #(#x48e #x48f)
-        #(#x490 #x491) #(#x492 #x493) #(#x494 #x495) #(#x496 #x497)
-        #(#x498 #x499) #(#x49a #x49b) #(#x49c #x49d) #(#x49e #x49f)
-        #(#x4a0 #x4a1) #(#x4a2 #x4a3) #(#x4a4 #x4a5) #(#x4a6 #x4a7)
-        #(#x4a8 #x4a9) #(#x4aa #x4ab) #(#x4ac #x4ad) #(#x4ae #x4af)
-        #(#x4b0 #x4b1) #(#x4b2 #x4b3) #(#x4b4 #x4b5) #(#x4b6 #x4b7)
-        #(#x4b8 #x4b9) #(#x4ba #x4bb) #(#x4bc #x4bd) #(#x4be #x4bf)
-        #(#x4c0 #x4cf) #(#x4c1 #x4c2) #(#x4c3 #x4c4) #(#x4c5 #x4c6)
-        #(#x4c7 #x4c8) #(#x4c9 #x4ca) #(#x4cb #x4cc) #(#x4cd #x4ce)
-        #(#x4d0 #x4d1) #(#x4d2 #x4d3) #(#x4d4 #x4d5) #(#x4d6 #x4d7)
-        #(#x4d8 #x4d9) #(#x4da #x4db) #(#x4dc #x4dd) #(#x4de #x4df)
-        #(#x4e0 #x4e1) #(#x4e2 #x4e3) #(#x4e4 #x4e5) #(#x4e6 #x4e7)
-        #(#x4e8 #x4e9) #(#x4ea #x4eb) #(#x4ec #x4ed) #(#x4ee #x4ef)
-        #(#x4f0 #x4f1) #(#x4f2 #x4f3) #(#x4f4 #x4f5) #(#x4f6 #x4f7)
-        #(#x4f8 #x4f9) #(#x4fa #x4fb) #(#x4fc #x4fd) #(#x4fe #x4ff)
-        #(#x500 #x501) #(#x502 #x503) #(#x504 #x505) #(#x506 #x507)
-        #(#x508 #x509) #(#x50a #x50b) #(#x50c #x50d) #(#x50e #x50f)
-        #(#x510 #x511) #(#x512 #x513) #(#x514 #x515) #(#x516 #x517)
-        #(#x518 #x519) #(#x51a #x51b) #(#x51c #x51d) #(#x51e #x51f)
-        #(#x520 #x521) #(#x522 #x523) #(#x524 #x525) #(#x526 #x527)
-        #(#x528 #x529) #(#x52a #x52b) #(#x52c #x52d) #(#x52e #x52f)
-        #(#x531 #x561) #(#x532 #x562) #(#x533 #x563) #(#x534 #x564)
-        #(#x535 #x565) #(#x536 #x566) #(#x537 #x567) #(#x538 #x568)
-        #(#x539 #x569) #(#x53a #x56a) #(#x53b #x56b) #(#x53c #x56c)
-        #(#x53d #x56d) #(#x53e #x56e) #(#x53f #x56f) #(#x540 #x570)
-        #(#x541 #x571) #(#x542 #x572) #(#x543 #x573) #(#x544 #x574)
-        #(#x545 #x575) #(#x546 #x576) #(#x547 #x577) #(#x548 #x578)
-        #(#x549 #x579) #(#x54a #x57a) #(#x54b #x57b) #(#x54c #x57c)
-        #(#x54d #x57d) #(#x54e #x57e) #(#x54f #x57f) #(#x550 #x580)
-        #(#x551 #x581) #(#x552 #x582) #(#x553 #x583) #(#x554 #x584)
-        #(#x555 #x585) #(#x556 #x586) #(#x10a0 #x2d00) #(#x10a1 #x2d01)
-        #(#x10a2 #x2d02) #(#x10a3 #x2d03) #(#x10a4 #x2d04) #(#x10a5 #x2d05)
-        #(#x10a6 #x2d06) #(#x10a7 #x2d07) #(#x10a8 #x2d08) #(#x10a9 #x2d09)
-        #(#x10aa #x2d0a) #(#x10ab #x2d0b) #(#x10ac #x2d0c) #(#x10ad #x2d0d)
-        #(#x10ae #x2d0e) #(#x10af #x2d0f) #(#x10b0 #x2d10) #(#x10b1 #x2d11)
-        #(#x10b2 #x2d12) #(#x10b3 #x2d13) #(#x10b4 #x2d14) #(#x10b5 #x2d15)
-        #(#x10b6 #x2d16) #(#x10b7 #x2d17) #(#x10b8 #x2d18) #(#x10b9 #x2d19)
-        #(#x10ba #x2d1a) #(#x10bb #x2d1b) #(#x10bc #x2d1c) #(#x10bd #x2d1d)
-        #(#x10be #x2d1e) #(#x10bf #x2d1f) #(#x10c0 #x2d20) #(#x10c1 #x2d21)
-        #(#x10c2 #x2d22) #(#x10c3 #x2d23) #(#x10c4 #x2d24) #(#x10c5 #x2d25)
-        #(#x10c7 #x2d27) #(#x10cd #x2d2d) #(#x13a0 #xab70) #(#x13a1 #xab71)
-        #(#x13a2 #xab72) #(#x13a3 #xab73) #(#x13a4 #xab74) #(#x13a5 #xab75)
-        #(#x13a6 #xab76) #(#x13a7 #xab77) #(#x13a8 #xab78) #(#x13a9 #xab79)
-        #(#x13aa #xab7a) #(#x13ab #xab7b) #(#x13ac #xab7c) #(#x13ad #xab7d)
-        #(#x13ae #xab7e) #(#x13af #xab7f) #(#x13b0 #xab80) #(#x13b1 #xab81)
-        #(#x13b2 #xab82) #(#x13b3 #xab83) #(#x13b4 #xab84) #(#x13b5 #xab85)
-        #(#x13b6 #xab86) #(#x13b7 #xab87) #(#x13b8 #xab88) #(#x13b9 #xab89)
-        #(#x13ba #xab8a) #(#x13bb #xab8b) #(#x13bc #xab8c) #(#x13bd #xab8d)
-        #(#x13be #xab8e) #(#x13bf #xab8f) #(#x13c0 #xab90) #(#x13c1 #xab91)
-        #(#x13c2 #xab92) #(#x13c3 #xab93) #(#x13c4 #xab94) #(#x13c5 #xab95)
-        #(#x13c6 #xab96) #(#x13c7 #xab97) #(#x13c8 #xab98) #(#x13c9 #xab99)
-        #(#x13ca #xab9a) #(#x13cb #xab9b) #(#x13cc #xab9c) #(#x13cd #xab9d)
-        #(#x13ce #xab9e) #(#x13cf #xab9f) #(#x13d0 #xaba0) #(#x13d1 #xaba1)
-        #(#x13d2 #xaba2) #(#x13d3 #xaba3) #(#x13d4 #xaba4) #(#x13d5 #xaba5)
-        #(#x13d6 #xaba6) #(#x13d7 #xaba7) #(#x13d8 #xaba8) #(#x13d9 #xaba9)
-        #(#x13da #xabaa) #(#x13db #xabab) #(#x13dc #xabac) #(#x13dd #xabad)
-        #(#x13de #xabae) #(#x13df #xabaf) #(#x13e0 #xabb0) #(#x13e1 #xabb1)
-        #(#x13e2 #xabb2) #(#x13e3 #xabb3) #(#x13e4 #xabb4) #(#x13e5 #xabb5)
-        #(#x13e6 #xabb6) #(#x13e7 #xabb7) #(#x13e8 #xabb8) #(#x13e9 #xabb9)
-        #(#x13ea #xabba) #(#x13eb #xabbb) #(#x13ec #xabbc) #(#x13ed #xabbd)
-        #(#x13ee #xabbe) #(#x13ef #xabbf) #(#x13f0 #x13f8) #(#x13f1 #x13f9)
-        #(#x13f2 #x13fa) #(#x13f3 #x13fb) #(#x13f4 #x13fc) #(#x13f5 #x13fd)
-        #(#x1c89 #x1c8a) #(#x1c90 #x10d0) #(#x1c91 #x10d1) #(#x1c92 #x10d2)
-        #(#x1c93 #x10d3) #(#x1c94 #x10d4) #(#x1c95 #x10d5) #(#x1c96 #x10d6)
-        #(#x1c97 #x10d7) #(#x1c98 #x10d8) #(#x1c99 #x10d9) #(#x1c9a #x10da)
-        #(#x1c9b #x10db) #(#x1c9c #x10dc) #(#x1c9d #x10dd) #(#x1c9e #x10de)
-        #(#x1c9f #x10df) #(#x1ca0 #x10e0) #(#x1ca1 #x10e1) #(#x1ca2 #x10e2)
-        #(#x1ca3 #x10e3) #(#x1ca4 #x10e4) #(#x1ca5 #x10e5) #(#x1ca6 #x10e6)
-        #(#x1ca7 #x10e7) #(#x1ca8 #x10e8) #(#x1ca9 #x10e9) #(#x1caa #x10ea)
-        #(#x1cab #x10eb) #(#x1cac #x10ec) #(#x1cad #x10ed) #(#x1cae #x10ee)
-        #(#x1caf #x10ef) #(#x1cb0 #x10f0) #(#x1cb1 #x10f1) #(#x1cb2 #x10f2)
-        #(#x1cb3 #x10f3) #(#x1cb4 #x10f4) #(#x1cb5 #x10f5) #(#x1cb6 #x10f6)
-        #(#x1cb7 #x10f7) #(#x1cb8 #x10f8) #(#x1cb9 #x10f9) #(#x1cba #x10fa)
-        #(#x1cbd #x10fd) #(#x1cbe #x10fe) #(#x1cbf #x10ff) #(#x1e00 #x1e01)
-        #(#x1e02 #x1e03) #(#x1e04 #x1e05) #(#x1e06 #x1e07) #(#x1e08 #x1e09)
-        #(#x1e0a #x1e0b) #(#x1e0c #x1e0d) #(#x1e0e #x1e0f) #(#x1e10 #x1e11)
-        #(#x1e12 #x1e13) #(#x1e14 #x1e15) #(#x1e16 #x1e17) #(#x1e18 #x1e19)
-        #(#x1e1a #x1e1b) #(#x1e1c #x1e1d) #(#x1e1e #x1e1f) #(#x1e20 #x1e21)
-        #(#x1e22 #x1e23) #(#x1e24 #x1e25) #(#x1e26 #x1e27) #(#x1e28 #x1e29)
-        #(#x1e2a #x1e2b) #(#x1e2c #x1e2d) #(#x1e2e #x1e2f) #(#x1e30 #x1e31)
-        #(#x1e32 #x1e33) #(#x1e34 #x1e35) #(#x1e36 #x1e37) #(#x1e38 #x1e39)
-        #(#x1e3a #x1e3b) #(#x1e3c #x1e3d) #(#x1e3e #x1e3f) #(#x1e40 #x1e41)
-        #(#x1e42 #x1e43) #(#x1e44 #x1e45) #(#x1e46 #x1e47) #(#x1e48 #x1e49)
-        #(#x1e4a #x1e4b) #(#x1e4c #x1e4d) #(#x1e4e #x1e4f) #(#x1e50 #x1e51)
-        #(#x1e52 #x1e53) #(#x1e54 #x1e55) #(#x1e56 #x1e57) #(#x1e58 #x1e59)
-        #(#x1e5a #x1e5b) #(#x1e5c #x1e5d) #(#x1e5e #x1e5f) #(#x1e60 #x1e61)
-        #(#x1e62 #x1e63) #(#x1e64 #x1e65) #(#x1e66 #x1e67) #(#x1e68 #x1e69)
-        #(#x1e6a #x1e6b) #(#x1e6c #x1e6d) #(#x1e6e #x1e6f) #(#x1e70 #x1e71)
-        #(#x1e72 #x1e73) #(#x1e74 #x1e75) #(#x1e76 #x1e77) #(#x1e78 #x1e79)
-        #(#x1e7a #x1e7b) #(#x1e7c #x1e7d) #(#x1e7e #x1e7f) #(#x1e80 #x1e81)
-        #(#x1e82 #x1e83) #(#x1e84 #x1e85) #(#x1e86 #x1e87) #(#x1e88 #x1e89)
-        #(#x1e8a #x1e8b) #(#x1e8c #x1e8d) #(#x1e8e #x1e8f) #(#x1e90 #x1e91)
-        #(#x1e92 #x1e93) #(#x1e94 #x1e95) #(#x1e9e #xdf) #(#x1ea0 #x1ea1)
-        #(#x1ea2 #x1ea3) #(#x1ea4 #x1ea5) #(#x1ea6 #x1ea7) #(#x1ea8 #x1ea9)
-        #(#x1eaa #x1eab) #(#x1eac #x1ead) #(#x1eae #x1eaf) #(#x1eb0 #x1eb1)
-        #(#x1eb2 #x1eb3) #(#x1eb4 #x1eb5) #(#x1eb6 #x1eb7) #(#x1eb8 #x1eb9)
-        #(#x1eba #x1ebb) #(#x1ebc #x1ebd) #(#x1ebe #x1ebf) #(#x1ec0 #x1ec1)
-        #(#x1ec2 #x1ec3) #(#x1ec4 #x1ec5) #(#x1ec6 #x1ec7) #(#x1ec8 #x1ec9)
-        #(#x1eca #x1ecb) #(#x1ecc #x1ecd) #(#x1ece #x1ecf) #(#x1ed0 #x1ed1)
-        #(#x1ed2 #x1ed3) #(#x1ed4 #x1ed5) #(#x1ed6 #x1ed7) #(#x1ed8 #x1ed9)
-        #(#x1eda #x1edb) #(#x1edc #x1edd) #(#x1ede #x1edf) #(#x1ee0 #x1ee1)
-        #(#x1ee2 #x1ee3) #(#x1ee4 #x1ee5) #(#x1ee6 #x1ee7) #(#x1ee8 #x1ee9)
-        #(#x1eea #x1eeb) #(#x1eec #x1eed) #(#x1eee #x1eef) #(#x1ef0 #x1ef1)
-        #(#x1ef2 #x1ef3) #(#x1ef4 #x1ef5) #(#x1ef6 #x1ef7) #(#x1ef8 #x1ef9)
-        #(#x1efa #x1efb) #(#x1efc #x1efd) #(#x1efe #x1eff) #(#x1f08 #x1f00)
-        #(#x1f09 #x1f01) #(#x1f0a #x1f02) #(#x1f0b #x1f03) #(#x1f0c #x1f04)
-        #(#x1f0d #x1f05) #(#x1f0e #x1f06) #(#x1f0f #x1f07) #(#x1f18 #x1f10)
-        #(#x1f19 #x1f11) #(#x1f1a #x1f12) #(#x1f1b #x1f13) #(#x1f1c #x1f14)
-        #(#x1f1d #x1f15) #(#x1f28 #x1f20) #(#x1f29 #x1f21) #(#x1f2a #x1f22)
-        #(#x1f2b #x1f23) #(#x1f2c #x1f24) #(#x1f2d #x1f25) #(#x1f2e #x1f26)
-        #(#x1f2f #x1f27) #(#x1f38 #x1f30) #(#x1f39 #x1f31) #(#x1f3a #x1f32)
-        #(#x1f3b #x1f33) #(#x1f3c #x1f34) #(#x1f3d #x1f35) #(#x1f3e #x1f36)
-        #(#x1f3f #x1f37) #(#x1f48 #x1f40) #(#x1f49 #x1f41) #(#x1f4a #x1f42)
-        #(#x1f4b #x1f43) #(#x1f4c #x1f44) #(#x1f4d #x1f45) #(#x1f59 #x1f51)
-        #(#x1f5b #x1f53) #(#x1f5d #x1f55) #(#x1f5f #x1f57) #(#x1f68 #x1f60)
-        #(#x1f69 #x1f61) #(#x1f6a #x1f62) #(#x1f6b #x1f63) #(#x1f6c #x1f64)
-        #(#x1f6d #x1f65) #(#x1f6e #x1f66) #(#x1f6f #x1f67) #(#x1f88 #x1f80)
-        #(#x1f89 #x1f81) #(#x1f8a #x1f82) #(#x1f8b #x1f83) #(#x1f8c #x1f84)
-        #(#x1f8d #x1f85) #(#x1f8e #x1f86) #(#x1f8f #x1f87) #(#x1f98 #x1f90)
-        #(#x1f99 #x1f91) #(#x1f9a #x1f92) #(#x1f9b #x1f93) #(#x1f9c #x1f94)
-        #(#x1f9d #x1f95) #(#x1f9e #x1f96) #(#x1f9f #x1f97) #(#x1fa8 #x1fa0)
-        #(#x1fa9 #x1fa1) #(#x1faa #x1fa2) #(#x1fab #x1fa3) #(#x1fac #x1fa4)
-        #(#x1fad #x1fa5) #(#x1fae #x1fa6) #(#x1faf #x1fa7) #(#x1fb8 #x1fb0)
-        #(#x1fb9 #x1fb1) #(#x1fba #x1f70) #(#x1fbb #x1f71) #(#x1fbc #x1fb3)
-        #(#x1fc8 #x1f72) #(#x1fc9 #x1f73) #(#x1fca #x1f74) #(#x1fcb #x1f75)
-        #(#x1fcc #x1fc3) #(#x1fd8 #x1fd0) #(#x1fd9 #x1fd1) #(#x1fda #x1f76)
-        #(#x1fdb #x1f77) #(#x1fe8 #x1fe0) #(#x1fe9 #x1fe1) #(#x1fea #x1f7a)
-        #(#x1feb #x1f7b) #(#x1fec #x1fe5) #(#x1ff8 #x1f78) #(#x1ff9 #x1f79)
-        #(#x1ffa #x1f7c) #(#x1ffb #x1f7d) #(#x1ffc #x1ff3) #(#x2126 #x3c9)
-        #(#x212a #x6b) #(#x212b #xe5) #(#x2132 #x214e) #(#x2160 #x2170)
-        #(#x2161 #x2171) #(#x2162 #x2172) #(#x2163 #x2173) #(#x2164 #x2174)
-        #(#x2165 #x2175) #(#x2166 #x2176) #(#x2167 #x2177) #(#x2168 #x2178)
-        #(#x2169 #x2179) #(#x216a #x217a) #(#x216b #x217b) #(#x216c #x217c)
-        #(#x216d #x217d) #(#x216e #x217e) #(#x216f #x217f) #(#x2183 #x2184)
-        #(#x24b6 #x24d0) #(#x24b7 #x24d1) #(#x24b8 #x24d2) #(#x24b9 #x24d3)
-        #(#x24ba #x24d4) #(#x24bb #x24d5) #(#x24bc #x24d6) #(#x24bd #x24d7)
-        #(#x24be #x24d8) #(#x24bf #x24d9) #(#x24c0 #x24da) #(#x24c1 #x24db)
-        #(#x24c2 #x24dc) #(#x24c3 #x24dd) #(#x24c4 #x24de) #(#x24c5 #x24df)
-        #(#x24c6 #x24e0) #(#x24c7 #x24e1) #(#x24c8 #x24e2) #(#x24c9 #x24e3)
-        #(#x24ca #x24e4) #(#x24cb #x24e5) #(#x24cc #x24e6) #(#x24cd #x24e7)
-        #(#x24ce #x24e8) #(#x24cf #x24e9) #(#x2c00 #x2c30) #(#x2c01 #x2c31)
-        #(#x2c02 #x2c32) #(#x2c03 #x2c33) #(#x2c04 #x2c34) #(#x2c05 #x2c35)
-        #(#x2c06 #x2c36) #(#x2c07 #x2c37) #(#x2c08 #x2c38) #(#x2c09 #x2c39)
-        #(#x2c0a #x2c3a) #(#x2c0b #x2c3b) #(#x2c0c #x2c3c) #(#x2c0d #x2c3d)
-        #(#x2c0e #x2c3e) #(#x2c0f #x2c3f) #(#x2c10 #x2c40) #(#x2c11 #x2c41)
-        #(#x2c12 #x2c42) #(#x2c13 #x2c43) #(#x2c14 #x2c44) #(#x2c15 #x2c45)
-        #(#x2c16 #x2c46) #(#x2c17 #x2c47) #(#x2c18 #x2c48) #(#x2c19 #x2c49)
-        #(#x2c1a #x2c4a) #(#x2c1b #x2c4b) #(#x2c1c #x2c4c) #(#x2c1d #x2c4d)
-        #(#x2c1e #x2c4e) #(#x2c1f #x2c4f) #(#x2c20 #x2c50) #(#x2c21 #x2c51)
-        #(#x2c22 #x2c52) #(#x2c23 #x2c53) #(#x2c24 #x2c54) #(#x2c25 #x2c55)
-        #(#x2c26 #x2c56) #(#x2c27 #x2c57) #(#x2c28 #x2c58) #(#x2c29 #x2c59)
-        #(#x2c2a #x2c5a) #(#x2c2b #x2c5b) #(#x2c2c #x2c5c) #(#x2c2d #x2c5d)
-        #(#x2c2e #x2c5e) #(#x2c2f #x2c5f) #(#x2c60 #x2c61) #(#x2c62 #x26b)
-        #(#x2c63 #x1d7d) #(#x2c64 #x27d) #(#x2c67 #x2c68) #(#x2c69 #x2c6a)
-        #(#x2c6b #x2c6c) #(#x2c6d #x251) #(#x2c6e #x271) #(#x2c6f #x250)
-        #(#x2c70 #x252) #(#x2c72 #x2c73) #(#x2c75 #x2c76) #(#x2c7e #x23f)
-        #(#x2c7f #x240) #(#x2c80 #x2c81) #(#x2c82 #x2c83) #(#x2c84 #x2c85)
-        #(#x2c86 #x2c87) #(#x2c88 #x2c89) #(#x2c8a #x2c8b) #(#x2c8c #x2c8d)
-        #(#x2c8e #x2c8f) #(#x2c90 #x2c91) #(#x2c92 #x2c93) #(#x2c94 #x2c95)
-        #(#x2c96 #x2c97) #(#x2c98 #x2c99) #(#x2c9a #x2c9b) #(#x2c9c #x2c9d)
-        #(#x2c9e #x2c9f) #(#x2ca0 #x2ca1) #(#x2ca2 #x2ca3) #(#x2ca4 #x2ca5)
-        #(#x2ca6 #x2ca7) #(#x2ca8 #x2ca9) #(#x2caa #x2cab) #(#x2cac #x2cad)
-        #(#x2cae #x2caf) #(#x2cb0 #x2cb1) #(#x2cb2 #x2cb3) #(#x2cb4 #x2cb5)
-        #(#x2cb6 #x2cb7) #(#x2cb8 #x2cb9) #(#x2cba #x2cbb) #(#x2cbc #x2cbd)
-        #(#x2cbe #x2cbf) #(#x2cc0 #x2cc1) #(#x2cc2 #x2cc3) #(#x2cc4 #x2cc5)
-        #(#x2cc6 #x2cc7) #(#x2cc8 #x2cc9) #(#x2cca #x2ccb) #(#x2ccc #x2ccd)
-        #(#x2cce #x2ccf) #(#x2cd0 #x2cd1) #(#x2cd2 #x2cd3) #(#x2cd4 #x2cd5)
-        #(#x2cd6 #x2cd7) #(#x2cd8 #x2cd9) #(#x2cda #x2cdb) #(#x2cdc #x2cdd)
-        #(#x2cde #x2cdf) #(#x2ce0 #x2ce1) #(#x2ce2 #x2ce3) #(#x2ceb #x2cec)
-        #(#x2ced #x2cee) #(#x2cf2 #x2cf3) #(#xa640 #xa641) #(#xa642 #xa643)
-        #(#xa644 #xa645) #(#xa646 #xa647) #(#xa648 #xa649) #(#xa64a #xa64b)
-        #(#xa64c #xa64d) #(#xa64e #xa64f) #(#xa650 #xa651) #(#xa652 #xa653)
-        #(#xa654 #xa655) #(#xa656 #xa657) #(#xa658 #xa659) #(#xa65a #xa65b)
-        #(#xa65c #xa65d) #(#xa65e #xa65f) #(#xa660 #xa661) #(#xa662 #xa663)
-        #(#xa664 #xa665) #(#xa666 #xa667) #(#xa668 #xa669) #(#xa66a #xa66b)
-        #(#xa66c #xa66d) #(#xa680 #xa681) #(#xa682 #xa683) #(#xa684 #xa685)
-        #(#xa686 #xa687) #(#xa688 #xa689) #(#xa68a #xa68b) #(#xa68c #xa68d)
-        #(#xa68e #xa68f) #(#xa690 #xa691) #(#xa692 #xa693) #(#xa694 #xa695)
-        #(#xa696 #xa697) #(#xa698 #xa699) #(#xa69a #xa69b) #(#xa722 #xa723)
-        #(#xa724 #xa725) #(#xa726 #xa727) #(#xa728 #xa729) #(#xa72a #xa72b)
-        #(#xa72c #xa72d) #(#xa72e #xa72f) #(#xa732 #xa733) #(#xa734 #xa735)
-        #(#xa736 #xa737) #(#xa738 #xa739) #(#xa73a #xa73b) #(#xa73c #xa73d)
-        #(#xa73e #xa73f) #(#xa740 #xa741) #(#xa742 #xa743) #(#xa744 #xa745)
-        #(#xa746 #xa747) #(#xa748 #xa749) #(#xa74a #xa74b) #(#xa74c #xa74d)
-        #(#xa74e #xa74f) #(#xa750 #xa751) #(#xa752 #xa753) #(#xa754 #xa755)
-        #(#xa756 #xa757) #(#xa758 #xa759) #(#xa75a #xa75b) #(#xa75c #xa75d)
-        #(#xa75e #xa75f) #(#xa760 #xa761) #(#xa762 #xa763) #(#xa764 #xa765)
-        #(#xa766 #xa767) #(#xa768 #xa769) #(#xa76a #xa76b) #(#xa76c #xa76d)
-        #(#xa76e #xa76f) #(#xa779 #xa77a) #(#xa77b #xa77c) #(#xa77d #x1d79)
-        #(#xa77e #xa77f) #(#xa780 #xa781) #(#xa782 #xa783) #(#xa784 #xa785)
-        #(#xa786 #xa787) #(#xa78b #xa78c) #(#xa78d #x265) #(#xa790 #xa791)
-        #(#xa792 #xa793) #(#xa796 #xa797) #(#xa798 #xa799) #(#xa79a #xa79b)
-        #(#xa79c #xa79d) #(#xa79e #xa79f) #(#xa7a0 #xa7a1) #(#xa7a2 #xa7a3)
-        #(#xa7a4 #xa7a5) #(#xa7a6 #xa7a7) #(#xa7a8 #xa7a9) #(#xa7aa #x266)
-        #(#xa7ab #x25c) #(#xa7ac #x261) #(#xa7ad #x26c) #(#xa7ae #x26a)
-        #(#xa7b0 #x29e) #(#xa7b1 #x287) #(#xa7b2 #x29d) #(#xa7b3 #xab53)
-        #(#xa7b4 #xa7b5) #(#xa7b6 #xa7b7) #(#xa7b8 #xa7b9) #(#xa7ba #xa7bb)
-        #(#xa7bc #xa7bd) #(#xa7be #xa7bf) #(#xa7c0 #xa7c1) #(#xa7c2 #xa7c3)
-        #(#xa7c4 #xa794) #(#xa7c5 #x282) #(#xa7c6 #x1d8e) #(#xa7c7 #xa7c8)
-        #(#xa7c9 #xa7ca) #(#xa7cb #x264) #(#xa7cc #xa7cd) #(#xa7ce #xa7cf)
-        #(#xa7d0 #xa7d1) #(#xa7d2 #xa7d3) #(#xa7d4 #xa7d5) #(#xa7d6 #xa7d7)
-        #(#xa7d8 #xa7d9) #(#xa7da #xa7db) #(#xa7dc #x19b) #(#xa7f5 #xa7f6)
-        #(#xff21 #xff41) #(#xff22 #xff42) #(#xff23 #xff43) #(#xff24 #xff44)
-        #(#xff25 #xff45) #(#xff26 #xff46) #(#xff27 #xff47) #(#xff28 #xff48)
-        #(#xff29 #xff49) #(#xff2a #xff4a) #(#xff2b #xff4b) #(#xff2c #xff4c)
-        #(#xff2d #xff4d) #(#xff2e #xff4e) #(#xff2f #xff4f) #(#xff30 #xff50)
-        #(#xff31 #xff51) #(#xff32 #xff52) #(#xff33 #xff53) #(#xff34 #xff54)
-        #(#xff35 #xff55) #(#xff36 #xff56) #(#xff37 #xff57) #(#xff38 #xff58)
-        #(#xff39 #xff59) #(#xff3a #xff5a) #(#x10400 #x10428) #(#x10401 #x10429)
-        #(#x10402 #x1042a) #(#x10403 #x1042b) #(#x10404 #x1042c)
-        #(#x10405 #x1042d) #(#x10406 #x1042e) #(#x10407 #x1042f)
-        #(#x10408 #x10430) #(#x10409 #x10431) #(#x1040a #x10432)
-        #(#x1040b #x10433) #(#x1040c #x10434) #(#x1040d #x10435)
-        #(#x1040e #x10436) #(#x1040f #x10437) #(#x10410 #x10438)
-        #(#x10411 #x10439) #(#x10412 #x1043a) #(#x10413 #x1043b)
-        #(#x10414 #x1043c) #(#x10415 #x1043d) #(#x10416 #x1043e)
-        #(#x10417 #x1043f) #(#x10418 #x10440) #(#x10419 #x10441)
-        #(#x1041a #x10442) #(#x1041b #x10443) #(#x1041c #x10444)
-        #(#x1041d #x10445) #(#x1041e #x10446) #(#x1041f #x10447)
-        #(#x10420 #x10448) #(#x10421 #x10449) #(#x10422 #x1044a)
-        #(#x10423 #x1044b) #(#x10424 #x1044c) #(#x10425 #x1044d)
-        #(#x10426 #x1044e) #(#x10427 #x1044f) #(#x104b0 #x104d8)
-        #(#x104b1 #x104d9) #(#x104b2 #x104da) #(#x104b3 #x104db)
-        #(#x104b4 #x104dc) #(#x104b5 #x104dd) #(#x104b6 #x104de)
-        #(#x104b7 #x104df) #(#x104b8 #x104e0) #(#x104b9 #x104e1)
-        #(#x104ba #x104e2) #(#x104bb #x104e3) #(#x104bc #x104e4)
-        #(#x104bd #x104e5) #(#x104be #x104e6) #(#x104bf #x104e7)
-        #(#x104c0 #x104e8) #(#x104c1 #x104e9) #(#x104c2 #x104ea)
-        #(#x104c3 #x104eb) #(#x104c4 #x104ec) #(#x104c5 #x104ed)
-        #(#x104c6 #x104ee) #(#x104c7 #x104ef) #(#x104c8 #x104f0)
-        #(#x104c9 #x104f1) #(#x104ca #x104f2) #(#x104cb #x104f3)
-        #(#x104cc #x104f4) #(#x104cd #x104f5) #(#x104ce #x104f6)
-        #(#x104cf #x104f7) #(#x104d0 #x104f8) #(#x104d1 #x104f9)
-        #(#x104d2 #x104fa) #(#x104d3 #x104fb) #(#x10570 #x10597)
-        #(#x10571 #x10598) #(#x10572 #x10599) #(#x10573 #x1059a)
-        #(#x10574 #x1059b) #(#x10575 #x1059c) #(#x10576 #x1059d)
-        #(#x10577 #x1059e) #(#x10578 #x1059f) #(#x10579 #x105a0)
-        #(#x1057a #x105a1) #(#x1057c #x105a3) #(#x1057d #x105a4)
-        #(#x1057e #x105a5) #(#x1057f #x105a6) #(#x10580 #x105a7)
-        #(#x10581 #x105a8) #(#x10582 #x105a9) #(#x10583 #x105aa)
-        #(#x10584 #x105ab) #(#x10585 #x105ac) #(#x10586 #x105ad)
-        #(#x10587 #x105ae) #(#x10588 #x105af) #(#x10589 #x105b0)
-        #(#x1058a #x105b1) #(#x1058c #x105b3) #(#x1058d #x105b4)
-        #(#x1058e #x105b5) #(#x1058f #x105b6) #(#x10590 #x105b7)
-        #(#x10591 #x105b8) #(#x10592 #x105b9) #(#x10594 #x105bb)
-        #(#x10595 #x105bc) #(#x10c80 #x10cc0) #(#x10c81 #x10cc1)
-        #(#x10c82 #x10cc2) #(#x10c83 #x10cc3) #(#x10c84 #x10cc4)
-        #(#x10c85 #x10cc5) #(#x10c86 #x10cc6) #(#x10c87 #x10cc7)
-        #(#x10c88 #x10cc8) #(#x10c89 #x10cc9) #(#x10c8a #x10cca)
-        #(#x10c8b #x10ccb) #(#x10c8c #x10ccc) #(#x10c8d #x10ccd)
-        #(#x10c8e #x10cce) #(#x10c8f #x10ccf) #(#x10c90 #x10cd0)
-        #(#x10c91 #x10cd1) #(#x10c92 #x10cd2) #(#x10c93 #x10cd3)
-        #(#x10c94 #x10cd4) #(#x10c95 #x10cd5) #(#x10c96 #x10cd6)
-        #(#x10c97 #x10cd7) #(#x10c98 #x10cd8) #(#x10c99 #x10cd9)
-        #(#x10c9a #x10cda) #(#x10c9b #x10cdb) #(#x10c9c #x10cdc)
-        #(#x10c9d #x10cdd) #(#x10c9e #x10cde) #(#x10c9f #x10cdf)
-        #(#x10ca0 #x10ce0) #(#x10ca1 #x10ce1) #(#x10ca2 #x10ce2)
-        #(#x10ca3 #x10ce3) #(#x10ca4 #x10ce4) #(#x10ca5 #x10ce5)
-        #(#x10ca6 #x10ce6) #(#x10ca7 #x10ce7) #(#x10ca8 #x10ce8)
-        #(#x10ca9 #x10ce9) #(#x10caa #x10cea) #(#x10cab #x10ceb)
-        #(#x10cac #x10cec) #(#x10cad #x10ced) #(#x10cae #x10cee)
-        #(#x10caf #x10cef) #(#x10cb0 #x10cf0) #(#x10cb1 #x10cf1)
-        #(#x10cb2 #x10cf2) #(#x10d50 #x10d70) #(#x10d51 #x10d71)
-        #(#x10d52 #x10d72) #(#x10d53 #x10d73) #(#x10d54 #x10d74)
-        #(#x10d55 #x10d75) #(#x10d56 #x10d76) #(#x10d57 #x10d77)
-        #(#x10d58 #x10d78) #(#x10d59 #x10d79) #(#x10d5a #x10d7a)
-        #(#x10d5b #x10d7b) #(#x10d5c #x10d7c) #(#x10d5d #x10d7d)
-        #(#x10d5e #x10d7e) #(#x10d5f #x10d7f) #(#x10d60 #x10d80)
-        #(#x10d61 #x10d81) #(#x10d62 #x10d82) #(#x10d63 #x10d83)
-        #(#x10d64 #x10d84) #(#x10d65 #x10d85) #(#x118a0 #x118c0)
-        #(#x118a1 #x118c1) #(#x118a2 #x118c2) #(#x118a3 #x118c3)
-        #(#x118a4 #x118c4) #(#x118a5 #x118c5) #(#x118a6 #x118c6)
-        #(#x118a7 #x118c7) #(#x118a8 #x118c8) #(#x118a9 #x118c9)
-        #(#x118aa #x118ca) #(#x118ab #x118cb) #(#x118ac #x118cc)
-        #(#x118ad #x118cd) #(#x118ae #x118ce) #(#x118af #x118cf)
-        #(#x118b0 #x118d0) #(#x118b1 #x118d1) #(#x118b2 #x118d2)
-        #(#x118b3 #x118d3) #(#x118b4 #x118d4) #(#x118b5 #x118d5)
-        #(#x118b6 #x118d6) #(#x118b7 #x118d7) #(#x118b8 #x118d8)
-        #(#x118b9 #x118d9) #(#x118ba #x118da) #(#x118bb #x118db)
-        #(#x118bc #x118dc) #(#x118bd #x118dd) #(#x118be #x118de)
-        #(#x118bf #x118df) #(#x16e40 #x16e60) #(#x16e41 #x16e61)
-        #(#x16e42 #x16e62) #(#x16e43 #x16e63) #(#x16e44 #x16e64)
-        #(#x16e45 #x16e65) #(#x16e46 #x16e66) #(#x16e47 #x16e67)
-        #(#x16e48 #x16e68) #(#x16e49 #x16e69) #(#x16e4a #x16e6a)
-        #(#x16e4b #x16e6b) #(#x16e4c #x16e6c) #(#x16e4d #x16e6d)
-        #(#x16e4e #x16e6e) #(#x16e4f #x16e6f) #(#x16e50 #x16e70)
-        #(#x16e51 #x16e71) #(#x16e52 #x16e72) #(#x16e53 #x16e73)
-        #(#x16e54 #x16e74) #(#x16e55 #x16e75) #(#x16e56 #x16e76)
-        #(#x16e57 #x16e77) #(#x16e58 #x16e78) #(#x16e59 #x16e79)
-        #(#x16e5a #x16e7a) #(#x16e5b #x16e7b) #(#x16e5c #x16e7c)
-        #(#x16e5d #x16e7d) #(#x16e5e #x16e7e) #(#x16e5f #x16e7f)
-        #(#x16ea0 #x16ebb) #(#x16ea1 #x16ebc) #(#x16ea2 #x16ebd)
-        #(#x16ea3 #x16ebe) #(#x16ea4 #x16ebf) #(#x16ea5 #x16ec0)
-        #(#x16ea6 #x16ec1) #(#x16ea7 #x16ec2) #(#x16ea8 #x16ec3)
-        #(#x16ea9 #x16ec4) #(#x16eaa #x16ec5) #(#x16eab #x16ec6)
-        #(#x16eac #x16ec7) #(#x16ead #x16ec8) #(#x16eae #x16ec9)
-        #(#x16eaf #x16eca) #(#x16eb0 #x16ecb) #(#x16eb1 #x16ecc)
-        #(#x16eb2 #x16ecd) #(#x16eb3 #x16ece) #(#x16eb4 #x16ecf)
-        #(#x16eb5 #x16ed0) #(#x16eb6 #x16ed1) #(#x16eb7 #x16ed2)
-        #(#x16eb8 #x16ed3) #(#x1e900 #x1e922) #(#x1e901 #x1e923)
-        #(#x1e902 #x1e924) #(#x1e903 #x1e925) #(#x1e904 #x1e926)
-        #(#x1e905 #x1e927) #(#x1e906 #x1e928) #(#x1e907 #x1e929)
-        #(#x1e908 #x1e92a) #(#x1e909 #x1e92b) #(#x1e90a #x1e92c)
-        #(#x1e90b #x1e92d) #(#x1e90c #x1e92e) #(#x1e90d #x1e92f)
-        #(#x1e90e #x1e930) #(#x1e90f #x1e931) #(#x1e910 #x1e932)
-        #(#x1e911 #x1e933) #(#x1e912 #x1e934) #(#x1e913 #x1e935)
-        #(#x1e914 #x1e936) #(#x1e915 #x1e937) #(#x1e916 #x1e938)
-        #(#x1e917 #x1e939) #(#x1e918 #x1e93a) #(#x1e919 #x1e93b)
-        #(#x1e91a #x1e93c) #(#x1e91b #x1e93d) #(#x1e91c #x1e93e)
-        #(#x1e91d #x1e93f) #(#x1e91e #x1e940) #(#x1e91f #x1e941)
-        #(#x1e920 #x1e942) #(#x1e921 #x1e943)
+        #(#x130 #x69 #x307)
         ))
 
-    ;; Full default non-Turkic case-folding mappings.
-    (define consent-unicode-full-foldcase-mappings
+    ;; Private full non-Turkic fold overrides to simple mappings.
+    (define %unicode-full-foldcase-overrides
       #(
-        #(#x41 #x61) #(#x42 #x62) #(#x43 #x63) #(#x44 #x64) #(#x45 #x65)
-        #(#x46 #x66) #(#x47 #x67) #(#x48 #x68) #(#x49 #x69) #(#x4a #x6a)
-        #(#x4b #x6b) #(#x4c #x6c) #(#x4d #x6d) #(#x4e #x6e) #(#x4f #x6f)
-        #(#x50 #x70) #(#x51 #x71) #(#x52 #x72) #(#x53 #x73) #(#x54 #x74)
-        #(#x55 #x75) #(#x56 #x76) #(#x57 #x77) #(#x58 #x78) #(#x59 #x79)
-        #(#x5a #x7a) #(#xb5 #x3bc) #(#xc0 #xe0) #(#xc1 #xe1) #(#xc2 #xe2)
-        #(#xc3 #xe3) #(#xc4 #xe4) #(#xc5 #xe5) #(#xc6 #xe6) #(#xc7 #xe7)
-        #(#xc8 #xe8) #(#xc9 #xe9) #(#xca #xea) #(#xcb #xeb) #(#xcc #xec)
-        #(#xcd #xed) #(#xce #xee) #(#xcf #xef) #(#xd0 #xf0) #(#xd1 #xf1)
-        #(#xd2 #xf2) #(#xd3 #xf3) #(#xd4 #xf4) #(#xd5 #xf5) #(#xd6 #xf6)
-        #(#xd8 #xf8) #(#xd9 #xf9) #(#xda #xfa) #(#xdb #xfb) #(#xdc #xfc)
-        #(#xdd #xfd) #(#xde #xfe) #(#xdf #x73 #x73) #(#x100 #x101)
-        #(#x102 #x103) #(#x104 #x105) #(#x106 #x107) #(#x108 #x109)
-        #(#x10a #x10b) #(#x10c #x10d) #(#x10e #x10f) #(#x110 #x111)
-        #(#x112 #x113) #(#x114 #x115) #(#x116 #x117) #(#x118 #x119)
-        #(#x11a #x11b) #(#x11c #x11d) #(#x11e #x11f) #(#x120 #x121)
-        #(#x122 #x123) #(#x124 #x125) #(#x126 #x127) #(#x128 #x129)
-        #(#x12a #x12b) #(#x12c #x12d) #(#x12e #x12f) #(#x130 #x69 #x307)
-        #(#x132 #x133) #(#x134 #x135) #(#x136 #x137) #(#x139 #x13a)
-        #(#x13b #x13c) #(#x13d #x13e) #(#x13f #x140) #(#x141 #x142)
-        #(#x143 #x144) #(#x145 #x146) #(#x147 #x148) #(#x149 #x2bc #x6e)
-        #(#x14a #x14b) #(#x14c #x14d) #(#x14e #x14f) #(#x150 #x151)
-        #(#x152 #x153) #(#x154 #x155) #(#x156 #x157) #(#x158 #x159)
-        #(#x15a #x15b) #(#x15c #x15d) #(#x15e #x15f) #(#x160 #x161)
-        #(#x162 #x163) #(#x164 #x165) #(#x166 #x167) #(#x168 #x169)
-        #(#x16a #x16b) #(#x16c #x16d) #(#x16e #x16f) #(#x170 #x171)
-        #(#x172 #x173) #(#x174 #x175) #(#x176 #x177) #(#x178 #xff)
-        #(#x179 #x17a) #(#x17b #x17c) #(#x17d #x17e) #(#x17f #x73)
-        #(#x181 #x253) #(#x182 #x183) #(#x184 #x185) #(#x186 #x254)
-        #(#x187 #x188) #(#x189 #x256) #(#x18a #x257) #(#x18b #x18c)
-        #(#x18e #x1dd) #(#x18f #x259) #(#x190 #x25b) #(#x191 #x192)
-        #(#x193 #x260) #(#x194 #x263) #(#x196 #x269) #(#x197 #x268)
-        #(#x198 #x199) #(#x19c #x26f) #(#x19d #x272) #(#x19f #x275)
-        #(#x1a0 #x1a1) #(#x1a2 #x1a3) #(#x1a4 #x1a5) #(#x1a6 #x280)
-        #(#x1a7 #x1a8) #(#x1a9 #x283) #(#x1ac #x1ad) #(#x1ae #x288)
-        #(#x1af #x1b0) #(#x1b1 #x28a) #(#x1b2 #x28b) #(#x1b3 #x1b4)
-        #(#x1b5 #x1b6) #(#x1b7 #x292) #(#x1b8 #x1b9) #(#x1bc #x1bd)
-        #(#x1c4 #x1c6) #(#x1c5 #x1c6) #(#x1c7 #x1c9) #(#x1c8 #x1c9)
-        #(#x1ca #x1cc) #(#x1cb #x1cc) #(#x1cd #x1ce) #(#x1cf #x1d0)
-        #(#x1d1 #x1d2) #(#x1d3 #x1d4) #(#x1d5 #x1d6) #(#x1d7 #x1d8)
-        #(#x1d9 #x1da) #(#x1db #x1dc) #(#x1de #x1df) #(#x1e0 #x1e1)
-        #(#x1e2 #x1e3) #(#x1e4 #x1e5) #(#x1e6 #x1e7) #(#x1e8 #x1e9)
-        #(#x1ea #x1eb) #(#x1ec #x1ed) #(#x1ee #x1ef) #(#x1f0 #x6a #x30c)
-        #(#x1f1 #x1f3) #(#x1f2 #x1f3) #(#x1f4 #x1f5) #(#x1f6 #x195)
-        #(#x1f7 #x1bf) #(#x1f8 #x1f9) #(#x1fa #x1fb) #(#x1fc #x1fd)
-        #(#x1fe #x1ff) #(#x200 #x201) #(#x202 #x203) #(#x204 #x205)
-        #(#x206 #x207) #(#x208 #x209) #(#x20a #x20b) #(#x20c #x20d)
-        #(#x20e #x20f) #(#x210 #x211) #(#x212 #x213) #(#x214 #x215)
-        #(#x216 #x217) #(#x218 #x219) #(#x21a #x21b) #(#x21c #x21d)
-        #(#x21e #x21f) #(#x220 #x19e) #(#x222 #x223) #(#x224 #x225)
-        #(#x226 #x227) #(#x228 #x229) #(#x22a #x22b) #(#x22c #x22d)
-        #(#x22e #x22f) #(#x230 #x231) #(#x232 #x233) #(#x23a #x2c65)
-        #(#x23b #x23c) #(#x23d #x19a) #(#x23e #x2c66) #(#x241 #x242)
-        #(#x243 #x180) #(#x244 #x289) #(#x245 #x28c) #(#x246 #x247)
-        #(#x248 #x249) #(#x24a #x24b) #(#x24c #x24d) #(#x24e #x24f)
-        #(#x345 #x3b9) #(#x370 #x371) #(#x372 #x373) #(#x376 #x377)
-        #(#x37f #x3f3) #(#x386 #x3ac) #(#x388 #x3ad) #(#x389 #x3ae)
-        #(#x38a #x3af) #(#x38c #x3cc) #(#x38e #x3cd) #(#x38f #x3ce)
-        #(#x390 #x3b9 #x308 #x301) #(#x391 #x3b1) #(#x392 #x3b2) #(#x393 #x3b3)
-        #(#x394 #x3b4) #(#x395 #x3b5) #(#x396 #x3b6) #(#x397 #x3b7)
-        #(#x398 #x3b8) #(#x399 #x3b9) #(#x39a #x3ba) #(#x39b #x3bb)
-        #(#x39c #x3bc) #(#x39d #x3bd) #(#x39e #x3be) #(#x39f #x3bf)
-        #(#x3a0 #x3c0) #(#x3a1 #x3c1) #(#x3a3 #x3c3) #(#x3a4 #x3c4)
-        #(#x3a5 #x3c5) #(#x3a6 #x3c6) #(#x3a7 #x3c7) #(#x3a8 #x3c8)
-        #(#x3a9 #x3c9) #(#x3aa #x3ca) #(#x3ab #x3cb) #(#x3b0 #x3c5 #x308 #x301)
-        #(#x3c2 #x3c3) #(#x3cf #x3d7) #(#x3d0 #x3b2) #(#x3d1 #x3b8)
-        #(#x3d5 #x3c6) #(#x3d6 #x3c0) #(#x3d8 #x3d9) #(#x3da #x3db)
-        #(#x3dc #x3dd) #(#x3de #x3df) #(#x3e0 #x3e1) #(#x3e2 #x3e3)
-        #(#x3e4 #x3e5) #(#x3e6 #x3e7) #(#x3e8 #x3e9) #(#x3ea #x3eb)
-        #(#x3ec #x3ed) #(#x3ee #x3ef) #(#x3f0 #x3ba) #(#x3f1 #x3c1)
-        #(#x3f4 #x3b8) #(#x3f5 #x3b5) #(#x3f7 #x3f8) #(#x3f9 #x3f2)
-        #(#x3fa #x3fb) #(#x3fd #x37b) #(#x3fe #x37c) #(#x3ff #x37d)
-        #(#x400 #x450) #(#x401 #x451) #(#x402 #x452) #(#x403 #x453)
-        #(#x404 #x454) #(#x405 #x455) #(#x406 #x456) #(#x407 #x457)
-        #(#x408 #x458) #(#x409 #x459) #(#x40a #x45a) #(#x40b #x45b)
-        #(#x40c #x45c) #(#x40d #x45d) #(#x40e #x45e) #(#x40f #x45f)
-        #(#x410 #x430) #(#x411 #x431) #(#x412 #x432) #(#x413 #x433)
-        #(#x414 #x434) #(#x415 #x435) #(#x416 #x436) #(#x417 #x437)
-        #(#x418 #x438) #(#x419 #x439) #(#x41a #x43a) #(#x41b #x43b)
-        #(#x41c #x43c) #(#x41d #x43d) #(#x41e #x43e) #(#x41f #x43f)
-        #(#x420 #x440) #(#x421 #x441) #(#x422 #x442) #(#x423 #x443)
-        #(#x424 #x444) #(#x425 #x445) #(#x426 #x446) #(#x427 #x447)
-        #(#x428 #x448) #(#x429 #x449) #(#x42a #x44a) #(#x42b #x44b)
-        #(#x42c #x44c) #(#x42d #x44d) #(#x42e #x44e) #(#x42f #x44f)
-        #(#x460 #x461) #(#x462 #x463) #(#x464 #x465) #(#x466 #x467)
-        #(#x468 #x469) #(#x46a #x46b) #(#x46c #x46d) #(#x46e #x46f)
-        #(#x470 #x471) #(#x472 #x473) #(#x474 #x475) #(#x476 #x477)
-        #(#x478 #x479) #(#x47a #x47b) #(#x47c #x47d) #(#x47e #x47f)
-        #(#x480 #x481) #(#x48a #x48b) #(#x48c #x48d) #(#x48e #x48f)
-        #(#x490 #x491) #(#x492 #x493) #(#x494 #x495) #(#x496 #x497)
-        #(#x498 #x499) #(#x49a #x49b) #(#x49c #x49d) #(#x49e #x49f)
-        #(#x4a0 #x4a1) #(#x4a2 #x4a3) #(#x4a4 #x4a5) #(#x4a6 #x4a7)
-        #(#x4a8 #x4a9) #(#x4aa #x4ab) #(#x4ac #x4ad) #(#x4ae #x4af)
-        #(#x4b0 #x4b1) #(#x4b2 #x4b3) #(#x4b4 #x4b5) #(#x4b6 #x4b7)
-        #(#x4b8 #x4b9) #(#x4ba #x4bb) #(#x4bc #x4bd) #(#x4be #x4bf)
-        #(#x4c0 #x4cf) #(#x4c1 #x4c2) #(#x4c3 #x4c4) #(#x4c5 #x4c6)
-        #(#x4c7 #x4c8) #(#x4c9 #x4ca) #(#x4cb #x4cc) #(#x4cd #x4ce)
-        #(#x4d0 #x4d1) #(#x4d2 #x4d3) #(#x4d4 #x4d5) #(#x4d6 #x4d7)
-        #(#x4d8 #x4d9) #(#x4da #x4db) #(#x4dc #x4dd) #(#x4de #x4df)
-        #(#x4e0 #x4e1) #(#x4e2 #x4e3) #(#x4e4 #x4e5) #(#x4e6 #x4e7)
-        #(#x4e8 #x4e9) #(#x4ea #x4eb) #(#x4ec #x4ed) #(#x4ee #x4ef)
-        #(#x4f0 #x4f1) #(#x4f2 #x4f3) #(#x4f4 #x4f5) #(#x4f6 #x4f7)
-        #(#x4f8 #x4f9) #(#x4fa #x4fb) #(#x4fc #x4fd) #(#x4fe #x4ff)
-        #(#x500 #x501) #(#x502 #x503) #(#x504 #x505) #(#x506 #x507)
-        #(#x508 #x509) #(#x50a #x50b) #(#x50c #x50d) #(#x50e #x50f)
-        #(#x510 #x511) #(#x512 #x513) #(#x514 #x515) #(#x516 #x517)
-        #(#x518 #x519) #(#x51a #x51b) #(#x51c #x51d) #(#x51e #x51f)
-        #(#x520 #x521) #(#x522 #x523) #(#x524 #x525) #(#x526 #x527)
-        #(#x528 #x529) #(#x52a #x52b) #(#x52c #x52d) #(#x52e #x52f)
-        #(#x531 #x561) #(#x532 #x562) #(#x533 #x563) #(#x534 #x564)
-        #(#x535 #x565) #(#x536 #x566) #(#x537 #x567) #(#x538 #x568)
-        #(#x539 #x569) #(#x53a #x56a) #(#x53b #x56b) #(#x53c #x56c)
-        #(#x53d #x56d) #(#x53e #x56e) #(#x53f #x56f) #(#x540 #x570)
-        #(#x541 #x571) #(#x542 #x572) #(#x543 #x573) #(#x544 #x574)
-        #(#x545 #x575) #(#x546 #x576) #(#x547 #x577) #(#x548 #x578)
-        #(#x549 #x579) #(#x54a #x57a) #(#x54b #x57b) #(#x54c #x57c)
-        #(#x54d #x57d) #(#x54e #x57e) #(#x54f #x57f) #(#x550 #x580)
-        #(#x551 #x581) #(#x552 #x582) #(#x553 #x583) #(#x554 #x584)
-        #(#x555 #x585) #(#x556 #x586) #(#x587 #x565 #x582) #(#x10a0 #x2d00)
-        #(#x10a1 #x2d01) #(#x10a2 #x2d02) #(#x10a3 #x2d03) #(#x10a4 #x2d04)
-        #(#x10a5 #x2d05) #(#x10a6 #x2d06) #(#x10a7 #x2d07) #(#x10a8 #x2d08)
-        #(#x10a9 #x2d09) #(#x10aa #x2d0a) #(#x10ab #x2d0b) #(#x10ac #x2d0c)
-        #(#x10ad #x2d0d) #(#x10ae #x2d0e) #(#x10af #x2d0f) #(#x10b0 #x2d10)
-        #(#x10b1 #x2d11) #(#x10b2 #x2d12) #(#x10b3 #x2d13) #(#x10b4 #x2d14)
-        #(#x10b5 #x2d15) #(#x10b6 #x2d16) #(#x10b7 #x2d17) #(#x10b8 #x2d18)
-        #(#x10b9 #x2d19) #(#x10ba #x2d1a) #(#x10bb #x2d1b) #(#x10bc #x2d1c)
-        #(#x10bd #x2d1d) #(#x10be #x2d1e) #(#x10bf #x2d1f) #(#x10c0 #x2d20)
-        #(#x10c1 #x2d21) #(#x10c2 #x2d22) #(#x10c3 #x2d23) #(#x10c4 #x2d24)
-        #(#x10c5 #x2d25) #(#x10c7 #x2d27) #(#x10cd #x2d2d) #(#x13f8 #x13f0)
-        #(#x13f9 #x13f1) #(#x13fa #x13f2) #(#x13fb #x13f3) #(#x13fc #x13f4)
-        #(#x13fd #x13f5) #(#x1c80 #x432) #(#x1c81 #x434) #(#x1c82 #x43e)
-        #(#x1c83 #x441) #(#x1c84 #x442) #(#x1c85 #x442) #(#x1c86 #x44a)
-        #(#x1c87 #x463) #(#x1c88 #xa64b) #(#x1c89 #x1c8a) #(#x1c90 #x10d0)
-        #(#x1c91 #x10d1) #(#x1c92 #x10d2) #(#x1c93 #x10d3) #(#x1c94 #x10d4)
-        #(#x1c95 #x10d5) #(#x1c96 #x10d6) #(#x1c97 #x10d7) #(#x1c98 #x10d8)
-        #(#x1c99 #x10d9) #(#x1c9a #x10da) #(#x1c9b #x10db) #(#x1c9c #x10dc)
-        #(#x1c9d #x10dd) #(#x1c9e #x10de) #(#x1c9f #x10df) #(#x1ca0 #x10e0)
-        #(#x1ca1 #x10e1) #(#x1ca2 #x10e2) #(#x1ca3 #x10e3) #(#x1ca4 #x10e4)
-        #(#x1ca5 #x10e5) #(#x1ca6 #x10e6) #(#x1ca7 #x10e7) #(#x1ca8 #x10e8)
-        #(#x1ca9 #x10e9) #(#x1caa #x10ea) #(#x1cab #x10eb) #(#x1cac #x10ec)
-        #(#x1cad #x10ed) #(#x1cae #x10ee) #(#x1caf #x10ef) #(#x1cb0 #x10f0)
-        #(#x1cb1 #x10f1) #(#x1cb2 #x10f2) #(#x1cb3 #x10f3) #(#x1cb4 #x10f4)
-        #(#x1cb5 #x10f5) #(#x1cb6 #x10f6) #(#x1cb7 #x10f7) #(#x1cb8 #x10f8)
-        #(#x1cb9 #x10f9) #(#x1cba #x10fa) #(#x1cbd #x10fd) #(#x1cbe #x10fe)
-        #(#x1cbf #x10ff) #(#x1e00 #x1e01) #(#x1e02 #x1e03) #(#x1e04 #x1e05)
-        #(#x1e06 #x1e07) #(#x1e08 #x1e09) #(#x1e0a #x1e0b) #(#x1e0c #x1e0d)
-        #(#x1e0e #x1e0f) #(#x1e10 #x1e11) #(#x1e12 #x1e13) #(#x1e14 #x1e15)
-        #(#x1e16 #x1e17) #(#x1e18 #x1e19) #(#x1e1a #x1e1b) #(#x1e1c #x1e1d)
-        #(#x1e1e #x1e1f) #(#x1e20 #x1e21) #(#x1e22 #x1e23) #(#x1e24 #x1e25)
-        #(#x1e26 #x1e27) #(#x1e28 #x1e29) #(#x1e2a #x1e2b) #(#x1e2c #x1e2d)
-        #(#x1e2e #x1e2f) #(#x1e30 #x1e31) #(#x1e32 #x1e33) #(#x1e34 #x1e35)
-        #(#x1e36 #x1e37) #(#x1e38 #x1e39) #(#x1e3a #x1e3b) #(#x1e3c #x1e3d)
-        #(#x1e3e #x1e3f) #(#x1e40 #x1e41) #(#x1e42 #x1e43) #(#x1e44 #x1e45)
-        #(#x1e46 #x1e47) #(#x1e48 #x1e49) #(#x1e4a #x1e4b) #(#x1e4c #x1e4d)
-        #(#x1e4e #x1e4f) #(#x1e50 #x1e51) #(#x1e52 #x1e53) #(#x1e54 #x1e55)
-        #(#x1e56 #x1e57) #(#x1e58 #x1e59) #(#x1e5a #x1e5b) #(#x1e5c #x1e5d)
-        #(#x1e5e #x1e5f) #(#x1e60 #x1e61) #(#x1e62 #x1e63) #(#x1e64 #x1e65)
-        #(#x1e66 #x1e67) #(#x1e68 #x1e69) #(#x1e6a #x1e6b) #(#x1e6c #x1e6d)
-        #(#x1e6e #x1e6f) #(#x1e70 #x1e71) #(#x1e72 #x1e73) #(#x1e74 #x1e75)
-        #(#x1e76 #x1e77) #(#x1e78 #x1e79) #(#x1e7a #x1e7b) #(#x1e7c #x1e7d)
-        #(#x1e7e #x1e7f) #(#x1e80 #x1e81) #(#x1e82 #x1e83) #(#x1e84 #x1e85)
-        #(#x1e86 #x1e87) #(#x1e88 #x1e89) #(#x1e8a #x1e8b) #(#x1e8c #x1e8d)
-        #(#x1e8e #x1e8f) #(#x1e90 #x1e91) #(#x1e92 #x1e93) #(#x1e94 #x1e95)
-        #(#x1e96 #x68 #x331) #(#x1e97 #x74 #x308) #(#x1e98 #x77 #x30a)
-        #(#x1e99 #x79 #x30a) #(#x1e9a #x61 #x2be) #(#x1e9b #x1e61)
-        #(#x1e9e #x73 #x73) #(#x1ea0 #x1ea1) #(#x1ea2 #x1ea3) #(#x1ea4 #x1ea5)
-        #(#x1ea6 #x1ea7) #(#x1ea8 #x1ea9) #(#x1eaa #x1eab) #(#x1eac #x1ead)
-        #(#x1eae #x1eaf) #(#x1eb0 #x1eb1) #(#x1eb2 #x1eb3) #(#x1eb4 #x1eb5)
-        #(#x1eb6 #x1eb7) #(#x1eb8 #x1eb9) #(#x1eba #x1ebb) #(#x1ebc #x1ebd)
-        #(#x1ebe #x1ebf) #(#x1ec0 #x1ec1) #(#x1ec2 #x1ec3) #(#x1ec4 #x1ec5)
-        #(#x1ec6 #x1ec7) #(#x1ec8 #x1ec9) #(#x1eca #x1ecb) #(#x1ecc #x1ecd)
-        #(#x1ece #x1ecf) #(#x1ed0 #x1ed1) #(#x1ed2 #x1ed3) #(#x1ed4 #x1ed5)
-        #(#x1ed6 #x1ed7) #(#x1ed8 #x1ed9) #(#x1eda #x1edb) #(#x1edc #x1edd)
-        #(#x1ede #x1edf) #(#x1ee0 #x1ee1) #(#x1ee2 #x1ee3) #(#x1ee4 #x1ee5)
-        #(#x1ee6 #x1ee7) #(#x1ee8 #x1ee9) #(#x1eea #x1eeb) #(#x1eec #x1eed)
-        #(#x1eee #x1eef) #(#x1ef0 #x1ef1) #(#x1ef2 #x1ef3) #(#x1ef4 #x1ef5)
-        #(#x1ef6 #x1ef7) #(#x1ef8 #x1ef9) #(#x1efa #x1efb) #(#x1efc #x1efd)
-        #(#x1efe #x1eff) #(#x1f08 #x1f00) #(#x1f09 #x1f01) #(#x1f0a #x1f02)
-        #(#x1f0b #x1f03) #(#x1f0c #x1f04) #(#x1f0d #x1f05) #(#x1f0e #x1f06)
-        #(#x1f0f #x1f07) #(#x1f18 #x1f10) #(#x1f19 #x1f11) #(#x1f1a #x1f12)
-        #(#x1f1b #x1f13) #(#x1f1c #x1f14) #(#x1f1d #x1f15) #(#x1f28 #x1f20)
-        #(#x1f29 #x1f21) #(#x1f2a #x1f22) #(#x1f2b #x1f23) #(#x1f2c #x1f24)
-        #(#x1f2d #x1f25) #(#x1f2e #x1f26) #(#x1f2f #x1f27) #(#x1f38 #x1f30)
-        #(#x1f39 #x1f31) #(#x1f3a #x1f32) #(#x1f3b #x1f33) #(#x1f3c #x1f34)
-        #(#x1f3d #x1f35) #(#x1f3e #x1f36) #(#x1f3f #x1f37) #(#x1f48 #x1f40)
-        #(#x1f49 #x1f41) #(#x1f4a #x1f42) #(#x1f4b #x1f43) #(#x1f4c #x1f44)
-        #(#x1f4d #x1f45) #(#x1f50 #x3c5 #x313) #(#x1f52 #x3c5 #x313 #x300)
-        #(#x1f54 #x3c5 #x313 #x301) #(#x1f56 #x3c5 #x313 #x342)
-        #(#x1f59 #x1f51) #(#x1f5b #x1f53) #(#x1f5d #x1f55) #(#x1f5f #x1f57)
-        #(#x1f68 #x1f60) #(#x1f69 #x1f61) #(#x1f6a #x1f62) #(#x1f6b #x1f63)
-        #(#x1f6c #x1f64) #(#x1f6d #x1f65) #(#x1f6e #x1f66) #(#x1f6f #x1f67)
-        #(#x1f80 #x1f00 #x3b9) #(#x1f81 #x1f01 #x3b9) #(#x1f82 #x1f02 #x3b9)
-        #(#x1f83 #x1f03 #x3b9) #(#x1f84 #x1f04 #x3b9) #(#x1f85 #x1f05 #x3b9)
-        #(#x1f86 #x1f06 #x3b9) #(#x1f87 #x1f07 #x3b9) #(#x1f88 #x1f00 #x3b9)
-        #(#x1f89 #x1f01 #x3b9) #(#x1f8a #x1f02 #x3b9) #(#x1f8b #x1f03 #x3b9)
-        #(#x1f8c #x1f04 #x3b9) #(#x1f8d #x1f05 #x3b9) #(#x1f8e #x1f06 #x3b9)
-        #(#x1f8f #x1f07 #x3b9) #(#x1f90 #x1f20 #x3b9) #(#x1f91 #x1f21 #x3b9)
-        #(#x1f92 #x1f22 #x3b9) #(#x1f93 #x1f23 #x3b9) #(#x1f94 #x1f24 #x3b9)
-        #(#x1f95 #x1f25 #x3b9) #(#x1f96 #x1f26 #x3b9) #(#x1f97 #x1f27 #x3b9)
-        #(#x1f98 #x1f20 #x3b9) #(#x1f99 #x1f21 #x3b9) #(#x1f9a #x1f22 #x3b9)
-        #(#x1f9b #x1f23 #x3b9) #(#x1f9c #x1f24 #x3b9) #(#x1f9d #x1f25 #x3b9)
-        #(#x1f9e #x1f26 #x3b9) #(#x1f9f #x1f27 #x3b9) #(#x1fa0 #x1f60 #x3b9)
-        #(#x1fa1 #x1f61 #x3b9) #(#x1fa2 #x1f62 #x3b9) #(#x1fa3 #x1f63 #x3b9)
-        #(#x1fa4 #x1f64 #x3b9) #(#x1fa5 #x1f65 #x3b9) #(#x1fa6 #x1f66 #x3b9)
-        #(#x1fa7 #x1f67 #x3b9) #(#x1fa8 #x1f60 #x3b9) #(#x1fa9 #x1f61 #x3b9)
-        #(#x1faa #x1f62 #x3b9) #(#x1fab #x1f63 #x3b9) #(#x1fac #x1f64 #x3b9)
-        #(#x1fad #x1f65 #x3b9) #(#x1fae #x1f66 #x3b9) #(#x1faf #x1f67 #x3b9)
-        #(#x1fb2 #x1f70 #x3b9) #(#x1fb3 #x3b1 #x3b9) #(#x1fb4 #x3ac #x3b9)
-        #(#x1fb6 #x3b1 #x342) #(#x1fb7 #x3b1 #x342 #x3b9) #(#x1fb8 #x1fb0)
-        #(#x1fb9 #x1fb1) #(#x1fba #x1f70) #(#x1fbb #x1f71)
-        #(#x1fbc #x3b1 #x3b9) #(#x1fbe #x3b9) #(#x1fc2 #x1f74 #x3b9)
-        #(#x1fc3 #x3b7 #x3b9) #(#x1fc4 #x3ae #x3b9) #(#x1fc6 #x3b7 #x342)
-        #(#x1fc7 #x3b7 #x342 #x3b9) #(#x1fc8 #x1f72) #(#x1fc9 #x1f73)
-        #(#x1fca #x1f74) #(#x1fcb #x1f75) #(#x1fcc #x3b7 #x3b9)
+        #(#xdf #x73 #x73) #(#x130 #x69 #x307) #(#x149 #x2bc #x6e)
+        #(#x1f0 #x6a #x30c) #(#x390 #x3b9 #x308 #x301)
+        #(#x3b0 #x3c5 #x308 #x301) #(#x587 #x565 #x582) #(#x1e96 #x68 #x331)
+        #(#x1e97 #x74 #x308) #(#x1e98 #x77 #x30a) #(#x1e99 #x79 #x30a)
+        #(#x1e9a #x61 #x2be) #(#x1e9e #x73 #x73) #(#x1f50 #x3c5 #x313)
+        #(#x1f52 #x3c5 #x313 #x300) #(#x1f54 #x3c5 #x313 #x301)
+        #(#x1f56 #x3c5 #x313 #x342) #(#x1f80 #x1f00 #x3b9)
+        #(#x1f81 #x1f01 #x3b9) #(#x1f82 #x1f02 #x3b9) #(#x1f83 #x1f03 #x3b9)
+        #(#x1f84 #x1f04 #x3b9) #(#x1f85 #x1f05 #x3b9) #(#x1f86 #x1f06 #x3b9)
+        #(#x1f87 #x1f07 #x3b9) #(#x1f88 #x1f00 #x3b9) #(#x1f89 #x1f01 #x3b9)
+        #(#x1f8a #x1f02 #x3b9) #(#x1f8b #x1f03 #x3b9) #(#x1f8c #x1f04 #x3b9)
+        #(#x1f8d #x1f05 #x3b9) #(#x1f8e #x1f06 #x3b9) #(#x1f8f #x1f07 #x3b9)
+        #(#x1f90 #x1f20 #x3b9) #(#x1f91 #x1f21 #x3b9) #(#x1f92 #x1f22 #x3b9)
+        #(#x1f93 #x1f23 #x3b9) #(#x1f94 #x1f24 #x3b9) #(#x1f95 #x1f25 #x3b9)
+        #(#x1f96 #x1f26 #x3b9) #(#x1f97 #x1f27 #x3b9) #(#x1f98 #x1f20 #x3b9)
+        #(#x1f99 #x1f21 #x3b9) #(#x1f9a #x1f22 #x3b9) #(#x1f9b #x1f23 #x3b9)
+        #(#x1f9c #x1f24 #x3b9) #(#x1f9d #x1f25 #x3b9) #(#x1f9e #x1f26 #x3b9)
+        #(#x1f9f #x1f27 #x3b9) #(#x1fa0 #x1f60 #x3b9) #(#x1fa1 #x1f61 #x3b9)
+        #(#x1fa2 #x1f62 #x3b9) #(#x1fa3 #x1f63 #x3b9) #(#x1fa4 #x1f64 #x3b9)
+        #(#x1fa5 #x1f65 #x3b9) #(#x1fa6 #x1f66 #x3b9) #(#x1fa7 #x1f67 #x3b9)
+        #(#x1fa8 #x1f60 #x3b9) #(#x1fa9 #x1f61 #x3b9) #(#x1faa #x1f62 #x3b9)
+        #(#x1fab #x1f63 #x3b9) #(#x1fac #x1f64 #x3b9) #(#x1fad #x1f65 #x3b9)
+        #(#x1fae #x1f66 #x3b9) #(#x1faf #x1f67 #x3b9) #(#x1fb2 #x1f70 #x3b9)
+        #(#x1fb3 #x3b1 #x3b9) #(#x1fb4 #x3ac #x3b9) #(#x1fb6 #x3b1 #x342)
+        #(#x1fb7 #x3b1 #x342 #x3b9) #(#x1fbc #x3b1 #x3b9)
+        #(#x1fc2 #x1f74 #x3b9) #(#x1fc3 #x3b7 #x3b9) #(#x1fc4 #x3ae #x3b9)
+        #(#x1fc6 #x3b7 #x342) #(#x1fc7 #x3b7 #x342 #x3b9) #(#x1fcc #x3b7 #x3b9)
         #(#x1fd2 #x3b9 #x308 #x300) #(#x1fd3 #x3b9 #x308 #x301)
-        #(#x1fd6 #x3b9 #x342) #(#x1fd7 #x3b9 #x308 #x342) #(#x1fd8 #x1fd0)
-        #(#x1fd9 #x1fd1) #(#x1fda #x1f76) #(#x1fdb #x1f77)
+        #(#x1fd6 #x3b9 #x342) #(#x1fd7 #x3b9 #x308 #x342)
         #(#x1fe2 #x3c5 #x308 #x300) #(#x1fe3 #x3c5 #x308 #x301)
         #(#x1fe4 #x3c1 #x313) #(#x1fe6 #x3c5 #x342) #(#x1fe7 #x3c5 #x308 #x342)
-        #(#x1fe8 #x1fe0) #(#x1fe9 #x1fe1) #(#x1fea #x1f7a) #(#x1feb #x1f7b)
-        #(#x1fec #x1fe5) #(#x1ff2 #x1f7c #x3b9) #(#x1ff3 #x3c9 #x3b9)
-        #(#x1ff4 #x3ce #x3b9) #(#x1ff6 #x3c9 #x342) #(#x1ff7 #x3c9 #x342 #x3b9)
-        #(#x1ff8 #x1f78) #(#x1ff9 #x1f79) #(#x1ffa #x1f7c) #(#x1ffb #x1f7d)
-        #(#x1ffc #x3c9 #x3b9) #(#x2126 #x3c9) #(#x212a #x6b) #(#x212b #xe5)
-        #(#x2132 #x214e) #(#x2160 #x2170) #(#x2161 #x2171) #(#x2162 #x2172)
-        #(#x2163 #x2173) #(#x2164 #x2174) #(#x2165 #x2175) #(#x2166 #x2176)
-        #(#x2167 #x2177) #(#x2168 #x2178) #(#x2169 #x2179) #(#x216a #x217a)
-        #(#x216b #x217b) #(#x216c #x217c) #(#x216d #x217d) #(#x216e #x217e)
-        #(#x216f #x217f) #(#x2183 #x2184) #(#x24b6 #x24d0) #(#x24b7 #x24d1)
-        #(#x24b8 #x24d2) #(#x24b9 #x24d3) #(#x24ba #x24d4) #(#x24bb #x24d5)
-        #(#x24bc #x24d6) #(#x24bd #x24d7) #(#x24be #x24d8) #(#x24bf #x24d9)
-        #(#x24c0 #x24da) #(#x24c1 #x24db) #(#x24c2 #x24dc) #(#x24c3 #x24dd)
-        #(#x24c4 #x24de) #(#x24c5 #x24df) #(#x24c6 #x24e0) #(#x24c7 #x24e1)
-        #(#x24c8 #x24e2) #(#x24c9 #x24e3) #(#x24ca #x24e4) #(#x24cb #x24e5)
-        #(#x24cc #x24e6) #(#x24cd #x24e7) #(#x24ce #x24e8) #(#x24cf #x24e9)
-        #(#x2c00 #x2c30) #(#x2c01 #x2c31) #(#x2c02 #x2c32) #(#x2c03 #x2c33)
-        #(#x2c04 #x2c34) #(#x2c05 #x2c35) #(#x2c06 #x2c36) #(#x2c07 #x2c37)
-        #(#x2c08 #x2c38) #(#x2c09 #x2c39) #(#x2c0a #x2c3a) #(#x2c0b #x2c3b)
-        #(#x2c0c #x2c3c) #(#x2c0d #x2c3d) #(#x2c0e #x2c3e) #(#x2c0f #x2c3f)
-        #(#x2c10 #x2c40) #(#x2c11 #x2c41) #(#x2c12 #x2c42) #(#x2c13 #x2c43)
-        #(#x2c14 #x2c44) #(#x2c15 #x2c45) #(#x2c16 #x2c46) #(#x2c17 #x2c47)
-        #(#x2c18 #x2c48) #(#x2c19 #x2c49) #(#x2c1a #x2c4a) #(#x2c1b #x2c4b)
-        #(#x2c1c #x2c4c) #(#x2c1d #x2c4d) #(#x2c1e #x2c4e) #(#x2c1f #x2c4f)
-        #(#x2c20 #x2c50) #(#x2c21 #x2c51) #(#x2c22 #x2c52) #(#x2c23 #x2c53)
-        #(#x2c24 #x2c54) #(#x2c25 #x2c55) #(#x2c26 #x2c56) #(#x2c27 #x2c57)
-        #(#x2c28 #x2c58) #(#x2c29 #x2c59) #(#x2c2a #x2c5a) #(#x2c2b #x2c5b)
-        #(#x2c2c #x2c5c) #(#x2c2d #x2c5d) #(#x2c2e #x2c5e) #(#x2c2f #x2c5f)
-        #(#x2c60 #x2c61) #(#x2c62 #x26b) #(#x2c63 #x1d7d) #(#x2c64 #x27d)
-        #(#x2c67 #x2c68) #(#x2c69 #x2c6a) #(#x2c6b #x2c6c) #(#x2c6d #x251)
-        #(#x2c6e #x271) #(#x2c6f #x250) #(#x2c70 #x252) #(#x2c72 #x2c73)
-        #(#x2c75 #x2c76) #(#x2c7e #x23f) #(#x2c7f #x240) #(#x2c80 #x2c81)
-        #(#x2c82 #x2c83) #(#x2c84 #x2c85) #(#x2c86 #x2c87) #(#x2c88 #x2c89)
-        #(#x2c8a #x2c8b) #(#x2c8c #x2c8d) #(#x2c8e #x2c8f) #(#x2c90 #x2c91)
-        #(#x2c92 #x2c93) #(#x2c94 #x2c95) #(#x2c96 #x2c97) #(#x2c98 #x2c99)
-        #(#x2c9a #x2c9b) #(#x2c9c #x2c9d) #(#x2c9e #x2c9f) #(#x2ca0 #x2ca1)
-        #(#x2ca2 #x2ca3) #(#x2ca4 #x2ca5) #(#x2ca6 #x2ca7) #(#x2ca8 #x2ca9)
-        #(#x2caa #x2cab) #(#x2cac #x2cad) #(#x2cae #x2caf) #(#x2cb0 #x2cb1)
-        #(#x2cb2 #x2cb3) #(#x2cb4 #x2cb5) #(#x2cb6 #x2cb7) #(#x2cb8 #x2cb9)
-        #(#x2cba #x2cbb) #(#x2cbc #x2cbd) #(#x2cbe #x2cbf) #(#x2cc0 #x2cc1)
-        #(#x2cc2 #x2cc3) #(#x2cc4 #x2cc5) #(#x2cc6 #x2cc7) #(#x2cc8 #x2cc9)
-        #(#x2cca #x2ccb) #(#x2ccc #x2ccd) #(#x2cce #x2ccf) #(#x2cd0 #x2cd1)
-        #(#x2cd2 #x2cd3) #(#x2cd4 #x2cd5) #(#x2cd6 #x2cd7) #(#x2cd8 #x2cd9)
-        #(#x2cda #x2cdb) #(#x2cdc #x2cdd) #(#x2cde #x2cdf) #(#x2ce0 #x2ce1)
-        #(#x2ce2 #x2ce3) #(#x2ceb #x2cec) #(#x2ced #x2cee) #(#x2cf2 #x2cf3)
-        #(#xa640 #xa641) #(#xa642 #xa643) #(#xa644 #xa645) #(#xa646 #xa647)
-        #(#xa648 #xa649) #(#xa64a #xa64b) #(#xa64c #xa64d) #(#xa64e #xa64f)
-        #(#xa650 #xa651) #(#xa652 #xa653) #(#xa654 #xa655) #(#xa656 #xa657)
-        #(#xa658 #xa659) #(#xa65a #xa65b) #(#xa65c #xa65d) #(#xa65e #xa65f)
-        #(#xa660 #xa661) #(#xa662 #xa663) #(#xa664 #xa665) #(#xa666 #xa667)
-        #(#xa668 #xa669) #(#xa66a #xa66b) #(#xa66c #xa66d) #(#xa680 #xa681)
-        #(#xa682 #xa683) #(#xa684 #xa685) #(#xa686 #xa687) #(#xa688 #xa689)
-        #(#xa68a #xa68b) #(#xa68c #xa68d) #(#xa68e #xa68f) #(#xa690 #xa691)
-        #(#xa692 #xa693) #(#xa694 #xa695) #(#xa696 #xa697) #(#xa698 #xa699)
-        #(#xa69a #xa69b) #(#xa722 #xa723) #(#xa724 #xa725) #(#xa726 #xa727)
-        #(#xa728 #xa729) #(#xa72a #xa72b) #(#xa72c #xa72d) #(#xa72e #xa72f)
-        #(#xa732 #xa733) #(#xa734 #xa735) #(#xa736 #xa737) #(#xa738 #xa739)
-        #(#xa73a #xa73b) #(#xa73c #xa73d) #(#xa73e #xa73f) #(#xa740 #xa741)
-        #(#xa742 #xa743) #(#xa744 #xa745) #(#xa746 #xa747) #(#xa748 #xa749)
-        #(#xa74a #xa74b) #(#xa74c #xa74d) #(#xa74e #xa74f) #(#xa750 #xa751)
-        #(#xa752 #xa753) #(#xa754 #xa755) #(#xa756 #xa757) #(#xa758 #xa759)
-        #(#xa75a #xa75b) #(#xa75c #xa75d) #(#xa75e #xa75f) #(#xa760 #xa761)
-        #(#xa762 #xa763) #(#xa764 #xa765) #(#xa766 #xa767) #(#xa768 #xa769)
-        #(#xa76a #xa76b) #(#xa76c #xa76d) #(#xa76e #xa76f) #(#xa779 #xa77a)
-        #(#xa77b #xa77c) #(#xa77d #x1d79) #(#xa77e #xa77f) #(#xa780 #xa781)
-        #(#xa782 #xa783) #(#xa784 #xa785) #(#xa786 #xa787) #(#xa78b #xa78c)
-        #(#xa78d #x265) #(#xa790 #xa791) #(#xa792 #xa793) #(#xa796 #xa797)
-        #(#xa798 #xa799) #(#xa79a #xa79b) #(#xa79c #xa79d) #(#xa79e #xa79f)
-        #(#xa7a0 #xa7a1) #(#xa7a2 #xa7a3) #(#xa7a4 #xa7a5) #(#xa7a6 #xa7a7)
-        #(#xa7a8 #xa7a9) #(#xa7aa #x266) #(#xa7ab #x25c) #(#xa7ac #x261)
-        #(#xa7ad #x26c) #(#xa7ae #x26a) #(#xa7b0 #x29e) #(#xa7b1 #x287)
-        #(#xa7b2 #x29d) #(#xa7b3 #xab53) #(#xa7b4 #xa7b5) #(#xa7b6 #xa7b7)
-        #(#xa7b8 #xa7b9) #(#xa7ba #xa7bb) #(#xa7bc #xa7bd) #(#xa7be #xa7bf)
-        #(#xa7c0 #xa7c1) #(#xa7c2 #xa7c3) #(#xa7c4 #xa794) #(#xa7c5 #x282)
-        #(#xa7c6 #x1d8e) #(#xa7c7 #xa7c8) #(#xa7c9 #xa7ca) #(#xa7cb #x264)
-        #(#xa7cc #xa7cd) #(#xa7ce #xa7cf) #(#xa7d0 #xa7d1) #(#xa7d2 #xa7d3)
-        #(#xa7d4 #xa7d5) #(#xa7d6 #xa7d7) #(#xa7d8 #xa7d9) #(#xa7da #xa7db)
-        #(#xa7dc #x19b) #(#xa7f5 #xa7f6) #(#xab70 #x13a0) #(#xab71 #x13a1)
-        #(#xab72 #x13a2) #(#xab73 #x13a3) #(#xab74 #x13a4) #(#xab75 #x13a5)
-        #(#xab76 #x13a6) #(#xab77 #x13a7) #(#xab78 #x13a8) #(#xab79 #x13a9)
-        #(#xab7a #x13aa) #(#xab7b #x13ab) #(#xab7c #x13ac) #(#xab7d #x13ad)
-        #(#xab7e #x13ae) #(#xab7f #x13af) #(#xab80 #x13b0) #(#xab81 #x13b1)
-        #(#xab82 #x13b2) #(#xab83 #x13b3) #(#xab84 #x13b4) #(#xab85 #x13b5)
-        #(#xab86 #x13b6) #(#xab87 #x13b7) #(#xab88 #x13b8) #(#xab89 #x13b9)
-        #(#xab8a #x13ba) #(#xab8b #x13bb) #(#xab8c #x13bc) #(#xab8d #x13bd)
-        #(#xab8e #x13be) #(#xab8f #x13bf) #(#xab90 #x13c0) #(#xab91 #x13c1)
-        #(#xab92 #x13c2) #(#xab93 #x13c3) #(#xab94 #x13c4) #(#xab95 #x13c5)
-        #(#xab96 #x13c6) #(#xab97 #x13c7) #(#xab98 #x13c8) #(#xab99 #x13c9)
-        #(#xab9a #x13ca) #(#xab9b #x13cb) #(#xab9c #x13cc) #(#xab9d #x13cd)
-        #(#xab9e #x13ce) #(#xab9f #x13cf) #(#xaba0 #x13d0) #(#xaba1 #x13d1)
-        #(#xaba2 #x13d2) #(#xaba3 #x13d3) #(#xaba4 #x13d4) #(#xaba5 #x13d5)
-        #(#xaba6 #x13d6) #(#xaba7 #x13d7) #(#xaba8 #x13d8) #(#xaba9 #x13d9)
-        #(#xabaa #x13da) #(#xabab #x13db) #(#xabac #x13dc) #(#xabad #x13dd)
-        #(#xabae #x13de) #(#xabaf #x13df) #(#xabb0 #x13e0) #(#xabb1 #x13e1)
-        #(#xabb2 #x13e2) #(#xabb3 #x13e3) #(#xabb4 #x13e4) #(#xabb5 #x13e5)
-        #(#xabb6 #x13e6) #(#xabb7 #x13e7) #(#xabb8 #x13e8) #(#xabb9 #x13e9)
-        #(#xabba #x13ea) #(#xabbb #x13eb) #(#xabbc #x13ec) #(#xabbd #x13ed)
-        #(#xabbe #x13ee) #(#xabbf #x13ef) #(#xfb00 #x66 #x66)
-        #(#xfb01 #x66 #x69) #(#xfb02 #x66 #x6c) #(#xfb03 #x66 #x66 #x69)
-        #(#xfb04 #x66 #x66 #x6c) #(#xfb05 #x73 #x74) #(#xfb06 #x73 #x74)
-        #(#xfb13 #x574 #x576) #(#xfb14 #x574 #x565) #(#xfb15 #x574 #x56b)
-        #(#xfb16 #x57e #x576) #(#xfb17 #x574 #x56d) #(#xff21 #xff41)
-        #(#xff22 #xff42) #(#xff23 #xff43) #(#xff24 #xff44) #(#xff25 #xff45)
-        #(#xff26 #xff46) #(#xff27 #xff47) #(#xff28 #xff48) #(#xff29 #xff49)
-        #(#xff2a #xff4a) #(#xff2b #xff4b) #(#xff2c #xff4c) #(#xff2d #xff4d)
-        #(#xff2e #xff4e) #(#xff2f #xff4f) #(#xff30 #xff50) #(#xff31 #xff51)
-        #(#xff32 #xff52) #(#xff33 #xff53) #(#xff34 #xff54) #(#xff35 #xff55)
-        #(#xff36 #xff56) #(#xff37 #xff57) #(#xff38 #xff58) #(#xff39 #xff59)
-        #(#xff3a #xff5a) #(#x10400 #x10428) #(#x10401 #x10429)
-        #(#x10402 #x1042a) #(#x10403 #x1042b) #(#x10404 #x1042c)
-        #(#x10405 #x1042d) #(#x10406 #x1042e) #(#x10407 #x1042f)
-        #(#x10408 #x10430) #(#x10409 #x10431) #(#x1040a #x10432)
-        #(#x1040b #x10433) #(#x1040c #x10434) #(#x1040d #x10435)
-        #(#x1040e #x10436) #(#x1040f #x10437) #(#x10410 #x10438)
-        #(#x10411 #x10439) #(#x10412 #x1043a) #(#x10413 #x1043b)
-        #(#x10414 #x1043c) #(#x10415 #x1043d) #(#x10416 #x1043e)
-        #(#x10417 #x1043f) #(#x10418 #x10440) #(#x10419 #x10441)
-        #(#x1041a #x10442) #(#x1041b #x10443) #(#x1041c #x10444)
-        #(#x1041d #x10445) #(#x1041e #x10446) #(#x1041f #x10447)
-        #(#x10420 #x10448) #(#x10421 #x10449) #(#x10422 #x1044a)
-        #(#x10423 #x1044b) #(#x10424 #x1044c) #(#x10425 #x1044d)
-        #(#x10426 #x1044e) #(#x10427 #x1044f) #(#x104b0 #x104d8)
-        #(#x104b1 #x104d9) #(#x104b2 #x104da) #(#x104b3 #x104db)
-        #(#x104b4 #x104dc) #(#x104b5 #x104dd) #(#x104b6 #x104de)
-        #(#x104b7 #x104df) #(#x104b8 #x104e0) #(#x104b9 #x104e1)
-        #(#x104ba #x104e2) #(#x104bb #x104e3) #(#x104bc #x104e4)
-        #(#x104bd #x104e5) #(#x104be #x104e6) #(#x104bf #x104e7)
-        #(#x104c0 #x104e8) #(#x104c1 #x104e9) #(#x104c2 #x104ea)
-        #(#x104c3 #x104eb) #(#x104c4 #x104ec) #(#x104c5 #x104ed)
-        #(#x104c6 #x104ee) #(#x104c7 #x104ef) #(#x104c8 #x104f0)
-        #(#x104c9 #x104f1) #(#x104ca #x104f2) #(#x104cb #x104f3)
-        #(#x104cc #x104f4) #(#x104cd #x104f5) #(#x104ce #x104f6)
-        #(#x104cf #x104f7) #(#x104d0 #x104f8) #(#x104d1 #x104f9)
-        #(#x104d2 #x104fa) #(#x104d3 #x104fb) #(#x10570 #x10597)
-        #(#x10571 #x10598) #(#x10572 #x10599) #(#x10573 #x1059a)
-        #(#x10574 #x1059b) #(#x10575 #x1059c) #(#x10576 #x1059d)
-        #(#x10577 #x1059e) #(#x10578 #x1059f) #(#x10579 #x105a0)
-        #(#x1057a #x105a1) #(#x1057c #x105a3) #(#x1057d #x105a4)
-        #(#x1057e #x105a5) #(#x1057f #x105a6) #(#x10580 #x105a7)
-        #(#x10581 #x105a8) #(#x10582 #x105a9) #(#x10583 #x105aa)
-        #(#x10584 #x105ab) #(#x10585 #x105ac) #(#x10586 #x105ad)
-        #(#x10587 #x105ae) #(#x10588 #x105af) #(#x10589 #x105b0)
-        #(#x1058a #x105b1) #(#x1058c #x105b3) #(#x1058d #x105b4)
-        #(#x1058e #x105b5) #(#x1058f #x105b6) #(#x10590 #x105b7)
-        #(#x10591 #x105b8) #(#x10592 #x105b9) #(#x10594 #x105bb)
-        #(#x10595 #x105bc) #(#x10c80 #x10cc0) #(#x10c81 #x10cc1)
-        #(#x10c82 #x10cc2) #(#x10c83 #x10cc3) #(#x10c84 #x10cc4)
-        #(#x10c85 #x10cc5) #(#x10c86 #x10cc6) #(#x10c87 #x10cc7)
-        #(#x10c88 #x10cc8) #(#x10c89 #x10cc9) #(#x10c8a #x10cca)
-        #(#x10c8b #x10ccb) #(#x10c8c #x10ccc) #(#x10c8d #x10ccd)
-        #(#x10c8e #x10cce) #(#x10c8f #x10ccf) #(#x10c90 #x10cd0)
-        #(#x10c91 #x10cd1) #(#x10c92 #x10cd2) #(#x10c93 #x10cd3)
-        #(#x10c94 #x10cd4) #(#x10c95 #x10cd5) #(#x10c96 #x10cd6)
-        #(#x10c97 #x10cd7) #(#x10c98 #x10cd8) #(#x10c99 #x10cd9)
-        #(#x10c9a #x10cda) #(#x10c9b #x10cdb) #(#x10c9c #x10cdc)
-        #(#x10c9d #x10cdd) #(#x10c9e #x10cde) #(#x10c9f #x10cdf)
-        #(#x10ca0 #x10ce0) #(#x10ca1 #x10ce1) #(#x10ca2 #x10ce2)
-        #(#x10ca3 #x10ce3) #(#x10ca4 #x10ce4) #(#x10ca5 #x10ce5)
-        #(#x10ca6 #x10ce6) #(#x10ca7 #x10ce7) #(#x10ca8 #x10ce8)
-        #(#x10ca9 #x10ce9) #(#x10caa #x10cea) #(#x10cab #x10ceb)
-        #(#x10cac #x10cec) #(#x10cad #x10ced) #(#x10cae #x10cee)
-        #(#x10caf #x10cef) #(#x10cb0 #x10cf0) #(#x10cb1 #x10cf1)
-        #(#x10cb2 #x10cf2) #(#x10d50 #x10d70) #(#x10d51 #x10d71)
-        #(#x10d52 #x10d72) #(#x10d53 #x10d73) #(#x10d54 #x10d74)
-        #(#x10d55 #x10d75) #(#x10d56 #x10d76) #(#x10d57 #x10d77)
-        #(#x10d58 #x10d78) #(#x10d59 #x10d79) #(#x10d5a #x10d7a)
-        #(#x10d5b #x10d7b) #(#x10d5c #x10d7c) #(#x10d5d #x10d7d)
-        #(#x10d5e #x10d7e) #(#x10d5f #x10d7f) #(#x10d60 #x10d80)
-        #(#x10d61 #x10d81) #(#x10d62 #x10d82) #(#x10d63 #x10d83)
-        #(#x10d64 #x10d84) #(#x10d65 #x10d85) #(#x118a0 #x118c0)
-        #(#x118a1 #x118c1) #(#x118a2 #x118c2) #(#x118a3 #x118c3)
-        #(#x118a4 #x118c4) #(#x118a5 #x118c5) #(#x118a6 #x118c6)
-        #(#x118a7 #x118c7) #(#x118a8 #x118c8) #(#x118a9 #x118c9)
-        #(#x118aa #x118ca) #(#x118ab #x118cb) #(#x118ac #x118cc)
-        #(#x118ad #x118cd) #(#x118ae #x118ce) #(#x118af #x118cf)
-        #(#x118b0 #x118d0) #(#x118b1 #x118d1) #(#x118b2 #x118d2)
-        #(#x118b3 #x118d3) #(#x118b4 #x118d4) #(#x118b5 #x118d5)
-        #(#x118b6 #x118d6) #(#x118b7 #x118d7) #(#x118b8 #x118d8)
-        #(#x118b9 #x118d9) #(#x118ba #x118da) #(#x118bb #x118db)
-        #(#x118bc #x118dc) #(#x118bd #x118dd) #(#x118be #x118de)
-        #(#x118bf #x118df) #(#x16e40 #x16e60) #(#x16e41 #x16e61)
-        #(#x16e42 #x16e62) #(#x16e43 #x16e63) #(#x16e44 #x16e64)
-        #(#x16e45 #x16e65) #(#x16e46 #x16e66) #(#x16e47 #x16e67)
-        #(#x16e48 #x16e68) #(#x16e49 #x16e69) #(#x16e4a #x16e6a)
-        #(#x16e4b #x16e6b) #(#x16e4c #x16e6c) #(#x16e4d #x16e6d)
-        #(#x16e4e #x16e6e) #(#x16e4f #x16e6f) #(#x16e50 #x16e70)
-        #(#x16e51 #x16e71) #(#x16e52 #x16e72) #(#x16e53 #x16e73)
-        #(#x16e54 #x16e74) #(#x16e55 #x16e75) #(#x16e56 #x16e76)
-        #(#x16e57 #x16e77) #(#x16e58 #x16e78) #(#x16e59 #x16e79)
-        #(#x16e5a #x16e7a) #(#x16e5b #x16e7b) #(#x16e5c #x16e7c)
-        #(#x16e5d #x16e7d) #(#x16e5e #x16e7e) #(#x16e5f #x16e7f)
-        #(#x16ea0 #x16ebb) #(#x16ea1 #x16ebc) #(#x16ea2 #x16ebd)
-        #(#x16ea3 #x16ebe) #(#x16ea4 #x16ebf) #(#x16ea5 #x16ec0)
-        #(#x16ea6 #x16ec1) #(#x16ea7 #x16ec2) #(#x16ea8 #x16ec3)
-        #(#x16ea9 #x16ec4) #(#x16eaa #x16ec5) #(#x16eab #x16ec6)
-        #(#x16eac #x16ec7) #(#x16ead #x16ec8) #(#x16eae #x16ec9)
-        #(#x16eaf #x16eca) #(#x16eb0 #x16ecb) #(#x16eb1 #x16ecc)
-        #(#x16eb2 #x16ecd) #(#x16eb3 #x16ece) #(#x16eb4 #x16ecf)
-        #(#x16eb5 #x16ed0) #(#x16eb6 #x16ed1) #(#x16eb7 #x16ed2)
-        #(#x16eb8 #x16ed3) #(#x1e900 #x1e922) #(#x1e901 #x1e923)
-        #(#x1e902 #x1e924) #(#x1e903 #x1e925) #(#x1e904 #x1e926)
-        #(#x1e905 #x1e927) #(#x1e906 #x1e928) #(#x1e907 #x1e929)
-        #(#x1e908 #x1e92a) #(#x1e909 #x1e92b) #(#x1e90a #x1e92c)
-        #(#x1e90b #x1e92d) #(#x1e90c #x1e92e) #(#x1e90d #x1e92f)
-        #(#x1e90e #x1e930) #(#x1e90f #x1e931) #(#x1e910 #x1e932)
-        #(#x1e911 #x1e933) #(#x1e912 #x1e934) #(#x1e913 #x1e935)
-        #(#x1e914 #x1e936) #(#x1e915 #x1e937) #(#x1e916 #x1e938)
-        #(#x1e917 #x1e939) #(#x1e918 #x1e93a) #(#x1e919 #x1e93b)
-        #(#x1e91a #x1e93c) #(#x1e91b #x1e93d) #(#x1e91c #x1e93e)
-        #(#x1e91d #x1e93f) #(#x1e91e #x1e940) #(#x1e91f #x1e941)
-        #(#x1e920 #x1e942) #(#x1e921 #x1e943)
+        #(#x1ff2 #x1f7c #x3b9) #(#x1ff3 #x3c9 #x3b9) #(#x1ff4 #x3ce #x3b9)
+        #(#x1ff6 #x3c9 #x342) #(#x1ff7 #x3c9 #x342 #x3b9) #(#x1ffc #x3c9 #x3b9)
+        #(#xfb00 #x66 #x66) #(#xfb01 #x66 #x69) #(#xfb02 #x66 #x6c)
+        #(#xfb03 #x66 #x66 #x69) #(#xfb04 #x66 #x66 #x6c) #(#xfb05 #x73 #x74)
+        #(#xfb06 #x73 #x74) #(#xfb13 #x574 #x576) #(#xfb14 #x574 #x565)
+        #(#xfb15 #x574 #x56b) #(#xfb16 #x57e #x576) #(#xfb17 #x574 #x56d)
         ))
+
+    ;; Mutable aggregate data never crosses the library boundary.
+    (define (%copy-public-data value)
+      "Return a fresh copy of mutable aggregate VALUE."
+      (cond
+       ((pair? value)
+        (cons (%copy-public-data (car value))
+              (%copy-public-data (cdr value))))
+       ((string? value) (string-copy value))
+       (else value)))
+
+    (define (consent-unicode-data-version)
+      "Return a fresh list naming the pinned Unicode release."
+      #((parameters)
+        (returns (type list)
+         (description "Three integers naming the Unicode release."))
+        (effects allocation))
+      (%copy-public-data %unicode-data-version))
+
+    (define (consent-unicode-data-metadata)
+      "Return a fresh copy of Unicode data provenance metadata."
+      #((parameters)
+        (returns (type list)
+         (description "Unicode release provenance metadata."))
+        (effects allocation))
+      (%copy-public-data %unicode-data-metadata))
+
+    (define (consent-unicode-data-counts)
+      "Return a fresh copy of generated Unicode table counts."
+      #((parameters)
+        (returns (type list)
+         (description "Names and sizes of generated Unicode tables."))
+        (effects allocation))
+      (%copy-public-data %unicode-data-counts))
+
+    ;; Resolve a BMP page or supplementary plane without host Unicode.
+    (define (%unicode-bucket code)
+      "Return CODE's BMP-page or supplementary-plane bucket."
+      (cond
+       ((or (< code 0) (> code #x10ffff)) #f)
+       ((< code #x10000) (quotient code #x100))
+       (else (+ #xff (quotient code #x10000)))))
+
+    (define (%indexed-range-contains? table index code)
+      "Return #t when CODE occurs in indexed range TABLE."
+      (let ((bucket (%unicode-bucket code)))
+        (and bucket
+             (let loop
+                 ((lower (vector-ref index bucket))
+                  (upper (- (vector-ref index (+ bucket 1)) 1)))
+               (if (> lower upper)
+                   #f
+                   (let* ((middle (quotient (+ lower upper) 2))
+                          (offset (* middle 2))
+                          (range-lower (vector-ref table offset))
+                          (range-upper
+                           (vector-ref table (+ offset 1))))
+                     (cond
+                      ((< code range-lower)
+                       (loop lower (- middle 1)))
+                      ((> code range-upper)
+                       (loop (+ middle 1) upper))
+                      (else #t))))))))
+
+    (define (%indexed-delta-ref table index code)
+      "Return CODE mapped through indexed delta TABLE, or #f."
+      (let ((bucket (%unicode-bucket code)))
+        (and bucket
+             (let loop
+                 ((lower (vector-ref index bucket))
+                  (upper (- (vector-ref index (+ bucket 1)) 1)))
+               (if (> lower upper)
+                   #f
+                   (let* ((middle (quotient (+ lower upper) 2))
+                          (offset (* middle 3))
+                          (range-lower (vector-ref table offset))
+                          (range-upper
+                           (vector-ref table (+ offset 1))))
+                     (cond
+                      ((< code range-lower)
+                       (loop lower (- middle 1)))
+                      ((> code range-upper)
+                       (loop (+ middle 1) upper))
+                      (else
+                       (+ code (vector-ref table (+ offset 2)))))))))))
+
+    (define (%decimal-block-ref table code)
+      "Return CODE's decimal-block value from TABLE, or #f."
+      (let loop ((lower 0) (upper (- (vector-length table) 1)))
+        (if (> lower upper)
+            #f
+            (let* ((middle (quotient (+ lower upper) 2))
+                   (start (vector-ref table middle)))
+              (cond
+               ((< code start) (loop lower (- middle 1)))
+               ((> code (+ start 9)) (loop (+ middle 1) upper))
+               (else (- code start)))))))
+
+    (define (%full-mapping-ref table code)
+      "Return CODE's fresh full mapping from TABLE, or #f."
+      (let loop ((lower 0) (upper (- (vector-length table) 1)))
+        (if (> lower upper)
+            #f
+            (let* ((middle (quotient (+ lower upper) 2))
+                   (entry (vector-ref table middle))
+                   (source (vector-ref entry 0)))
+              (cond
+               ((< code source) (loop lower (- middle 1)))
+               ((> code source) (loop (+ middle 1) upper))
+               (else
+                (let copy ((position 1) (result '()))
+                  (if (= position (vector-length entry))
+                      (reverse result)
+                      (copy
+                       (+ position 1)
+                       (cons (vector-ref entry position)
+                             result))))))))))
+
+    (define (consent-unicode-alphabetic? code)
+      "Return #t when CODE has the Unicode Alphabetic property."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to classify.")))
+        (returns (type boolean)
+         (description "Whether CODE has Unicode Alphabetic."))
+        (effects pure))
+      (%indexed-range-contains?
+       %unicode-alphabetic-ranges %unicode-alphabetic-index code))
+
+    (define (consent-unicode-uppercase? code)
+      "Return #t when CODE has the Unicode Uppercase property."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to classify.")))
+        (returns (type boolean)
+         (description "Whether CODE has Unicode Uppercase."))
+        (effects pure))
+      (%indexed-range-contains?
+       %unicode-uppercase-ranges %unicode-uppercase-index code))
+
+    (define (consent-unicode-lowercase? code)
+      "Return #t when CODE has the Unicode Lowercase property."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to classify.")))
+        (returns (type boolean)
+         (description "Whether CODE has Unicode Lowercase."))
+        (effects pure))
+      (%indexed-range-contains?
+       %unicode-lowercase-ranges %unicode-lowercase-index code))
+
+    (define (consent-unicode-whitespace? code)
+      "Return #t when CODE has the Unicode White_Space property."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to classify.")))
+        (returns (type boolean)
+         (description "Whether CODE has Unicode White_Space."))
+        (effects pure))
+      (%indexed-range-contains?
+       %unicode-whitespace-ranges %unicode-whitespace-index code))
+
+    (define (consent-unicode-decimal-value code)
+      "Return CODE's decimal digit value, or #f."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to inspect.")))
+        (returns (type (or exact-integer boolean))
+         (description "Decimal value from zero through nine, or #f."))
+        (effects pure))
+      (%decimal-block-ref %unicode-decimal-block-starts code))
+
+    (define (consent-unicode-simple-uppercase code)
+      "Return CODE's simple Unicode uppercase mapping."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to map.")))
+        (returns (type exact-integer)
+         (description "Simple uppercase scalar value."))
+        (effects pure))
+      (or (%indexed-delta-ref
+           %unicode-simple-uppercase-segments
+           %unicode-simple-uppercase-index code)
+          code))
+
+    (define (consent-unicode-simple-lowercase code)
+      "Return CODE's simple Unicode lowercase mapping."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to map.")))
+        (returns (type exact-integer)
+         (description "Simple lowercase scalar value."))
+        (effects pure))
+      (or (%indexed-delta-ref
+           %unicode-simple-lowercase-segments
+           %unicode-simple-lowercase-index code)
+          code))
+
+    (define (consent-unicode-simple-foldcase code)
+      "Return CODE's simple Unicode case-folding mapping."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to map.")))
+        (returns (type exact-integer)
+         (description "Simple case-folded scalar value."))
+        (effects pure))
+      (or (%indexed-delta-ref
+           %unicode-simple-foldcase-segments
+           %unicode-simple-foldcase-index code)
+          code))
+
+    (define (consent-unicode-full-uppercase code)
+      "Return CODE's full Unicode uppercase mapping as a fresh list."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to map.")))
+        (returns (type list)
+         (description "Fresh list of full uppercase scalar values."))
+        (effects allocation))
+      (or (%full-mapping-ref %unicode-full-uppercase-overrides code)
+          (list (consent-unicode-simple-uppercase code))))
+
+    (define (consent-unicode-full-lowercase code)
+      "Return CODE's full Unicode lowercase mapping as a fresh list."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to map.")))
+        (returns (type list)
+         (description "Fresh list of full lowercase scalar values."))
+        (effects allocation))
+      (or (%full-mapping-ref %unicode-full-lowercase-overrides code)
+          (list (consent-unicode-simple-lowercase code))))
+
+    (define (consent-unicode-full-foldcase code)
+      "Return CODE's full case-folding mapping as a fresh list."
+      #((parameters
+         (code (type exact-integer)
+          (description "Unicode scalar value to map.")))
+        (returns (type list)
+         (description "Fresh list of full case-folded scalar values."))
+        (effects allocation))
+      (or (%full-mapping-ref %unicode-full-foldcase-overrides code)
+          (list (consent-unicode-simple-foldcase code))))
 
     ))

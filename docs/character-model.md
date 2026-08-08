@@ -79,15 +79,31 @@ do not match the pin. Both the UCD inputs and their derived table artifact are
 redistributed under the Unicode License v3 (`Unicode-3.0`); the license text is
 in `LICENSES/Unicode-3.0.txt` and attribution is recorded in `NOTICE`.
 
-The generated `(consent unicode-data)` library exports only Scheme-readable
-version, provenance, range, and mapping data. `(scheme char)` owns the lookup
-algorithms. Interpreted bootstraps load both files through the ordinary source
-library registry; host-compiled distributions embed and install both through
-the manifest-derived runtime source inventory. A future native compiler can
-link or transform the same generated library without calling a host Unicode
-API. The `(scheme char)` manifest and the generated metadata datum expose the
-supported Unicode version to reflection, and `(features)` includes
-`full-unicode`.
+The generated `(consent unicode-data)` library exports zero-argument procedures
+for Scheme-readable version, provenance, and structural counts plus pure scalar
+query procedures. Its raw vectors and aggregate templates are private, so an
+importing program cannot mutate process-shared Unicode backing data; aggregate
+and full-mapping queries return fresh deep data, including fresh strings.
+`(scheme char)` owns the public character API and its constant-time ASCII
+paths. Interpreted bootstraps cache parsed source forms process-wide. The data
+library's explicit `shared-immutable-data` realization also retains one
+evaluated instance for trusted internal imports in the default symbol domain;
+ordinary libraries still receive fresh mutable source graphs, and isolated
+symbol domains bypass instance sharing. Host-compiled distributions embed and
+install both files through the manifest-derived runtime source inventory. A
+future native compiler can link or transform the same generated library
+without calling a host Unicode API. The `(scheme char)` manifest and the
+generated metadata query expose the supported Unicode version to reflection,
+and `(features)` includes `full-unicode`.
+
+The generator builds lookup indexes rather than rebuilding them at runtime.
+Property and simple-mapping searches are bounded first by a 256-code-point BMP
+page or a supplementary Unicode plane. Decimal values store one start per
+validated ten-character block. Simple case mappings store sorted
+lower/upper/delta segments, with one-code-point segments for sparse exceptions.
+Full string tables store only mappings that differ from the corresponding
+simple mapping; this includes expansions and any identity override required by
+the pinned data.
 
 To adopt a new Unicode version, add a new pinned UCD directory, review the UCD
 format and semantic changes, update the generator version and hashes,
@@ -117,10 +133,11 @@ ASCII, Arabic, Indic, Latin, and Greek bootstrap sample.
 
 `char-upcase` and `char-downcase` use the simple mappings from
 `UnicodeData.txt`; `char-foldcase` uses `C` and `S` entries from
-`CaseFolding.txt`. `string-upcase` and `string-downcase` combine those simple
-mappings with the unconditional full mappings in `SpecialCasing.txt`.
-`string-foldcase` uses the `C` and `F` case-folding entries. The default
-non-Turkic fold is used; locale-sensitive mappings are out of scope.
+`CaseFolding.txt`. `string-upcase` and `string-downcase` use the simple mapping
+as their fallback and apply only differing unconditional full overrides from
+`SpecialCasing.txt`. `string-foldcase` similarly combines the simple `C` and
+`S` mapping with differing `C` and `F` full overrides. The default non-Turkic
+fold is used; locale-sensitive mappings are out of scope.
 
 Full string mappings can change length. For example, `ß` uppercases to `SS`,
 the `ﬃ` ligature uppercases to `FFI`, and both fold to lowercase sequences.
@@ -165,12 +182,13 @@ replace an owned path.
 
 ## Verification contract
 
-The portable character suite verifies the generated version/provenance datum,
-table ordering, representative property and decimal entries across scripts,
-simple versus length-changing full case mappings, supplementary-plane casing,
-and unassigned-scalar fallback. The shared conformance corpus exercises every
-base and case-insensitive character/string comparison in true, false, equality,
-prefix, and variadic forms; the complete scalar validity boundary; BMP,
+The portable character suite verifies the generated version and provenance
+queries, structural counts, representative property and decimal entries across
+scripts, simple versus length-changing full case mappings, supplementary-plane
+casing, and unassigned-scalar fallback. The shared conformance corpus
+exercises every base and case-insensitive character/string comparison in
+true, false, equality, prefix, and variadic forms; the complete scalar validity
+boundary; BMP,
 supplementary, and maximum scalar crossings through strings, vectors, ports,
 and native adapters; and canonical reader/writer external forms.
 

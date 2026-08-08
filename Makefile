@@ -2,6 +2,8 @@ EMACS ?= emacs
 CONSENT_UNICODE_VERSION ?= 17.0.0
 CONSENT_UNICODE_DATA_DIR ?= vendor/unicode/$(CONSENT_UNICODE_VERSION)
 CONSENT_UNICODE_DATA_OUTPUT ?= scheme/consent/unicode-data.sld
+CONSENT_UNICODE_BENCHMARK_ITERATIONS ?= 100
+CONSENT_UNICODE_BENCHMARK_IMPORT_ITERATIONS ?= 3
 # Gambit is the default compile host: `gsc -exe -nopreload' produces a
 # standalone
 # native executable with no runtime dependency, so the default `make compile'
@@ -155,7 +157,8 @@ CONSENT_EMACS_TOOLS_TEST_SELECTOR ?= (and (or "consent-ci.*" \
   "consent-diagnostics.*" "consent-diff.*" "consent-docstring-metadata-doc.*" \
   "consent-feature-reflection-doc.*" "consent-job.*" \
   "consent-repl-agent-quickstart-doc.*" "consent-script.*" "consent-skill.*" \
-  "consent-smoke.*" "consent-scheme-documentation-test-.*" \
+  "consent-smoke.*" "consent-unicode-data-generator.*" \
+  "consent-scheme-documentation-test-.*" \
   "consent-scheme-module-ownership-test-.*" "consent-scheme-numeric-test-.*" \
   "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$$" \
   "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$$") \
@@ -271,7 +274,8 @@ CONSENT_FULL_TEST_JOBS ?= 16
 .DEFAULT_GOAL := help
 
 .PHONY: help print-version clean clean-compile compile install uninstall dist \
-  compile-elisp update-unicode-data check-unicode-data lint-elisp \
+  compile-elisp update-unicode-data check-unicode-data benchmark-unicode \
+  lint-elisp \
   lint-elisp-docstrings lint-portable lint-branding \
   lint-readability lint-line-length repl test test-full test-portable \
   test-portable-shard test-portable-chibi test-portable-gambit \
@@ -324,6 +328,8 @@ help:
 	  'Regenerate the pinned Unicode Scheme data library.'
 	@printf '  %-26s %s\n' 'check-unicode-data' \
 	  'Verify the generated Unicode library is current.'
+	@printf '  %-26s %s\n' 'benchmark-unicode' \
+	  'Measure opt-in Unicode import and operation costs.'
 	@printf '  %-26s %s\n' 'lint-elisp' \
 	  'Byte-compile Elisp sources with warnings-as-errors.'
 	@printf '  %-26s %s\n' 'lint-elisp-docstrings' \
@@ -459,6 +465,11 @@ help:
 	  'Hard width enforced by lint-readability.'
 	@printf '  %-50s %s\n' 'CONSENT_ELISP_DOCSTRING_MAX_COLUMN=80' \
 	  'Column limit enforced by lint-elisp-docstrings.'
+	@printf '  %-50s %s\n' 'CONSENT_UNICODE_BENCHMARK_ITERATIONS=N' \
+	  'Persistent operations per Unicode benchmark metric.'
+	@printf '  %-50s %s\n' \
+	  'CONSENT_UNICODE_BENCHMARK_IMPORT_ITERATIONS=N' \
+	  'Fresh contexts measured by the warm Unicode import metric.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_JOBS=N' \
 	  'Parallel jobs used by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SHARD_TARGETS=a b' \
@@ -698,6 +709,16 @@ check-unicode-data:
 	$(EMACS) -Q --batch --load tools/generate-unicode-data.el -- \
 	  --ucd-dir '$(CONSENT_UNICODE_DATA_DIR)' \
 	  --output '$(CONSENT_UNICODE_DATA_OUTPUT)' --check
+
+benchmark-unicode:
+	@$(EMACS) -Q --batch --eval "(setq load-prefer-newer t)" \
+	  --eval \
+	  "(setenv \"CONSENT_UNICODE_BENCHMARK_ITERATIONS\" \
+	     \"$(CONSENT_UNICODE_BENCHMARK_ITERATIONS)\")" \
+	  --eval \
+	  "(setenv \"CONSENT_UNICODE_BENCHMARK_IMPORT_ITERATIONS\" \
+	     \"$(CONSENT_UNICODE_BENCHMARK_IMPORT_ITERATIONS)\")" \
+	  --load tools/benchmark-unicode.el
 
 lint-elisp-docstrings:
 	CONSENT_ELISP_DOCSTRING_MAX_COLUMN='$(CONSENT_ELISP_DOCSTRING_MAX_COLUMN)' \

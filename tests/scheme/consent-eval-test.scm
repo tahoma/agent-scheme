@@ -43,7 +43,9 @@
         (only (consent version)
               consent-version-datum)
         (only (consent library)
-              consent-runtime-source-files)
+              consent-runtime-source-files
+              eval-import
+              library-registry-ref)
         (only (consent runtime)
               audit-process-capability-result!
               audit-network-capability-result!
@@ -1931,6 +1933,93 @@ ged "
                (- after-second after-first)))))))
 
 (testing-registry-case
+ 'manifest-source-library-literals-are-context-isolated
+ '(portable core security)
+(if compiled-host-run?
+    (check 'compiled-native-library-literal-isolation-not-applicable #t #t)
+    (let ((first
+       (consent-value->external
+        (consent-eval-source
+         "(import (scheme base) (agent redaction))
+          (let ((text (redact \"sk-first\" 'test)))
+            (string-set! text 0 #\\X)
+            text)")))
+      (second
+       (consent-value->external
+        (consent-eval-source
+         "(import (scheme base) (agent redaction))
+          (let* ((text (redact \"sk-second\" 'test))
+                 (observed (string-copy text)))
+            (string-set! text 0 #\\[)
+            observed)"))))
+  (check 'source-library-first-context-mutation
+         first
+         "\"Xredacted]\"")
+  (check 'source-library-second-context-isolation
+         second
+         "\"[redacted]\""))))
+
+(testing-registry-case
+ 'manifest-source-library-literals-preserve-source-metadata
+ '(portable core security reflection)
+(if compiled-host-run?
+    (check 'compiled-native-library-source-metadata-not-applicable #t #t)
+    (let ((source-present?
+       (lambda ()
+         (consent-value->external
+          (consent-eval-source
+           "(import (scheme base) (agent redaction) (agent reflect))
+            (let ((source (syntax-source (redact \"sk-source\" 'test))))
+              (and source
+                   (eq? (cadr (assq 'origin (cdr source))) 'source)
+                   (eq? (cadr (assq 'phase (cdr source))) 'read)))")))))
+  (check 'source-library-first-context-source-metadata
+         (source-present?)
+         "#t")
+  (check 'source-library-cached-context-source-metadata
+         (source-present?)
+         "#t"))))
+
+(testing-registry-case
+ 'shared-unicode-library-instance-cache
+ '(portable core performance unicode library security)
+(if compiled-host-run?
+    (check 'compiled-native-unicode-source-cache-not-applicable #t #t)
+    (let ((load-unicode-library
+       (lambda (symbol-table)
+         (let* ((options
+                 (if symbol-table
+                     (list (cons 'symbol-table symbol-table))
+                     '()))
+                (reader-options
+                 (cons (cons 'source-metadata #f) options))
+                (context (new-eval-context options))
+                (environment
+                 (if symbol-table
+                     (consent-make-base-environment symbol-table)
+                     (consent-make-base-environment)))
+                (import-form
+                 (consent-read
+                  "(import (scheme base) (scheme char))"
+                  reader-options))
+                (library-name
+                 (consent-read
+                  "(consent unicode-data)"
+                  reader-options)))
+           (eval-import import-form environment context)
+           (library-registry-ref context library-name)))))
+  (let* ((first (load-unicode-library #f))
+         (cached (load-unicode-library #f))
+         (isolated
+          (load-unicode-library (consent-make-symbol-table))))
+    (check 'shared-unicode-default-domain-instance-identity
+           (and first cached (eq? first cached))
+           #t)
+    (check 'shared-unicode-isolated-domain-does-not-share
+           (and isolated (not (eq? first isolated)))
+           #t)))))
+
+(testing-registry-case
  'data-avl-tree-source-import '(portable core)
 (check 'data-avl-tree-source-import
        (consent-value->external
@@ -1977,6 +2066,34 @@ ged "
            (lambda ()
              (consent-set-library-user-directories! user-directories))))
        "fixture-tool"))
+
+(testing-registry-case
+ 'manifest-source-library-shared-datum-isolation '(portable core security)
+(let ((user-directories (consent-library-user-directory-list)))
+  (dynamic-wind
+    (lambda ()
+      (consent-set-library-user-directories!
+       (append user-directories '("tests/fixtures/manifest-root"))))
+    (lambda ()
+      (let ((first
+             (consent-value->external
+              (consent-eval-source
+               "(import (scheme base) (fixture tool))
+                (let ((value fixture-shared-literal))
+                  (string-set! (cdr value) 0 #\\X)
+                  (list (eq? value (car value))
+                        (string=? (cdr value) \"Xresh\")))")))
+            (second
+             (consent-value->external
+              (consent-eval-source
+               "(import (scheme base) (fixture tool))
+                (let ((value fixture-shared-literal))
+                  (list (eq? value (car value))
+                        (string=? (cdr value) \"fresh\")))"))))
+        (check 'source-library-labelled-cycle-preserved first "(#t #t)")
+        (check 'source-library-labelled-cycle-isolated second "(#t #t)")))
+    (lambda ()
+      (consent-set-library-user-directories! user-directories)))))
 
 (testing-registry-case
  'srfi-16-case-lambda-alias-import '(portable core)

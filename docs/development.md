@@ -124,6 +124,25 @@ is an explicit reviewed repository change. Follow
 source files, fallback policy, default non-Turkic casing choice, license, and
 upgrade procedure.
 
+## Unicode performance benchmark
+
+Use the opt-in same-process benchmark to compare Unicode import and lookup costs
+across revisions on the same machine under equivalent checkout conditions:
+
+```sh
+make benchmark-unicode
+CONSENT_UNICODE_BENCHMARK_ITERATIONS=500 \
+  CONSENT_UNICODE_BENCHMARK_IMPORT_ITERATIONS=5 make benchmark-unicode
+```
+
+The command emits one Scheme-readable `consent-benchmark` record per metric. It
+measures the first `(scheme char)` import, warm imports into fresh contexts, and
+persistent ASCII classification, BMP classification, and full string upcasing.
+Each record includes stable metric and schema names, elapsed and per-iteration
+seconds, and garbage-collection counts. The benchmark has no pass/fail wall-time
+threshold and is not part of `make test` or CI; compare equivalent runs instead
+of treating timings from unlike machines as regressions.
+
 ## Emacs Lisp Docstrings
 
 Checked-in Emacs Lisp implementation docstrings under `lisp/` must fit within

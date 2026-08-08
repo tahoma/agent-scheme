@@ -43,7 +43,6 @@
           expand-expression/fully
           expand-sequence-forms)
   (import (scheme base)
-          (scheme char)
           (consent reader)
           (consent symbol)
           (consent symbol-boundary)

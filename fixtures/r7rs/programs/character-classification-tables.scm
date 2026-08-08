@@ -17,7 +17,7 @@
   "Return whether PREDICATE accepts the character for every code."
   (all? (lambda (code) (predicate (integer->char code))) codes))
 
-(let* ((upper '(65 90 192 214 216 222 304 376 7838
+(let* ((upper '(65 90 192 214 216 222 256 304 376 7838
                 913 929 931 939 #x10400 #x10427))
        (lower '(97 122 170 181 186 224 246 248 255 305
                 945 961 962 971 #x10428 #x1044f))

@@ -152,10 +152,15 @@
     (portable-files ())
     (boundary-reason ert-to-portable-map-enforcement))
    (surface
-    (ert-file "tests/consent-test-options-test.el")
+   (ert-file "tests/consent-test-options-test.el")
     (ownership emacs-host-adapter)
     (portable-files ())
     (boundary-reason emacs-evaluator-option-injection))
+   (surface
+    (ert-file "tests/consent-unicode-data-generator-test.el")
+    (ownership generator-tooling)
+    (portable-files ("tests/scheme/consent-character-test.scm"))
+    (boundary-reason pinned-input-and-generation-host-tooling))
    (surface
     (ert-file "tests/consent-vcs-doc-test.el")
     (ownership repository-policy)

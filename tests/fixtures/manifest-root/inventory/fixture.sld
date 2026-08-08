@@ -20,7 +20,7 @@
         (api-version (compat 0))
         (source-version unknown)
         (realization portable-source)
-        (exports (fixture-tool))
+        (exports (fixture-tool fixture-shared-literal))
         (dependencies ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)

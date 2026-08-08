@@ -118,6 +118,51 @@
           (plist-get entry :source-file)
           (plist-get entry :root)))))
 
+(defun consent-library-test--cached-source-entry
+    (root &optional realization visibility)
+  "Return a test source-library entry rooted at ROOT."
+  (list :name "(test cached-source)"
+        :source-kind 'portable-source
+        :source-file "cached-source.sld"
+        :root root
+        :exports-declared t
+        :exports '("value" "text" "items" "bytes")
+        :visibility (or visibility 'public)
+        :realization (or realization 'portable-source)))
+
+(defun consent-library-test--write-cached-source (root value)
+  "Write the cached source-library fixture under ROOT with VALUE."
+  (write-region
+   (format
+    "(define-library (test cached-source)
+  (export value text items bytes)
+  (import (scheme base))
+  (begin
+    (define value %s)
+    (define text \"fresh\")
+    (define items #(1 2))
+    (define bytes #u8(3 4))))
+"
+    value)
+   nil
+   (expand-file-name "cached-source.sld" root)))
+
+(defun consent-library-test--register-cached-source (entry &optional options)
+  "Register test source-library ENTRY in a fresh context using OPTIONS."
+  (let ((context (consent--new-eval-context options))
+        (environment (consent-make-base-environment)))
+    (consent--register-scheme-base-library context environment)
+    (consent--register-manifest-source-library entry context environment)
+    (cons context
+          (gethash (plist-get entry :name)
+                   (consent--eval-context-libraries context)))))
+
+(defun consent-library-test--cached-source-value (library name)
+  "Return exported NAME's value from cached source LIBRARY."
+  (consent--environment-ref
+   (consent--library-value-environment library)
+   name))
+
 (defun consent-library-test--write-manifest-root
     (root collection library value-symbol)
   "Write a manifest ROOT for COLLECTION/LIBRARY returning VALUE-SYMBOL."
@@ -1751,6 +1796,195 @@
            (exports (mapcar #'consent--library-binding-name
                             (consent--library-exports library))))
       (should (equal exports '("force"))))))
+
+(ert-deftest consent-library-test-source-cache-reuses-and-invalidates-parse ()
+  "Reuse an unchanged parsed source library and notice file replacement."
+  (let* ((root (make-temp-file "consent-source-cache-" t))
+         (entry (consent-library-test--cached-source-entry root))
+         (original-read-all (symbol-function 'consent-read-all))
+         (parse-count 0))
+    (unwind-protect
+        (progn
+          (consent-library-test--write-cached-source root 1)
+          (consent--source-library-cache-reset)
+          (cl-letf
+              (((symbol-function 'consent-read-all)
+                (lambda (source &optional options)
+                  (when (string-match-p
+                         "define-library (test cached-source)"
+                         source)
+                    (setq parse-count (1+ parse-count)))
+                  (funcall original-read-all source options))))
+            (consent-library-test--register-cached-source entry)
+            (consent-library-test--register-cached-source entry)
+            (should (= parse-count 1))
+            (consent-library-test--write-cached-source root 12345)
+            (let* ((registered
+                    (consent-library-test--register-cached-source entry))
+                   (library (cdr registered)))
+              (should (= parse-count 2))
+              (should
+               (equal
+                (consent-value->external
+                 (consent-library-test--cached-source-value
+                  library "value"))
+                "12345")))))
+      (consent--source-library-cache-reset)
+      (delete-directory root t))))
+
+(ert-deftest consent-library-test-source-cache-isolates-mutable-datums ()
+  "Copy cached mutable literals before evaluating each source library."
+  (let* ((root (make-temp-file "consent-source-cache-mutable-" t))
+         (entry (consent-library-test--cached-source-entry root)))
+    (unwind-protect
+        (progn
+          (consent-library-test--write-cached-source root 1)
+          (consent--source-library-cache-reset)
+          (let* ((left
+                  (cdr
+                   (consent-library-test--register-cached-source entry)))
+                 (right
+                  (cdr
+                   (consent-library-test--register-cached-source entry)))
+                 (left-text
+                  (consent-library-test--cached-source-value left "text"))
+                 (right-text
+                  (consent-library-test--cached-source-value right "text"))
+                 (left-items
+                  (consent-library-test--cached-source-value left "items"))
+                 (right-items
+                  (consent-library-test--cached-source-value right "items"))
+                 (left-bytes
+                  (consent-library-test--cached-source-value left "bytes"))
+                 (right-bytes
+                  (consent-library-test--cached-source-value right "bytes")))
+            (should-not (eq left-text right-text))
+            (should-not (eq left-items right-items))
+            (should-not (eq left-bytes right-bytes))
+            (aset left-text 0 ?X)
+            (aset left-items 0 consent-false)
+            (aset (consent-bytevector-bytes left-bytes) 0 9)
+            (should (equal right-text "fresh"))
+            (should
+             (equal (consent-value->external right-items) "#(1 2)"))
+            (should
+             (equal (consent-value->external right-bytes) "#u8(3 4)"))))
+      (consent--source-library-cache-reset)
+      (delete-directory root t))))
+
+(ert-deftest consent-library-test-shared-immutable-source-is-explicit ()
+  "Share only manifest-trusted immutable data in the process symbol domain."
+  (let* ((root (make-temp-file "consent-shared-source-" t))
+         (entry
+          (consent-library-test--cached-source-entry
+           root 'shared-immutable-data 'internal-runtime))
+         (public-entry
+          (consent-library-test--cached-source-entry
+           root 'shared-immutable-data 'public))
+         (ordinary-entry
+          (consent-library-test--cached-source-entry
+           root 'portable-source 'internal-runtime)))
+    (unwind-protect
+        (progn
+          (consent-library-test--write-cached-source root 1)
+          (consent--source-library-cache-reset)
+          (let ((direct-left
+                 (cdr
+                  (consent-library-test--register-cached-source entry)))
+                (direct-right
+                 (cdr
+                  (consent-library-test--register-cached-source entry))))
+            (should-not (eq direct-left direct-right)))
+          (let ((consent--source-library-internal-imports-allowed t))
+            (let* ((left
+                    (cdr
+                     (consent-library-test--register-cached-source entry)))
+                   (right
+                    (cdr
+                     (consent-library-test--register-cached-source entry)))
+                   (public-left
+                    (cdr
+                     (consent-library-test--register-cached-source
+                      public-entry)))
+                   (public-right
+                    (cdr
+                     (consent-library-test--register-cached-source
+                      public-entry)))
+                   (ordinary-left
+                    (cdr
+                     (consent-library-test--register-cached-source
+                      ordinary-entry)))
+                   (ordinary-right
+                    (cdr
+                     (consent-library-test--register-cached-source
+                      ordinary-entry)))
+                   (left-table (consent--make-symbol-table))
+                   (right-table (consent--make-symbol-table))
+                   (isolated-left
+                    (cdr
+                     (consent-library-test--register-cached-source
+                      entry (list :symbol-table left-table))))
+                   (isolated-right
+                    (cdr
+                     (consent-library-test--register-cached-source
+                      entry (list :symbol-table right-table))))
+                   (left-name (car (consent--library-name isolated-left)))
+                   (right-name (car (consent--library-name isolated-right))))
+              (should (eq left right))
+              (should-not (eq public-left public-right))
+              (should-not (eq ordinary-left ordinary-right))
+              (consent--library-catalog-invalidate)
+              (should
+               (eq left
+                   (cdr
+                    (consent-library-test--register-cached-source entry))))
+              (should-not (eq left isolated-left))
+              (should-not (eq isolated-left isolated-right))
+              (should
+               (eq left-name
+                   (gethash
+                    "test" (consent--symbol-table-entries left-table))))
+              (should
+               (eq right-name
+                   (gethash
+                    "test" (consent--symbol-table-entries right-table))))
+              (should-not (eq left-name right-name))
+              (consent-library-test--write-cached-source root 12345)
+              (let ((replacement
+                     (cdr
+                      (consent-library-test--register-cached-source entry))))
+                (should-not (eq left replacement))
+                (should
+                 (equal
+                  (consent-value->external
+                   (consent-library-test--cached-source-value
+                    replacement "value"))
+                  "12345"))))))
+      (consent--source-library-cache-reset)
+      (delete-directory root t))))
+
+(ert-deftest consent-library-test-shared-cache-preserves-step-cost ()
+  "Keep source-library step accounting identical on cache hits."
+  (let* ((root (make-temp-file "consent-shared-step-cost-" t))
+         (entry
+          (consent-library-test--cached-source-entry
+           root 'shared-immutable-data 'internal-runtime)))
+    (unwind-protect
+        (progn
+          (consent-library-test--write-cached-source root 1)
+          (consent--source-library-cache-reset)
+          (let ((consent--source-library-internal-imports-allowed t))
+            (let* ((cold
+                    (consent-library-test--register-cached-source entry))
+                   (warm
+                    (consent-library-test--register-cached-source entry)))
+              (should (eq (cdr cold) (cdr warm)))
+              (should (> (consent--eval-context-steps (car cold)) 0))
+              (should
+               (= (consent--eval-context-steps (car cold))
+                  (consent--eval-context-steps (car warm)))))))
+      (consent--source-library-cache-reset)
+      (delete-directory root t))))
 
 (ert-deftest consent-library-test-agent-generated-source-is-source-backed ()
   "Load `(agent generated-source)' from the shared portable source library."

@@ -53,4 +53,4 @@
         (string->list (string-upcase (string (integer->char #x390)))))
    (map (lambda (code)
           (char->integer (char-upcase (integer->char code))))
-        '(8364 128578))))
+        '(8364 128578 #x10ffff))))

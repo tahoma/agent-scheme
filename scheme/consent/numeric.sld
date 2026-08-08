@@ -16,8 +16,7 @@
           consent-numeric-backend-limb-bits
           consent-numeric-backend-positive-fixnum-limit
           consent-numeric)
-  (import (scheme base)
-          (scheme char))
+  (import (scheme base))
   (begin
     ;; A backend fixes the limb profile for all integers passed to it.
     (define-record-type <consent-numeric-backend>

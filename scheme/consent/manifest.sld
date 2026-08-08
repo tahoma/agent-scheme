@@ -71,9 +71,7 @@
           consent-numeric-backend-limb-bits
           consent-numeric-backend-positive-fixnum-limit
           consent-numeric))
-        (dependencies
-         ((library (scheme base))
-          (library (scheme char))))
+        (dependencies ((library (scheme base))))
         (provenance ((origin repo)))
         (verification
          ((test-status
@@ -416,8 +414,8 @@
           (semantics consent-owned-unicode-profile)))
         (verification
          ((test-status
-           (generated-data classification simple-case full-case
-                           compiled-host-suite))))
+          (generated-data classification boundary-cases simple-case
+                          full-case compiled-host-suite))))
         (status implemented)
         (canonical #t))
        (manifest-entry
@@ -1366,21 +1364,22 @@
         (source (path "unicode-data.sld"))
         (api-version internal)
         (source-version (unicode 17 0 0))
-        (realization portable-source)
+        (realization shared-immutable-data)
         (exports
          (consent-unicode-data-version
           consent-unicode-data-metadata
-          consent-unicode-alphabetic-ranges
-          consent-unicode-uppercase-ranges
-          consent-unicode-lowercase-ranges
-          consent-unicode-whitespace-ranges
-          consent-unicode-decimal-values
-          consent-unicode-simple-uppercase-mappings
-          consent-unicode-simple-lowercase-mappings
-          consent-unicode-simple-foldcase-mappings
-          consent-unicode-full-uppercase-mappings
-          consent-unicode-full-lowercase-mappings
-          consent-unicode-full-foldcase-mappings))
+          consent-unicode-data-counts
+          consent-unicode-alphabetic?
+          consent-unicode-uppercase?
+          consent-unicode-lowercase?
+          consent-unicode-whitespace?
+          consent-unicode-decimal-value
+          consent-unicode-simple-uppercase
+          consent-unicode-simple-lowercase
+          consent-unicode-simple-foldcase
+          consent-unicode-full-uppercase
+          consent-unicode-full-lowercase
+          consent-unicode-full-foldcase))
         (dependencies
          ((library (scheme base))))
         (provenance
@@ -1392,8 +1391,9 @@
           (generator (path "tools/generate-unicode-data.el"))))
         (verification
          ((test-status
-           (input-hashes deterministic-regeneration portable-host-suite
-                         compiled-host-suite))))
+          (input-hashes deterministic-regeneration generator-unit
+                        mutation-isolation portable-host-suite
+                        compiled-host-suite))))
         (status internal)
         (canonical #t))
        (manifest-entry

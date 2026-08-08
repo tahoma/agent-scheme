@@ -352,7 +352,6 @@
           ensure-distinct-names
           parse-formals)
   (import (scheme base)
-          (scheme char)
           (only (scheme process-context)
                 get-environment-variable)
           (consent version)

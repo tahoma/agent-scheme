@@ -2374,8 +2374,8 @@ decimal digits, and whitespace without host tables.")
      (oracle-reason implementation-dependent)
      (options ())
      (description
-       "Representative BMP and supplementary cased ranges, uncased \
-alphabetics, and unassigned exclusions follow the generated tables.")
+       "Representative BMP page boundaries, supplementary cased ranges, \
+uncased alphabetics, and unassigned exclusions follow generated tables.")
 
      (source
        (file "programs/character-classification-tables.scm"))
@@ -2445,8 +2445,8 @@ Unicode 17 profile.")
      (oracle-reason implementation-dependent)
      (options ())
      (description
-       "Representative simple BMP and supplementary mappings, simple versus \
-full folding, and length-changing string mappings follow generated data.")
+       "Representative simple BMP and supplementary mappings, full \
+expansions, and maximum-scalar identity follow generated case data.")
 
      (source
        (file "programs/character-case-tables.scm"))
@@ -2454,7 +2454,7 @@ full folding, and length-changing string mappings follow generated data.")
        (value
          (#t #t (223 963 304 223 66600) (83 83) (105 775)
              (115 115 115 115 105 775) (70 70 73) (102 102 105)
-             (921 776 769) (8364 128578))))
+             (921 776 769) (8364 128578 1114111))))
 )
     ((id standard-library-char-comparison-matrix)
      (kind r7rs-conformance)
