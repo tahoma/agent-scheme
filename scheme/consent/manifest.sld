@@ -381,7 +381,7 @@
         (source-kind source-library)
         (source (path "char.sld"))
         (api-version (compat 0))
-        (source-version unknown)
+        (source-version (unicode 17 0 0))
         (realization portable-source)
         (exports
          (char-alphabetic?
@@ -407,10 +407,17 @@
           string-foldcase
           string-upcase))
         (dependencies
-         ((library (scheme base))))
+         ((library (scheme base))
+          (library (consent unicode-data))))
         (provenance
          ((origin repo)
-          (semantics consent-owned-bootstrap-unicode-profile)))
+          (generated-from unicode-character-database)
+          (upstream-license Unicode-3.0)
+          (semantics consent-owned-unicode-profile)))
+        (verification
+         ((test-status
+           (generated-data classification simple-case full-case
+                           compiled-host-suite))))
         (status implemented)
         (canonical #t))
        (manifest-entry
@@ -1347,6 +1354,48 @@
         (provenance ((origin repo)))
         (status internal)
        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (consent unicode-data))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "unicode-data.sld"))
+        (api-version internal)
+        (source-version (unicode 17 0 0))
+        (realization portable-source)
+        (exports
+         (consent-unicode-data-version
+          consent-unicode-data-metadata
+          consent-unicode-alphabetic-ranges
+          consent-unicode-uppercase-ranges
+          consent-unicode-lowercase-ranges
+          consent-unicode-whitespace-ranges
+          consent-unicode-decimal-values
+          consent-unicode-simple-uppercase-mappings
+          consent-unicode-simple-lowercase-mappings
+          consent-unicode-simple-foldcase-mappings
+          consent-unicode-full-uppercase-mappings
+          consent-unicode-full-lowercase-mappings
+          consent-unicode-full-foldcase-mappings))
+        (dependencies
+         ((library (scheme base))))
+        (provenance
+         ((origin repo-generated)
+          (generated #t)
+          (upstream-source-url
+           "https://www.unicode.org/Public/17.0.0/ucd/")
+          (upstream-license Unicode-3.0)
+          (generator (path "tools/generate-unicode-data.el"))))
+        (verification
+         ((test-status
+           (input-hashes deterministic-regeneration portable-host-suite
+                         compiled-host-suite))))
+        (status internal)
+        (canonical #t))
        (manifest-entry
         (schema-version 1)
         (kind library)

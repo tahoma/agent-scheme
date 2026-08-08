@@ -371,8 +371,9 @@
            "(let ((available (features)))
               (list (pair? (memq 'r7rs available))
                     (pair? (memq 'srfi-0 available))
+                    (pair? (memq 'full-unicode available))
                     (pair? (memq 'consent available))))")
-          "(#t #t #t)"))
+          "(#t #t #t #t)"))
   (should
    (equal (consent-base-test--external
            "(let ((setting (make-parameter 'outer)))

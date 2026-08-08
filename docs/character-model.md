@@ -7,11 +7,9 @@ ordering, classification, case mapping, digit values, or UTF-8 validity.
 
 The R7RS-small character and string procedures in
 [sections 6.6 and 6.7](r7rs-small-report.md#66-characters) are the language
-contract. This document fixes the smaller deterministic Unicode profile used by
-the early self-hosting runtime. Issue
-[#727](https://github.com/tahoma/consent/issues/727) can expand the same boundary
-with generated and versioned Unicode tables without changing the character
-representation.
+contract. Consent pins the Unicode Character Database (UCD) at version 17.0.0
+and generates portable Scheme tables from repository-owned inputs. Changing
+the Unicode version changes table data, not the character representation.
 
 ## Representation and scalar range
 
@@ -59,60 +57,86 @@ canonical name above when one exists, `#\x<lowercase hex>` for other control
 characters, and `#\` followed by the character for other printable scalars.
 Reader and writer round trips preserve scalar identity.
 
-## Bootstrap Unicode profile
+## Generated Unicode data ownership
 
-The bootstrap profile deliberately implements a documented subset rather than
-delegating to whichever Unicode release a host happens to provide. Scalars
-outside a classification or case table remain valid characters. Their
-classification predicates return `#f`, and case conversion returns the input.
+The exact UCD 17.0.0 inputs are vendored under `vendor/unicode/17.0.0/` with
+SHA-256 hashes in its README. The repository uses only the files needed by the
+R7RS character surface:
+
+- `DerivedCoreProperties.txt` supplies `Alphabetic`, `Uppercase`, and
+  `Lowercase`;
+- `PropList.txt` supplies `White_Space`;
+- `UnicodeData.txt` supplies `Numeric_Type=Decimal` values and simple
+  uppercase/lowercase mappings;
+- `SpecialCasing.txt` supplies unconditional full uppercase and lowercase
+  mappings; and
+- `CaseFolding.txt` supplies default non-Turkic simple and full case folding.
+
+`tools/generate-unicode-data.el` verifies the pinned input hashes and writes
+`scheme/consent/unicode-data.sld`. `make update-unicode-data` regenerates the
+artifact, while `make check-unicode-data` fails when it is stale or its inputs
+do not match the pin. Both the UCD inputs and their derived table artifact are
+redistributed under the Unicode License v3 (`Unicode-3.0`); the license text is
+in `LICENSES/Unicode-3.0.txt` and attribution is recorded in `NOTICE`.
+
+The generated `(consent unicode-data)` library exports only Scheme-readable
+version, provenance, range, and mapping data. `(scheme char)` owns the lookup
+algorithms. Interpreted bootstraps load both files through the ordinary source
+library registry; host-compiled distributions embed and install both through
+the manifest-derived runtime source inventory. A future native compiler can
+link or transform the same generated library without calling a host Unicode
+API. The `(scheme char)` manifest and the generated metadata datum expose the
+supported Unicode version to reflection, and `(features)` includes
+`full-unicode`.
+
+To adopt a new Unicode version, add a new pinned UCD directory, review the UCD
+format and semantic changes, update the generator version and hashes,
+regenerate the table library, then run the character, conformance,
+compiled-host, license, and readability gates. Unicode upgrades are explicit
+repository changes; builds never download floating `latest` data.
+
+## Unicode 17.0.0 profile
+
+All Unicode scalar values remain valid Consent characters. Assigned scalars in
+Unicode 17.0.0 receive the generated properties and mappings described below.
+Unassigned scalars and scalars assigned by a later Unicode release have false
+classification predicates and identity case mappings until the repository pin
+is upgraded.
 
 ### Classification
 
-`char-upper-case?`, `char-lower-case?`, and `char-alphabetic?` cover:
-
-- ASCII letters;
-- Latin-1 uppercase ranges `U+00C0..U+00D6` and `U+00D8..U+00DE`;
-- Latin-1 lowercase ranges `U+00E0..U+00F6` and `U+00F8..U+00FF`;
-- `U+00AA`, `U+00B5`, `U+00BA`, `U+0130`, `U+0131`, `U+0178`, and
-  `U+1E9E`;
-- Greek uppercase ranges `U+0391..U+03A1` and `U+03A3..U+03AB`;
-- Greek lowercase ranges `U+03B1..U+03C1` and `U+03C2..U+03CB`.
-
-`char-whitespace?` owns the Unicode `White_Space` scalar set:
-`U+0009..U+000D`, `U+0020`, `U+0085`, `U+00A0`, `U+1680`,
-`U+2000..U+200A`, `U+2028`, `U+2029`, `U+202F`, `U+205F`, and `U+3000`.
-
-`digit-value` and `char-numeric?` recognize decimal digits in these blocks:
-
-- ASCII `U+0030..U+0039`;
-- Arabic-Indic `U+0660..U+0669`;
-- Extended Arabic-Indic `U+06F0..U+06F9`;
-- Devanagari `U+0966..U+096F`;
-- Bengali `U+09E6..U+09EF`;
-- Gurmukhi `U+0A66..U+0A6F`;
-- Gujarati `U+0AE6..U+0AEF`.
-
-These are exact bootstrap tables, not claims of complete Unicode
-`Alphabetic`, `Uppercase`, `Lowercase`, or `Decimal_Number` coverage.
+`char-upper-case?`, `char-lower-case?`, `char-alphabetic?`, and
+`char-whitespace?` use the complete generated `Uppercase`, `Lowercase`,
+`Alphabetic`, and `White_Space` property ranges for the pinned version.
+`char-numeric?` and `digit-value` use every UCD `Numeric_Type=Decimal` entry,
+returning its decimal value from zero through nine. This includes alphabetic
+characters with neither case property and decimal blocks outside the earlier
+ASCII, Arabic, Indic, Latin, and Greek bootstrap sample.
 
 ### Case conversion and folding
 
-Simple character mappings cover ASCII, the listed Latin and Greek ranges, and
-the explicit exceptional mappings in those ranges. Greek final sigma
-`U+03C2` upcases to `U+03A3` and folds to `U+03C3`. Micro sign `U+00B5`
-upcases to Greek capital mu `U+039C`. Latin sharp s `U+00DF` upcases to
-`U+1E9E`, and dotless i `U+0131` upcases to ASCII `I`.
+`char-upcase` and `char-downcase` use the simple mappings from
+`UnicodeData.txt`; `char-foldcase` uses `C` and `S` entries from
+`CaseFolding.txt`. `string-upcase` and `string-downcase` combine those simple
+mappings with the unconditional full mappings in `SpecialCasing.txt`.
+`string-foldcase` uses the `C` and `F` case-folding entries. The default
+non-Turkic fold is used; locale-sensitive mappings are out of scope.
 
-String case procedures apply full mappings where one character expands:
-
-- `ß` uppercases to `SS`;
-- `ß` and `ẞ` fold to `ss`;
-- `İ` lowercases and folds to `i` followed by combining dot above `U+0307`.
+Full string mappings can change length. For example, `ß` uppercases to `SS`,
+the `ﬃ` ligature uppercases to `FFI`, and both fold to lowercase sequences.
+By contrast, simple `char-foldcase` returns one character and leaves `ß`
+unchanged. `İ` lowercases and folds to `i` followed by combining dot above
+`U+0307`.
 
 Case-insensitive character and string comparisons use these owned fold
 mappings, then compare scalar values. The runtime does not normalize Unicode
 strings; canonically equivalent but differently normalized strings remain
 distinct unless the mappings above make them equal.
+
+Conditional special casing is deliberately omitted. In particular,
+`string-downcase` maps Greek capital sigma to ordinary small sigma in every
+position instead of selecting final sigma by word context, which R7RS explicitly
+permits. Locale-sensitive Turkic and Lithuanian conditions are also omitted.
 
 ## UTF-8
 
@@ -133,20 +157,22 @@ case conversion, folding, digit values, and UTF-8 validation never call host
 Unicode procedures.
 
 The public `(scheme char)` implementation is the single portable
-`scheme/consent/char.sld` source loaded by both evaluator bootstraps. There is
-no parallel host-defined `(scheme char)` primitive provider. A future
-accelerator must be checked against these semantics and the shared fixtures
-before it can replace an owned path.
+`scheme/consent/char.sld` source loaded by both evaluator bootstraps, backed by
+the single generated `scheme/consent/unicode-data.sld` artifact. There is no
+parallel host-defined `(scheme char)` primitive provider. A future accelerator
+must be checked against these semantics and the shared fixtures before it can
+replace an owned path.
 
 ## Verification contract
 
-The shared conformance corpus exhausts every finite classification, decimal
-digit, whitespace, and simple/full case table in the bootstrap profile, with
-excluded-neighbor checks. It exercises every base and case-insensitive
-character/string comparison in true, false, equality, prefix, and variadic
-forms; the complete scalar validity boundary; BMP, supplementary, and maximum
-scalar crossings through strings, vectors, ports, and native adapters; and
-canonical reader/writer external forms.
+The portable character suite verifies the generated version/provenance datum,
+table ordering, representative property and decimal entries across scripts,
+simple versus length-changing full case mappings, supplementary-plane casing,
+and unassigned-scalar fallback. The shared conformance corpus exercises every
+base and case-insensitive character/string comparison in true, false, equality,
+prefix, and variadic forms; the complete scalar validity boundary; BMP,
+supplementary, and maximum scalar crossings through strings, vectors, ports,
+and native adapters; and canonical reader/writer external forms.
 
 UTF-8 fixtures cover every one- through four-byte branch boundary, both sides
 of the surrogate gap, multibyte and empty range slices, malformed continuation

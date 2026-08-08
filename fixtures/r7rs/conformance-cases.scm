@@ -2342,8 +2342,8 @@ variadic scalar-order cases.")
      (oracle shared)
      (options ())
      (description
-       "The owned profile classifies representative Greek letters, decimal \
-digit blocks, and Unicode whitespace without host tables.")
+       "The Unicode 17 profile classifies representative Greek letters, \
+decimal digits, and whitespace without host tables.")
 
      (source
        (forms
@@ -2374,9 +2374,8 @@ digit blocks, and Unicode whitespace without host tables.")
      (oracle-reason implementation-dependent)
      (options ())
      (description
-       "Every scalar in the finite bootstrap alphabetic tables and \
-representative excluded neighbors follows the documented owned profile.\
-")
+       "Representative BMP and supplementary cased ranges, uncased \
+alphabetics, and unassigned exclusions follow the generated tables.")
 
      (source
        (file "programs/character-classification-tables.scm"))
@@ -2395,8 +2394,8 @@ representative excluded neighbors follows the documented owned profile.\
      (oracle-reason implementation-dependent)
      (options ())
      (description
-       "Every decimal digit and whitespace scalar in the bootstrap tables, \
-plus their excluded neighbors, is fixture-covered.")
+       "Decimal digits across BMP and supplementary scripts plus Unicode \
+whitespace and excluded neighbors follow the generated tables.")
 
      (source
        (file "programs/character-digit-whitespace-tables.scm"))
@@ -2414,7 +2413,7 @@ plus their excluded neighbors, is fixture-covered.")
      (options ())
      (description
        "Simple character and full string case mappings follow the documented \
-bootstrap profile.")
+Unicode 17 profile.")
 
      (source
        (forms
@@ -2446,17 +2445,16 @@ bootstrap profile.")
      (oracle-reason implementation-dependent)
      (options ())
      (description
-
-        "Every finite simple mapping plus all documented full string expansion\
-s \
-follows the owned case tables.")
+       "Representative simple BMP and supplementary mappings, simple versus \
+full folding, and length-changing string mappings follow generated data.")
 
      (source
        (file "programs/character-case-tables.scm"))
      (expect
        (value
-         (#t #t (963 304 223) (83 83) (105 775) (115 115 115 115 105 775)
-             (8364 128578))))
+         (#t #t (223 963 304 223 66600) (83 83) (105 775)
+             (115 115 115 115 105 775) (70 70 73) (102 102 105)
+             (921 776 769) (8364 128578))))
 )
     ((id standard-library-char-comparison-matrix)
      (kind r7rs-conformance)

@@ -7,20 +7,18 @@
 
 (import (scheme base) (scheme char))
 
-(define (range lower upper)
-  "Return the inclusive integer range from LOWER through UPPER."
-  (let loop ((value upper) (result '()))
-    (if (< value lower)
-        result
-        (loop (- value 1) (cons value result)))))
-
 (define (all? predicate values)
   "Return whether PREDICATE accepts every member of VALUES."
   (or (null? values)
       (and (predicate (car values))
            (all? predicate (cdr values)))))
 
-(let ((zeros '(48 1632 1776 2406 2534 2662 2790))
+(let ((digits '((48 . 0) (57 . 9) (1632 . 0) (1641 . 9)
+                (1776 . 0) (1785 . 9) (2406 . 0) (2415 . 9)
+                (2534 . 0) (2543 . 9) (2662 . 0) (2671 . 9)
+                (2790 . 0) (2799 . 9) (#x104a0 . 0) (#x104a9 . 9)
+                (#x1d7ce . 0) (#x1d7d7 . 9) (#x1e950 . 0)
+                (#x1e959 . 9) (#x1fbf0 . 0) (#x1fbf9 . 9)))
       (digit-neighbors
        '(47 58 1631 1642 1775 1786 2405 2416 2533 2544 2661 2672
          2789 2800))
@@ -31,13 +29,11 @@
        '(8 14 31 33 132 134 159 161 5759 5761 8191 8203 8231 8234
          8238 8240 8286 8288 12287 12289)))
   (list
-   (all? (lambda (zero)
-           (all? (lambda (value)
-                   (let ((character (integer->char (+ zero value))))
-                     (and (char-numeric? character)
-                          (= (digit-value character) value))))
-                 (range 0 9)))
-         zeros)
+   (all? (lambda (pair)
+           (let ((character (integer->char (car pair))))
+             (and (char-numeric? character)
+                  (= (digit-value character) (cdr pair)))))
+         digits)
    (all? (lambda (code)
            (let ((character (integer->char code)))
              (and (not (char-numeric? character))

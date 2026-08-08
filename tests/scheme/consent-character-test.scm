@@ -2,12 +2,14 @@
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; This suite checks the owned-record contracts and adapters at their direct
-;;; R7RS host boundaries.  The shared fixture corpus exhausts `(scheme char)'.
+;;; This suite checks the owned-record contracts, generated Unicode table
+;;; invariants, and adapters at their direct R7RS host boundaries. The shared
+;;; fixture corpus exercises `(scheme char)' behavior through Consent.
 
 (import (scheme base)
         (scheme process-context)
         (consent character)
+        (consent unicode-data)
         (only (consent runtime)
               consent-host-datum->consent-datum)
         (only (consent library)
@@ -29,6 +31,72 @@
   (or (null? values)
       (and (predicate (car values))
            (all? predicate (cdr values)))))
+
+(define (range-table-sorted? table)
+  "Return #t when flat inclusive ranges in TABLE are sorted and disjoint."
+  (and (even? (vector-length table))
+       (let loop ((index 0) (previous-upper #f))
+         (if (= index (vector-length table))
+             #t
+             (let ((lower (vector-ref table index))
+                   (upper (vector-ref table (+ index 1))))
+               (and (<= lower upper)
+                    (or (not previous-upper)
+                        (< (+ previous-upper 1) lower))
+                    (loop (+ index 2) upper)))))))
+
+(define (flat-mapping-sorted? table)
+  "Return #t when flat source/value TABLE has strictly increasing sources."
+  (and (even? (vector-length table))
+       (let loop ((index 0) (previous-source #f))
+         (if (= index (vector-length table))
+             #t
+             (let ((source (vector-ref table index)))
+               (and (or (not previous-source)
+                        (< previous-source source))
+                    (loop (+ index 2) source)))))))
+
+(define (full-mapping-sorted? table)
+  "Return #t when TABLE entries have sorted sources and mapped scalars."
+  (let loop ((index 0) (previous-source #f))
+    (if (= index (vector-length table))
+        #t
+        (let* ((entry (vector-ref table index))
+               (source (vector-ref entry 0)))
+          (and (> (vector-length entry) 1)
+               (or (not previous-source) (< previous-source source))
+               (all? consent-scalar-value? (cdr (vector->list entry)))
+               (loop (+ index 1) source))))))
+
+(testing-registry-case
+ 'generated-unicode-data-contract '(portable runtime character unicode data)
+(let ((version-field (assq 'unicode-version consent-unicode-data-metadata)))
+  (test-equal 'unicode-data-version '(17 0 0) consent-unicode-data-version)
+  (test-equal 'unicode-data-version-metadata
+              '(unicode-version "17.0.0")
+              version-field)
+  (test-assert 'unicode-property-range-shape
+               (and (> (vector-length consent-unicode-alphabetic-ranges) 1000)
+                    (range-table-sorted?
+                     consent-unicode-alphabetic-ranges)
+                    (range-table-sorted? consent-unicode-uppercase-ranges)
+                    (range-table-sorted? consent-unicode-lowercase-ranges)
+                    (range-table-sorted? consent-unicode-whitespace-ranges)))
+  (test-assert 'unicode-flat-mapping-shape
+               (and (flat-mapping-sorted? consent-unicode-decimal-values)
+                    (flat-mapping-sorted?
+                     consent-unicode-simple-uppercase-mappings)
+                    (flat-mapping-sorted?
+                     consent-unicode-simple-lowercase-mappings)
+                    (flat-mapping-sorted?
+                     consent-unicode-simple-foldcase-mappings)))
+  (test-assert 'unicode-full-mapping-shape
+               (and (full-mapping-sorted?
+                     consent-unicode-full-uppercase-mappings)
+                    (full-mapping-sorted?
+                     consent-unicode-full-lowercase-mappings)
+                    (full-mapping-sorted?
+                     consent-unicode-full-foldcase-mappings)))))
 
 (testing-registry-case
  'unicode-scalar-boundaries '(portable runtime character unicode)

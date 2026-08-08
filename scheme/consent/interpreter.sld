@@ -5095,7 +5095,7 @@ d"
 "
       "Scheme values."
       (own-runtime-datum
-       '(r7rs srfi-0 ratios exact-complex ieee-float consent)
+       '(r7rs srfi-0 ratios exact-complex ieee-float full-unicode consent)
        context))
 
     (define (primitive-agent-yield arguments context)

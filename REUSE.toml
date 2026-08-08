@@ -32,6 +32,15 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Tahoma Toelkes"
 SPDX-License-Identifier = "Apache-2.0"
 
+# Pinned Unicode Character Database inputs used by the generated portable
+# character tables. The generated Scheme file carries the same upstream SPDX
+# metadata inline.
+[[annotations]]
+path = ["vendor/unicode/17.0.0/*.txt"]
+precedence = "override"
+SPDX-FileCopyrightText = "1991-2025 Unicode, Inc."
+SPDX-License-Identifier = "Unicode-3.0"
+
 # Vendored SRFI 180 fixture corpus from
 # https://github.com/scheme-requests-for-implementation/srfi-180 at
 # 671857bac55c53e3190a24ec53b457321a1d8f12. The JSON fixtures are the

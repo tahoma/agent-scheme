@@ -66,6 +66,12 @@ It must record that license via an inline SPDX header or a dedicated
 added. Such material is tracked under the `review:license-vendor` label. Do not
 relabel third-party material as Apache-2.0.
 
+The pinned Unicode Character Database inputs under `vendor/unicode/` and the
+derived `scheme/consent/unicode-data.sld` table library use the Unicode License
+v3 (`Unicode-3.0`). `REUSE.toml` annotates the verbatim inputs, the generated
+Scheme library carries inline SPDX metadata, `LICENSES/Unicode-3.0.txt` carries
+the license text, and `NOTICE` records the product attribution.
+
 ## Contribution and relicensing implications
 
 Because relicensing is only trivial while copyright is single-holder, the

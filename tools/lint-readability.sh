@@ -7,7 +7,8 @@ set -eu
 soft_limit=${CONSENT_READABILITY_SOFT_LIMIT:-80}
 hard_limit=${CONSENT_READABILITY_HARD_LIMIT:-100}
 repository_root=${CONSENT_READABILITY_ROOT:-$(git rev-parse --show-toplevel)}
-exclusions_file=${CONSENT_READABILITY_EXCLUSIONS:-tools/readability-exclusions.txt}
+default_exclusions=tools/readability-exclusions.txt
+exclusions_file=${CONSENT_READABILITY_EXCLUSIONS:-$default_exclusions}
 file_list=${CONSENT_READABILITY_FILE_LIST:-}
 
 fail_usage() {
@@ -48,7 +49,8 @@ validate_exclusions() {
     /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
     NF != 4 || $1 !~ /\/$/ || $2 !~ /^vendored-(byte-exact|verbatim)$/ ||
       length($3) == 0 || length($4) < 20 {
-        printf "%s:%d: invalid provenance exclusion\n", FILENAME, FNR > "/dev/stderr"
+        printf "%s:%d: invalid provenance exclusion\n", FILENAME,
+          FNR > "/dev/stderr"
         failed = 1
       }
     END { exit failed }
@@ -76,6 +78,7 @@ check_file() {
   checked_file=$1
   awk -v file="$checked_file" -v soft="$soft_limit" -v hard="$hard_limit" '
     function marker(line) {
+      # readability-allow: exact-text -- Atomic validation expression.
       return line ~ /readability-allow: (contiguous-datum|external-identifier|exact-text) -- .{12,}/
     }
     {
@@ -146,9 +149,11 @@ run_repository_check() {
   changed_soft=0
   changed_hard=0
   if [ "${CONSENT_READABILITY_SKIP_CHANGED:-0}" != 1 ] &&
-     git -C "$repository_root" rev-parse --verify origin/main >/dev/null 2>&1; then
+     git -C "$repository_root" rev-parse --verify origin/main \
+       >/dev/null 2>&1; then
     set -- $(git -C "$repository_root" diff --no-ext-diff --unified=0 \
-      origin/main -- scheme lisp tests fixtures tools .github/workflows Makefile |
+      origin/main -- scheme lisp tests fixtures tools .github/workflows \
+      Makefile |
       awk -v soft="$soft_limit" -v hard="$hard_limit" '
         /^\+\+\+/ { next }
         /^\+/ {
@@ -162,8 +167,14 @@ run_repository_check() {
     changed_hard=$2
   fi
 
-  printf '%s\n' \
-    "lint-readability: checked=$checked excluded=$excluded repository>80=$repository_soft repository>100=$repository_hard allowed-soft=$allowed_soft changed>80=$changed_soft changed>100=$changed_hard"
+  printf '%s%s%s%s%s%s%s\n' \
+    "lint-readability: checked=$checked" \
+    " excluded=$excluded" \
+    " repository>80=$repository_soft" \
+    " repository>100=$repository_hard" \
+    " allowed-soft=$allowed_soft" \
+    " changed>80=$changed_soft" \
+    " changed>100=$changed_hard"
   [ "$failed" -eq 0 ] || exit 1
 }
 
@@ -172,7 +183,9 @@ run_self_test() {
   trap 'rm -rf "$self_root"' EXIT HUP INT TERM
   mkdir -p "$self_root/tools" "$self_root/.github/workflows"
   : > "$self_root/tools/readability-exclusions.txt"
-  classes='Makefile lisp/sample.el fixtures/sample.scm scheme/sample.sld tools/sample.sh .github/workflows/sample.yml .github/workflows/sample.yaml tools/consent-repl'
+  classes='Makefile lisp/sample.el fixtures/sample.scm scheme/sample.sld'
+  classes="$classes tools/sample.sh .github/workflows/sample.yml"
+  classes="$classes .github/workflows/sample.yaml tools/consent-repl"
   for sample in $classes; do
     sample_path="$self_root/$sample"
     mkdir -p "$(dirname "$sample_path")"
@@ -182,30 +195,40 @@ run_self_test() {
       CONSENT_READABILITY_FILE_LIST="$self_root/files" \
       CONSENT_READABILITY_EXCLUSIONS=tools/readability-exclusions.txt \
       CONSENT_READABILITY_SKIP_CHANGED=1 "$0" >/dev/null
-    awk 'BEGIN { for (i = 0; i < 101; i++) printf "x"; printf "\n" }' > "$sample_path"
+    awk 'BEGIN {
+      for (i = 0; i < 101; i++) printf "x"
+      printf "\n"
+    }' > "$sample_path"
     if CONSENT_READABILITY_ROOT="$self_root" \
        CONSENT_READABILITY_FILE_LIST="$self_root/files" \
        CONSENT_READABILITY_EXCLUSIONS=tools/readability-exclusions.txt \
        CONSENT_READABILITY_SKIP_CHANGED=1 "$0" >/dev/null 2>&1; then
       fail_usage "$sample did not reject a hard-limit violation"
     fi
-    awk 'BEGIN { for (i = 0; i < 81; i++) printf "x"; printf "\n" }' > "$sample_path"
+    awk 'BEGIN {
+      for (i = 0; i < 81; i++) printf "x"
+      printf "\n"
+    }' > "$sample_path"
     if CONSENT_READABILITY_ROOT="$self_root" \
        CONSENT_READABILITY_FILE_LIST="$self_root/files" \
        CONSENT_READABILITY_EXCLUSIONS=tools/readability-exclusions.txt \
        CONSENT_READABILITY_SKIP_CHANGED=1 "$0" >/dev/null 2>&1; then
       fail_usage "$sample did not reject an unclassified soft-limit violation"
     fi
-    printf '%s\n' \
-      '# readability-allow: contiguous-datum -- fixture identity stays intact.' \
-      'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
-      > "$sample_path"
+    exception_marker='# readability-allow: contiguous-datum -- '
+    exception_marker="${exception_marker}fixture identity stays intact."
+    printf '%s\n' "$exception_marker" > "$sample_path"
+    awk 'BEGIN {
+      for (i = 0; i < 81; i++) printf "x"
+      printf "\n"
+    }' >> "$sample_path"
     CONSENT_READABILITY_ROOT="$self_root" \
       CONSENT_READABILITY_FILE_LIST="$self_root/files" \
       CONSENT_READABILITY_EXCLUSIONS=tools/readability-exclusions.txt \
       CONSENT_READABILITY_SKIP_CHANGED=1 "$0" >/dev/null
   done
-  printf '%s\n' "lint-readability: self-test passed for every supported file class."
+  printf '%s\n' \
+    "lint-readability: self-test passed for every supported file class."
 }
 
 case "${1:-}" in

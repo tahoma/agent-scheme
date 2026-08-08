@@ -1,4 +1,4 @@
-;;; consent-ci-write-summary.el --- Render one CI timing summary -*- lexical-binding: t; -*-
+;;; consent-ci-write-summary.el -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 

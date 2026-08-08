@@ -7,18 +7,6 @@
 
 (import (scheme base) (scheme char))
 
-(define (range lower upper)
-  "Return the inclusive integer range from LOWER through UPPER."
-  (let loop ((value upper) (result '()))
-    (if (< value lower)
-        result
-        (loop (- value 1) (cons value result)))))
-
-(define (pairs lower upper delta)
-  "Return source and mapped character-code pairs across one range."
-  (map (lambda (code) (cons code (+ code delta)))
-       (range lower upper)))
-
 (define (all? predicate values)
   "Return whether PREDICATE accepts every member of VALUES."
   (or (null? values)
@@ -33,27 +21,22 @@
         (cdr pair)))
    mappings))
 
-(let ((up
-       (append (pairs 97 122 -32)
-               (pairs 224 246 -32)
-               (pairs 248 254 -32)
-               '((255 . 376) (181 . 924) (223 . 7838) (305 . 73))
-               (pairs 945 961 -32)
-               '((962 . 931))
-               (pairs 963 971 -32)))
-      (down
-       (append (pairs 65 90 32)
-               (pairs 192 214 32)
-               (pairs 216 222 32)
-               '((304 . 105) (376 . 255) (7838 . 223))
-               (pairs 913 929 32)
-               (pairs 931 939 32))))
+(let ((up '((97 . 65) (122 . 90) (224 . 192) (246 . 214)
+            (248 . 216) (254 . 222) (255 . 376) (181 . 924)
+            (305 . 73) (945 . 913) (961 . 929) (962 . 931)
+            (963 . 931) (971 . 939) (#x10428 . #x10400)
+            (#x1044f . #x10427)))
+      (down '((65 . 97) (90 . 122) (192 . 224) (214 . 246)
+              (216 . 248) (222 . 254) (304 . 105) (376 . 255)
+              (7838 . 223) (913 . 945) (929 . 961) (931 . 963)
+              (939 . 971) (#x10400 . #x10428)
+              (#x10427 . #x1044f))))
   (list
    (matches? char-upcase up)
    (matches? char-downcase down)
    (map (lambda (code)
           (char->integer (char-foldcase (integer->char code))))
-        '(962 304 7838))
+        '(223 962 304 7838 #x10400))
    (map char->integer
         (string->list (string-upcase (string (integer->char 223)))))
    (map char->integer
@@ -62,6 +45,12 @@
         (string->list
          (string-foldcase
           (list->string (map integer->char '(223 7838 304))))))
+   (map char->integer
+        (string->list (string-upcase (string (integer->char #xfb03)))))
+   (map char->integer
+        (string->list (string-foldcase (string (integer->char #xfb03)))))
+   (map char->integer
+        (string->list (string-upcase (string (integer->char #x390)))))
    (map (lambda (code)
           (char->integer (char-upcase (integer->char code))))
         '(8364 128578))))

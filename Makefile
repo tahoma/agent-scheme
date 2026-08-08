@@ -1,4 +1,7 @@
 EMACS ?= emacs
+CONSENT_UNICODE_VERSION ?= 17.0.0
+CONSENT_UNICODE_DATA_DIR ?= vendor/unicode/$(CONSENT_UNICODE_VERSION)
+CONSENT_UNICODE_DATA_OUTPUT ?= scheme/consent/unicode-data.sld
 # Gambit is the default compile host: `gsc -exe -nopreload' produces a
 # standalone
 # native executable with no runtime dependency, so the default `make compile'
@@ -268,7 +271,8 @@ CONSENT_FULL_TEST_JOBS ?= 16
 .DEFAULT_GOAL := help
 
 .PHONY: help print-version clean clean-compile compile install uninstall dist \
-  compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding \
+  compile-elisp update-unicode-data check-unicode-data lint-elisp \
+  lint-elisp-docstrings lint-portable lint-branding \
   lint-readability lint-line-length repl test test-full test-portable \
   test-portable-shard test-portable-chibi test-portable-gambit \
   test-portable-gambit-evaluator test-portable-gambit-support \
@@ -316,6 +320,10 @@ help:
 	  'Print the canonical runtime version from version.sld.'
 	@printf '  %-26s %s\n' 'compile-elisp' \
 	  'Byte-compile checked-in Elisp sources.'
+	@printf '  %-26s %s\n' 'update-unicode-data' \
+	  'Regenerate the pinned Unicode Scheme data library.'
+	@printf '  %-26s %s\n' 'check-unicode-data' \
+	  'Verify the generated Unicode library is current.'
 	@printf '  %-26s %s\n' 'lint-elisp' \
 	  'Byte-compile Elisp sources with warnings-as-errors.'
 	@printf '  %-26s %s\n' 'lint-elisp-docstrings' \
@@ -681,6 +689,16 @@ compile-elisp:
 # the gate reads GITHUB_HEAD_REF for the branch name and scans tracked files;
 # the dedicated Branding workflow injects the PR title/body and full commit
 # range, while this prerequisite remains a fallback for ordinary test runs.
+update-unicode-data:
+	$(EMACS) -Q --batch --load tools/generate-unicode-data.el -- \
+	  --ucd-dir '$(CONSENT_UNICODE_DATA_DIR)' \
+	  --output '$(CONSENT_UNICODE_DATA_OUTPUT)'
+
+check-unicode-data:
+	$(EMACS) -Q --batch --load tools/generate-unicode-data.el -- \
+	  --ucd-dir '$(CONSENT_UNICODE_DATA_DIR)' \
+	  --output '$(CONSENT_UNICODE_DATA_OUTPUT)' --check
+
 lint-elisp-docstrings:
 	CONSENT_ELISP_DOCSTRING_MAX_COLUMN='$(CONSENT_ELISP_DOCSTRING_MAX_COLUMN)' \
 		$(EMACS) -Q --batch --load tools/lint-elisp-docstrings.el \
@@ -710,7 +728,7 @@ lint-elisp: lint-branding lint-elisp-docstrings
 # the portable hosts already in CI, it is the only one with a usable `-W`
 # warning facility; see tools/lint-portable.sh and docs/development.md. Skips
 # (does not fail) when Guile is unavailable, matching the portable host shards.
-lint-portable:
+lint-portable: check-unicode-data
 	CONSENT_GUILE='$(CONSENT_GUILE)' \
 	CONSENT_PORTABLE_LINT_BUILD_DIR='$(CONSENT_PORTABLE_LINT_BUILD_DIR)' \
 	tools/lint-portable.sh

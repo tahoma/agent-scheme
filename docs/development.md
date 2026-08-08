@@ -104,6 +104,26 @@ with dependency-free or explicitly unblocked issues.
   definition shape, docstrings, and rich metadata layout.
 - Follow the commit-message rules in [Contributing](contributing.md).
 
+## Unicode data generation
+
+The portable character implementation consumes the pinned Unicode 17.0.0 UCD
+inputs under `vendor/unicode/17.0.0/`. Regenerate the checked-in Scheme table
+library after changing those inputs, their hashes, or the generator:
+
+```sh
+make update-unicode-data
+make check-unicode-data
+```
+
+The update target uses the required Emacs runtime, verifies all input SHA-256
+hashes, and writes `scheme/consent/unicode-data.sld`. The check target performs
+the same transformation in memory and fails if the checked-in output differs.
+Build and test targets never download Unicode data; updating the pinned release
+is an explicit reviewed repository change. Follow
+[Portable Character Model and Unicode Profile](character-model.md) for the UCD
+source files, fallback policy, default non-Turkic casing choice, license, and
+upgrade procedure.
+
 ## Emacs Lisp Docstrings
 
 Checked-in Emacs Lisp implementation docstrings under `lisp/` must fit within

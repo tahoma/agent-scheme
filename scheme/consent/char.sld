@@ -2,12 +2,10 @@
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; This bootstrap profile owns ASCII, Latin-1 casing letters, representative
-;;; Greek casing, selected decimal digit blocks, and the Unicode White_Space
-;;; property directly in portable Scheme.  Characters outside those tables
+;;; Unicode classification and mapping use the pinned, generated tables in
+;;; `(consent unicode-data)'.  Characters outside those versioned properties
 ;;; remain valid Unicode scalar values: classification returns false and case
-;;; conversion returns the input.  Issue #727 expands the same boundary with
-;;; generated, versioned Unicode data.
+;;; conversion returns the input.
 
 (define-library (scheme char)
   (export char-alphabetic?
@@ -32,48 +30,56 @@
           string-downcase
           string-foldcase
           string-upcase)
-  (import (scheme base))
+  (import (scheme base)
+          (consent unicode-data))
   (begin
-    (define (code-in-range? code lower upper)
-      "Return #t when CODE lies in the inclusive LOWER..UPPER range."
-      (and (<= lower code) (<= code upper)))
+    (define (range-table-contains? table code)
+      "Return #t when CODE occurs in flat inclusive-range TABLE."
+      (let loop ((lower 0)
+                 (upper (- (quotient (vector-length table) 2) 1)))
+        (if (> lower upper)
+            #f
+            (let* ((middle (quotient (+ lower upper) 2))
+                   (index (* middle 2))
+                   (range-lower (vector-ref table index))
+                   (range-upper (vector-ref table (+ index 1))))
+              (cond
+               ((< code range-lower) (loop lower (- middle 1)))
+               ((> code range-upper) (loop (+ middle 1) upper))
+               (else #t))))))
 
-    (define (code-in-either-range? code first-low first-high second-low
-      second-high)
-      "Return #t when CODE lies in either supplied inclusive range."
-      (or (code-in-range? code first-low first-high)
-          (code-in-range? code second-low second-high)))
+    (define (flat-mapping-ref table code)
+      "Return CODE's value in flat sorted TABLE, or #f."
+      (let loop ((lower 0)
+                 (upper (- (quotient (vector-length table) 2) 1)))
+        (if (> lower upper)
+            #f
+            (let* ((middle (quotient (+ lower upper) 2))
+                   (index (* middle 2))
+                   (source (vector-ref table index)))
+              (cond
+               ((< code source) (loop lower (- middle 1)))
+               ((> code source) (loop (+ middle 1) upper))
+               (else (vector-ref table (+ index 1))))))))
 
-    (define (ascii-upper-code? code)
-      "Return #t when CODE is an ASCII uppercase letter."
-      (code-in-range? code #x41 #x5a))
+    (define (full-mapping-ref table code)
+      "Return CODE's entry vector in sorted full-mapping TABLE, or #f."
+      (let loop ((lower 0) (upper (- (vector-length table) 1)))
+        (if (> lower upper)
+            #f
+            (let* ((middle (quotient (+ lower upper) 2))
+                   (entry (vector-ref table middle))
+                   (source (vector-ref entry 0)))
+              (cond
+               ((< code source) (loop lower (- middle 1)))
+               ((> code source) (loop (+ middle 1) upper))
+               (else entry))))))
 
-    (define (ascii-lower-code? code)
-      "Return #t when CODE is an ASCII lowercase letter."
-      (code-in-range? code #x61 #x7a))
-
-    (define (latin-upper-code? code)
-      "Return #t when CODE is an owned-profile Latin uppercase letter."
-      (or (code-in-either-range? code #xc0 #xd6 #xd8 #xde)
-          (= code #x130)
-          (= code #x178)
-          (= code #x1e9e)))
-
-    (define (latin-lower-code? code)
-      "Return #t when CODE is an owned-profile Latin lowercase letter."
-      (or (code-in-either-range? code #xe0 #xf6 #xf8 #xff)
-          (= code #xaa)
-          (= code #xb5)
-          (= code #xba)
-          (= code #x131)))
-
-    (define (greek-upper-code? code)
-      "Return #t when CODE is an owned-profile Greek uppercase letter."
-      (code-in-either-range? code #x391 #x3a1 #x3a3 #x3ab))
-
-    (define (greek-lower-code? code)
-      "Return #t when CODE is an owned-profile Greek lowercase letter."
-      (code-in-either-range? code #x3b1 #x3c1 #x3c2 #x3cb))
+    (define (simple-character-map table character)
+      "Return CHARACTER mapped through flat simple-mapping TABLE."
+      (let* ((code (char->integer character))
+             (mapped (flat-mapping-ref table code)))
+        (if mapped (integer->char mapped) character)))
 
     (define (char-upper-case? character)
       "Report whether CHARACTER has the owned Unicode Uppercase property."
@@ -82,10 +88,8 @@
         (returns (type boolean) (description
           "Whether CHARACTER is uppercase."))
         (effects pure))
-      (let ((code (char->integer character)))
-        (or (ascii-upper-code? code)
-            (latin-upper-code? code)
-            (greek-upper-code? code))))
+      (range-table-contains? consent-unicode-uppercase-ranges
+                             (char->integer character)))
 
     (define (char-lower-case? character)
       "Report whether CHARACTER has the owned Unicode Lowercase property."
@@ -94,24 +98,18 @@
         (returns (type boolean) (description
           "Whether CHARACTER is lowercase."))
         (effects pure))
-      (let ((code (char->integer character)))
-        (or (ascii-lower-code? code)
-            (latin-lower-code? code)
-            (greek-lower-code? code))))
+      (range-table-contains? consent-unicode-lowercase-ranges
+                             (char->integer character)))
 
     (define (char-alphabetic? character)
       "Report whether CHARACTER has the owned Unicode Alphabetic property."
       #((parameters
          (character (type character) (description "Character to classify.")))
         (returns (type boolean)
-         (description "Whether CHARACTER is alphabetic in this profile."))
+         (description "Whether CHARACTER has the Alphabetic property."))
         (effects pure))
-      (or (char-upper-case? character)
-          (char-lower-case? character)))
-
-    ;; Unicode decimal-zero scalars included by the bootstrap profile.
-    (define decimal-zero-codes
-      '(#x30 #x660 #x6f0 #x966 #x9e6 #xa66 #xae6))
+      (range-table-contains? consent-unicode-alphabetic-ranges
+                             (char->integer character)))
 
     (define (digit-value character)
       "Return CHARACTER's owned decimal digit value, or #f."
@@ -120,13 +118,8 @@
         (returns (type (or exact-integer boolean))
          (description "Decimal value from zero through nine, or #f."))
         (effects pure))
-      (let ((code (char->integer character)))
-        (let loop ((zeros decimal-zero-codes))
-          (cond
-           ((null? zeros) #f)
-           ((code-in-range? code (car zeros) (+ (car zeros) 9))
-            (- code (car zeros)))
-           (else (loop (cdr zeros)))))))
+      (flat-mapping-ref consent-unicode-decimal-values
+                        (char->integer character)))
 
     (define (char-numeric? character)
       "Report whether CHARACTER has Numeric_Type=Decimal in this profile."
@@ -137,12 +130,6 @@
         (effects pure))
       (if (digit-value character) #t #f))
 
-    ;; Unicode White_Space scalars are small and stable enough to own directly.
-    (define whitespace-codes
-      '(#x9 #xa #xb #xc #xd #x20 #x85 #xa0 #x1680
-        #x2000 #x2001 #x2002 #x2003 #x2004 #x2005 #x2006 #x2007
-        #x2008 #x2009 #x200a #x2028 #x2029 #x202f #x205f #x3000))
-
     (define (char-whitespace? character)
       "Report whether CHARACTER has the Unicode White_Space property."
       #((parameters
@@ -150,7 +137,8 @@
         (returns (type boolean) (description
           "Whether CHARACTER is whitespace."))
         (effects pure))
-      (if (memv (char->integer character) whitespace-codes) #t #f))
+      (range-table-contains? consent-unicode-whitespace-ranges
+                             (char->integer character)))
 
     (define (char-upcase character)
       "Return CHARACTER's owned simple uppercase mapping."
@@ -158,20 +146,8 @@
          (character (type character) (description "Character to map.")))
         (returns (type character) (description "Simple uppercase character."))
         (effects pure))
-      (let ((code (char->integer character)))
-        (integer->char
-         (cond
-          ((ascii-lower-code? code) (- code #x20))
-          ((code-in-either-range? code #xe0 #xf6 #xf8 #xfe)
-           (- code #x20))
-          ((= code #xff) #x178)
-          ((= code #xb5) #x39c)
-          ((= code #xdf) #x1e9e)
-          ((= code #x131) #x49)
-          ((code-in-range? code #x3b1 #x3c1) (- code #x20))
-          ((= code #x3c2) #x3a3)
-          ((code-in-range? code #x3c3 #x3cb) (- code #x20))
-          (else code)))))
+      (simple-character-map consent-unicode-simple-uppercase-mappings
+                            character))
 
     (define (char-downcase character)
       "Return CHARACTER's owned simple lowercase mapping."
@@ -179,18 +155,8 @@
          (character (type character) (description "Character to map.")))
         (returns (type character) (description "Simple lowercase character."))
         (effects pure))
-      (let ((code (char->integer character)))
-        (integer->char
-         (cond
-          ((ascii-upper-code? code) (+ code #x20))
-          ((code-in-either-range? code #xc0 #xd6 #xd8 #xde)
-           (+ code #x20))
-          ((= code #x130) #x69)
-          ((= code #x178) #xff)
-          ((= code #x1e9e) #xdf)
-          ((code-in-range? code #x391 #x3a1) (+ code #x20))
-          ((code-in-range? code #x3a3 #x3ab) (+ code #x20))
-          (else code)))))
+      (simple-character-map consent-unicode-simple-lowercase-mappings
+                            character))
 
     (define (char-foldcase character)
       "Return CHARACTER's owned Unicode simple case-folding mapping."
@@ -198,11 +164,8 @@
          (character (type character) (description "Character to fold.")))
         (returns (type character) (description "Simple foldcase character."))
         (effects pure))
-      (let ((code (char->integer character)))
-        (cond
-         ((= code #x3c2) (integer->char #x3c3))
-         ((= code #x130) character)
-         (else (char-downcase character)))))
+      (simple-character-map consent-unicode-simple-foldcase-mappings
+                            character))
 
     (define (folded-char-compare predicate first second rest)
       "Compare FIRST, SECOND, and REST after owned character foldcase."
@@ -268,29 +231,32 @@
         (effects pure))
       (folded-char-compare >= first second rest))
 
+    (define (full-mapping-characters table character)
+      "Return CHARACTER's full TABLE mapping as a character list."
+      (let ((entry (full-mapping-ref table (char->integer character))))
+        (if (not entry)
+            (list character)
+            (let loop ((index (- (vector-length entry) 1)) (result '()))
+              (if (= index 0)
+                  result
+                  (loop (- index 1)
+                        (cons (integer->char (vector-ref entry index))
+                              result)))))))
+
     (define (full-upcase-characters character)
-      "Return CHARACTER's owned full uppercase mapping as a list."
-      (let ((code (char->integer character)))
-        (if (= code #xdf)
-            (list (integer->char #x53) (integer->char #x53))
-            (list (char-upcase character)))))
+      "Return CHARACTER's generated full uppercase mapping as a list."
+      (full-mapping-characters consent-unicode-full-uppercase-mappings
+                               character))
 
     (define (full-downcase-characters character)
-      "Return CHARACTER's owned full lowercase mapping as a list."
-      (let ((code (char->integer character)))
-        (if (= code #x130)
-            (list (integer->char #x69) (integer->char #x307))
-            (list (char-downcase character)))))
+      "Return CHARACTER's generated full lowercase mapping as a list."
+      (full-mapping-characters consent-unicode-full-lowercase-mappings
+                               character))
 
     (define (full-foldcase-characters character)
-      "Return CHARACTER's owned full case-folding mapping as a list."
-      (let ((code (char->integer character)))
-        (cond
-         ((or (= code #xdf) (= code #x1e9e))
-          (list (integer->char #x73) (integer->char #x73)))
-         ((= code #x130)
-          (list (integer->char #x69) (integer->char #x307)))
-         (else (list (char-foldcase character))))))
+      "Return CHARACTER's generated full case-fold mapping as a list."
+      (full-mapping-characters consent-unicode-full-foldcase-mappings
+                               character))
 
     (define (string-case-map string mapper)
       "Return STRING transformed by MAPPER's full character mappings."

@@ -42,6 +42,8 @@
               consent-read)
         (only (consent version)
               consent-version-datum)
+        (only (consent library)
+              consent-runtime-source-files)
         (only (consent runtime)
               audit-process-capability-result!
               audit-network-capability-result!
@@ -1767,6 +1769,12 @@ ged "
          (and char-spec
               (cadr (assq 'source-file char-spec)))
          "consent/char.sld")
+  (check 'runtime-source-library-unicode-data-file
+         (if (member "consent/unicode-data.sld"
+                     (consent-runtime-source-files))
+             #t
+             #f)
+         #t)
   (check 'standard-source-library-cxr-file
          (and cxr-spec
               (cadr (assq 'source-file cxr-spec)))
@@ -3338,6 +3346,7 @@ age \"example\")))))")))
                    (let ((bytes (string->utf8 \"agent\")))
                      (list (pair? (memq 'r7rs available))
                            (pair? (memq 'srfi-0 available))
+                           (pair? (memq 'full-unicode available))
                            (pair? (memq 'consent available))
                            (setting)
                            (parameterize ((setting 'inner))
@@ -3346,7 +3355,8 @@ age \"example\")))))")))
                            bytes
                            (utf8->string bytes)
                            (utf8->string bytes 1 4))))"
-                "(#t #t #t outer inner outer #u8(97 103 101 110 116) \"agent\" \
+                "(#t #t #t #t outer inner outer #u8(97 103 101 110 116) \
+\"agent\" \
 \"gen\")"))
 
 (testing-registry-case
