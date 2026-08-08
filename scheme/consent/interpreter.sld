@@ -202,7 +202,8 @@ d."
                       (begin
                         (set-car! copy head)
                         (set-cdr! copy tail)
-                        (consent-copy-datum-source! copy value #t)))))))
+                        (context-copy-datum-source!
+                         context copy value #t)))))))
          ((vector? value)
           (let ((prior
                  (let loop ((entries seen))
@@ -224,7 +225,8 @@ d."
                           (loop (+ index 1)
                                 (or changed? (not (eq? owned element)))))
                         (if changed?
-                            (consent-copy-datum-source! copy value #t)
+                            (context-copy-datum-source!
+                             context copy value #t)
                             value)))))))
          (else value)))
 
@@ -1663,7 +1665,7 @@ er")
                 (eval-error "quote requires exactly one datum" parts))
             (continue continuation
                       (charge-literal!
-                       (strip-identifiers (second parts))
+                       (strip-identifiers (second parts) context)
                        context)))
            ((and operator-name
                  (string=? operator-name "quasiquote")
@@ -1677,7 +1679,8 @@ er")
              continuation
              (charge-literal!
               (strip-identifiers
-               (eval-quasiquote parts environment context))
+               (eval-quasiquote parts environment context)
+               context)
               context)))
            ((and operator-name
                  (string=? operator-name "lambda")
@@ -6916,7 +6919,10 @@ d.")))
 
     (define (primitive-syntax-source arguments context)
       "Return source metadata attached to a syntax datum, if any."
-      (own-runtime-datum (consent-syntax-source (car arguments)) context))
+      (own-runtime-datum
+       (or (context-source-copy-source-ref context (car arguments))
+           (consent-syntax-source (car arguments)))
+       context))
 
     (define (primitive-macroexpand-yield arguments context)
       "Record a macro expansion event and return the expansion record."

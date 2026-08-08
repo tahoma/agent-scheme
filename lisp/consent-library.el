@@ -50,10 +50,10 @@
 
 (cl-defstruct (consent--source-library-instance-entry
                (:constructor consent--make-source-library-instance-entry
-                             (library step-cost))
+                             (library step-cost value-node-cost))
                (:copier nil))
-  "Cached immutable source library and its logical evaluation cost."
-  library step-cost)
+  "Cached immutable source library and its logical evaluation costs."
+  library step-cost value-node-cost)
 
 (defvar consent--source-library-file-cache (make-hash-table :test #'equal)
   "Source-library signatures and parsed forms keyed by absolute file name.")
@@ -2487,6 +2487,14 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
   (dotimes (_ step-cost)
     (consent--note-step context)))
 
+(defun consent--source-library-charge-cached-value-nodes
+    (context value-node-cost)
+  "Charge CONTEXT the logical VALUE-NODE-COST of a cached source library."
+  ;; Reusing the immutable instance avoids host allocation, but the value-node
+  ;; budget describes the source program's logical work just like the step
+  ;; budget.  Replay the cold load's aggregate charge on every cache hit.
+  (consent--note-value-allocation context value-node-cost))
+
 (defun consent--finish-manifest-source-library (entry context)
   "Apply manifest ENTRY's overlay and export filter in CONTEXT."
   (let ((key (plist-get entry :name))
@@ -2546,11 +2554,16 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
               (consent--source-library-charge-cached-steps
                context
                (consent--source-library-instance-entry-step-cost cached))
+              (consent--source-library-charge-cached-value-nodes
+               context
+               (consent--source-library-instance-entry-value-node-cost cached))
               (puthash
                key
                (consent--source-library-instance-entry-library cached)
                (consent--eval-context-libraries context)))
-          (let ((steps-before (consent--eval-context-steps context)))
+          (let ((steps-before (consent--eval-context-steps context))
+                (value-nodes-before
+                 (consent--eval-context-value-nodes context)))
             (consent--register-source-library-forms
              (consent--source-library-forms-for-context file-entry context)
              context
@@ -2562,7 +2575,9 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
                (consent--make-source-library-instance-entry
                 (gethash key
                          (consent--eval-context-libraries context))
-                (- (consent--eval-context-steps context) steps-before))
+                (- (consent--eval-context-steps context) steps-before)
+                (- (consent--eval-context-value-nodes context)
+                   value-nodes-before))
                consent--source-library-instance-cache))))))))
 
 (defun consent--manifest-entry-exports-declared-p (entry)

@@ -148,11 +148,6 @@
     ;; ordinary datum equality and external writing remain R7RS datums.
     (define consent-source-metadata '())
 
-    ;; Cached source-library copies point back to canonical parsed datums.
-    ;; Resolve these aliases only when source metadata is inspected, avoiding
-    ;; one linear metadata-table scan per node while copying a source graph.
-    (define consent-source-metadata-aliases '())
-
     ;; Default cap for the portable source side table. Portable R7RS has no
     ;; weak hash table, so the table remains explicit runtime state. Keep the
     ;; cap option-backed so trusted callers can retry with a higher bound.
@@ -536,29 +531,21 @@ r"
             "would exceed its resource limit."))
         (effects state-read state-write error))
       (if (and source (source-attachable? datum))
-          (if (and (pair? maybe-limit)
-                   (eq? (car maybe-limit) 'source-metadata-alias))
-              ;; Internal cached-source path: SOURCE is the canonical datum,
-              ;; not a new metadata record, so it does not consume the caller's
-              ;; source-metadata budget.
-              (set! consent-source-metadata-aliases
-                    (cons (cons datum source)
-                          consent-source-metadata-aliases))
-              (let ((limit
-                     (if (null? maybe-limit)
-                         consent-default-maximum-source-metadata
-                         (car maybe-limit))))
-                (if (>= consent-source-metadata-entry-count limit)
-                    (error
-                     "consent datum limit error: source metadata count exceeds \
+          (let ((limit
+                 (if (null? maybe-limit)
+                     consent-default-maximum-source-metadata
+                     (car maybe-limit))))
+            (if (>= consent-source-metadata-entry-count limit)
+                (error
+                 "consent datum limit error: source metadata count exceeds \
 maximum source metadata"
-                     consent-source-metadata-entry-count
-                     limit))
-                (set! consent-source-metadata
-                      (cons (cons datum source)
-                            consent-source-metadata))
-                (set! consent-source-metadata-entry-count
-                      (+ consent-source-metadata-entry-count 1)))))
+                 consent-source-metadata-entry-count
+                 limit))
+            (set! consent-source-metadata
+                  (cons (cons datum source)
+                        consent-source-metadata))
+            (set! consent-source-metadata-entry-count
+                  (+ consent-source-metadata-entry-count 1))))
       datum)
 
     (define (consent-datum-source datum)
@@ -570,18 +557,13 @@ maximum source metadata"
           ("A source-metadata record built from DATUM's attached"
             "metadata, or #f when none is attached.")))
         (effects state-read))
-      (let ((metadata (datum-source-metadata datum)))
-        (if metadata (source-metadata->record metadata) #f)))
+      (let ((cell (assq datum consent-source-metadata)))
+        (if cell (source-metadata->record (cdr cell)) #f)))
 
     (define (datum-source-metadata datum)
       "Return raw source metadata attached to DATUM, or #f when absent."
       (let ((cell (assq datum consent-source-metadata)))
-        (if cell
-            (cdr cell)
-            (let ((alias (assq datum consent-source-metadata-aliases)))
-              (if alias
-                  (datum-source-metadata (cdr alias))
-                  #f)))))
+        (if cell (cdr cell) #f)))
 
     (define (consent-copy-datum-source! target source . maybe-overwrite)
       "Copy source metadata from SOURCE to TARGET, preserving existing metadat\

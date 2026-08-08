@@ -197,6 +197,10 @@
           set-context-syntax-environment!
           context-libraries
           set-context-libraries!
+          context-source-copy-count
+          context-source-copy-set!
+          context-source-copy-source-ref
+          context-copy-datum-source!
           context-include-paths
           context-include-directory
           set-context-include-directory!
@@ -964,6 +968,7 @@ t."
                          maximum-value-nodes maximum-source-metadata
                          value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
+                         source-copies
                          include-paths include-directory file-paths
                          docstring-retention
                          boundary-contract-checking
@@ -1011,6 +1016,10 @@ t."
       (syntax-environment context-syntax-environment
                           set-context-syntax-environment!)
       (libraries context-libraries set-context-libraries!)
+      ;; Cached source syntax is copied once per evaluation context. The state
+      ;; vector holds a bounded count and runtime-to-canonical provenance map
+      ;; without retaining the context globally.
+      (source-copies context-source-copies)
       (include-paths context-include-paths)
       (include-directory context-include-directory
                          set-context-include-directory!)
@@ -3295,6 +3304,7 @@ tuple."
                      consent-default-maximum-host-callbacks)
        (make-syntax-environment '() #f '())
        '()
+       (vector 0 '())
        (normalize-include-paths
         (option-ref options 'include-paths '())
         include-directory)
@@ -3352,6 +3362,133 @@ tuple."
        (option-count options
                      'max-interned-symbols
                      consent-default-maximum-interned-symbols))))
+
+    (define (context-source-copy-count context)
+      "Return CONTEXT's number of copied mutable source nodes."
+      #((parameters
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose source-copy overlay is"
+             "inspected."))))
+        (returns (type exact-integer)
+         (description
+          "Number of mutable source nodes copied into CONTEXT."))
+        (effects state-read))
+      (vector-ref (context-source-copies context) 0))
+
+    (define (context-source-copy-map-ref entries key)
+      "Return KEY's identity-mapped value in ENTRIES, or #f."
+      (let loop ((rest entries))
+        (cond
+         ((null? rest) #f)
+         ((eq? key (caar rest)) (cdar rest))
+         (else (loop (cdr rest))))))
+
+    (define (context-source-copy-source-ref context value)
+      "Return CONTEXT-local source metadata for copied VALUE, or #f."
+      #((parameters
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose source-copy overlay is"
+             "inspected.")))
+         (value (type any)
+          (description "Potential context-owned source copy.")))
+        (returns (type (or source-metadata boolean))
+         (description
+          ("Source metadata for VALUE's canonical source, or #f when"
+            "VALUE is not a context-owned source copy.")))
+        (effects state-read))
+      (let ((source (context-source-copy-canonical-ref context value)))
+        (and source (consent-datum-source source))))
+
+    (define (context-source-copy-canonical-ref context value)
+      "Return VALUE's canonical source in CONTEXT, or #f."
+      (context-source-copy-map-ref
+       (vector-ref (context-source-copies context) 1)
+       value))
+
+    (define (context-source-copy-attachable? value)
+      "Report whether VALUE has stable identity for local provenance."
+      (or (pair? value)
+          (vector? value)
+          (string? value)
+          (bytevector? value)
+          (consent-number? value)
+          (and (consent-record? value)
+               (not (consent-symbol? value)))
+          (consent-record-type? value)))
+
+    (define (context-source-copy-set! context value source)
+      "Record VALUE as CONTEXT's copy of canonical SOURCE."
+      "The provenance overlay is bounded by the source-metadata ceiling;"
+      "source copying is representation work, not a program-visible value"
+      "allocation. Its conservative count covers identity-bearing clone"
+      "nodes and can exceed the reader's metadata-record count."
+      #((parameters
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose source-copy overlay is"
+             "extended.")))
+         (value (type any)
+          (description "Context-owned copy to associate with SOURCE."))
+         (source (type any)
+          (description "Canonical source datum represented by VALUE.")))
+        (returns (type any)
+         (description "The original VALUE, unchanged."))
+        (effects state-write error))
+      (let* ((state (context-source-copies context))
+             (count (vector-ref state 0))
+             (next-count (+ count 1))
+             (limit (context-maximum-source-metadata context)))
+        (if (> next-count limit)
+            (budget-stop!
+             context
+             'source-metadata
+             "source copy count exceeds maximum source metadata"
+             next-count
+             limit))
+        (vector-set! state 0 next-count)
+        (vector-set! state 1
+                     (cons (cons value source) (vector-ref state 1)))
+        value))
+
+    (define (context-copy-datum-source!
+             context target source . maybe-overwrite)
+      "Copy SOURCE provenance to TARGET in CONTEXT when locally owned."
+      "Global reader metadata remains the fallback for directly parsed datums."
+      #((parameters
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose source-copy overlay is"
+             "consulted and possibly extended.")))
+         (target (type any)
+          (description "Datum that receives SOURCE provenance."))
+         (source (type any)
+          (description "Datum whose provenance is copied to TARGET."))
+         (maybe-overwrite (type list)
+          (description
+           ("Optional flag allowing existing TARGET provenance to be"
+             "replaced."))))
+        (returns (type any)
+         (description "The original TARGET, unchanged."))
+        (effects state-read state-write error))
+      (let ((canonical
+             (context-source-copy-canonical-ref context source))
+            (overwrite?
+             (and (pair? maybe-overwrite) (car maybe-overwrite))))
+        (if (and canonical (context-source-copy-attachable? target))
+            (if (or overwrite?
+                    (and
+                     (not
+                      (context-source-copy-canonical-ref context target))
+                     (not (consent-datum-source target))))
+                (context-source-copy-set! context target canonical))
+            (apply
+             consent-copy-datum-source!
+             target
+             source
+             maybe-overwrite)))
+      target)
 
     (define (context-reader-options context)
       "Return reader options derived from CONTEXT's resource ceilings."

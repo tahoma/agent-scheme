@@ -20,7 +20,13 @@
         (api-version (compat 0))
         (source-version unknown)
         (realization portable-source)
-        (exports (fixture-tool fixture-shared-literal))
+        (exports
+         (fixture-tool
+          fixture-documented
+          fixture-shared-literal
+          fixture-shared-literal-ref
+          fixture-template-form-ref
+          fixture-template-literal))
         (dependencies ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)

@@ -1963,9 +1963,9 @@
       (consent--source-library-cache-reset)
       (delete-directory root t))))
 
-(ert-deftest consent-library-test-shared-cache-preserves-step-cost ()
-  "Keep source-library step accounting identical on cache hits."
-  (let* ((root (make-temp-file "consent-shared-step-cost-" t))
+(ert-deftest consent-library-test-shared-cache-preserves-budget-costs ()
+  "Keep source-library aggregate logical costs equal on cache hits."
+  (let* ((root (make-temp-file "consent-shared-budget-cost-" t))
          (entry
           (consent-library-test--cached-source-entry
            root 'shared-immutable-data 'internal-runtime)))
@@ -1980,9 +1980,37 @@
                     (consent-library-test--register-cached-source entry)))
               (should (eq (cdr cold) (cdr warm)))
               (should (> (consent--eval-context-steps (car cold)) 0))
+              (should (> (consent--eval-context-value-nodes (car cold)) 0))
               (should
                (= (consent--eval-context-steps (car cold))
-                  (consent--eval-context-steps (car warm)))))))
+                  (consent--eval-context-steps (car warm))))
+              (should
+               (= (consent--eval-context-value-nodes (car cold))
+                  (consent--eval-context-value-nodes (car warm)))))))
+      (consent--source-library-cache-reset)
+      (delete-directory root t))))
+
+(ert-deftest consent-library-test-shared-cache-enforces-value-node-budget ()
+  "Enforce a tight value-node budget on shared source cache hits."
+  (let* ((root (make-temp-file "consent-shared-value-budget-" t))
+         (entry
+          (consent-library-test--cached-source-entry
+           root 'shared-immutable-data 'internal-runtime)))
+    (unwind-protect
+        (progn
+          (consent-library-test--write-cached-source root 1)
+          (consent--source-library-cache-reset)
+          (let ((consent--source-library-internal-imports-allowed t))
+            (let* ((cold
+                    (consent-library-test--register-cached-source entry))
+                   (value-node-cost
+                    (consent--eval-context-value-nodes (car cold))))
+              (should (> value-node-cost 0))
+              (should-error
+               (consent-library-test--register-cached-source
+                entry
+                (list :max-value-nodes (1- value-node-cost)))
+               :type 'consent-budget-error))))
       (consent--source-library-cache-reset)
       (delete-directory root t))))
 

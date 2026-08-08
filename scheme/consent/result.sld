@@ -138,70 +138,85 @@
          (list 'host-object
                 (result-field 'printed "#<host-object>"))))))
 
-    (define (strip-identifiers value . maybe-seen)
+    (define (strip-identifiers value . maybe-context)
       "Remove hygienic identifier wrappers from VALUE for readable output."
       #((parameters
          (value . "Runtime value to simplify for display.")
-         (maybe-seen (type list)
+         (maybe-context (type list)
           (description
-           ("Internal cycle-detection list used while walking compound"
-             "values."))))
+           ("Optional evaluation context used to preserve context-local"
+             "source provenance on rebuilt containers."))))
         (returns
          . ("VALUE with identifiers replaced by their names inside"
             "compound values."))
-        (effects pure))
-      (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
-        (cond
-         ((identifier? value)
-          (identifier-name value))
-         ((pair? value)
-          (let ((prior
-                 (let loop ((entries seen))
-                   (cond
-                    ((null? entries) #f)
-                    ((host-eq? value (caar entries)) (cdar entries))
-                    (else (loop (cdr entries)))))))
-            (if prior
-                prior
-                (let* ((copy (cons #f #f))
-                       (next-seen (cons (cons value copy) seen))
-                       (head (strip-identifiers (car value) next-seen))
-                       (tail (strip-identifiers (cdr value) next-seen)))
-                  (if (and (host-eq? head (car value))
-                           (host-eq? tail (cdr value)))
-                      value
-                      (begin
-                        (set-car! copy head)
-                        (set-cdr! copy tail)
-                        (consent-copy-datum-source! copy value #t)))))))
-         ((vector? value)
-          (let ((prior
-                 (let loop ((entries seen))
-                   (cond
-                    ((null? entries) #f)
-                    ((host-eq? value (caar entries)) (cdar entries))
-                    (else (loop (cdr entries)))))))
-            (if prior
-                prior
-                (let* ((copy (make-vector (vector-length value) #f))
-                       (next-seen (cons (cons value copy) seen)))
-                  (let loop ((index 0) (changed? #f))
-                    (if (< index (vector-length value))
-                        (let* ((element (vector-ref value index))
-                               (stripped
-                                (strip-identifiers element next-seen)))
-                          (vector-set! copy index stripped)
-                          (loop (+ index 1)
-                                (or changed?
-                                    (not (host-eq? stripped element)))))
-                        (if changed?
-                            (consent-copy-datum-source! copy value #t)
-                            value)))))))
-         ((consent-record? value)
-          value)
-         ((consent-record-type? value)
-          value)
-         (else value))))
+        (effects state-read state-write))
+      (let ((context (if (null? maybe-context)
+                         #f
+                         (car maybe-context))))
+        (letrec
+            ((copy-source!
+              (lambda (target source)
+                (if context
+                    (context-copy-datum-source!
+                     context target source #t)
+                    (consent-copy-datum-source! target source #t))))
+             (walk
+              (lambda (item seen)
+                (cond
+                 ((identifier? item)
+                  (identifier-name item))
+                 ((pair? item)
+                  (let ((prior
+                         (let loop ((entries seen))
+                           (cond
+                            ((null? entries) #f)
+                            ((host-eq? item (caar entries)) (cdar entries))
+                            (else (loop (cdr entries)))))))
+                    (if prior
+                        prior
+                        (let* ((copy (cons #f #f))
+                               (next-seen
+                                (cons (cons item copy) seen))
+                               (head (walk (car item) next-seen))
+                               (tail (walk (cdr item) next-seen)))
+                          (if (and (host-eq? head (car item))
+                                   (host-eq? tail (cdr item)))
+                              item
+                              (begin
+                                (set-car! copy head)
+                                (set-cdr! copy tail)
+                                (copy-source! copy item)))))))
+                 ((vector? item)
+                  (let ((prior
+                         (let loop ((entries seen))
+                           (cond
+                            ((null? entries) #f)
+                            ((host-eq? item (caar entries)) (cdar entries))
+                            (else (loop (cdr entries)))))))
+                    (if prior
+                        prior
+                        (let* ((copy
+                                (make-vector (vector-length item) #f))
+                               (next-seen
+                                (cons (cons item copy) seen)))
+                          (let loop ((index 0) (changed? #f))
+                            (if (< index (vector-length item))
+                                (let* ((element (vector-ref item index))
+                                       (stripped
+                                        (walk element next-seen)))
+                                  (vector-set! copy index stripped)
+                                  (loop
+                                   (+ index 1)
+                                   (or changed?
+                                       (not
+                                        (host-eq? stripped element)))))
+                                (if changed?
+                                    (copy-source! copy item)
+                                    item)))))))
+                 ((consent-record? item) item)
+                 ((consent-record-type? item) item)
+                 (else item)))))
+          (walk value '()))))
 
     (define (budget-result-field context)
       "Build the budget field for a public evaluation-result datum."

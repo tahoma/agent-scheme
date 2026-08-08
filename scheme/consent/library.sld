@@ -174,9 +174,9 @@
     ;; pair.
     (define manifest-source-library-source-cache '())
 
-    ;; Parsed manifest source is immutable evaluator input in the process-wide
-    ;; default symbol domain.  Reuse it across short-lived contexts so source
-    ;; metadata remains proportional to distinct libraries, not import count.
+    ;; Canonical syntax is shared only in the process-wide default symbol
+    ;; domain. Mutable literal realizations remain owned by evaluation
+    ;; contexts, so the cached graph itself is never exposed for mutation.
     (define manifest-source-library-form-cache '())
 
     ;; Internal immutable-data libraries may keep one evaluated library object
@@ -3095,23 +3095,23 @@ ntry"
          source)
         found?))
 
-    (define (source-library-copy-source! copy source)
-      "Attach SOURCE's canonical reader provenance lazily to COPY."
-      (consent-datum-source-set! copy source 'source-metadata-alias))
+    (define (source-library-copy-source! copy source context)
+      "Record COPY's canonical SOURCE in CONTEXT-local provenance."
+      (context-source-copy-set! context copy source))
 
-    (define (source-library-copy-tree value)
+    (define (source-library-copy-tree value context)
       "Copy acyclic mutable VALUE while preserving default-domain symbols."
       (cond
        ((or (consent-symbol? value) (host-symbol? value)) value)
        ((pair? value)
         (let ((copy
-               (cons (source-library-copy-tree (car value))
-                     (source-library-copy-tree (cdr value)))))
-          (source-library-copy-source! copy value)))
+               (cons (source-library-copy-tree (car value) context)
+                     (source-library-copy-tree (cdr value) context))))
+          (source-library-copy-source! copy value context)))
        ((string? value)
-        (source-library-copy-source! (string-copy value) value))
+        (source-library-copy-source! (string-copy value) value context))
        ((bytevector? value)
-        (source-library-copy-source! (bytevector-copy value) value))
+        (source-library-copy-source! (bytevector-copy value) value context))
        ((vector? value)
         (let ((copy (make-vector (vector-length value) #f)))
           (let loop ((index 0))
@@ -3121,12 +3121,13 @@ ntry"
                    copy
                    index
                    (source-library-copy-tree
-                    (vector-ref value index)))
+                    (vector-ref value index)
+                    context))
                   (loop (+ index 1)))))
-          (source-library-copy-source! copy value)))
+          (source-library-copy-source! copy value context)))
        (else value)))
 
-    (define (source-library-copy-datum value seen)
+    (define (source-library-copy-datum value seen context)
       "Copy mutable VALUE while preserving sharing and default symbols."
       (cond
        ((or (consent-symbol? value) (host-symbol? value)) value)
@@ -3136,23 +3137,21 @@ ntry"
               (source-library-copy-seen-set! seen value copy)
               (set-car!
                copy
-               (source-library-copy-datum
-                (car value) seen))
+               (source-library-copy-datum (car value) seen context))
               (set-cdr!
                copy
-               (source-library-copy-datum
-                (cdr value) seen))
-              (source-library-copy-source! copy value))))
+               (source-library-copy-datum (cdr value) seen context))
+              (source-library-copy-source! copy value context))))
        ((string? value)
         (or (source-library-copy-seen-ref seen value)
             (let ((copy (string-copy value)))
               (source-library-copy-seen-set! seen value copy)
-              (source-library-copy-source! copy value))))
+              (source-library-copy-source! copy value context))))
        ((bytevector? value)
         (or (source-library-copy-seen-ref seen value)
             (let ((copy (bytevector-copy value)))
               (source-library-copy-seen-set! seen value copy)
-              (source-library-copy-source! copy value))))
+              (source-library-copy-source! copy value context))))
        ((vector? value)
         (or (source-library-copy-seen-ref seen value)
             (let ((copy (make-vector (vector-length value) #f)))
@@ -3164,29 +3163,28 @@ ntry"
                        copy
                        index
                        (source-library-copy-datum
-                        (vector-ref value index) seen))
+                        (vector-ref value index)
+                        seen
+                        context))
                       (loop (+ index 1)))))
-              (source-library-copy-source! copy value))))
+              (source-library-copy-source! copy value context))))
        (else value)))
 
-    (define (source-library-copy-forms forms shared-datum?)
-      "Return mutable source FORMS isolated in the default symbol domain."
-      ;; This helper is reached only for the default-domain cache branch below;
-      ;; custom symbol tables receive a fresh parse and need no re-interning.
+    (define (source-library-copy-forms forms shared-datum? context)
+      "Return CONTEXT-owned mutable copies of canonical source FORMS."
+      ;; Custom symbol tables parse afresh and never reach this helper.
       (if shared-datum?
           (source-library-copy-datum
-           forms (list 'source-library-copy-seen))
-          (source-library-copy-tree forms)))
+           forms (list 'source-library-copy-seen) context)
+          (source-library-copy-tree forms context)))
 
     (define (manifest-source-library-forms
              source context preserve-source?)
       "Return parsed SOURCE forms in CONTEXT's symbol domain."
-      "The default symbol domain caches one canonical parse, then copies every"
-      "mutable datum before ordinary evaluation. Isolated symbol domains still"
-      "receive a fresh parse whose symbols belong only to that table. Trusted"
-      "immutable-data realizations parse once without retained provenance;"
-      "their private data cannot expose syntax metadata, and their evaluated"
-      "instance is the process cache."
+      "The default symbol domain caches canonical syntax, then copies its"
+      "mutable graph into each context. Custom symbol domains parse afresh."
+      "Trusted immutable-data realizations parse without provenance because"
+      "their evaluated data instance, rather than source syntax, is cached."
       (if (not preserve-source?)
           (consent-read-all
            source
@@ -3216,28 +3214,33 @@ ntry"
                       (if cached
                           (third cached)
                           (third (car manifest-source-library-form-cache)))))
-                (source-library-copy-forms forms shared-datum?))
+                (source-library-copy-forms forms shared-datum? context))
               (consent-read-all source (context-reader-options context)))))
+
+    (define (shared-immutable-source-library-entry? entry)
+      "Report whether ENTRY explicitly declares immutable shared data."
+      ;; This is a trusted repository-manifest assertion, not an inferred
+      ;; property. Reviewers must verify that no mutable aggregate or
+      ;; context-sensitive state crosses the library's export boundary.
+      (and
+       (source-library-internal-imports-allowed?)
+       (library-symbol-eq?
+        (collection-entry-field entry 'realization #f)
+        'shared-immutable-data)
+       (library-symbol-eq?
+        (collection-entry-field entry 'visibility #f)
+        'internal-runtime)
+       (library-symbol-eq?
+        (collection-entry-field entry 'source-kind #f)
+        'portable-source)
+       (not
+        (collection-entry-field
+         entry 'primitive-overlay-library #f))))
 
     (define (shared-immutable-source-library-key entry context)
       "Return ENTRY's process-cache key in CONTEXT, or #f."
-      ;; This realization is a trusted repository-manifest assertion, not an
-      ;; inferred property. Reviewers must verify that no mutable aggregate or
-      ;; context-sensitive state crosses the library's export boundary.
       (if (and
-           (source-library-internal-imports-allowed?)
-           (library-symbol-eq?
-            (collection-entry-field entry 'realization #f)
-            'shared-immutable-data)
-           (library-symbol-eq?
-            (collection-entry-field entry 'visibility #f)
-            'internal-runtime)
-           (library-symbol-eq?
-            (collection-entry-field entry 'source-kind #f)
-            'portable-source)
-           (not
-            (collection-entry-field
-             entry 'primitive-overlay-library #f))
+           (shared-immutable-source-library-entry? entry)
            (host-eq? (context-symbol-table context)
                      consent-default-symbol-table))
           (list
@@ -3263,25 +3266,29 @@ ntry"
         (and entry (cdr entry))))
 
     (define (shared-immutable-source-library-set!
-             cache-key library step-cost)
-      "Cache immutable source LIBRARY and logical STEP-COST under CACHE-KEY."
+             cache-key library step-cost value-node-cost)
+      "Cache immutable source LIBRARY and its logical costs under CACHE-KEY."
       (if cache-key
           (set! shared-immutable-source-library-cache
-                (cons (list cache-key library step-cost)
+                (cons (list
+                       cache-key library step-cost value-node-cost)
                       shared-immutable-source-library-cache)))
       consent-unspecified)
 
-    (define (shared-immutable-source-library-charge-steps!
-             context step-cost)
-      "Charge CONTEXT the logical STEP-COST of a cached source library."
+    (define (shared-immutable-source-library-charge-costs!
+             context step-cost value-node-cost)
+      "Charge CONTEXT the aggregate logical costs of a cached source library."
       ;; Evaluation budgets are observable in result records. The process
       ;; cache avoids host work, but cannot make that logical cost depend on
-      ;; whether another context happened to load the library first.
+      ;; whether another context happened to load the library first. Replay
+      ;; preserves each aggregate dimension, not the cold evaluation's
+      ;; chronological interleaving between dimensions.
       (let loop ((remaining step-cost))
         (if (> remaining 0)
             (begin
               (note-step! context)
-              (loop (- remaining 1))))))
+              (loop (- remaining 1)))))
+      (note-value-allocation! context value-node-cost))
 
     (define (register-source-library!
              source context environment preserve-source?)
@@ -3839,7 +3846,8 @@ host"
                          (host-eq? tail (cdr datum)))
                     datum
                     (let ((result (cons head tail)))
-                      (consent-copy-datum-source! result datum)
+                      (context-copy-datum-source!
+                       context result datum)
                       result)))))
          ((vector? datum)
           (if (host-memq datum seen)
@@ -3860,7 +3868,8 @@ host"
                                         (not (host-eq? next element)))))))))
                 (if converted
                     (let ((result (list->vector converted)))
-                      (consent-copy-datum-source! result datum)
+                      (context-copy-datum-source!
+                       context result datum)
                       result)
                     datum))))
          (else datum)))
@@ -4597,11 +4606,13 @@ ary"
 
     (define (register-manifest-source-library! entry context environment)
       "Register source library described by manifest ENTRY."
-      (let ((key (collection-entry-field entry 'name #f))
-            (source-file (collection-entry-field entry 'source-file #f))
-            (root (collection-entry-field entry 'root #f))
-            (cache-key
-             (shared-immutable-source-library-key entry context)))
+      (let* ((key (collection-entry-field entry 'name #f))
+             (source-file (collection-entry-field entry 'source-file #f))
+             (root (collection-entry-field entry 'root #f))
+             (shared-immutable?
+              (shared-immutable-source-library-entry? entry))
+             (cache-key
+              (shared-immutable-source-library-key entry context)))
         (if (not source-file)
             (eval-error "manifest source library has no source-file" key))
         (if (not (library-registry-ref context key))
@@ -4609,20 +4620,23 @@ ary"
                    (shared-immutable-source-library-ref cache-key)))
               (if cached
                   (begin
-                    (shared-immutable-source-library-charge-steps!
-                     context (cadr cached))
+                    (shared-immutable-source-library-charge-costs!
+                     context (cadr cached) (third cached))
                     (library-registry-set! context key (car cached)))
-                  (let ((steps-before (context-steps context)))
+                  (let ((steps-before (context-steps context))
+                        (value-nodes-before (context-value-nodes context)))
                     (register-source-library!
                      (manifest-source-library-source source-file key root)
                      context
                      environment
-                     (not cache-key))
+                     (not shared-immutable?))
                     (finish-manifest-library-registration! entry context)
                     (shared-immutable-source-library-set!
                      cache-key
                      (library-registry-ref context key)
-                     (- (context-steps context) steps-before))))))
+                     (- (context-steps context) steps-before)
+                     (- (context-value-nodes context)
+                        value-nodes-before))))))
         ;; A cached immutable library was already normalized before it entered
         ;; the process cache. Ordinary source libraries still finish here.
         (if (not cache-key)

@@ -1785,6 +1785,10 @@
           set-context-syntax-environment!
           context-libraries
           set-context-libraries!
+          context-source-copy-count
+          context-source-copy-set!
+          context-source-copy-source-ref
+          context-copy-datum-source!
           context-include-paths
           context-include-directory
           set-context-include-directory!
