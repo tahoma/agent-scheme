@@ -704,7 +704,7 @@ lint-elisp-docstrings:
 		$(EMACS) -Q --batch --load tools/lint-elisp-docstrings.el \
 		-f consent-lint-elisp-docstrings-batch-main
 
-lint-elisp: lint-branding lint-elisp-docstrings
+lint-elisp: check-unicode-data lint-branding lint-elisp-docstrings
 	@rm -rf '$(CONSENT_LINT_BUILD_DIR)'
 	@mkdir -p '$(CONSENT_LINT_BUILD_DIR)'
 	$(EMACS) -Q --batch -L lisp \
@@ -728,7 +728,7 @@ lint-elisp: lint-branding lint-elisp-docstrings
 # the portable hosts already in CI, it is the only one with a usable `-W`
 # warning facility; see tools/lint-portable.sh and docs/development.md. Skips
 # (does not fail) when Guile is unavailable, matching the portable host shards.
-lint-portable: check-unicode-data
+lint-portable:
 	CONSENT_GUILE='$(CONSENT_GUILE)' \
 	CONSENT_PORTABLE_LINT_BUILD_DIR='$(CONSENT_PORTABLE_LINT_BUILD_DIR)' \
 	tools/lint-portable.sh
