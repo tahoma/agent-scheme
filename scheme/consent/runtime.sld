@@ -36,7 +36,7 @@
           make-cell
           cell?
           cell-value
-          set-cell-value!
+          context-cell-set!
           make-environment
           environment?
           environment-frame
@@ -44,6 +44,8 @@
           environment-parent
           environment-imported-names
           set-environment-imported-names!
+          environment-datum-heap
+          context-use-environment-datum-heap!
           make-syntax-environment
           syntax-environment?
           syntax-environment-frame
@@ -169,6 +171,8 @@
           set-context-maximum-interned-symbols!
           context-symbol-table
           set-context-symbol-table!
+          context-datum-heap
+          set-context-datum-heap!
           context-host-callbacks
           set-context-host-callbacks!
           context-maximum-host-callbacks
@@ -197,7 +201,10 @@
           set-context-syntax-environment!
           context-libraries
           set-context-libraries!
+          context-native-binding-cache
+          set-context-native-binding-cache!
           context-source-copy-count
+          context-source-copy-set-fresh!
           context-source-copy-set!
           context-source-copy-source-ref
           context-copy-datum-source!
@@ -360,6 +367,8 @@
                 get-environment-variable)
           (consent version)
           (consent character)
+          (consent datum)
+          (consent identity-map)
           (consent reader)
           (consent symbol)
           (consent symbol-boundary)
@@ -408,9 +417,9 @@
     ;; by
     ;; the reader's node budgets rather than this dimension.
     (define consent-default-maximum-interned-symbols 1000000)
-    ;; Default maximum retained portable source metadata entries admitted by a
-    ;; run. This bounds the portable reader's process-global source side table
-    ;; while leaving ordinary loaded runtime/library graphs introspectable.
+    ;; Default maximum portable source metadata attachments admitted by a run.
+    ;; Owned notes follow object lifetime; legacy host syntax uses the bounded
+    ;; bootstrap side table.
     (define consent-default-maximum-source-metadata 10000000)
     ;; Default maximum primitive callback count allowed during evaluation.
     (define consent-default-maximum-host-callbacks 10000)
@@ -728,21 +737,138 @@ t."
     ;; Record type for mutable lexical storage shared by closures and
     ;; environments.
     (define-record-type <cell>
-      (make-cell value)
+      (make-cell-record value owned-slots)
       cell?
-      (value cell-value set-cell-value!))
+      (value raw-cell-value)
+      (owned-slots cell-owned-slots set-cell-owned-slots!))
+
+    (define (make-cell value . maybe-context)
+      "Return private lexical storage initialized to VALUE."
+      #((parameters
+         (value . "Initial stored value.")
+         (maybe-context (type list)
+          (description "Zero or one evaluation context owning the cell.")))
+        (returns (type cell) (description "Fresh lexical cell."))
+        (effects allocation error))
+      (make-cell-record
+       value
+       (if (null? maybe-context)
+           #f
+           (consent-datum-make-internal-slots
+            (context-datum-heap (car maybe-context))
+            'cell
+            (list value)))))
+
+    (define (cell-value cell)
+      "Return CELL's current value from owned or bootstrap storage."
+      #((parameters (cell (type cell) (description "Cell to inspect.")))
+        (returns (type any) (description "Current stored value."))
+        (effects state-read error))
+      (let ((slots (cell-owned-slots cell)))
+        (if slots
+            (consent-datum-internal-slot-ref slots 0)
+            (raw-cell-value cell))))
+
+    (define (context-cell-set! context cell operation value)
+      "Set CELL to VALUE through CONTEXT's datum-heap mutation gateway."
+      #((parameters
+         (context (type eval-context)
+          (description "Evaluation context whose heap owns the mutation."))
+         (cell (type cell) (description "Lexical cell to mutate."))
+         (operation (type symbol)
+          (description "Mutation observer operation tag."))
+         (value . "Replacement binding value."))
+        (returns . "The unspecified value.")
+        (effects allocation state-write error))
+      (let* ((heap (context-datum-heap context))
+             (slots
+              (or (cell-owned-slots cell)
+                  (let ((created
+                         (consent-datum-make-internal-slots
+                          heap 'cell (list (raw-cell-value cell)))))
+                    (set-cell-owned-slots! cell created)
+                    created))))
+        (consent-datum-internal-slot-set!
+         heap slots operation 0 value)))
 
     ;; Value environments are internal mutable frames; imported names mark the
     ;; current frame bindings that Scheme source cannot redefine or mutate.
     (define-record-type <environment>
       ;; FRAME maps lexical keys to mutable cells.  IMPORTED-NAMES marks
       ;; current-frame imports that Scheme code may not redefine or mutate.
-      (make-environment frame parent imported-names)
+      (make-environment-record frame parent imported-names datum-heap)
       environment?
       (frame environment-frame set-environment-frame!)
       (parent environment-parent)
       (imported-names environment-imported-names
-                      set-environment-imported-names!))
+                      set-environment-imported-names!)
+      (datum-heap environment-datum-heap set-environment-datum-heap!))
+
+    (define (make-environment frame parent imported-names . maybe-heap)
+      "Return a private lexical environment with inherited heap ownership."
+      #((parameters
+         (frame (type list) (description "Initial binding frame."))
+         (parent (type (or environment boolean))
+          (description "Parent environment or #f."))
+         (imported-names (type list)
+          (description "Names protected as imported bindings."))
+         (maybe-heap (type list)
+          (description "Zero or one explicit datum heap.")))
+        (returns (type environment)
+         (description "Fresh lexical environment."))
+        (effects allocation))
+      (make-environment-record
+       frame
+       parent
+       imported-names
+       (if (null? maybe-heap)
+           (and parent (environment-datum-heap parent))
+           (car maybe-heap))))
+
+    (define (environment-effective-datum-heap environment)
+      "Return ENVIRONMENT's nearest owned datum heap, or #f."
+      (let loop ((cursor environment))
+        (and cursor
+             (or (environment-datum-heap cursor)
+                 (loop (environment-parent cursor))))))
+
+    (define (attach-environment-datum-heap! environment heap)
+      "Attach HEAP to unowned frames in ENVIRONMENT's parent chain."
+      (let loop ((cursor environment))
+        (if cursor
+            (let ((current (environment-datum-heap cursor)))
+              (if (and current (not (eq? current heap)))
+                  (error "environment belongs to another datum heap"))
+              (if (not current)
+                  (set-environment-datum-heap! cursor heap))
+              (loop (environment-parent cursor)))))
+      heap)
+
+    (define (context-use-environment-datum-heap! context environment)
+      "Make CONTEXT and ENVIRONMENT share one persistent datum heap."
+      #((parameters
+         (context (type eval-context)
+          (description "Evaluation context to align."))
+         (environment (type environment)
+          (description "Persistent lexical environment to align.")))
+        (returns (type datum-heap) (description "The shared heap."))
+        (effects state-write error))
+      (let ((heap
+             (or (environment-effective-datum-heap environment)
+                 (context-datum-heap context))))
+        (attach-environment-datum-heap! environment heap)
+        (set-context-datum-heap! context heap)
+        heap))
+
+    (define (ensure-environment-context-heap! environment context)
+      "Reject a CONTEXT that conflicts with ENVIRONMENT's persistent heap."
+      "Unowned source-library and template environments remain reusable; only"
+      "an explicit `context-use-environment-datum-heap!' call makes an"
+      "environment persistent across evaluations."
+      (let ((heap (environment-effective-datum-heap environment)))
+        (if (and heap (not (eq? heap (context-datum-heap context))))
+            (error "environment belongs to another evaluation datum heap"))
+        (or heap (context-datum-heap context))))
 
     ;; Record type for syntax frames, parent links, and immutable imported
     ;; syntax names.
@@ -968,7 +1094,7 @@ t."
                          maximum-value-nodes maximum-source-metadata
                          value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
-                         source-copies
+                         native-binding-cache source-copies
                          include-paths include-directory file-paths
                          docstring-retention
                          boundary-contract-checking
@@ -989,7 +1115,7 @@ t."
                          internal-libraries-allowed
                          output-bytes maximum-output-bytes
                          maximum-wall-time-ms wall-clock wall-start
-                         exhaustion-reason symbol-table
+                         exhaustion-reason symbol-table datum-heap
                          interned-symbols maximum-interned-symbols)
       eval-context?
       (steps context-steps set-context-steps!)
@@ -1007,6 +1133,7 @@ t."
       (maximum-interned-symbols context-maximum-interned-symbols
                                 set-context-maximum-interned-symbols!)
       (symbol-table context-symbol-table set-context-symbol-table!)
+      (datum-heap context-datum-heap set-context-datum-heap!)
       (host-callbacks context-host-callbacks set-context-host-callbacks!)
       (maximum-host-callbacks context-maximum-host-callbacks
                               set-context-maximum-host-callbacks!)
@@ -1016,6 +1143,11 @@ t."
       (syntax-environment context-syntax-environment
                           set-context-syntax-environment!)
       (libraries context-libraries set-context-libraries!)
+      ;; Native binding cells are shared only within one evaluation context.
+      ;; Keeping this cache on the context prevents process-history retention
+      ;; while preserving location identity across same-context re-exports.
+      (native-binding-cache context-native-binding-cache
+                            set-context-native-binding-cache!)
       ;; Cached source syntax is copied once per evaluation context. The state
       ;; vector holds a bounded count and runtime-to-canonical provenance map
       ;; without retaining the context globally.
@@ -1139,7 +1271,7 @@ t."
         (returns
          . ("The value associated with KEY, or DEFAULT when KEY is"
             "absent."))
-        (effects pure))
+        (effects allocation state-write))
       (let ((cell (runtime-assq key options)))
         (if cell (cdr cell) default)))
 
@@ -2672,7 +2804,12 @@ tuple."
        ((real? number)
         (consent-make-canonical-decimal number))
        (else
-        (consent-read (number->string number)))))
+        ;; Numeric canonicalization needs no syntax provenance. Avoid making
+        ;; every host-number conversion a process-lifetime reader metadata
+        ;; root through the private host-syntax entry point.
+        (consent-read
+         (number->string number)
+         '((source-metadata . #f))))))
 
     (define (consent-host-datum->consent-datum datum . maybe-wrap-procedure)
       "Convert host-owned DATUM into the Consent runtime representation."
@@ -2699,57 +2836,205 @@ tuple."
              (if (null? maybe-wrap-procedure)
                  (lambda (value) value)
                  (car maybe-wrap-procedure))))
-        (letrec
-            ((convert
-              (lambda (value seen)
-                (cond
-                 ((or (consent-number? value)
-                      (consent-character? value)
-                      (consent-eof-object? value))
-                  value)
-                 ((number? value)
-                  (host-number->consent-number value))
-                 ((eof-object? value)
-                  consent-eof-object)
-                 ((char? value)
-                  (consent-host-character->character value))
-                 ((procedure? value)
-                  (wrap-procedure value))
-                 ((pair? value)
-                  (if (runtime-memq value seen)
-                      value
-                      (let* ((next-seen (cons value seen))
-                             (head (convert (car value) next-seen))
-                             (tail (convert (cdr value) next-seen)))
-                        (if (and (runtime-symbol-eq? head (car value))
-                                 (runtime-symbol-eq? tail (cdr value)))
-                            value
-                            (let ((result (cons head tail)))
-                              (consent-copy-datum-source! result value)
-                              result)))))
-                 ((vector? value)
-                  (if (runtime-memq value seen)
-                      value
-                      (let* ((next-seen (cons value seen))
-                             (length (vector-length value))
-                             (converted
-                              (let loop ((index 0) (acc '()) (changed #f))
-                                (if (= index length)
-                                    (and changed (reverse acc))
-                                    (let* ((element (vector-ref value index))
-                                           (next (convert element next-seen)))
-                                      (loop (+ index 1)
-                                            (cons next acc)
-                                            (or changed
-                                                (not (runtime-symbol-eq? next
-                              element)))))))))
-                        (if converted
-                            (let ((result (list->vector converted)))
-                              (consent-copy-datum-source! result value)
-                              result)
-                            value))))
-                 (else value)))))
-          (convert datum '()))))
+        (define (host-conversion-compound? value)
+          "Report whether VALUE participates in host graph topology."
+          (or (pair? value) (vector? value)))
+        (define (convert-leaf value)
+          "Convert one non-compound host VALUE."
+          (cond
+           ((or (consent-number? value)
+                (consent-character? value)
+                (consent-eof-object? value))
+            value)
+           ((number? value)
+            (host-number->consent-number value))
+           ((eof-object? value)
+            consent-eof-object)
+           ((char? value)
+            (consent-host-character->character value))
+           ((procedure? value)
+            (wrap-procedure value))
+           (else value)))
+        ;; Scalar boundary values dominate this helper's callers. Avoid the
+        ;; graph registry and worklist unless DATUM can contain graph edges.
+        (if (not (host-conversion-compound? datum))
+            (convert-leaf datum)
+            (let ((nodes-by-source #f)
+                  (all-nodes '())
+                  (locally-changed '()))
+              (define (conversion-node-ref source)
+                "Return SOURCE's conversion node, or #f before/if absent."
+                "Node slots are source, pair-kind?, edge payloads, compound"
+                "flags, reverse parents, changed?, and output. Reverse parents"
+                "let one changed leaf mark every ancestor in O(V+E)."
+                (and
+                 nodes-by-source
+                 (consent-identity-map-ref nodes-by-source source #f)))
+              (define (make-conversion-node source)
+                "Create and memoize one host compound conversion node."
+                (if (not nodes-by-source)
+                    (set! nodes-by-source (consent-make-identity-map)))
+                (let* ((pair-kind? (pair? source))
+                       (length (if pair-kind? 2 (vector-length source)))
+                       (node
+                        (vector source
+                                pair-kind?
+                                (make-vector length #f)
+                                (make-vector length #f)
+                                '()
+                                #f
+                                #f)))
+                  (consent-identity-map-set!
+                   nodes-by-source source node)
+                  (set! all-nodes (cons node all-nodes))
+                  node))
+              (define (mark-conversion-node-changed! node)
+                "Mark NODE locally changed exactly once."
+                (if (not (vector-ref node 5))
+                    (begin
+                      (vector-set! node 5 #t)
+                      (set! locally-changed
+                            (cons node locally-changed)))))
+              (define (conversion-source-child source pair-kind? index)
+                "Return SOURCE's child at INDEX."
+                (if pair-kind?
+                    (if (= index 0) (car source) (cdr source))
+                    (vector-ref source index)))
+              (define (discover-conversion-graph! root)
+                "Discover ROOT depth-first with an explicit worklist."
+                (let loop ((work (list (cons root 0))))
+                  (if (not (null? work))
+                      (let* ((task (car work))
+                             (node (car task))
+                             (index (cdr task))
+                             (source (vector-ref node 0))
+                             (pair-kind? (vector-ref node 1))
+                             (edges (vector-ref node 2))
+                             (length (vector-length edges))
+                             (rest (cdr work)))
+                        (if (= index length)
+                            (loop rest)
+                            (let* ((next-index (+ index 1))
+                                   (next-work
+                                    (if (< next-index length)
+                                        (cons
+                                         (cons node next-index)
+                                         rest)
+                                        rest))
+                                   (child
+                                    (conversion-source-child
+                                     source pair-kind? index)))
+                              (if (host-conversion-compound? child)
+                                  (let ((child-node
+                                         (conversion-node-ref child)))
+                                    (if child-node
+                                        (begin
+                                          (vector-set! edges index child-node)
+                                          (vector-set!
+                                           (vector-ref node 3) index #t)
+                                          (vector-set!
+                                           child-node
+                                           4
+                                           (cons
+                                            node
+                                            (vector-ref child-node 4)))
+                                          (loop next-work))
+                                        (let ((created
+                                               (make-conversion-node child)))
+                                          (vector-set! edges index created)
+                                          (vector-set!
+                                           (vector-ref node 3) index #t)
+                                          (vector-set!
+                                           created
+                                           4
+                                           (cons node
+                                                 (vector-ref created 4)))
+                                          (loop
+                                           (cons
+                                            (cons created 0)
+                                            next-work)))))
+                                  (let ((converted (convert-leaf child)))
+                                    (vector-set! edges index converted)
+                                    (if (not
+                                         (runtime-symbol-eq?
+                                          converted child))
+                                        (mark-conversion-node-changed! node))
+                                    (loop next-work)))))))))
+              (define (propagate-conversion-changes!)
+                "Mark every compound ancestor of a changed node."
+                (let loop ((work locally-changed))
+                  (if (not (null? work))
+                      (let parent-loop
+                          ((parents (vector-ref (car work) 4))
+                           (next (cdr work)))
+                        (if (null? parents)
+                            (loop next)
+                            (let ((parent (car parents)))
+                              (if (vector-ref parent 5)
+                                  (parent-loop (cdr parents) next)
+                                  (begin
+                                    (vector-set! parent 5 #t)
+                                    (parent-loop
+                                     (cdr parents)
+                                     (cons parent next))))))))))
+              (define (allocate-conversion-outputs!)
+                "Allocate placeholders only for compounds that changed."
+                (let loop ((rest all-nodes))
+                  (if (not (null? rest))
+                      (let* ((node (car rest))
+                             (source (vector-ref node 0))
+                             (output
+                              (if (vector-ref node 5)
+                                  (if (vector-ref node 1)
+                                      (cons #f #f)
+                                      (make-vector
+                                       (vector-length (vector-ref node 2))
+                                       #f))
+                                  source)))
+                        (vector-set! node 6 output)
+                        (if (vector-ref node 5)
+                            (consent-copy-datum-source! output source))
+                        (loop (cdr rest))))))
+              (define (conversion-edge-value node index)
+                "Return NODE's converted edge at INDEX."
+                (let ((payload (vector-ref (vector-ref node 2) index)))
+                  (if (vector-ref (vector-ref node 3) index)
+                      (vector-ref payload 6)
+                      payload)))
+              (define (fill-conversion-outputs!)
+                "Fill every changed placeholder from converted edge values."
+                (let loop ((rest all-nodes))
+                  (if (not (null? rest))
+                      (let ((node (car rest)))
+                        (if (vector-ref node 5)
+                            (let ((output (vector-ref node 6)))
+                              (if (vector-ref node 1)
+                                  (begin
+                                    (set-car!
+                                     output
+                                     (conversion-edge-value node 0))
+                                    (set-cdr!
+                                     output
+                                     (conversion-edge-value node 1)))
+                                  (let fill
+                                      ((index 0)
+                                       (length
+                                        (vector-length
+                                         (vector-ref node 2))))
+                                    (if (< index length)
+                                        (begin
+                                          (vector-set!
+                                           output
+                                           index
+                                           (conversion-edge-value node index))
+                                          (fill (+ index 1) length)))))))
+                        (loop (cdr rest))))))
+              (let ((root (make-conversion-node datum)))
+                (discover-conversion-graph! root)
+                (propagate-conversion-changes!)
+                (allocate-conversion-outputs!)
+                (fill-conversion-outputs!)
+                (vector-ref root 6))))))
 
     (define (network-public-datum datum)
       "Convert host-owned network metadata to Consent data before publication.\
@@ -3304,7 +3589,8 @@ tuple."
                      consent-default-maximum-host-callbacks)
        (make-syntax-environment '() #f '())
        '()
-       (vector 0 '())
+       #f
+       (vector 0 (make-context-source-copy-map))
        (normalize-include-paths
         (option-ref options 'include-paths '())
         include-directory)
@@ -3358,13 +3644,14 @@ tuple."
        #f
        #f
        (option-ref options 'symbol-table consent-default-symbol-table)
+       (option-ref options 'datum-heap (consent-make-datum-heap))
        0
        (option-count options
                      'max-interned-symbols
                      consent-default-maximum-interned-symbols))))
 
     (define (context-source-copy-count context)
-      "Return CONTEXT's number of copied mutable source nodes."
+      "Return CONTEXT's retained host-side source-note count."
       #((parameters
          (context (type eval-context)
           (description
@@ -3372,20 +3659,82 @@ tuple."
              "inspected."))))
         (returns (type exact-integer)
          (description
-          "Number of mutable source nodes copied into CONTEXT."))
+          "Number of host source-note entries retained by CONTEXT."))
         (effects state-read))
       (vector-ref (context-source-copies context) 0))
 
-    (define (context-source-copy-map-ref entries key)
-      "Return KEY's identity-mapped value in ENTRIES, or #f."
-      (let loop ((rest entries))
-        (cond
-         ((null? rest) #f)
-         ((eq? key (caar rest)) (cdar rest))
-         (else (loop (cdr rest))))))
+    (define (make-runtime-identity-map)
+      "Return an empty lazy owned/host hybrid runtime identity map."
+      (vector #f #f))
+
+    (define (runtime-identity-map-ref map key default)
+      "Return identity KEY's value in MAP, or DEFAULT."
+      (let* ((owned? (consent-datum-object? key))
+             (backend (vector-ref map (if owned? 0 1))))
+        (if (not backend)
+            default
+            (if owned?
+                (consent-datum-object-map-ref backend key default)
+                (consent-identity-map-ref backend key default)))))
+
+    (define (runtime-identity-map-set! map key value)
+      "Associate identity KEY with VALUE in MAP and return VALUE."
+      (let* ((owned? (consent-datum-object? key))
+             (index (if owned? 0 1))
+             (backend
+              (or
+               (vector-ref map index)
+               (let ((created
+                      (if owned?
+                          (consent-make-datum-object-map)
+                          (consent-make-identity-map))))
+                 (vector-set! map index created)
+                 created))))
+        (if owned?
+            (consent-datum-object-map-set! backend key value)
+            (consent-identity-map-set! backend key value)))
+      value)
+
+    (define (runtime-identity-map-release! map)
+      "Release MAP's call-scoped owned-object backend when allocated."
+      (let ((owned (vector-ref map 0)))
+        (if owned (consent-datum-object-map-release! owned)))
+      map)
+
+    (define (make-context-source-copy-map)
+      "Return a lazy box for the host-only source-copy identity map."
+      (vector #f))
+
+    (define (context-source-copy-direct-owner? value)
+      "Report whether VALUE owns its current provenance slot directly."
+      (or (consent-datum-object? value)
+          (consent-number? value)
+          (and (consent-record? value)
+               (not (consent-symbol? value)))
+          (consent-record-type? value)))
+
+    (define (context-source-copy-map-ref map key default)
+      "Return identity KEY's value in source-copy MAP, or DEFAULT."
+      (if (context-source-copy-direct-owner? key)
+          (or (consent-datum-source-metadata key) default)
+          (let ((backend (vector-ref map 0)))
+            (if backend
+                (consent-identity-map-ref backend key default)
+                default))))
+
+    (define (context-source-copy-map-set! map key value)
+      "Associate identity KEY with VALUE in source-copy MAP."
+      (if (context-source-copy-direct-owner? key)
+          (consent-datum-source-set! key value)
+          (let ((backend
+                 (or (vector-ref map 0)
+                     (let ((created (consent-make-identity-map)))
+                       (vector-set! map 0 created)
+                       created))))
+            (consent-identity-map-set! backend key value))))
 
     (define (context-source-copy-source-ref context value)
-      "Return CONTEXT-local source metadata for copied VALUE, or #f."
+      "Return materialized CONTEXT-local source metadata for copied VALUE."
       #((parameters
          (context (type eval-context)
           (description
@@ -3397,19 +3746,23 @@ tuple."
          (description
           ("Source metadata for VALUE's canonical source, or #f when"
             "VALUE is not a context-owned source copy.")))
-        (effects state-read))
-      (let ((source (context-source-copy-canonical-ref context value)))
-        (and source (consent-datum-source source))))
+        (effects allocation state-read))
+      (let ((metadata (context-source-copy-metadata-ref context value)))
+        (if metadata
+            (consent-source-metadata->record metadata)
+            #f)))
 
-    (define (context-source-copy-canonical-ref context value)
-      "Return VALUE's canonical source in CONTEXT, or #f."
+    (define (context-source-copy-metadata-ref context value)
+      "Return VALUE's copied source metadata in CONTEXT, or #f."
       (context-source-copy-map-ref
        (vector-ref (context-source-copies context) 1)
-       value))
+       value
+       #f))
 
     (define (context-source-copy-attachable? value)
       "Report whether VALUE has stable identity for local provenance."
-      (or (pair? value)
+      (or (consent-datum-object? value)
+          (pair? value)
           (vector? value)
           (string? value)
           (bytevector? value)
@@ -3418,12 +3771,57 @@ tuple."
                (not (consent-symbol? value)))
           (consent-record-type? value)))
 
+    (define (context-source-copy-metadata-set! context value metadata)
+      "Record immutable source METADATA for VALUE in CONTEXT."
+      "Only host identities retained in the provenance side table consume"
+      "the source-metadata ceiling. Direct owners carry their note in the"
+      "object and are bounded by ordinary value allocation and reader work."
+      #((parameters
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose source-copy overlay is"
+             "extended.")))
+         (value (type any)
+          (description "Context-owned copy to associate with METADATA."))
+         (metadata (type (or source-metadata boolean))
+          (description
+           ("Opaque immutable source metadata, or #f when no note is"
+             "attached."))))
+        (returns (type any)
+         (description "The original VALUE, unchanged."))
+        (effects state-write error))
+      ;; A missing note is not an overlay entry. This keeps graph-copy hooks
+      ;; for unannotated values from consuming budget or creating ambiguous
+      ;; #f-valued map entries.
+      (if metadata
+          (let* ((state (context-source-copies context))
+                 (map (vector-ref state 1))
+                 (direct-owner?
+                  (context-source-copy-direct-owner? value))
+                 (existing
+                  (context-source-copy-map-ref map value #f)))
+            ;; The observable contract exposes only the current immutable
+            ;; note. Direct-owner fields retain no context entry, and replacing
+            ;; a host entry must not retain history or consume another unit.
+            (if (and (not direct-owner?) (not existing))
+                (let* ((count (vector-ref state 0))
+                       (next-count (+ count 1))
+                       (limit (context-maximum-source-metadata context)))
+                  (if (> next-count limit)
+                      (budget-stop!
+                       context
+                       'source-metadata
+                       "source copy count exceeds maximum source metadata"
+                       next-count
+                       limit))
+                  (vector-set! state 0 next-count)))
+            (context-source-copy-map-set! map value metadata)))
+      value)
+
     (define (context-source-copy-set! context value source)
       "Record VALUE as CONTEXT's copy of canonical SOURCE."
-      "The provenance overlay is bounded by the source-metadata ceiling;"
-      "source copying is representation work, not a program-visible value"
-      "allocation. Its conservative count covers identity-bearing clone"
-      "nodes and can exceed the reader's metadata-record count."
+      "Only SOURCE's immutable metadata enters the overlay; the canonical"
+      "container itself does not become a context-lifetime retention root."
       #((parameters
          (context (type eval-context)
           (description
@@ -3435,22 +3833,55 @@ tuple."
           (description "Canonical source datum represented by VALUE.")))
         (returns (type any)
          (description "The original VALUE, unchanged."))
-        (effects state-write error))
-      (let* ((state (context-source-copies context))
-             (count (vector-ref state 0))
-             (next-count (+ count 1))
-             (limit (context-maximum-source-metadata context)))
-        (if (> next-count limit)
-            (budget-stop!
-             context
-             'source-metadata
-             "source copy count exceeds maximum source metadata"
-             next-count
-             limit))
-        (vector-set! state 0 next-count)
-        (vector-set! state 1
-                     (cons (cons value source) (vector-ref state 1)))
-        value))
+        (effects state-read state-write error))
+      (context-source-copy-metadata-set!
+       context
+       value
+       (or (context-source-copy-metadata-ref context source)
+           (consent-datum-source-metadata source))))
+
+    (define (context-source-copy-set-fresh! context value source)
+      "Record fresh VALUE as CONTEXT's copy of canonical SOURCE."
+      "This source-realization boundary requires a newly allocated VALUE and"
+      "a canonical cached SOURCE. It therefore reads SOURCE's raw immutable"
+      "note directly and counts VALUE once without probing either identity in"
+      "the context overlay. General callers use context-source-copy-set!."
+      #((parameters
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose source-copy overlay is"
+             "extended.")))
+         (value (type any)
+          (description "Fresh context-owned copy of SOURCE."))
+         (source (type any)
+          (description "Canonical cached source datum represented by VALUE.")))
+        (returns (type any)
+         (description "The original VALUE, unchanged."))
+        (effects state-read state-write error))
+      (let ((metadata (consent-datum-source-metadata source)))
+        (if metadata
+            (let* ((state (context-source-copies context))
+                   (map (vector-ref state 1))
+                   (direct-owner?
+                    (context-source-copy-direct-owner? value)))
+              ;; Source-library shells are host compounds today. Preserve the
+              ;; direct-owner rule so this boundary stays sound if their
+              ;; representation changes: direct slots consume no side-table
+              ;; budget, while every fresh host identity consumes one unit.
+              (if (not direct-owner?)
+                  (let* ((count (vector-ref state 0))
+                         (next-count (+ count 1))
+                         (limit (context-maximum-source-metadata context)))
+                    (if (> next-count limit)
+                        (budget-stop!
+                         context
+                         'source-metadata
+                         "source copy count exceeds maximum source metadata"
+                         next-count
+                         limit))
+                    (vector-set! state 0 next-count)))
+              (context-source-copy-map-set! map value metadata))))
+      value)
 
     (define (context-copy-datum-source!
              context target source . maybe-overwrite)
@@ -3472,17 +3903,23 @@ tuple."
         (returns (type any)
          (description "The original TARGET, unchanged."))
         (effects state-read state-write error))
-      (let ((canonical
-             (context-source-copy-canonical-ref context source))
+      (let ((metadata
+             (or (context-source-copy-metadata-ref context source)
+                 (consent-datum-source-metadata source)))
             (overwrite?
              (and (pair? maybe-overwrite) (car maybe-overwrite))))
-        (if (and canonical (context-source-copy-attachable? target))
+        (if (and metadata (context-source-copy-attachable? target))
             (if (or overwrite?
                     (and
-                     (not
-                      (context-source-copy-canonical-ref context target))
-                     (not (consent-datum-source target))))
-                (context-source-copy-set! context target canonical))
+                     (not (context-source-copy-metadata-ref context target))
+                     (not (consent-datum-source-metadata target))))
+                (if (context-source-copy-direct-owner? target)
+                    ;; Direct provenance follows the published value beyond
+                    ;; this evaluation context. The source attachment was
+                    ;; already budgeted when the parser created it.
+                    (consent-datum-source-set! target metadata)
+                    (context-source-copy-metadata-set!
+                     context target metadata)))
             (apply
              consent-copy-datum-source!
              target
@@ -3503,7 +3940,15 @@ tuple."
         (effects state-read))
       (list (cons 'max-source-metadata
                   (context-maximum-source-metadata context))
-            (cons 'symbol-table (context-symbol-table context))))
+            (cons 'symbol-table (context-symbol-table context))
+            (cons 'datum-heap (context-datum-heap context))
+            ;; Private syntax provenance belongs to this evaluation context,
+            ;; not the reader's process-global compatibility table. The reader
+            ;; invokes this sink once per parsed identity-bearing node.
+            (cons 'source-metadata-sink
+                  (lambda (value metadata)
+                    (context-source-copy-metadata-set!
+                     context value metadata)))))
 
     (define (record-audit-event! context event fields)
       "Record a Scheme-readable audit EVENT with FIELDS in CONTEXT."
@@ -3729,6 +4174,18 @@ e"
       (note-value-allocation! context count)
       value)
 
+    (define (own-allocated-compound value context)
+      "Return arbitrary VALUE imported into CONTEXT's compound datum heap."
+      "Fresh linear constructors use kind-specific allocation below; this"
+      "graph-aware fallback remains for values whose sharing or cycles must"
+      "be discovered."
+      (consent-datum-import
+       (context-datum-heap context)
+       value
+       (lambda (leaf) leaf)
+       (lambda (target source)
+         (context-copy-datum-source! context target source #t))))
+
     (define (charge-string-allocation! value context)
       "Charge a freshly built string VALUE's nodes (1 + length) and return it.\
 "
@@ -3741,8 +4198,16 @@ e"
         (returns (type string)
          (description "The original string VALUE, unchanged."))
         (effects state-write error))
-      (note-value-allocation! context (+ 1 (string-length value)))
-      value)
+      ;; VALUE is a fresh private adapter string. Copy its indexed contents
+      ;; directly instead of allocating a host-identity registry for a graph
+      ;; that cannot contain edges.
+      (let ((owned
+             (consent-datum-string-from-host
+              (context-datum-heap context) value)))
+        (note-value-allocation!
+         context
+         (+ 1 (consent-datum-string-length owned)))
+        owned))
 
     (define (charge-bytevector-allocation! value context)
       "Charge a freshly built bytevector VALUE's nodes (1 + length) and return \
@@ -3756,8 +4221,15 @@ it."
         (returns (type bytevector)
          (description "The original bytevector VALUE, unchanged."))
         (effects state-write error))
-      (note-value-allocation! context (+ 1 (bytevector-length value)))
-      value)
+      ;; Bytevectors are flat. Their direct owner copies exactly LENGTH bytes
+      ;; and never enters the graph importer.
+      (let ((owned
+             (consent-datum-bytevector-from-host
+              (context-datum-heap context) value)))
+        (note-value-allocation!
+         context
+         (+ 1 (consent-datum-bytevector-length owned)))
+        owned))
 
     (define (charge-vector-allocation! value context)
       "Charge a freshly built vector VALUE's nodes (1 + length) and return it.\
@@ -3771,8 +4243,17 @@ it."
         (returns (type vector)
          (description "The original vector VALUE, unchanged."))
         (effects state-write error))
-      (note-value-allocation! context (+ 1 (vector-length value)))
-      value)
+      ;; Interpreter constructors supply flat adapter vectors whose elements
+      ;; are already canonical values. Validate/copy those slots directly;
+      ;; encountering a host compound is a boundary bug, not a reason to run
+      ;; graph discovery over every ordinary vector result.
+      (let ((owned
+             (consent-datum-vector-from-host-elements
+              (context-datum-heap context) value)))
+        (note-value-allocation!
+         context
+         (+ 1 (consent-datum-vector-length owned)))
+        owned))
 
     (define (charge-list-allocation! value context)
       "Charge a freshly consed proper list VALUE's pairs (its length) and"
@@ -3788,8 +4269,51 @@ it."
         (returns (type list)
          (description "The original list VALUE, unchanged."))
         (effects state-write error))
-      (note-value-allocation! context (length value))
-      value)
+      (if (not (proper-list? value))
+          (eval-error "allocated list must be a proper list"))
+      ;; Collect source nodes in reverse order, then allocate the visible spine
+      ;; from its tail. This is three bounded linear passes including Floyd
+      ;; validation, needs no identity registry, and leaves every fresh pair at
+      ;; revision zero. Elements are reused unchanged, retaining their existing
+      ;; ownership and source notes.
+      (let collect ((cursor value) (nodes '()) (count 0))
+        (if (null? cursor)
+            (let build ((rest nodes) (result '()))
+              (if (null? rest)
+                  (charge-value-allocation! result count context)
+                  (let ((source (car rest)))
+                    (build
+                     (cdr rest)
+                     (consent-datum-cons
+                      (context-datum-heap context)
+                      (proper-list-node-car source)
+                      result)))))
+            (collect
+             (proper-list-node-cdr cursor)
+             (cons cursor nodes)
+             (+ count 1)))))
+
+    (define (value-node-atomic? value)
+      "Report whether VALUE is one opaque node with no traversed children."
+      (or (boolean? value)
+          (null? value)
+          (runtime-symbol? value)
+          (identifier? value)
+          (consent-character? value)
+          ;; Public accessors can unwrap canonical numbers to host values.
+          (number? value)
+          (consent-number? value)
+          (consent-unspecified? value)
+          (consent-procedure? value)
+          (consent-primitive-procedure? value)
+          (consent-parameter? value)
+          (continuation? value)
+          (consent-error-object? value)
+          (consent-eof-object? value)
+          (consent-port? value)
+          (environment-specifier? value)
+          (string-output-port? value)
+          (consent-record-type? value)))
 
     (define (value-node-count value seen . maybe-tolerant)
       "Count the reachable nodes in VALUE while tolerating cycles."
@@ -3814,76 +4338,148 @@ it."
             "integer.")))
         (effects error))
       (let ((tolerant (and (pair? maybe-tolerant) (car maybe-tolerant))))
-        (cond
-         ((or (boolean? value)
-              (null? value)
-              (runtime-symbol? value)
-              (identifier? value)
-              (consent-character? value)
-              ;; Raw host numbers reach here legitimately: public accessors
-              ;; such
-              ;; as `consent-number-value' unwrap canonical numbers to host
-              ;; integers/reals, and such a value can be an evaluation result.
-              (number? value)
-              (consent-number? value)
-              (consent-unspecified? value)
-              (consent-procedure? value)
-              (consent-primitive-procedure? value)
-              (consent-parameter? value)
-              (continuation? value)
-              (consent-error-object? value)
-              (consent-eof-object? value)
-              (consent-port? value)
-              (environment-specifier? value)
-              (string-output-port? value)
-              (consent-record-type? value))
-          1)
-         ((consent-record? value)
-          (if (runtime-memq value seen)
-              0
-              (let ((fields (consent-record-fields value)))
-                (let loop ((index 0) (count 1))
-                  (if (= index (vector-length fields))
-                      count
-                      (loop (+ index 1)
-                            (+ count
-                               (value-node-count
-                                (vector-ref fields index)
-                                (cons value seen)
-                                tolerant))))))))
-         ((multiple-values? value)
-          (+ 1
-             (let loop ((rest (multiple-values-values value)) (count 0))
-               (if (null? rest)
-                   count
-                   (loop (cdr rest)
-                         (+ count
-                            (value-node-count (car rest) seen tolerant)))))))
-         ((string? value)
-          (+ 1 (string-length value)))
-         ((bytevector? value)
-          (+ 1 (bytevector-length value)))
-         ((pair? value)
-          (if (runtime-memq value seen)
-              0
-              (+ 1
-                 (value-node-count (car value) (cons value seen) tolerant)
-                 (value-node-count (cdr value) (cons value seen) tolerant))))
-         ((vector? value)
-          (if (runtime-memq value seen)
-              0
-              (let loop ((index 0) (count 1))
-                (if (= index (vector-length value))
-                    count
-                    (loop (+ index 1)
-                          (+ count
-                             (value-node-count
-                              (vector-ref value index)
-                              (cons value seen)
-                              tolerant)))))))
-         (tolerant 1)
-         (else
-          (eval-error "unsupported Scheme value" value)))))
+        ;; Scalar results dominate budget checks; avoid allocating a worklist
+        ;; or identity maps until VALUE can actually contain graph edges.
+        (if (value-node-atomic? value)
+            1
+            (let ((visited (make-runtime-identity-map)))
+              (dynamic-wind
+               (lambda () #t)
+               (lambda ()
+                 ;; Preserve the historical SEEN parameter as initial state.
+                 (let seed ((rest seen))
+                   (if (not (null? rest))
+                       (begin
+                         (runtime-identity-map-set! visited (car rest) #t)
+                         (seed (cdr rest)))))
+                 ;; Count each identity-bearing graph node once. The explicit
+                 ;; worklist prevents deep-stack failure and ancestor scans;
+                 ;; shared DAGs therefore remain O(V + E), too.
+                 (let loop ((work (list value)) (count 0))
+                   (if (null? work)
+                       count
+                       (let* ((item (car work))
+                              (rest (cdr work)))
+                         (cond
+                          ((value-node-atomic? item)
+                           (loop rest (+ count 1)))
+                 ((consent-record? item)
+                  (if (runtime-identity-map-ref visited item #f)
+                      (loop rest count)
+                      (let* ((fields (consent-record-fields item))
+                             (owned? (consent-datum-vector? fields))
+                             (length
+                              (if owned?
+                                  (consent-datum-vector-length fields)
+                                  (vector-length fields))))
+                        (runtime-identity-map-set! visited item #t)
+                        (let push ((index (- length 1)) (next rest))
+                          (if (< index 0)
+                              (loop next (+ count 1))
+                              (push
+                               (- index 1)
+                               (cons
+                                (if owned?
+                                    (consent-datum-vector-ref fields index)
+                                    (vector-ref fields index))
+                                next)))))))
+                 ((multiple-values? item)
+                  (if (runtime-identity-map-ref visited item #f)
+                      (loop rest count)
+                      (begin
+                        (runtime-identity-map-set! visited item #t)
+                        (let reverse-values
+                            ((values (multiple-values-values item))
+                             (reversed '()))
+                          (if (null? values)
+                              (let push ((values reversed) (next rest))
+                                (if (null? values)
+                                    (loop next (+ count 1))
+                                    (push
+                                     (cdr values)
+                                     (cons (car values) next))))
+                              (reverse-values
+                               (cdr values)
+                               (cons (car values) reversed)))))))
+                 ((consent-datum-string? item)
+                  (if (runtime-identity-map-ref visited item #f)
+                      (loop rest count)
+                      (begin
+                        (runtime-identity-map-set! visited item #t)
+                        (loop
+                         rest
+                         (+ count 1
+                            (consent-datum-string-length item))))))
+                 ((consent-datum-bytevector? item)
+                  (if (runtime-identity-map-ref visited item #f)
+                      (loop rest count)
+                      (begin
+                        (runtime-identity-map-set! visited item #t)
+                        (loop
+                         rest
+                         (+ count 1
+                            (consent-datum-bytevector-length item))))))
+                 ((consent-datum-pair? item)
+                  (if (runtime-identity-map-ref visited item #f)
+                      (loop rest count)
+                      (begin
+                        (runtime-identity-map-set! visited item #t)
+                        (loop
+                         (cons
+                          (consent-datum-car item)
+                          (cons (consent-datum-cdr item) rest))
+                         (+ count 1)))))
+                 ((consent-datum-vector? item)
+                  (if (runtime-identity-map-ref visited item #f)
+                      (loop rest count)
+                      (let ((length (consent-datum-vector-length item)))
+                        (runtime-identity-map-set! visited item #t)
+                        (let push ((index (- length 1)) (next rest))
+                          (if (< index 0)
+                              (loop next (+ count 1))
+                              (push
+                               (- index 1)
+                               (cons
+                                (consent-datum-vector-ref item index)
+                                next)))))))
+                 ((string? item)
+                  (if (runtime-identity-map-ref visited item #f)
+                      (loop rest count)
+                      (begin
+                        (runtime-identity-map-set! visited item #t)
+                        (loop rest (+ count 1 (string-length item))))))
+                 ((bytevector? item)
+                  (if (runtime-identity-map-ref visited item #f)
+                      (loop rest count)
+                      (begin
+                        (runtime-identity-map-set! visited item #t)
+                        (loop rest (+ count 1 (bytevector-length item))))))
+                 ((pair? item)
+                  (if (runtime-identity-map-ref visited item #f)
+                      (loop rest count)
+                      (begin
+                        (runtime-identity-map-set! visited item #t)
+                        (loop
+                         (cons (car item) (cons (cdr item) rest))
+                         (+ count 1)))))
+                 ((vector? item)
+                  (if (runtime-identity-map-ref visited item #f)
+                      (loop rest count)
+                      (let ((length (vector-length item)))
+                        (runtime-identity-map-set! visited item #t)
+                        (let push ((index (- length 1)) (next rest))
+                          (if (< index 0)
+                              (loop next (+ count 1))
+                              (push
+                               (- index 1)
+                               (cons (vector-ref item index) next)))))))
+                       (tolerant (loop rest (+ count 1)))
+                       (else
+                        (eval-error
+                         "unsupported Scheme value"
+                         item)))))))
+               (lambda ()
+                 (runtime-identity-map-release! visited)))))))
 
     (define (check-value-budget value context)
       "Reject VALUE when its reachable node count exceeds the result budget."
@@ -3920,13 +4516,14 @@ it."
             ("Evaluation context whose value-node budget is charged."))))
         (returns . "The original literal VALUE, unchanged.")
         (effects state-write error))
-      (note-value-allocation!
-       context
-       (value-node-count
-        value
-        '()
-        (and context (context-internal-libraries-allowed? context))))
-      value)
+      (let ((owned (own-allocated-compound value context)))
+        (note-value-allocation!
+         context
+         (value-node-count
+          owned
+          '()
+          (and context (context-internal-libraries-allowed? context))))
+        owned))
 
     (define (budget-spec-ref spec keys)
       "Return SPEC's first numeric value among KEYS as a host number, or #f."
@@ -4119,8 +4716,51 @@ ng"
           (car arguments)
           (make-multiple-values arguments)))
 
+    (define (proper-list-node? value)
+      "Report whether VALUE is an owned or private host pair."
+      (or (pair? value) (consent-datum-pair? value)))
+
+    (define (proper-list-node-car pair)
+      "Return owned or private host PAIR's car."
+      (if (pair? pair)
+          (car pair)
+          (consent-datum-car pair)))
+
+    (define (proper-list-node-cdr pair)
+      "Return owned or private host PAIR's cdr."
+      (if (pair? pair)
+          (cdr pair)
+          (consent-datum-cdr pair)))
+
+    (define (proper-list-node-same? left right)
+      "Report whether LEFT and RIGHT are the same mixed pair node."
+      (and (proper-list-node? left)
+           (proper-list-node? right)
+           (or (eq? left right)
+               (consent-datum-same? left right))))
+
+    (define (proper-list? datum)
+      "Report whether DATUM is a finite proper mixed Scheme list."
+      ;; Floyd validation is O(n), constant-space, and allocates no identity
+      ;; table on ordinary list validation paths.
+      (let loop ((slow datum) (fast datum))
+        (cond
+         ((null? fast) #t)
+         ((not (proper-list-node? fast)) #f)
+         (else
+          (let ((fast-one (proper-list-node-cdr fast)))
+            (cond
+             ((null? fast-one) #t)
+             ((not (proper-list-node? fast-one)) #f)
+             (else
+              (let ((slow-one (proper-list-node-cdr slow))
+                    (fast-two (proper-list-node-cdr fast-one)))
+                (if (proper-list-node-same? slow-one fast-two)
+                    #f
+                    (loop slow-one fast-two))))))))))
+
     (define (proper-list-elements datum description)
-      "Return DATUM as a proper list or raise an evaluator error."
+      "Return DATUM's elements or reject an improper or cyclic spine."
       #((parameters
          (datum (type list)
           (description "Datum expected to be a proper list."))
@@ -4133,21 +4773,17 @@ ng"
           ("A fresh list of DATUM's elements; raises when DATUM is not"
             "a proper list.")))
         (effects error))
-      (let loop ((cursor datum) (elements '()))
-        (cond
-         ((null? cursor) (reverse elements))
-         ((pair? cursor) (loop (cdr cursor) (cons (car cursor) elements)))
-         (else
+      (if (not (proper-list? datum))
           (eval-error
-           (string-append description " must be a proper list"))))))
-
-    (define (proper-list? datum)
-      "Report whether DATUM is a proper Scheme list."
-      (let loop ((cursor datum))
-        (cond
-         ((null? cursor) #t)
-         ((pair? cursor) (loop (cdr cursor)))
-         (else #f))))
+           (string-append description " must be a proper list")))
+      ;; Validation proved the spine finite. Collection is a second linear,
+      ;; map-free pass and allocates only the result list promised above.
+      (let loop ((cursor datum) (elements '()))
+        (if (null? cursor)
+            (reverse elements)
+            (loop
+             (proper-list-node-cdr cursor)
+             (cons (proper-list-node-car cursor) elements)))))
 
     ;; Documentation metadata fields whose list values append in source order.
     (define documentation-list-field-names '(examples see-also))
@@ -4853,7 +5489,7 @@ arent."
            name
            (environment-imported-names environment))))
 
-    (define (environment-define! environment name value)
+    (define (environment-define! environment name value . maybe-context)
       "Add NAME to ENVIRONMENT's current frame unless it would redefine import\
 ."
       #((parameters
@@ -4861,19 +5497,27 @@ arent."
           (description "Environment whose current frame gains the binding."))
          (name (type (or symbol list))
           (description "Binding name to define."))
-         (value . "Initial value stored in the new binding cell."))
+         (value . "Initial value stored in the new binding cell.")
+         (maybe-context (type list)
+          (description
+           "Zero or one evaluation context owning the binding cell.")))
         (returns
          . ("The unspecified value; raises when NAME shadows an"
             "imported binding."))
         (effects state-write error))
       (if (current-environment-imported? environment name)
           (eval-error "cannot redefine imported binding" name))
+      (if (not (null? maybe-context))
+          (ensure-environment-context-heap!
+           environment (car maybe-context)))
       (set-environment-frame!
        environment
-       (cons (cons name (make-cell value))
+       (cons (cons name (if (null? maybe-context)
+                            (make-cell value)
+                            (make-cell value (car maybe-context))))
              (environment-frame environment))))
 
-    (define (environment-set! environment name value)
+    (define (environment-set! environment name value context)
       "Mutate an existing lexical binding, rejecting unbound and imported name\
 s."
       #((parameters
@@ -4882,7 +5526,9 @@ s."
             ("Innermost environment whose binding chain is searched.")))
          (name (type (or symbol list))
           (description "Binding name to mutate."))
-         (value . "New value stored in the resolved binding cell."))
+         (value . "New value stored in the resolved binding cell.")
+         (context (type eval-context)
+          (description "Context whose heap observes the mutation.")))
         (returns
          . ("The unspecified value; raises when NAME is unbound or"
             "imported."))
@@ -4894,9 +5540,9 @@ s."
          ((environment-cell-imported? environment cell)
           (eval-error "cannot mutate imported binding" name))
          (else
-          (set-cell-value! cell value)))))
+          (context-cell-set! context cell 'binding-set! value)))))
 
-    (define (environment-define-or-set! environment name value)
+    (define (environment-define-or-set! environment name value context)
       "Update NAME in the current frame, or define it if no current cell exist\
 s."
       #((parameters
@@ -4905,7 +5551,9 @@ s."
             ("Environment whose current frame is updated or extended.")))
          (name (type (or symbol list))
           (description "Binding name to update or define."))
-         (value . "Value stored in the binding cell."))
+         (value . "Value stored in the binding cell.")
+         (context (type eval-context)
+          (description "Context whose heap observes an update.")))
         (returns
          . ("The unspecified value; raises when NAME shadows an"
             "imported binding."))
@@ -4915,8 +5563,8 @@ s."
             (begin
               (if (current-environment-imported? environment name)
                   (eval-error "cannot redefine imported binding" name))
-              (set-cell-value! cell value))
-            (environment-define! environment name value))))
+              (context-cell-set! context cell 'binding-define! value))
+            (environment-define! environment name value context))))
 
     (define (environment-ref environment name)
       "Return NAME's value, rejecting unbound or still-undefined bindings."
@@ -4992,7 +5640,8 @@ s."
                    (identifier-datum-name identifier))
                   value)))))
 
-    (define (environment-set-identifier! environment identifier value)
+    (define (environment-set-identifier!
+             environment identifier value context)
       "Mutate IDENTIFIER's binding after hygienic lookup and import checks."
       #((parameters
          (environment (type environment)
@@ -5000,7 +5649,9 @@ s."
          (identifier (type (or symbol identifier))
           (description
             ("Symbol or hygienic identifier whose binding is mutated.")))
-         (value . "New value stored in the resolved binding cell."))
+         (value . "New value stored in the resolved binding cell.")
+         (context (type eval-context)
+          (description "Context whose heap observes the mutation.")))
         (returns
          . ("The unspecified value; raises when IDENTIFIER is unbound"
             "or imported."))
@@ -5014,7 +5665,7 @@ s."
           (eval-error "cannot mutate imported binding"
                       (identifier-datum-name identifier)))
          (else
-          (set-cell-value! cell value)))))
+          (context-cell-set! context cell 'binding-set! value)))))
 
     (define (ensure-distinct-names names description)
       "Reject duplicate symbols in NAMES using DESCRIPTION for diagnostics."

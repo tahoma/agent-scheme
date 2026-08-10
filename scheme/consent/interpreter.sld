@@ -59,11 +59,15 @@
           (scheme write)
           (data avl-tree)
           (consent character)
+          (consent datum)
+          (consent identity-map)
           (consent numeric)
           (consent reader)
           (consent symbol)
           (consent symbol-boundary)
-          (consent runtime)
+          (rename (consent runtime)
+                  (proper-list-elements
+                   runtime-proper-list-elements))
           (consent result)
           (consent base)
           (consent library)
@@ -159,76 +163,228 @@ d."
            interpreter-session-manager default-session-context-factory))
       interpreter-session-manager)
 
-    (define (own-runtime-datum value context)
-      "Return VALUE with every visible symbol owned by CONTEXT's symbol table.\
-"
-      "Published data already owned by the context keeps its original graph,"
-      "including reader source metadata; only changed paths are rebuilt."
-      (own-runtime-datum* value context '()))
+    (define (own-syntax-datum value context)
+      "Return VALUE as private host syntax with symbols owned by CONTEXT."
+      "Owned runtime compounds are projected only at this evaluator/parser"
+      "boundary; topology and context-local source metadata are preserved."
+      (own-syntax-datum* value context))
 
-    (define (own-runtime-datum* value context seen)
-      "Recursively own VALUE while preserving sharing recorded in SEEN."
-      (cond
-         ((identifier? value)
-          (own-runtime-datum* (identifier-name value) context seen))
-         ((consent-symbol? value)
-          (consent-intern-symbol
-           (context-symbol-table context)
-           (consent-symbol-name value)))
-         ((host-symbol? value)
-          (consent-intern-symbol
-           (context-symbol-table context)
-           (host-symbol->string value)))
-         ((pair? value)
-          (let ((prior
-                 (let loop ((entries seen))
-                   (cond
-                    ((null? entries) #f)
-                    ((eq? value (caar entries)) (cdar entries))
-                    (else (loop (cdr entries)))))))
-            (if prior
-                prior
-                (let* ((copy (cons #f #f))
-                       (next-seen (cons (cons value copy) seen))
-                       (head (own-runtime-datum* (car value)
-                                                 context
-                                                 next-seen))
-                       (tail (own-runtime-datum* (cdr value)
-                                                 context
-                                                 next-seen)))
-                  (if (and (eq? head (car value))
-                           (eq? tail (cdr value)))
-                      value
+    (define (own-syntax-datum* value context)
+      "Iteratively own VALUE while preserving mixed-graph topology."
+      ;; Registry entries hold traversal state and the projected host object.
+      ;; Each backing map is lazy so scalar syntax avoids table allocation.
+      (let ((absent (vector 'syntax-graph-absent))
+            (owned-map #f)
+            (host-map #f)
+            (pending '())
+            (root (vector #f)))
+        (define (graph-ref item)
+          (if (consent-datum-object? item)
+              (if owned-map
+                  (consent-datum-object-map-ref owned-map item absent)
+                  absent)
+              (if host-map
+                  (consent-identity-map-ref host-map item absent)
+                  absent)))
+        (define (graph-set! item entry)
+          (if (consent-datum-object? item)
+              (begin
+                (if (not owned-map)
+                    (set! owned-map (consent-make-datum-object-map)))
+                (consent-datum-object-map-set! owned-map item entry))
+              (begin
+                (if (not host-map)
+                    (set! host-map (consent-make-identity-map)))
+                (consent-identity-map-set! host-map item entry))))
+        (define (copy-source! target source)
+          (context-copy-datum-source! context target source #t))
+        (define (push! task)
+          (set! pending (cons task pending)))
+        (define (push-visit! item setter)
+          (push! (vector 'visit item setter)))
+        (define (note-host-child! changed setter original rendered)
+          (setter rendered)
+          (if (not (eq? rendered original))
+              (vector-set! changed 0 #t)))
+        (define (visit-owned-scalar! item setter string-kind?)
+          (let ((entry (graph-ref item)))
+            (if (eq? entry absent)
+                (let* ((copy
+                        (if string-kind?
+                            (consent-datum-string->host item)
+                            (consent-datum-bytevector->host item)))
+                       (entry (vector 'done copy)))
+                  (graph-set! item entry)
+                  (copy-source! copy item)
+                  (setter copy))
+                (setter (vector-ref entry 1)))))
+        (define (visit-owned-compound! item setter pair-kind?)
+          (let ((entry (graph-ref item)))
+            (if (not (eq? entry absent))
+                (setter (vector-ref entry 1))
+                (let* ((length
+                        (if pair-kind?
+                            0
+                            (consent-datum-vector-length item)))
+                       (copy
+                        (if pair-kind?
+                            (cons #f #f)
+                            (make-vector length #f)))
+                       (entry (vector 'active copy)))
+                  (graph-set! item entry)
+                  ;; Owned compounds always project to the fresh host object,
+                  ;; so callers and cycle backedges may receive it now.
+                  (setter copy)
+                  (push!
+                   (vector
+                    'finish
+                    (lambda ()
+                      (copy-source! copy item)
+                      (vector-set! entry 0 'done))))
+                  (if pair-kind?
                       (begin
-                        (set-car! copy head)
-                        (set-cdr! copy tail)
-                        (context-copy-datum-source!
-                         context copy value #t)))))))
-         ((vector? value)
-          (let ((prior
-                 (let loop ((entries seen))
-                   (cond
-                    ((null? entries) #f)
-                    ((eq? value (caar entries)) (cdar entries))
-                    (else (loop (cdr entries)))))))
-            (if prior
-                prior
-                (let* ((copy (make-vector (vector-length value) #f))
-                       (next-seen (cons (cons value copy) seen)))
-                  (let loop ((index 0) (changed? #f))
-                    (if (< index (vector-length value))
-                        (let* ((element (vector-ref value index))
-                               (owned (own-runtime-datum* element
-                                                          context
-                                                          next-seen)))
-                          (vector-set! copy index owned)
-                          (loop (+ index 1)
-                                (or changed? (not (eq? owned element)))))
-                        (if changed?
-                            (context-copy-datum-source!
-                             context copy value #t)
-                            value)))))))
-         (else value)))
+                        (push-visit!
+                         (consent-datum-cdr item)
+                         (lambda (rendered)
+                           (set-cdr! copy rendered)))
+                        (push-visit!
+                         (consent-datum-car item)
+                         (lambda (rendered)
+                           (set-car! copy rendered))))
+                      (let loop ((index (- length 1)))
+                        (if (>= index 0)
+                            (begin
+                              (push-visit!
+                               (consent-datum-vector-ref item index)
+                               (lambda (rendered)
+                                 (vector-set! copy index rendered)))
+                              (loop (- index 1))))))))))
+        (define (visit-host-compound! item setter pair-kind?)
+          (let ((entry (graph-ref item)))
+            (if (not (eq? entry absent))
+                (setter (vector-ref entry 1))
+                (let* ((copy
+                        (if pair-kind?
+                            (cons #f #f)
+                            (make-vector (vector-length item) #f)))
+                       (entry (vector 'active copy))
+                       (changed (vector #f)))
+                  (graph-set! item entry)
+                  (push!
+                   (vector
+                    'finish
+                    (lambda ()
+                      (let ((output
+                             (if (vector-ref changed 0) copy item)))
+                        (if (vector-ref changed 0)
+                            (copy-source! copy item))
+                        (vector-set! entry 0 'done)
+                        (vector-set! entry 1 output)
+                        (setter output)))))
+                  (if pair-kind?
+                      (begin
+                        (push-visit!
+                         (cdr item)
+                         (lambda (rendered)
+                           (note-host-child!
+                            changed
+                            (lambda (owned)
+                              (set-cdr! copy owned))
+                            (cdr item)
+                            rendered)))
+                        (push-visit!
+                         (car item)
+                         (lambda (rendered)
+                           (note-host-child!
+                            changed
+                            (lambda (owned)
+                              (set-car! copy owned))
+                            (car item)
+                            rendered))))
+                      (let loop ((index (- (vector-length item) 1)))
+                        (if (>= index 0)
+                            (begin
+                              (push-visit!
+                               (vector-ref item index)
+                               (lambda (rendered)
+                                 (note-host-child!
+                                  changed
+                                  (lambda (owned)
+                                    (vector-set! copy index owned))
+                                  (vector-ref item index)
+                                  rendered)))
+                              (loop (- index 1))))))))))
+        (define (visit! item setter)
+          (cond
+           ((identifier? item)
+            (push-visit! (identifier-name item) setter))
+           ((consent-symbol? item)
+            (setter
+             (consent-intern-symbol
+              (context-symbol-table context)
+              (consent-symbol-name item))))
+           ((host-symbol? item)
+            (setter
+             (consent-intern-symbol
+              (context-symbol-table context)
+              (host-symbol->string item))))
+           ((consent-datum-string? item)
+            (visit-owned-scalar! item setter #t))
+           ((consent-datum-bytevector? item)
+            (visit-owned-scalar! item setter #f))
+           ((consent-datum-pair? item)
+            (visit-owned-compound! item setter #t))
+           ((consent-datum-vector? item)
+            (visit-owned-compound! item setter #f))
+           ((pair? item)
+            (visit-host-compound! item setter #t))
+           ((vector? item)
+            (visit-host-compound! item setter #f))
+           (else (setter item))))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (push-visit! value (lambda (owned)
+                                (vector-set! root 0 owned)))
+           (let loop ()
+             (if (pair? pending)
+                 (let ((task (car pending)))
+                   (set! pending (cdr pending))
+                   (if (eq? (vector-ref task 0) 'finish)
+                       ((vector-ref task 1))
+                       (visit! (vector-ref task 1)
+                               (vector-ref task 2)))
+                   (loop))))
+           (vector-ref root 0))
+         (lambda ()
+           (if owned-map
+               (consent-datum-object-map-release! owned-map))))))
+
+    (define (own-runtime-leaf value context)
+      "Return one scalar VALUE in CONTEXT's owned runtime representation."
+      (cond
+       ((identifier? value)
+        (own-runtime-leaf (identifier-name value) context))
+       ((consent-symbol? value)
+        (consent-intern-symbol
+         (context-symbol-table context)
+         (consent-symbol-name value)))
+       ((host-symbol? value)
+        (consent-intern-symbol
+         (context-symbol-table context)
+         (host-symbol->string value)))
+       (else (consent-host-datum->consent-datum value))))
+
+    (define (own-runtime-datum value context)
+      "Return VALUE as a context-owned runtime graph."
+      "Host compounds remain parser and adapter details; this conversion"
+      "always allocates opaque pairs, strings, vectors, and bytevectors."
+      (consent-datum-import
+       (context-datum-heap context)
+       value
+       (lambda (leaf) (own-runtime-leaf leaf context))
+       (lambda (target source)
+         (context-copy-datum-source! context target source #t))))
 
     (define (portable-library-call procedure context . arguments)
       "Apply PROCEDURE to ARGUMENTS normalized for a compiled portable library\
@@ -459,7 +615,8 @@ ator"
            value))
       value)
 
-    (define (define-or-set-record-binding! environment name value)
+    (define (define-or-set-record-binding!
+             environment name value context)
       "Install or update a record-related binding while preserving import prot\
 ection."
       (let ((cell (frame-cell environment name)))
@@ -467,8 +624,9 @@ ection."
             (begin
               (if (environment-cell-imported? environment cell)
                   (eval-error "cannot redefine imported binding" name))
-              (set-cell-value! cell value))
-            (environment-define! environment name value))))
+              (context-cell-set!
+               context cell 'record-binding-set! value))
+            (environment-define! environment name value context))))
 
     (define (eval-record-definition form environment context)
       "Install a record type plus generated constructor, predicate, and field \
@@ -482,23 +640,29 @@ procedures."
              (constructor-name (second (host-assq 'constructor-name spec)))
              (predicate-name (second (host-assq 'predicate-name spec)))
              (constructor
-              (make-primitive-procedure
+             (make-primitive-procedure
                constructor-name
                (lambda (arguments context)
-                 (let ((values (make-vector
-                                (length fields)
-                                consent-unspecified)))
+                 (let ((values
+                        (make-vector
+                         (length fields) consent-unspecified)))
                    (let loop ((rest-fields constructor-fields)
                               (rest-arguments arguments))
                      (if (null? rest-fields)
                          ;; Charge the record header plus its field slots; the
                          ;; field values were charged where they were
                          ;; allocated.
-                         (charge-value-allocation!
-                          (consent-make-record record-type values)
+                          (charge-value-allocation!
+                           (consent-make-record
+                            record-type
+                            (consent-datum-vector-from-host-elements
+                             (context-datum-heap context) values))
                           (+ 1 (vector-length values))
                           context)
                          (begin
+                           ;; Initialize private construction storage before
+                           ;; publication.  User record mutations still cross
+                           ;; the owned vector gateway below.
                            (vector-set!
                             values
                             (record-field-index record-type (car rest-fields))
@@ -516,10 +680,12 @@ procedures."
                            record-type)))
                1
                1)))
-        (define-or-set-record-binding! environment type-name record-type)
+        (define-or-set-record-binding!
+         environment type-name record-type context)
         (define-or-set-record-binding! environment constructor-name
-          constructor)
-        (define-or-set-record-binding! environment predicate-name predicate)
+          constructor context)
+        (define-or-set-record-binding!
+         environment predicate-name predicate context)
         (for-each
          (lambda (accessor)
            (let* ((name (car accessor))
@@ -531,7 +697,7 @@ procedures."
               (make-primitive-procedure
                name
                (lambda (arguments context)
-                 (vector-ref
+                 (consent-datum-vector-ref
                   (consent-record-fields
                    (expect-record-of-type
                     (car arguments)
@@ -539,7 +705,8 @@ procedures."
                     name))
                   index))
                1
-               1))))
+               1)
+              context)))
          (second (host-assq 'accessors spec)))
         (for-each
          (lambda (mutator)
@@ -552,7 +719,8 @@ procedures."
               (make-primitive-procedure
                name
                (lambda (arguments context)
-                 (vector-set!
+                 (consent-datum-vector-set!
+                  (context-datum-heap context)
                   (consent-record-fields
                    (expect-record-of-type
                     (car arguments)
@@ -562,7 +730,8 @@ procedures."
                   (second arguments))
                  consent-unspecified)
                2
-               2))))
+               2)
+              context)))
          (second (host-assq 'mutators spec)))
         consent-unspecified))
 
@@ -617,7 +786,8 @@ s."
                                 (cdr (cdr (car remaining)))
                                 body-environment
                                 context
-                                #f)))
+                                #f)
+                               context))
                              ((eq? (car (car remaining)) 'define-values)
                               (let* ((parsed (cdr (car remaining)))
                                      (value
@@ -653,7 +823,8 @@ s."
                           (environment-define!
                            body-environment
                            (car parsed-definition)
-                           undefined)
+                           undefined
+                           context)
                           (install-loop
                            (cdr rest)
                            (cons (cons 'define parsed-definition)
@@ -674,7 +845,8 @@ s."
                                   (environment-define!
                                    body-environment
                                    (car names)
-                                   undefined)
+                                   undefined
+                                   context)
                                   (names-loop (cdr names)))))
                           (install-loop
                            (cdr rest)
@@ -693,7 +865,8 @@ s."
                                 (environment-define!
                                  body-environment
                                  (car names)
-                                 undefined)
+                                 undefined
+                                 context)
                                 (names-loop (cdr names)))))
                         (install-loop
                          (cdr rest)
@@ -726,8 +899,10 @@ s."
                              (eval-error
                               "cannot redefine imported binding"
                               name))
-                         (set-cell-value! cell value))
-                       (environment-define! environment name value))
+                         (context-cell-set!
+                          context cell 'binding-define! value))
+                       (environment-define!
+                        environment name value context))
                    (continue continuation consent-unspecified))))))
         (if direct-call?
             (drain-state state context)
@@ -757,12 +932,14 @@ s."
                   (environment-define-or-set!
                    environment
                    rest
-                   remaining-values))
+                   remaining-values
+                   context))
               (begin
                 (environment-define-or-set!
                  environment
                  (car names)
-                 (car remaining-values))
+                 (car remaining-values)
+                 context)
                 (loop (cdr names) (cdr remaining-values)))))))
 
     (define (eval-define-values
@@ -823,17 +1000,20 @@ s."
           (if (null? names)
               (begin
                 (if rest
-                    (begin
-                      (environment-define! environment rest values)
-                      ;; The rest list is freshly consed by the apply
-                      ;; machinery;
-                      ;; charge its pairs as the allocation they are.
-                      (note-value-allocation! context (length values))))
+                    ;; The evaluator's argument transport list is private host
+                    ;; state.  A rest binding is a fresh Scheme-visible list,
+                    ;; so own and charge its spine before exposing it.
+                    (environment-define!
+                     environment
+                     rest
+                     (charge-list-allocation! values context)
+                     context))
                 environment)
               (begin
                 (environment-define! environment
                                      (car names)
-                                     (car values))
+                                     (car values)
+                                     context)
                 (loop (cdr names) (cdr values)))))))
 
     (define (arity-match? primitive count)
@@ -965,7 +1145,7 @@ s."
          ((contract-tag=? type 'any) #t)
          ((contract-tag=? type 'boolean) (boolean? value))
          ((contract-tag=? type 'symbol) (interpreter-symbol? value))
-         ((contract-tag=? type 'string) (string? value))
+         ((contract-tag=? type 'string) (consent-datum-string? value))
          ((contract-tag=? type 'number)
           (or (number? value) (consent-number? value)))
          ((contract-tag=? type 'integer) (contract-integer? value))
@@ -973,11 +1153,12 @@ s."
          ((or (contract-tag=? type 'char)
               (contract-tag=? type 'character))
           (consent-character? value))
-         ((contract-tag=? type 'pair) (pair? value))
-         ((contract-tag=? type 'list) (list? value))
+         ((contract-tag=? type 'pair) (consent-datum-pair? value))
+         ((contract-tag=? type 'list) (proper-list? value))
          ((contract-tag=? type 'null) (null? value))
-         ((contract-tag=? type 'vector) (vector? value))
-         ((contract-tag=? type 'bytevector) (bytevector? value))
+         ((contract-tag=? type 'vector) (consent-datum-vector? value))
+         ((contract-tag=? type 'bytevector)
+          (consent-datum-bytevector? value))
          ((contract-tag=? type 'procedure) (contract-procedure? value))
          ((contract-tag=? type 'port) (consent-port? value))
          ((contract-tag=? type 'input-port)
@@ -1000,33 +1181,36 @@ s."
               (else (loop (cdr variants))))))
          ((contract-tag=? (car type) 'list-of)
            (if (= (length type) 2)
-               (and (list? value)
+               (and (proper-list? value)
                     (let loop ((items value))
                       (cond
                        ((null? items) #t)
-                       ((contract-type-matches? (cadr type) (car items))
-                        (loop (cdr items)))
+                       ((contract-type-matches?
+                         (cadr type) (consent-datum-car items))
+                        (loop (consent-datum-cdr items)))
                        (else #f))))
                #t))
          ((contract-tag=? (car type) 'vector-of)
            (if (= (length type) 2)
-               (and (vector? value)
+               (and (consent-datum-vector? value)
                     (let loop ((index 0))
                       (cond
-                       ((= index (vector-length value)) #t)
+                       ((= index (consent-datum-vector-length value)) #t)
                        ((contract-type-matches?
                          (cadr type)
-                         (vector-ref value index))
+                         (consent-datum-vector-ref value index))
                         (loop (+ index 1)))
                        (else #f))))
                #t))
          ((contract-tag=? (car type) 'pair)
            (cond
             ((= (length type) 3)
-             (and (pair? value)
-                  (contract-type-matches? (cadr type) (car value))
-                  (contract-type-matches? (third type) (cdr value))))
-            (else (pair? value))))
+             (and (consent-datum-pair? value)
+                  (contract-type-matches?
+                   (cadr type) (consent-datum-car value))
+                  (contract-type-matches?
+                   (third type) (consent-datum-cdr value))))
+            (else (consent-datum-pair? value))))
          ((contract-tag=? (car type) 'procedure) (contract-procedure? value))
          ((contract-tag=? (car type) 'values) #t)
          (else #t)))
@@ -1038,14 +1222,14 @@ s."
        ((eq? value #f) '#f)
        ((eq? value #t) 'boolean)
        ((interpreter-symbol? value) 'symbol)
-       ((string? value) 'string)
+       ((consent-datum-string? value) 'string)
        ((or (number? value) (consent-number? value)) 'number)
        ((consent-character? value) 'character)
        ((null? value) 'list)
-       ((and (pair? value) (list? value)) 'list)
-       ((pair? value) 'pair)
-       ((vector? value) 'vector)
-       ((bytevector? value) 'bytevector)
+       ((and (consent-datum-pair? value) (proper-list? value)) 'list)
+       ((consent-datum-pair? value) 'pair)
+       ((consent-datum-vector? value) 'vector)
+       ((consent-datum-bytevector? value) 'bytevector)
        ((contract-procedure? value) 'procedure)
        ((consent-port? value) 'port)
        ((consent-eof-object? value) 'eof-object)
@@ -1364,7 +1548,8 @@ ich metadata"
            (let ((value (single-value raw-value "set! expression")))
              (if (not (identifier-datum? target))
                  (eval-error "set! target must be an identifier" target))
-             (environment-set-identifier! environment target value)
+             (environment-set-identifier!
+              environment target value context)
              (continue continuation consent-unspecified))))))
 
     (define (eval-quasiquote-list template depth environment context)
@@ -1489,7 +1674,8 @@ er")
         (ensure-distinct-names names description)
         (for-each
          (lambda (name)
-           (environment-define! local-environment name undefined))
+           (environment-define!
+            local-environment name undefined context))
          names)
         (if sequential?
             (for-each
@@ -1502,7 +1688,8 @@ er")
                                   local-environment
                                   context
                                   #f)
-                 "letrec* initializer")))
+                 "letrec* initializer")
+                context))
              bindings)
             (let ((values
                    (map (lambda (binding)
@@ -1517,9 +1704,10 @@ er")
               (for-each
                (lambda (binding-value)
                  (environment-set!
-                  local-environment
+                 local-environment
                   (car binding-value)
-                  (cdr binding-value)))
+                  (cdr binding-value)
+                  context))
                values)))
         (eval-sequence (cddr parts)
                        local-environment
@@ -1811,7 +1999,9 @@ er")
        context
        #f
        (lambda (spec-result)
-         (let ((spec (single-value spec-result "with-budget spec"))
+         (let ((spec
+                (own-syntax-datum
+                 (single-value spec-result "with-budget spec") context))
                (saved (budget-ceiling-snapshot context)))
            (budget-tighten! context spec)
            (eval-sequence
@@ -2396,9 +2586,13 @@ ch."
 
     (define (expect-string datum description)
       "Validate string input and raise an evaluator error on mismatch."
-      (if (string? datum)
+      (if (consent-datum-string? datum)
           datum
           (eval-error (string-append description " must be a string") datum)))
+
+    (define (expect-host-string datum description)
+      "Project owned string DATUM for a private host adapter operation."
+      (consent-datum-string->host (expect-string datum description)))
 
     (define (expect-character datum description)
       "Return owned DATUM or raise an evaluator error naming DESCRIPTION."
@@ -2419,17 +2613,22 @@ ch."
 
     (define (expect-vector datum description)
       "Validate vector input and raise an evaluator error on mismatch."
-      (if (vector? datum)
+      (if (consent-datum-vector? datum)
           datum
           (eval-error (string-append description " must be a vector") datum)))
 
     (define (expect-bytevector datum description)
       "Validate bytevector input and raise an evaluator error on mismatch."
-      (if (bytevector? datum)
+      (if (consent-datum-bytevector? datum)
           datum
           (eval-error
            (string-append description " must be a bytevector")
            datum)))
+
+    (define (expect-host-bytevector datum description)
+      "Project owned bytevector DATUM for a private host adapter operation."
+      (consent-datum-bytevector->host
+       (expect-bytevector datum description)))
 
     (define (expect-procedure datum description)
       "Validate procedure input and raise an evaluator error on mismatch."
@@ -3417,7 +3616,10 @@ eme values."
       ;; Charging `cons' charges every prelude list builder (list, append,
       ;; reverse, map, ...) that conses, with no walk of the growing result.
       (charge-value-allocation!
-       (cons (car arguments) (second arguments))
+       (consent-datum-cons
+        (context-datum-heap context)
+        (car arguments)
+        (second arguments))
        1
        context))
 
@@ -3425,31 +3627,94 @@ eme values."
       "Implement the `car` primitive with argument validation and Consent Sche\
 me values."
       (let ((pair (car arguments)))
-        (if (pair? pair)
-            (car pair)
+        (if (consent-datum-pair? pair)
+            (consent-datum-car pair)
             (eval-error "car expected pair" pair))))
 
     (define (primitive-cdr arguments context)
       "Implement the `cdr` primitive with argument validation and Consent Sche\
 me values."
       (let ((pair (car arguments)))
-        (if (pair? pair)
-            (cdr pair)
+        (if (consent-datum-pair? pair)
+            (consent-datum-cdr pair)
             (eval-error "cdr expected pair" pair))))
 
     (define (primitive-list arguments context)
       "Implement the `list` primitive with argument validation and Consent Sch\
 eme values."
-      arguments)
+      (charge-list-allocation! arguments context))
+
+    (define (list-node? value)
+      "Report whether VALUE is an owned or private host pair."
+      ;; Evaluator syntax and continuation worklists are normally private host
+      ;; pairs. Keep that common path on the host predicate and fall back to
+      ;; the owned representation only at a value boundary.
+      (or (pair? value) (consent-datum-pair? value)))
+
+    (define (list-node-cdr pair)
+      "Return owned or private host PAIR's cdr."
+      (if (pair? pair)
+          (cdr pair)
+          (consent-datum-cdr pair)))
+
+    (define (list-node-car pair)
+      "Return owned or private host PAIR's car."
+      (if (pair? pair)
+          (car pair)
+          (consent-datum-car pair)))
+
+    (define (same-list-node? left right)
+      "Report whether LEFT and RIGHT are the same pair node."
+      (and (list-node? left)
+           (list-node? right)
+           (or (eq? left right)
+               (consent-datum-same? left right))))
+
+    (define (proper-list-shape? value node? node-cdr same-node?)
+      "Report whether VALUE is proper under the supplied pair operations."
+      ;; Floyd's tortoise/hare traversal is linear and constant-space. It also
+      ;; avoids allocating an identity table for ordinary list primitives.
+      (let loop ((slow value) (fast value))
+        (cond
+         ((null? fast) #t)
+         ((not (node? fast)) #f)
+         (else
+          (let ((fast-one (node-cdr fast)))
+            (cond
+             ((null? fast-one) #t)
+             ((not (node? fast-one)) #f)
+             (else
+              (let ((slow-one (node-cdr slow))
+                    (fast-two (node-cdr fast-one)))
+                (if (same-node? slow-one fast-two)
+                    #f
+                    (loop slow-one fast-two))))))))))
 
     (define (proper-list? value)
-      "Report whether VALUE is a proper, acyclic list."
-      (let loop ((cursor value) (seen '()))
-        (cond
-         ((null? cursor) #t)
-         ((not (pair? cursor)) #f)
-         ((host-memq cursor seen) #f)
-         (else (loop (cdr cursor) (cons cursor seen))))))
+      "Report whether VALUE is a proper owned Scheme list."
+      (proper-list-shape?
+       value
+       consent-datum-pair?
+       consent-datum-cdr
+       consent-datum-same?))
+
+    (define (proper-mixed-list? value)
+      "Report whether VALUE is a proper private-host/owned boundary list."
+      (proper-list-shape?
+       value list-node? list-node-cdr same-list-node?))
+
+    (define (proper-list-elements value description)
+      "Return VALUE's elements, rejecting improper and cyclic lists."
+      (if (not (proper-mixed-list? value))
+          (eval-error
+           (string-append description " must be a proper list")))
+      ;; Validation proved this spine finite; collection needs no identity
+      ;; table and therefore performs no per-call hash allocation.
+      (let loop ((cursor value) (elements '()))
+        (if (null? cursor)
+            (reverse elements)
+            (loop (list-node-cdr cursor)
+                  (cons (list-node-car cursor) elements)))))
 
     (define (primitive-list? arguments context)
       "Implement the `list?` primitive with argument validation and Consent"
@@ -3464,12 +3729,36 @@ eme values."
     (define (primitive-append arguments context)
       "Implement the `append` primitive with argument validation and Consent"
       "Scheme values."
-      (apply append arguments))
+      (if (null? arguments)
+          '()
+          (let* ((heap (context-datum-heap context))
+                 (reversed (reverse arguments)))
+            (let loop ((rest (cdr reversed))
+                       (result (car reversed))
+                       (count 0))
+              (if (null? rest)
+                  (charge-value-allocation! result count context)
+                  (let rebuild
+                      ((elements
+                        (reverse
+                         (proper-list-elements
+                          (car rest)
+                          "append argument")))
+                       (tail result)
+                       (next-count count))
+                    (if (null? elements)
+                        (loop (cdr rest) tail next-count)
+                        (rebuild
+                         (cdr elements)
+                         (consent-datum-cons heap (car elements) tail)
+                         (+ next-count 1)))))))))
 
     (define (primitive-reverse arguments context)
       "Implement the `reverse` primitive with argument validation and Consent"
       "Scheme values."
-      (reverse (proper-list-elements (car arguments) "reverse")))
+      (charge-list-allocation!
+       (reverse (proper-list-elements (car arguments) "reverse"))
+       context))
 
     (define (primitive-list-tail arguments context)
       "Implement the `list-tail` primitive with argument validation and Consen\
@@ -3481,7 +3770,8 @@ t"
         (let loop ((cursor (car arguments)) (remaining index))
           (cond
            ((zero? remaining) cursor)
-           ((pair? cursor) (loop (cdr cursor) (- remaining 1)))
+           ((consent-datum-pair? cursor)
+            (loop (consent-datum-cdr cursor) (- remaining 1)))
            (else (eval-error "list-tail index exceeds list length"))))))
 
     (define (primitive-list-ref arguments context)
@@ -3489,8 +3779,8 @@ t"
 "
       "Scheme values."
       (let ((tail (primitive-list-tail arguments context)))
-        (if (pair? tail)
-            (car tail)
+        (if (consent-datum-pair? tail)
+            (consent-datum-car tail)
             (eval-error "list-ref index exceeds list length"))))
 
     (define (primitive-list-set! arguments context)
@@ -3498,9 +3788,10 @@ t"
 t"
       "Scheme values."
       (let ((tail (primitive-list-tail arguments context)))
-        (if (not (pair? tail))
+        (if (not (consent-datum-pair? tail))
             (eval-error "list-set! index exceeds list length"))
-        (set-car! tail (third arguments))
+        (consent-datum-set-car!
+         (context-datum-heap context) tail (third arguments))
         consent-unspecified))
 
     (define (primitive-set-car! arguments context)
@@ -3508,9 +3799,10 @@ t"
 "
       "Scheme values."
       (let ((pair (car arguments)))
-        (if (not (pair? pair))
+        (if (not (consent-datum-pair? pair))
             (eval-error "set-car! expected pair" pair))
-        (set-car! pair (second arguments))
+        (consent-datum-set-car!
+         (context-datum-heap context) pair (second arguments))
         consent-unspecified))
 
     (define (primitive-set-cdr! arguments context)
@@ -3518,9 +3810,10 @@ t"
 "
       "Scheme values."
       (let ((pair (car arguments)))
-        (if (not (pair? pair))
+        (if (not (consent-datum-pair? pair))
             (eval-error "set-cdr! expected pair" pair))
-        (set-cdr! pair (second arguments))
+        (consent-datum-set-cdr!
+         (context-datum-heap context) pair (second arguments))
         consent-unspecified))
 
     (define (primitive-make-list arguments context)
@@ -3533,20 +3826,26 @@ t"
                       (second arguments))))
         (if (< length 0)
             (eval-error "make-list length must be non-negative"))
-        (make-list length fill)))
-
-    (define (copy-list value)
-      "Copy a pair spine while preserving any improper tail."
-      (cond
-       ((null? value) '())
-       ((pair? value) (cons (car value) (copy-list (cdr value))))
-       (else value)))
+        ;; Build the promised Scheme spine directly in the active datum heap.
+        ;; A private host list would only be an intermediate graph for the
+        ;; ownership boundary to scan and discard.
+        (let ((heap (context-datum-heap context)))
+          (let loop ((remaining length) (result '()))
+            (if (= remaining 0)
+                (charge-value-allocation! result length context)
+                (loop
+                 (- remaining 1)
+                 (consent-datum-cons heap fill result)))))))
 
     (define (primitive-list-copy arguments context)
       "Implement the `list-copy` primitive with argument validation and Consen\
 t"
       "Scheme values."
-      (copy-list (car arguments)))
+      (let ((copy
+             (consent-datum-list-copy
+              (context-datum-heap context) (car arguments))))
+        (note-value-allocation! context (cdr copy))
+        (car copy)))
 
     (define (primitive-null? arguments context)
       "Implement the `null?` primitive with argument validation and Consent"
@@ -3556,7 +3855,7 @@ t"
     (define (primitive-pair? arguments context)
       "Implement the `pair?` primitive with argument validation and Consent"
       "Scheme values."
-      (pair? (car arguments)))
+      (consent-datum-pair? (car arguments)))
 
     (define (primitive-not arguments context)
       "Implement the `not` primitive with argument validation and Consent Sche\
@@ -3684,7 +3983,8 @@ ix."
     (define (primitive-string->number arguments context)
       "Implement the `string->number` primitive with argument validation and"
       "Consent Scheme values."
-      (let* ((source-text (expect-string (car arguments) "string->number"))
+      (let* ((source-text
+              (expect-host-string (car arguments) "string->number"))
              (radix (if (null? (cdr arguments))
                         10
                         (exact-integer->host
@@ -3817,7 +4117,7 @@ ix."
     (define (primitive-string->utf8 arguments context)
       "Implement the `string->utf8` primitive with argument validation and"
       "Consent Scheme values."
-      (let* ((string (expect-string (car arguments) "string->utf8"))
+      (let* ((string (expect-host-string (car arguments) "string->utf8"))
              (range (optional-range
                      arguments
                      1
@@ -3830,7 +4130,8 @@ ix."
     (define (primitive-utf8->string arguments context)
       "Implement the `utf8->string` primitive with argument validation and"
       "Consent Scheme values."
-      (let* ((bytes (expect-bytevector (car arguments) "utf8->string"))
+      (let* ((bytes
+              (expect-host-bytevector (car arguments) "utf8->string"))
              (range (optional-range
                      arguments
                      1
@@ -3860,7 +4161,7 @@ ix."
 "
       "name is interned so a flood of distinct names fails closed on its own"
       "dimension rather than relying on the step budget as a proxy."
-      (let ((name (expect-string (car arguments) "string->symbol")))
+      (let ((name (expect-host-string (car arguments) "string->symbol")))
         (note-interned-symbol! context)
         (consent-intern-symbol (context-symbol-table context) name)))
 
@@ -4168,6 +4469,29 @@ ismatch."
          (else
           (loop (cdr counters) (cons (car counters) kept))))))
 
+    ;; Private counter key for the current prepared port reader source.
+    (define port-reader-source-cache-key
+      'consent-private-reader-source-cache)
+
+    (define (port-reader-source port)
+      "Return PORT's reusable prepared reader source for its current text."
+      (let* ((source (consent-port-source port))
+             (cached
+              (port-capability-counter
+               port port-reader-source-cache-key)))
+        (if (and (vector? cached)
+                 (= (vector-length cached) 2)
+                 (eq? (vector-ref cached 0) source))
+            (vector-ref cached 1)
+            (let ((prepared (consent-make-reader-source source)))
+              ;; SOURCE replacement, including streaming refill, replaces the
+              ;; one current cache entry rather than retaining its history.
+              (set-port-capability-counter!
+               port
+               port-reader-source-cache-key
+               (vector source prepared))
+              prepared))))
+
     (define (check-port-capability-limit! context port operation)
       "Consume one PORT operation limit unit for OPERATION."
       (let* ((name (port-capability-limit-name operation))
@@ -4457,7 +4781,7 @@ d"
       "Consent Scheme values."
       (make-consent-port
        'string #t #f #t #f #t
-       (expect-string (car arguments) "open-input-string")
+       (expect-host-string (car arguments) "open-input-string")
        0 #f
        #f '() #f '() #f #f #f '()))
 
@@ -4497,7 +4821,8 @@ n"
       (make-consent-port
        'bytevector #t #f #f #t #t
        (copy-bytevector
-        (expect-bytevector (car arguments) "open-input-bytevector"))
+        (expect-host-bytevector
+         (car arguments) "open-input-bytevector"))
        0 #f
        #f '() #f '() #f #f #f '()))
 
@@ -4539,8 +4864,9 @@ eme values."
             (charge-literal! (program-input-read-streaming port context)
               context)
             (let ((result
-                   (consent-read-from-string-at
-                    (consent-port-source port)
+                   (consent-read-datum-from-string-at
+                    (context-datum-heap context)
+                    (port-reader-source port)
                     (consent-port-position port)
                     (context-reader-options context))))
               (set-consent-port-position! port (cdr result))
@@ -4633,7 +4959,10 @@ t"
         (if (< count 0)
             (eval-error "read-string count must be non-negative"))
         (cond
-         ((not port) (if (= count 0) "" consent-eof-object))
+         ((not port)
+          (if (= count 0)
+              (charge-string-allocation! "" context)
+              consent-eof-object))
          ((not (host-memq
                 (consent-port-medium port)
                 '(string file network)))
@@ -4653,7 +4982,7 @@ t"
                  (remaining (- (string-length source) position))
                  (amount (if (< count remaining) count remaining)))
             (cond
-             ((= count 0) "")
+             ((= count 0) (charge-string-allocation! "" context))
              ((= amount 0) consent-eof-object)
              (else
               (set-consent-port-position! port (+ position amount))
@@ -4850,7 +5179,10 @@ t"
             (eval-error "read-bytevector count must be non-negative"))
         (cond
          ((not port)
-          (if (= count 0) (make-bytevector 0 0) consent-eof-object))
+          (if (= count 0)
+              (charge-bytevector-allocation!
+               (make-bytevector 0 0) context)
+              consent-eof-object))
          ((not (host-memq
                 (consent-port-medium port)
                 '(bytevector file)))
@@ -4870,7 +5202,9 @@ t"
                  (remaining (- (bytevector-length source) position))
                  (amount (if (< count remaining) count remaining)))
             (cond
-             ((= count 0) (make-bytevector 0 0))
+             ((= count 0)
+              (charge-bytevector-allocation!
+               (make-bytevector 0 0) context))
              ((= amount 0) consent-eof-object)
              (else
               (set-consent-port-position! port (+ position amount))
@@ -4896,14 +5230,14 @@ t"
                         0
                         (expect-nonnegative-index
                          (third arguments)
-                         (bytevector-length target)
+                         (consent-datum-bytevector-length target)
                          "read-bytevector!"
                          #t)))
              (end (if (< arity 4)
-                      (bytevector-length target)
+                      (consent-datum-bytevector-length target)
                       (expect-nonnegative-index
                        (fourth arguments)
-                       (bytevector-length target)
+                       (consent-datum-bytevector-length target)
                        "read-bytevector!"
                        #t))))
         (if (> start end)
@@ -4937,7 +5271,8 @@ t"
                       (let loop ((offset 0))
                         (if (< offset amount)
                             (begin
-                              (bytevector-u8-set!
+                              (consent-datum-bytevector-u8-set!
+                               (context-datum-heap context)
                                target
                                (+ start offset)
                                (bytevector-u8-ref source (+ position offset)))
@@ -4969,12 +5304,15 @@ t"
                          "write-bytevector"))
                  (range (optional-range arguments
                                         2
-                                        (bytevector-length bytes)
+                                        (consent-datum-bytevector-length
+                                         bytes)
                                         "write-bytevector")))
             (let loop ((index (car range)) (payload '()))
               (if (< index (cdr range))
                   (loop (+ index 1)
-                        (cons (bytevector-u8-ref bytes index) payload))
+                        (cons
+                         (consent-datum-bytevector-u8-ref bytes index)
+                         payload))
                   (append-bytes-to-port
                    (reverse payload)
                    (second arguments)
@@ -4997,7 +5335,7 @@ t"
     (define (primitive-write-string arguments context)
       "Implement the `write-string` primitive with argument validation and"
       "Consent Scheme values."
-      (let* ((string (expect-string (car arguments) "write-string"))
+      (let* ((string (expect-host-string (car arguments) "write-string"))
              (port (if (null? (cdr arguments))
                        (current-output-port-or-deny context "write-string")
                        (second arguments)))
@@ -5186,6 +5524,10 @@ d"
       "Return QUERY as a context selector name, or #f when unsupported."
       (cond
        ((interpreter-symbol? query) query)
+       ((consent-datum-string? query)
+        (interpreter-string->symbol
+         (consent-datum-string->host query)
+         context))
        ((string? query) (interpreter-string->symbol query context))
        (else #f)))
 
@@ -5223,7 +5565,7 @@ d"
       (let ((name (context-query-name query context)))
         (cond
          (name (context-select-one name context))
-         ((pair? query)
+         ((or (consent-datum-pair? query) (pair? query))
           (portable-library-call
            context-model:make-context-bundle
            context
@@ -5390,6 +5732,10 @@ d"
       "Return SYMBOL-OR-NAME as a capability name symbol."
       (cond
        ((interpreter-symbol? symbol-or-name) symbol-or-name)
+       ((consent-datum-string? symbol-or-name)
+        (interpreter-string->symbol
+         (consent-datum-string->host symbol-or-name)
+         context))
        ((string? symbol-or-name)
         (interpreter-string->symbol symbol-or-name context))
        (else (eval-error "capability-info expects a symbol or string"))))
@@ -5551,6 +5897,10 @@ d.")))
       "Return SYMBOL-OR-NAME as a binding symbol, or #f."
       (cond
        ((interpreter-symbol? symbol-or-name) symbol-or-name)
+       ((consent-datum-string? symbol-or-name)
+        (interpreter-string->symbol
+         (consent-datum-string->host symbol-or-name)
+         context))
        ((string? symbol-or-name)
         (interpreter-string->symbol symbol-or-name context))
        (else #f)))
@@ -6179,16 +6529,53 @@ d.")))
         (consent-intern-symbol
          (context-symbol-table context)
          (host-symbol->string name)))
+       ((consent-datum-string? name)
+        (consent-intern-symbol
+         (context-symbol-table context)
+         (consent-datum-string->host name)))
        ((string? name)
         (consent-intern-symbol (context-symbol-table context) name))
        (else name)))
 
+    (define (reflect-public-pair? value)
+      "Report whether VALUE is an owned or private reflection pair."
+      (or (pair? value) (consent-datum-pair? value)))
+
+    (define (reflect-public-car pair)
+      "Return the car of an owned or private reflection PAIR."
+      (if (pair? pair)
+          (car pair)
+          (consent-datum-car pair)))
+
+    (define (reflect-public-cdr pair)
+      "Return the cdr of an owned or private reflection PAIR."
+      (if (pair? pair)
+          (cdr pair)
+          (consent-datum-cdr pair)))
+
+    (define (reflect-owned-field-value/default fields name default)
+      "Return NAME's value from public reflection FIELDS, or DEFAULT."
+      (let loop ((rest fields))
+        (if (not (reflect-public-pair? rest))
+            default
+            (let ((field (reflect-public-car rest)))
+              (if (and
+                   (reflect-public-pair? field)
+                   (interpreter-symbol-eq?
+                    (reflect-public-car field)
+                    name))
+                  (let ((values (reflect-public-cdr field)))
+                    (if (reflect-public-pair? values)
+                        (reflect-public-car values)
+                        default))
+                  (loop (reflect-public-cdr rest)))))))
+
     (define (reflect-owned-reflection-field record name default context)
       "Return owned field NAME from public RECORD, or DEFAULT."
-      (if (not (pair? record))
+      (if (not (reflect-public-pair? record))
           default
-          (reflect-field-value/default
-           (cdr record)
+          (reflect-owned-field-value/default
+           (reflect-public-cdr record)
            (reflect-owned-field-name name context)
            default)))
 
@@ -6201,19 +6588,17 @@ d.")))
               "fields"
               #f
               context)))
-        (if (not (list? fields))
-            default
-            (reflect-field-value/default
-             fields
-             (reflect-owned-field-name name context)
-             default))))
+        (reflect-owned-field-value/default
+         fields
+         (reflect-owned-field-name name context)
+         default)))
 
     (define (reflect-docstring subject default context)
       "Return SUBJECT's documentation string, or DEFAULT when absent."
       (if (and
-           (pair? subject)
-           (eq?
-            (car subject)
+           (reflect-public-pair? subject)
+           (interpreter-symbol-eq?
+            (reflect-public-car subject)
             (reflect-owned-field-name "documentation-metadata" context)))
           (reflect-owned-documentation-field
            subject
@@ -6355,6 +6740,8 @@ d.")))
       (let ((needle
              (string-downcase
               (cond
+               ((consent-datum-string? query)
+                (consent-datum-string->host query))
                ((string? query) query)
                ((interpreter-symbol? query) (interpreter-symbol-name query))
                (else (consent-value->external query))))))
@@ -6458,7 +6845,7 @@ d.")))
 
     (define (primitive-consent-version arguments context)
       "Return the canonical Consent Scheme version datum."
-      (consent-version))
+      (charge-literal! (consent-version) context))
 
     (define (primitive-current-capabilities arguments context)
       "Return the runtime capability metadata list."
@@ -6480,7 +6867,8 @@ d.")))
       "Report whether ARGUMENT is a budget-exhaustion stop receipt."
       "Accepts a condition datum or an evaluation-result error datum so a"
       "caller can classify a recent error or a nested evaluation's outcome."
-      (budget-exhausted-condition? (car arguments)))
+      (budget-exhausted-condition?
+       (own-syntax-datum (car arguments) context)))
 
     (define (primitive-budget-yield arguments context)
       "Emit the current budget ledger as a yield event and return it."
@@ -6495,7 +6883,8 @@ d.")))
     (define (primitive-library-bindings arguments context)
       "Return exported bindings for a library name."
       (reflect-public-datum
-       (reflect-library-bindings (car arguments) context)
+       (reflect-library-bindings
+        (own-syntax-datum (car arguments) context) context)
        context))
 
     (define (primitive-libraries arguments context)
@@ -6505,13 +6894,13 @@ d.")))
     (define (primitive-library-info arguments context)
       "Return catalog metadata for one library name."
       (reflect-public-datum
-       (reflect-library-info (car arguments))
+       (reflect-library-info (own-syntax-datum (car arguments) context))
        context))
 
     (define (primitive-library-search arguments context)
       "Search catalog metadata."
       (reflect-public-datum
-       (reflect-library-search (car arguments))
+       (reflect-library-search (own-syntax-datum (car arguments) context))
        context))
 
     (define (primitive-catalog-sources arguments context)
@@ -6525,19 +6914,22 @@ d.")))
     (define (primitive-library-resolve arguments context)
       "Return resolution metadata for a library name."
       (reflect-public-datum
-       (reflect-library-resolve (car arguments) context)
+       (reflect-library-resolve
+        (own-syntax-datum (car arguments) context) context)
        context))
 
     (define (primitive-library-load arguments context)
       "Load a library and return resolution metadata."
       (reflect-public-datum
-       (reflect-library-load (car arguments) context)
+       (reflect-library-load
+        (own-syntax-datum (car arguments) context) context)
        context))
 
     (define (primitive-library-solve-dependencies arguments context)
       "Return dependency solution metadata for a library name."
       (reflect-public-datum
-       (reflect-library-solve-dependencies (car arguments))
+       (reflect-library-solve-dependencies
+        (own-syntax-datum (car arguments) context))
        context))
 
     (define (primitive-library-paths arguments context)
@@ -6548,13 +6940,16 @@ d.")))
       "Return catalog conflict records for a library name."
       (reflect-public-datum
        (reflect-library-conflicts
-        (if (null? arguments) #f (car arguments)))
+        (if (null? arguments)
+            #f
+            (own-syntax-datum (car arguments) context)))
        context))
 
     (define (primitive-library-snapshot arguments context)
       "Return a reproducible library resolution snapshot."
       (reflect-public-datum
-       (reflect-library-snapshot (car arguments) context)
+       (reflect-library-snapshot
+        (own-syntax-datum (car arguments) context) context)
        context))
 
     (define (primitive-srfi-library-name arguments context)
@@ -6579,25 +6974,29 @@ d.")))
       "Add or replace an ad-hoc manifest datum."
       (reflect-public-datum
        (reflect-datumize
-        (consent-library-catalog-add-manifest! (car arguments)
-                                               (second arguments)))
+        (consent-library-catalog-add-manifest!
+         (own-syntax-datum (car arguments) context)
+         (own-syntax-datum (second arguments) context)))
        context))
 
     (define (primitive-remove-manifest! arguments context)
       "Remove an ad-hoc manifest source."
-      (consent-library-catalog-remove-manifest! (car arguments)))
+      (consent-library-catalog-remove-manifest!
+       (own-syntax-datum (car arguments) context)))
 
     (define (primitive-add-manifest-root! arguments context)
       "Add or replace an explicit manifest-root input."
       (reflect-public-datum
        (reflect-datumize
-        (consent-library-catalog-add-root! (car arguments)
-                                           (second arguments)))
+        (consent-library-catalog-add-root!
+         (own-syntax-datum (car arguments) context)
+         (own-syntax-datum (second arguments) context)))
        context))
 
     (define (primitive-remove-manifest-root! arguments context)
       "Remove an explicit manifest-root input."
-      (consent-library-catalog-remove-root! (car arguments)))
+      (consent-library-catalog-remove-root!
+       (own-syntax-datum (car arguments) context)))
 
     (define (primitive-refresh-library-catalog! arguments context)
       "Refresh catalog caches and diagnostics."
@@ -6874,45 +7273,47 @@ d.")))
        'runtime-reflection
        context))
 
-    (define (macro-primitive-options arguments)
+    (define (macro-primitive-options arguments context)
       "Return optional macro introspection options from primitive ARGUMENTS."
-      (if (null? (cdr arguments)) '() (second arguments)))
+      (if (null? (cdr arguments))
+          '()
+          (own-syntax-datum (second arguments) context)))
 
     (define (primitive-macroexpand arguments context)
       "Return a full macro expansion record."
       (own-runtime-datum
        (consent-macroexpand
-        (car arguments)
+        (own-syntax-datum (car arguments) context)
         (context-interaction-environment context)
         context
-        (macro-primitive-options arguments))
+        (macro-primitive-options arguments context))
        context))
 
     (define (primitive-macroexpand-1 arguments context)
       "Return a one-step macro expansion record."
       (own-runtime-datum
        (consent-macroexpand-1
-        (car arguments)
+        (own-syntax-datum (car arguments) context)
         (context-interaction-environment context)
         context
-        (macro-primitive-options arguments))
+        (macro-primitive-options arguments context))
        context))
 
     (define (primitive-macroexpand-library arguments context)
       "Return macro export metadata for a library."
       (own-runtime-datum
        (consent-macroexpand-library
-        (car arguments)
+        (own-syntax-datum (car arguments) context)
         (context-interaction-environment context)
         context
-        (macro-primitive-options arguments))
+        (macro-primitive-options arguments context))
        context))
 
     (define (primitive-macro-binding-info arguments context)
       "Return metadata for an active syntax binding."
       (own-runtime-datum
        (consent-macro-binding-info
-        (car arguments)
+        (own-syntax-datum (car arguments) context)
         (context-interaction-environment context)
         context)
        context))
@@ -6928,49 +7329,59 @@ d.")))
       "Record a macro expansion event and return the expansion record."
       (let ((result
              (consent-macroexpand
-              (car arguments)
+              (own-syntax-datum (car arguments) context)
               (context-interaction-environment context)
               context
-              (second arguments))))
+              (own-syntax-datum (second arguments) context))))
         (record-context-event! context (list 'macroexpand result))
         (own-runtime-datum result context)))
 
     (define (primitive-current-error arguments context)
       "Return the active debugger condition, or #f outside error handling."
       (let ((current (context-current-error context)))
-        (if current current #f)))
+        (if current (own-runtime-datum current context) #f)))
 
     (define (primitive-condition-stack arguments context)
       "Return a debugger condition's stack frames."
-      (debugger-field-value
-       (debugger-expect-condition (car arguments) "condition-stack")
-       'stack))
+      (own-runtime-datum
+       (debugger-field-value
+        (debugger-expect-condition
+         (own-syntax-datum (car arguments) context)
+         "condition-stack")
+        'stack)
+       context))
 
     (define (primitive-condition-environment arguments context)
       "Return debugger environment frames, or one frame by id."
       (let* ((condition
               (debugger-expect-condition
-               (car arguments)
+               (own-syntax-datum (car arguments) context)
                "condition-environment"))
              (frames (debugger-field-values condition 'environment))
              (frame-id (second arguments)))
-        (if (not frame-id)
-            frames
-            (let ((name (debugger-restart-id-name frame-id context)))
-              (let loop ((rest frames))
-                (cond
-                 ((null? rest) #f)
-                 ((interpreter-symbol-eq?
-                   (debugger-field-value (car rest) 'frame)
-                   name)
-                  (car rest))
-                 (else (loop (cdr rest)))))))))
+        (own-runtime-datum
+         (if (not frame-id)
+             frames
+             (let ((name (debugger-restart-id-name frame-id context)))
+               (let loop ((rest frames))
+                 (cond
+                  ((null? rest) #f)
+                  ((interpreter-symbol-eq?
+                    (debugger-field-value (car rest) 'frame)
+                    name)
+                   (car rest))
+                  (else (loop (cdr rest)))))))
+         context)))
 
     (define (primitive-condition-restarts arguments context)
       "Return a debugger condition's restart records."
-      (debugger-field-value
-       (debugger-expect-condition (car arguments) "condition-restarts")
-       'restarts))
+      (own-runtime-datum
+       (debugger-field-value
+        (debugger-expect-condition
+         (own-syntax-datum (car arguments) context)
+         "condition-restarts")
+        'restarts)
+       context))
 
     (define (primitive-restart-invoke! arguments context)
       "Invoke a debugger restart that can be modeled in portable Scheme."
@@ -7028,7 +7439,7 @@ d.")))
         (for-each
          (lambda (record)
            (record-context-event! context (list 'yield record)))
-         records)
+         (proper-list-elements records "approval pending records"))
         records))
 
     (define (approval-resolution-allowed? context)
@@ -7201,20 +7612,25 @@ d.")))
 
     (define (primitive-grant-capability! arguments context)
       "Create a portable capability grant in the current context."
-      (capability-grant-store!
-       context
-       (normalize-capability-grant (car arguments))))
+      (own-runtime-datum
+       (capability-grant-store!
+        context
+        (normalize-capability-grant
+         (own-syntax-datum (car arguments) context)))
+       context))
 
     (define (primitive-current-grants arguments context)
       "Return active portable capability grants in the current context."
-      (let loop ((grants (context-capability-grants context)))
-        (cond
-         ((null? grants) '())
-         ((consent-host-symbol-eq?
-           (capability-grant-status (car grants))
-           'active)
-          (cons (car grants) (loop (cdr grants))))
-         (else (loop (cdr grants))))))
+      (own-runtime-datum
+       (let loop ((grants (context-capability-grants context)))
+         (cond
+          ((null? grants) '())
+          ((consent-host-symbol-eq?
+            (capability-grant-status (car grants))
+            'active)
+           (cons (car grants) (loop (cdr grants))))
+          (else (loop (cdr grants)))))
+       context))
 
     (define (primitive-grant-ref arguments context)
       "Return a portable capability grant by id, or #f when unknown."
@@ -7222,7 +7638,7 @@ d.")))
              (capability-grant-find
               (context-capability-grants context)
               (car arguments))))
-        (if grant grant #f)))
+        (if grant (own-runtime-datum grant context) #f)))
 
     (define (primitive-grant-attenuate arguments context)
       "Create a portable attenuated child grant by replacing declared fields."
@@ -7231,7 +7647,8 @@ d.")))
                    (context-capability-grants context)
                    (car arguments))
                   (eval-error "unknown parent capability grant")))
-             (restrictions (second arguments))
+             (restrictions
+              (own-syntax-datum (second arguments) context))
              (id-field (consent-host-symbol-assq 'id restrictions))
              (child
               (capability-grant-remove-fields
@@ -7268,9 +7685,11 @@ d.")))
                child
                'parent
                (list (capability-grant-id parent))))
-        (capability-grant-store!
-         context
-         (normalize-capability-grant child))))
+        (own-runtime-datum
+         (capability-grant-store!
+          context
+          (normalize-capability-grant child))
+         context)))
 
     (define (primitive-grant-revoke! arguments context)
       "Revoke a portable capability grant in the current context."
@@ -7295,11 +7714,15 @@ d.")))
                (list 'target
                      (list 'grant (capability-grant-id grant)))
                (list 'status 'revoked)
-               (list 'reason "grant-revoke!")))))
+               (list 'reason "grant-revoke!")))
+        (own-runtime-datum revoked context)))
 
     (define (primitive-call-with-capability-grant arguments context)
       "Call THUNK with GRANT present in the portable context."
-      (let ((grant-or-id (car arguments))
+      (let ((grant-or-id
+             (if (consent-datum-object? (car arguments))
+                 (own-syntax-datum (car arguments) context)
+                 (car arguments)))
             (thunk (second arguments)))
         (if (and (pair? grant-or-id)
                  (consent-host-symbol-eq?
@@ -7410,57 +7833,87 @@ d.")))
 
     (define (primitive-handle-ref arguments context)
       "Return portable lifecycle metadata for a handle datum or port."
-      (let ((value (car arguments)))
-        (cond
-         ((consent-port? value)
-          (portable-port-handle-metadata value))
-         ((portable-handle-datum? value) value)
-         (else #f))))
+      (let* ((argument (car arguments))
+             (value
+              (if (consent-datum-object? argument)
+                  (own-syntax-datum argument context)
+                  argument))
+             (metadata
+              (cond
+               ((consent-port? value)
+                (portable-port-handle-metadata value))
+               ((portable-handle-datum? value) value)
+               (else #f))))
+        (if metadata (own-runtime-datum metadata context) #f)))
 
     (define (primitive-handle-live? arguments context)
       "Return true when the portable handle is live."
-      (portable-handle-live? (car arguments) context))
+      (let ((value (car arguments)))
+        (portable-handle-live?
+         (if (consent-datum-object? value)
+             (own-syntax-datum value context)
+             value)
+         context)))
 
     (define (primitive-handle-kind arguments context)
       "Return the portable handle kind, or #f when unknown."
-      (let ((value (car arguments)))
-        (cond
-         ((consent-port? value)
-          (portable-port-kind value))
-         ((portable-handle-datum? value)
-          (portable-handle-field-value value 'kind))
-         (else #f))))
+      (let* ((argument (car arguments))
+             (value
+              (if (consent-datum-object? argument)
+                  (own-syntax-datum argument context)
+                  argument)))
+        (own-runtime-datum
+         (cond
+          ((consent-port? value)
+           (portable-port-kind value))
+          ((portable-handle-datum? value)
+           (portable-handle-field-value value 'kind))
+          (else #f))
+         context)))
 
     (define (primitive-handle-revalidate arguments context)
       "Revalidate a portable handle and return metadata when known."
-      (let ((value (car arguments)))
-        (cond
-         ((consent-port? value)
-          (let ((metadata (portable-port-handle-metadata value)))
-            (if (and metadata (not (portable-port-live? value context)))
-                (portable-handle-replace-status metadata 'stale)
-                metadata)))
-         ((portable-handle-datum? value)
-          (if (portable-handle-live? value context)
-              value
-              (portable-handle-replace-status value 'stale)))
-         (else #f))))
+      (let* ((argument (car arguments))
+             (value
+              (if (consent-datum-object? argument)
+                  (own-syntax-datum argument context)
+                  argument))
+             (metadata
+              (cond
+               ((consent-port? value)
+                (let ((record (portable-port-handle-metadata value)))
+                  (if (and record
+                           (not (portable-port-live? value context)))
+                      (portable-handle-replace-status record 'stale)
+                      record)))
+               ((portable-handle-datum? value)
+                (if (portable-handle-live? value context)
+                    value
+                    (portable-handle-replace-status value 'stale)))
+               (else #f))))
+        (if metadata (own-runtime-datum metadata context) #f)))
 
     (define (primitive-handle-release! arguments context)
       "Return released portable lifecycle metadata when VALUE is known."
-      (let ((value (car arguments)))
-        (cond
-         ((consent-port? value)
-          (let ((metadata (portable-port-handle-metadata value)))
-            (if metadata
-                (begin
-                  (set-consent-port-open?! value #f)
-                  (set-consent-port-status! value 'released)
-                  (portable-handle-replace-status metadata 'released))
-                #f)))
-         ((portable-handle-datum? value)
-          (portable-handle-replace-status value 'released))
-         (else #f))))
+      (let* ((argument (car arguments))
+             (value
+              (if (consent-datum-object? argument)
+                  (own-syntax-datum argument context)
+                  argument))
+             (metadata
+              (cond
+               ((consent-port? value)
+                (let ((record (portable-port-handle-metadata value)))
+                  (if record
+                      (begin
+                        (set-consent-port-open?! value #f)
+                        (set-consent-port-status! value 'released)
+                        (portable-handle-replace-status record 'released))
+                      #f)))
+               ((portable-handle-datum? value)
+                (portable-handle-replace-status value 'released))
+               (else #f))))
+        (if metadata (own-runtime-datum metadata context) #f)))
 
     (define (primitive-memory-put! arguments context)
       "Store a keyed memory record in the portable interpreter memory store."
@@ -7561,18 +8014,25 @@ d.")))
         (for-each
          (lambda (record)
            (record-context-event! context (list 'yield record)))
-         records)
+         (proper-list-elements records "memory yield records"))
         records))
 
     (define (helper-option-ref options key default)
       "Return KEY from OPTIONS, or DEFAULT if absent."
-      (let ((entry (consent-host-symbol-assq key options)))
-        (if entry
-            (let ((value (cdr entry)))
-              (if (and (pair? value) (null? (cdr value)))
-                  (car value)
-                  value))
-            default)))
+      (let loop ((rest (proper-list-elements options
+                                              "agent helper options")))
+        (if (null? rest)
+            default
+            (let ((entry
+                   (proper-list-elements (car rest)
+                                         "agent helper option")))
+              (if (and (pair? entry)
+                       (consent-host-symbol-eq? (car entry) key))
+                  (let ((values (cdr entry)))
+                    (if (and (pair? values) (null? (cdr values)))
+                        (car values)
+                        values))
+                  (loop (cdr rest)))))))
 
     (define (helper-default-scope context)
       "Return the default helper scope for CONTEXT."
@@ -7592,13 +8052,13 @@ d.")))
       (let ((scope (helper-option-ref options
                                       'scope
                                       (helper-default-scope context))))
-        (if (eq? scope 'project)
+        (if (consent-host-symbol-eq? scope 'project)
             'project-private
             scope)))
 
     (define (helper-source scope context)
       "Return a Scheme-readable source datum for helper SCOPE and CONTEXT."
-      (if (eq? scope 'session)
+      (if (consent-host-symbol-eq? scope 'session)
           (list 'session (context-session-id context))
           '(project-root portable)))
 
@@ -7657,11 +8117,12 @@ l."
         (if (not record)
             (eval-error "unknown helper library" (car arguments)))
         (drain-state
-         (eval-sequence (consent-host-datum->consent-datum
+         (eval-sequence (own-syntax-datum
                          (portable-library-call
                           helper-model:helper-record-forms
                           context
-                          record))
+                          record)
+                         context)
                         (context-interaction-environment context)
                         context
                         #t
@@ -7685,9 +8146,14 @@ l."
       "Promote a portable helper into a skill candidate datum."
       (let* ((helper-or-name (car arguments))
              (options (if (pair? (cdr arguments)) (second arguments) '()))
-             (record (if (and (pair? helper-or-name)
-                              (eq? (car helper-or-name)
-                                   'agent-helper-library))
+             (helper-shape
+              (if (consent-datum-object? helper-or-name)
+                  (own-syntax-datum helper-or-name context)
+                  helper-or-name))
+             (record (if (and (pair? helper-shape)
+                              (consent-host-symbol-eq?
+                               (car helper-shape)
+                               'agent-helper-library))
                          helper-or-name
                          (helper-record-ref helper-or-name options context))))
         (if (not record)
@@ -7740,7 +8206,7 @@ l."
     (define (primitive-agent-test-eval-source-result arguments context)
       "Evaluate one declared source-string test under normal evaluator policy.\
 "
-      (let ((source (expect-string
+      (let ((source (expect-host-string
                      (car arguments)
                      "agent-test-eval-source-result source"))
             (options (if (pair? (cdr arguments)) (second arguments) '())))
@@ -7923,6 +8389,10 @@ l."
       "Return VALUE as a provider/model name."
       (cond
        ((interpreter-symbol? value) value)
+       ((consent-datum-string? value)
+        (interpreter-string->symbol
+         (consent-datum-string->host value)
+         context))
        ((string? value) (interpreter-string->symbol value context))
        (else (eval-error
               (string-append description " must be a symbol or string")
@@ -8124,22 +8594,30 @@ l."
     (define (primitive-model-provider-register! arguments context)
       "Register a portable model provider profile."
       (let ((provider
-             (model-normalize-provider (car arguments) context)))
+             (model-normalize-provider
+              (own-syntax-datum (car arguments) context)
+              context)))
         (model-register-provider! provider)
-        (model-provider-diagnostic provider context)))
+        (own-runtime-datum
+         (model-provider-diagnostic provider context)
+         context)))
 
     (define (primitive-model-providers arguments context)
       "Return registered provider diagnostics."
-      (list 'providers
-            (map (lambda (provider)
-                   (model-provider-diagnostic provider context))
-                 interpreter-model-providers)))
+      (own-runtime-datum
+       (list 'providers
+             (map (lambda (provider)
+                    (model-provider-diagnostic provider context))
+                  interpreter-model-providers))
+       context))
 
     (define (primitive-model-route arguments context)
       "Return a portable model routing decision."
       (let* ((role (model-name (car arguments) "model role" context))
              (candidate (model-select role)))
-        (model-routing-decision role candidate)))
+        (own-runtime-datum
+         (model-routing-decision role candidate)
+         context)))
 
     (define (primitive-model-complete arguments context)
       "Complete through the portable local OpenAI-compatible transport."
@@ -8172,11 +8650,13 @@ l."
 
     (define (primitive-model-provider-diagnostics arguments context)
       "Return redacted portable model provider diagnostics."
-      (list 'model-provider-diagnostics
-            (list 'providers
-                  (map (lambda (provider)
-                         (model-provider-diagnostic provider context))
-                       interpreter-model-providers))))
+      (own-runtime-datum
+       (list 'model-provider-diagnostics
+             (list 'providers
+                   (map (lambda (provider)
+                          (model-provider-diagnostic provider context))
+                        interpreter-model-providers)))
+       context))
 
     (define (primitive-secret-source? arguments context)
       "Report whether a datum contains secret-prone source data."
@@ -8343,25 +8823,33 @@ r."
       "Implement `command-line` from script invocation metadata or a grant."
       (let ((script-command-line
              (and context (context-command-line context))))
-        (if script-command-line
-            script-command-line
-            (begin
-              (authorize-process-environment-capability "command-line" context)
-              (host-command-line)))))
+        (charge-literal!
+         (if script-command-line
+             script-command-line
+             (begin
+               (authorize-process-environment-capability
+                "command-line" context)
+               (host-command-line)))
+         context)))
 
     (define (primitive-get-environment-variable arguments context)
       "Implement `get-environment-variable` through a policy-gated host read."
       (authorize-process-environment-capability
        "get-environment-variable" context)
-      (host-get-environment-variable
-       (expect-string (car arguments) "get-environment-variable")))
+      (let ((value
+             (host-get-environment-variable
+              (expect-host-string
+               (car arguments) "get-environment-variable"))))
+        (if value
+            (charge-string-allocation! value context)
+            #f)))
 
     (define (primitive-get-environment-variables arguments context)
       "Implement `get-environment-variables` through a policy-gated host read.\
 "
       (authorize-process-environment-capability
        "get-environment-variables" context)
-      (host-get-environment-variables))
+      (charge-literal! (host-get-environment-variables) context))
 
     (define (primitive-current-jiffy arguments context)
       "Implement R7RS `current-jiffy` through a policy-gated clock read."
@@ -8474,7 +8962,8 @@ r."
 
     (define (primitive-open-input-file arguments context)
       "Implement the `open-input-file` primitive with capability checks."
-      (let* ((filename (expect-string (car arguments) "open-input-file"))
+      (let* ((filename
+              (expect-host-string (car arguments) "open-input-file"))
              (authorization
               (resolve-file-policy-path
                filename
@@ -8509,7 +8998,8 @@ r."
       "Implement the `open-binary-input-file` primitive with capability checks\
 ."
       (let* ((filename
-              (expect-string (car arguments) "open-binary-input-file"))
+              (expect-host-string
+               (car arguments) "open-binary-input-file"))
              (authorization
               (resolve-file-policy-path
                filename
@@ -8542,7 +9032,8 @@ r."
 
     (define (primitive-open-output-file arguments context)
       "Implement the `open-output-file` primitive with capability checks."
-      (let* ((filename (expect-string (car arguments) "open-output-file"))
+      (let* ((filename
+              (expect-host-string (car arguments) "open-output-file"))
              (authorization
              (resolve-output-file-policy-path
                filename
@@ -8571,7 +9062,8 @@ r."
     (define (primitive-open-binary-output-file arguments context)
       "Implement `open-binary-output-file` with capability checks."
       (let* ((filename
-              (expect-string (car arguments) "open-binary-output-file"))
+              (expect-host-string
+               (car arguments) "open-binary-output-file"))
              (authorization
              (resolve-output-file-policy-path
                filename
@@ -8585,7 +9077,7 @@ r."
       "Consent Scheme values."
       (let* ((authorization
              (resolve-file-policy-path
-              (expect-string (car arguments) "file-exists?")
+              (expect-host-string (car arguments) "file-exists?")
               context
               "file-exists?"))
              (exists? (file-exists? (file-authorization-path authorization))))
@@ -8597,7 +9089,7 @@ r."
       "Consent Scheme values."
       (let* ((authorization
               (resolve-file-policy-path
-               (expect-string (car arguments) "delete-file")
+               (expect-host-string (car arguments) "delete-file")
                context
                "delete-file"))
              (path (file-authorization-path authorization)))
@@ -8744,11 +9236,15 @@ r."
       "Consent Scheme values."
       (let ((environment (consent-make-empty-environment))
             (syntax-environment (make-syntax-environment '() #f '())))
+        (context-use-environment-datum-heap! context environment)
         (with-syntax-environment
          context
          syntax-environment
          (lambda ()
-           (eval-import (cons 'import arguments) environment context)))
+           (eval-import
+            (own-syntax-datum (cons 'import arguments) context)
+            environment
+            context)))
         (make-environment-specifier environment syntax-environment #t)))
 
     (define (expect-environment-specifier value description)
@@ -8779,7 +9275,7 @@ eme values."
       "Continuation-aware implementation of the `eval` primitive for trampolin\
 e"
       "evaluation."
-      (let* ((expression (car arguments))
+      (let* ((expression (own-syntax-datum (car arguments) context))
              (specifier
               (expect-environment-specifier (second arguments) "eval"))
              (environment (environment-specifier-environment specifier))
@@ -8848,7 +9344,7 @@ eme values."
       "Continuation-aware implementation of the `load` primitive for trampolin\
 e"
       "evaluation."
-      (let* ((filename (expect-string (car arguments) "load"))
+      (let* ((filename (expect-host-string (car arguments) "load"))
              (read-result
               (read-policy-file-forms filename context "load"))
              (target (load-target arguments context))
@@ -8879,7 +9375,7 @@ e"
     (define (primitive-string? arguments context)
       "Implement the `string?` primitive with argument validation and Consent"
       "Scheme values."
-      (string? (car arguments)))
+      (consent-datum-string? (car arguments)))
 
     (define (primitive-make-string arguments context)
       "Implement the `make-string` primitive with argument validation and"
@@ -8892,7 +9388,11 @@ e"
                        "make-string fill"))))
         (if (< length 0)
             (eval-error "make-string length must be non-negative"))
-        (charge-string-allocation! (make-string length fill) context)))
+        (charge-value-allocation!
+         (consent-datum-make-string
+          (context-datum-heap context) length fill)
+         (+ 1 length)
+         context)))
 
     (define (primitive-string arguments context)
       "Implement the `string` primitive with argument validation and Consent"
@@ -8908,7 +9408,8 @@ e"
       "Implement the `string-length` primitive with argument validation and"
       "Consent Scheme values."
       (consent-make-canonical-integer
-       (string-length (expect-string (car arguments) "string-length"))))
+       (consent-datum-string-length
+        (expect-string (car arguments) "string-length"))))
 
     (define (primitive-string-ref arguments context)
       "Implement the `string-ref` primitive with argument validation and"
@@ -8916,10 +9417,11 @@ e"
       (let* ((string (expect-string (car arguments) "string-ref"))
              (index (expect-nonnegative-index
                      (second arguments)
-                     (string-length string)
+                     (consent-datum-string-length string)
                      "string-ref"
                      #f)))
-        (consent-host-character->character (string-ref string index))))
+        (consent-host-character->character
+         (consent-datum-string-ref-host string index))))
 
     (define (primitive-string-set! arguments context)
       "Implement the `string-set!` primitive with argument validation and"
@@ -8927,13 +9429,14 @@ e"
       (let* ((string (expect-string (car arguments) "string-set!"))
              (index (expect-nonnegative-index
                      (second arguments)
-                     (string-length string)
+                     (consent-datum-string-length string)
                      "string-set!"
                      #f))
              (char (expect-host-character
                     (third arguments)
                     "string-set! value")))
-        (string-set! string index char)
+        (consent-datum-string-set-host!
+         (context-datum-heap context) string index char)
         consent-unspecified))
 
     (define (primitive-substring arguments context)
@@ -8941,19 +9444,24 @@ e"
 t"
       "Scheme values."
       (let* ((string (expect-string (car arguments) "substring"))
+             (length (consent-datum-string-length string))
              (start (expect-nonnegative-index
                      (second arguments)
-                     (string-length string)
+                     length
                      "substring"
                      #t))
              (end (expect-nonnegative-index
                    (third arguments)
-                   (string-length string)
+                   length
                    "substring"
                    #t)))
         (if (> start end)
             (eval-error "substring start exceeds end"))
-        (charge-string-allocation! (substring string start end) context)))
+        (charge-value-allocation!
+         (consent-datum-string-copy-range
+          (context-datum-heap context) string start end)
+         (+ 1 (- end start))
+         context)))
 
     (define (primitive-string-append arguments context)
       "Implement the `string-append` primitive with argument validation and"
@@ -8961,7 +9469,7 @@ t"
       (charge-string-allocation!
        (apply string-append
               (map (lambda (argument)
-                     (expect-string argument "string-append"))
+                     (expect-host-string argument "string-append"))
                    arguments))
        context))
 
@@ -8972,14 +9480,14 @@ t"
              (range (optional-range
                      arguments
                      1
-                     (string-length string)
+                     (consent-datum-string-length string)
                      "string->list")))
         (let loop ((index (car range)) (result '()))
           (if (= index (cdr range))
               (charge-list-allocation! (reverse result) context)
               (loop (+ index 1)
                     (cons (consent-host-character->character
-                           (string-ref string index))
+                           (consent-datum-string-ref-host string index))
                           result))))))
 
     (define (primitive-list->string arguments context)
@@ -8995,9 +9503,23 @@ t"
     (define (primitive-string->vector arguments context)
       "Implement the `string->vector` primitive with argument validation and"
       "Consent Scheme values."
-      (charge-vector-allocation!
-       (list->vector (primitive-string->list arguments context))
-       context))
+      (let* ((string (expect-string (car arguments) "string->vector"))
+             (range (optional-range
+                     arguments
+                     1
+                     (consent-datum-string-length string)
+                     "string->vector"))
+             (length (- (cdr range) (car range)))
+             (vector (make-vector length #f)))
+        (let loop ((source-index (car range)) (target-index 0))
+          (if (< source-index (cdr range))
+              (begin
+                (vector-set!
+                 vector target-index
+                 (consent-host-character->character
+                  (consent-datum-string-ref-host string source-index)))
+                (loop (+ source-index 1) (+ target-index 1)))))
+        (charge-vector-allocation! vector context)))
 
     (define (primitive-vector->string arguments context)
       "Implement the `vector->string` primitive with argument validation and"
@@ -9006,7 +9528,7 @@ t"
              (range (optional-range
                      arguments
                      1
-                     (vector-length vector)
+                     (consent-datum-vector-length vector)
                      "vector->string")))
         (let loop ((index (car range)) (result '()))
           (if (= index (cdr range))
@@ -9014,7 +9536,7 @@ t"
                 context)
               (loop (+ index 1)
                     (cons (expect-host-character
-                           (vector-ref vector index)
+                           (consent-datum-vector-ref vector index)
                            "vector->string")
                           result))))))
 
@@ -9025,10 +9547,15 @@ t"
              (range (optional-range
                      arguments
                      1
-                     (string-length string)
+                     (consent-datum-string-length string)
                      "string-copy")))
-        (charge-string-allocation!
-         (substring string (car range) (cdr range))
+        (charge-value-allocation!
+         (consent-datum-string-copy-range
+          (context-datum-heap context)
+          string
+          (car range)
+          (cdr range))
+         (+ 1 (- (cdr range) (car range)))
          context)))
 
     (define (primitive-string-copy! arguments context)
@@ -9037,22 +9564,39 @@ t"
       (let* ((to (expect-string (car arguments) "string-copy! target"))
              (at (expect-nonnegative-index
                   (second arguments)
-                  (string-length to)
+                  (consent-datum-string-length to)
                   "string-copy!"
                   #t))
              (from (expect-string (third arguments) "string-copy! source"))
              (range (optional-range
                      arguments
                      3
-                     (string-length from)
-                     "string-copy!")))
-        (if (> (+ at (- (cdr range) (car range))) (string-length to))
+                     (consent-datum-string-length from)
+                     "string-copy!"))
+             (length (- (cdr range) (car range)))
+             (source (make-vector length #f)))
+        (if (> (+ at (- (cdr range) (car range)))
+               (consent-datum-string-length to))
             (eval-error "string-copy! target range exceeds length"))
-        (let loop ((source-index (car range)) (target-index at))
-          (if (< source-index (cdr range))
+        ;; Snapshot through datum accessors before any write so overlapping
+        ;; copies have R7RS semantics without allocating a host string.
+        (let snapshot ((source-index (car range)) (snapshot-index 0))
+          (if (< snapshot-index length)
               (begin
-                (string-set! to target-index (string-ref from source-index))
-                (loop (+ source-index 1) (+ target-index 1)))))
+                (vector-set!
+                 source
+                 snapshot-index
+                 (consent-datum-string-ref-host from source-index))
+                (snapshot (+ source-index 1) (+ snapshot-index 1)))))
+        (let copy ((snapshot-index 0) (target-index at))
+          (if (< snapshot-index length)
+              (begin
+                (consent-datum-string-set-host!
+                 (context-datum-heap context)
+                 to
+                 target-index
+                 (vector-ref source snapshot-index))
+                (copy (+ snapshot-index 1) (+ target-index 1)))))
         consent-unspecified))
 
     (define (primitive-string-fill! arguments context)
@@ -9065,27 +9609,32 @@ t"
              (range (optional-range
                      arguments
                      2
-                     (string-length string)
+                     (consent-datum-string-length string)
                      "string-fill!")))
         (let loop ((index (car range)))
           (if (< index (cdr range))
               (begin
-                (string-set! string index fill)
+                (consent-datum-string-set-host!
+                 (context-datum-heap context) string index fill)
                 (loop (+ index 1)))))
         consent-unspecified))
 
     (define (string-scalar-compare left right)
-      "Compare host strings lexicographically by Unicode scalar value."
-      (let ((left-length (string-length left))
-            (right-length (string-length right)))
+      "Compare owned strings lexicographically by Unicode scalar value."
+      (let ((left-length (consent-datum-string-length left))
+            (right-length (consent-datum-string-length right)))
         (let loop ((index 0))
           (cond
            ((and (= index left-length) (= index right-length)) 0)
            ((= index left-length) -1)
            ((= index right-length) 1)
            (else
-            (let ((left-code (char->integer (string-ref left index)))
-                  (right-code (char->integer (string-ref right index))))
+            (let ((left-code
+                   (char->integer
+                    (consent-datum-string-ref-host left index)))
+                  (right-code
+                   (char->integer
+                    (consent-datum-string-ref-host right index))))
               (cond
                ((< left-code right-code) -1)
                ((> left-code right-code) 1)
@@ -9142,17 +9691,23 @@ t"
              ((null? rest) #f)
              ((null? (car rest)) #t)
              (else (any-empty? (cdr rest)))))
-          (if keep-results? (reverse results) consent-unspecified))
+          (if keep-results?
+              (charge-list-allocation! (reverse results) context)
+              consent-unspecified))
          ((let any-improper? ((rest cursors))
             (cond
              ((null? rest) #f)
-             ((not (pair? (car rest))) #t)
+             ((not (consent-datum-pair? (car rest))) #t)
              (else (any-improper? (cdr rest)))))
           (eval-error "map expected proper lists"))
          (else
           (let ((value
-                 (apply-procedure procedure (map car cursors) context #f)))
-            (loop (map cdr cursors)
+                 (apply-procedure
+                  procedure
+                  (map consent-datum-car cursors)
+                  context
+                  #f)))
+            (loop (map consent-datum-cdr cursors)
                   (if keep-results?
                       (cons (single-value value "map result") results)
                       results)))))))
@@ -9464,7 +10019,8 @@ d"
     (define (primitive-error arguments context)
       "Implement the `error` primitive with argument validation and Consent"
       "Scheme values."
-      (let ((message (expect-string (car arguments) "error message"))
+      (let ((message
+             (expect-host-string (car arguments) "error message"))
             (irritants (cdr arguments)))
         (primitive-raise
          (list (make-consent-error-object message irritants))
@@ -9473,7 +10029,8 @@ d"
     (define (primitive-error/k arguments context continuation)
       "Continuation-aware implementation of the `error` primitive for"
       "trampoline evaluation."
-      (let ((message (expect-string (car arguments) "error message"))
+      (let ((message
+             (expect-host-string (car arguments) "error message"))
             (irritants (cdr arguments)))
         (primitive-raise/k
          (list (make-consent-error-object message irritants))
@@ -9497,14 +10054,19 @@ d"
       "Implement the `error-object-message` primitive with argument validation\
 "
       "and Consent Scheme values."
-      (consent-error-object-message
-       (expect-error-object (car arguments) "error-object-message")))
+      (charge-string-allocation!
+       (string-copy
+        (consent-error-object-message
+         (expect-error-object (car arguments) "error-object-message")))
+       context))
 
     (define (primitive-error-object-irritants arguments context)
       "Implement the `error-object-irritants` primitive with argument"
       "validation and Consent Scheme values."
-      (consent-error-object-irritants
-       (expect-error-object (car arguments) "error-object-irritants")))
+      (charge-list-allocation!
+       (consent-error-object-irritants
+        (expect-error-object (car arguments) "error-object-irritants"))
+       context))
 
     (define (primitive-map arguments context)
       "Implement the `map` primitive with argument validation and Consent Sche\
@@ -9528,7 +10090,7 @@ me values."
     (define (primitive-vector? arguments context)
       "Implement the `vector?` primitive with argument validation and Consent"
       "Scheme values."
-      (vector? (car arguments)))
+      (consent-datum-vector? (car arguments)))
 
     (define (primitive-make-vector arguments context)
       "Implement the `make-vector` primitive with argument validation and"
@@ -9539,7 +10101,11 @@ me values."
                       (second arguments))))
         (if (< length 0)
             (eval-error "make-vector length must be non-negative"))
-        (charge-vector-allocation! (make-vector length fill) context)))
+        (charge-value-allocation!
+         (consent-datum-make-vector
+          (context-datum-heap context) length fill)
+         (+ 1 length)
+         context)))
 
     (define (primitive-vector arguments context)
       "Implement the `vector` primitive with argument validation and Consent"
@@ -9550,7 +10116,8 @@ me values."
       "Implement the `vector-length` primitive with argument validation and"
       "Consent Scheme values."
       (consent-make-canonical-integer
-       (vector-length (expect-vector (car arguments) "vector-length"))))
+       (consent-datum-vector-length
+        (expect-vector (car arguments) "vector-length"))))
 
     (define (primitive-vector-ref arguments context)
       "Implement the `vector-ref` primitive with argument validation and"
@@ -9558,10 +10125,10 @@ me values."
       (let* ((vector (expect-vector (car arguments) "vector-ref"))
              (index (expect-nonnegative-index
                      (second arguments)
-                     (vector-length vector)
+                     (consent-datum-vector-length vector)
                      "vector-ref"
                      #f)))
-        (vector-ref vector index)))
+        (consent-datum-vector-ref vector index)))
 
     (define (primitive-vector-set! arguments context)
       "Implement the `vector-set!` primitive with argument validation and"
@@ -9569,10 +10136,11 @@ me values."
       (let* ((vector (expect-vector (car arguments) "vector-set!"))
              (index (expect-nonnegative-index
                      (second arguments)
-                     (vector-length vector)
+                     (consent-datum-vector-length vector)
                      "vector-set!"
                      #f)))
-        (vector-set! vector index (third arguments))
+        (consent-datum-vector-set!
+         (context-datum-heap context) vector index (third arguments))
         consent-unspecified))
 
     (define (primitive-vector->list arguments context)
@@ -9582,13 +10150,14 @@ me values."
              (range (optional-range
                      arguments
                      1
-                     (vector-length vector)
+                     (consent-datum-vector-length vector)
                      "vector->list")))
         (let loop ((index (car range)) (result '()))
           (if (= index (cdr range))
               (charge-list-allocation! (reverse result) context)
               (loop (+ index 1)
-                    (cons (vector-ref vector index) result))))))
+                    (cons (consent-datum-vector-ref vector index)
+                          result))))))
 
     (define (primitive-list->vector arguments context)
       "Implement the `list->vector` primitive with argument validation and"
@@ -9601,9 +10170,22 @@ me values."
     (define (primitive-vector-copy arguments context)
       "Implement the `vector-copy` primitive with argument validation and"
       "Consent Scheme values."
-      (charge-vector-allocation!
-       (list->vector (primitive-vector->list arguments context))
-       context))
+      (let* ((source (expect-vector (car arguments) "vector-copy"))
+             (range (optional-range
+                     arguments
+                     1
+                     (consent-datum-vector-length source)
+                     "vector-copy"))
+             (length (- (cdr range) (car range)))
+             (copy (make-vector length #f)))
+        (let loop ((source-index (car range)) (target-index 0))
+          (if (< source-index (cdr range))
+              (begin
+                (vector-set!
+                 copy target-index
+                 (consent-datum-vector-ref source source-index))
+                (loop (+ source-index 1) (+ target-index 1)))))
+        (charge-vector-allocation! copy context)))
 
     (define (primitive-vector-copy! arguments context)
       "Implement the `vector-copy!` primitive with argument validation and"
@@ -9611,23 +10193,40 @@ me values."
       (let* ((to (expect-vector (car arguments) "vector-copy! target"))
              (at (expect-nonnegative-index
                   (second arguments)
-                  (vector-length to)
+                  (consent-datum-vector-length to)
                   "vector-copy!"
                   #t))
              (from (expect-vector (third arguments) "vector-copy! source"))
              (range (optional-range
                      arguments
                      3
-                     (vector-length from)
-                     "vector-copy!")))
-        (if (> (+ at (- (cdr range) (car range))) (vector-length to))
+                     (consent-datum-vector-length from)
+                     "vector-copy!"))
+             (length (- (cdr range) (car range)))
+             (source (make-vector length #f)))
+        (if (> (+ at (- (cdr range) (car range)))
+               (consent-datum-vector-length to))
             (eval-error "vector-copy! target range exceeds length"))
-        (let loop ((source-index (car range)) (target-index at))
-          (if (< source-index (cdr range))
+        ;; R7RS requires overlap to behave as if the source range had first
+        ;; been copied. A host vector snapshot gives exactly one indexed read
+        ;; and one indexed write per slot instead of repeated list-ref walks.
+        (let snapshot ((source-index (car range)) (snapshot-index 0))
+          (if (< snapshot-index length)
               (begin
-                (vector-set! to target-index
-                             (vector-ref from source-index))
-                (loop (+ source-index 1) (+ target-index 1)))))
+                (vector-set!
+                 source
+                 snapshot-index
+                 (consent-datum-vector-ref from source-index))
+                (snapshot (+ source-index 1) (+ snapshot-index 1)))))
+        (let copy ((snapshot-index 0) (target-index at))
+          (if (< snapshot-index length)
+              (begin
+                (consent-datum-vector-set!
+                 (context-datum-heap context)
+                 to
+                 target-index
+                 (vector-ref source snapshot-index))
+                (copy (+ snapshot-index 1) (+ target-index 1)))))
         consent-unspecified))
 
     (define (primitive-vector-append arguments context)
@@ -9637,8 +10236,17 @@ me values."
        (list->vector
         (apply append
                (map (lambda (argument)
-                      (vector->list
-                       (expect-vector argument "vector-append")))
+                      (let ((vector
+                             (expect-vector argument "vector-append")))
+                        (let loop ((index 0) (result '()))
+                          (if (= index
+                                 (consent-datum-vector-length vector))
+                              (reverse result)
+                              (loop
+                               (+ index 1)
+                               (cons
+                                (consent-datum-vector-ref vector index)
+                                result))))))
                     arguments)))
        context))
 
@@ -9650,19 +10258,20 @@ me values."
              (range (optional-range
                      arguments
                      2
-                     (vector-length vector)
+                     (consent-datum-vector-length vector)
                      "vector-fill!")))
         (let loop ((index (car range)))
           (if (< index (cdr range))
               (begin
-                (vector-set! vector index fill)
+                (consent-datum-vector-set!
+                 (context-datum-heap context) vector index fill)
                 (loop (+ index 1)))))
         consent-unspecified))
 
     (define (primitive-bytevector? arguments context)
       "Implement the `bytevector?` primitive with argument validation and"
       "Consent Scheme values."
-      (bytevector? (car arguments)))
+      (consent-datum-bytevector? (car arguments)))
 
     (define (primitive-make-bytevector arguments context)
       "Implement the `make-bytevector` primitive with argument validation and"
@@ -9675,7 +10284,11 @@ me values."
                        "make-bytevector fill"))))
         (if (< length 0)
             (eval-error "make-bytevector length must be non-negative"))
-        (charge-bytevector-allocation! (make-bytevector length fill) context)))
+        (charge-value-allocation!
+         (consent-datum-make-bytevector
+          (context-datum-heap context) length fill)
+         (+ 1 length)
+         context)))
 
     (define (primitive-bytevector arguments context)
       "Implement the `bytevector` primitive with argument validation and"
@@ -9692,7 +10305,7 @@ me values."
 d"
       "Consent Scheme values."
       (consent-make-canonical-integer
-       (bytevector-length
+       (consent-datum-bytevector-length
         (expect-bytevector (car arguments) "bytevector-length"))))
 
     (define (primitive-bytevector-u8-ref arguments context)
@@ -9705,11 +10318,11 @@ d"
                "bytevector-u8-ref"))
              (index (expect-nonnegative-index
                      (second arguments)
-                     (bytevector-length bytevector)
+                     (consent-datum-bytevector-length bytevector)
                      "bytevector-u8-ref"
                      #f)))
         (consent-make-canonical-integer
-         (bytevector-u8-ref bytevector index))))
+         (consent-datum-bytevector-u8-ref bytevector index))))
 
     (define (primitive-bytevector-u8-set! arguments context)
       "Implement the `bytevector-u8-set!` primitive with argument validation"
@@ -9720,13 +10333,14 @@ d"
                "bytevector-u8-set!"))
              (index (expect-nonnegative-index
                      (second arguments)
-                     (bytevector-length bytevector)
+                     (consent-datum-bytevector-length bytevector)
                      "bytevector-u8-set!"
                      #f))
              (byte (expect-byte
                     (third arguments)
                     "bytevector-u8-set! value")))
-        (bytevector-u8-set! bytevector index byte)
+        (consent-datum-bytevector-u8-set!
+         (context-datum-heap context) bytevector index byte)
         consent-unspecified))
 
     (define (primitive-bytevector-copy arguments context)
@@ -9737,10 +10351,13 @@ d"
              (range (optional-range
                      arguments
                      1
-                     (bytevector-length bytevector)
+                     (consent-datum-bytevector-length bytevector)
                      "bytevector-copy")))
         (charge-bytevector-allocation!
-         (bytevector-copy bytevector (car range) (cdr range))
+         (bytevector-copy
+          (consent-datum-bytevector->host bytevector)
+          (car range)
+          (cdr range))
          context)))
 
     (define (primitive-bytevector-copy! arguments context)
@@ -9752,20 +10369,30 @@ d"
                   "bytevector-copy! target"))
              (at (expect-nonnegative-index
                   (second arguments)
-                  (bytevector-length to)
+                  (consent-datum-bytevector-length to)
                   "bytevector-copy!"
                   #t))
              (from (expect-bytevector
                     (third arguments)
                     "bytevector-copy! source"))
+             (source (consent-datum-bytevector->host from))
              (range (optional-range
                      arguments
                      3
-                     (bytevector-length from)
+                     (consent-datum-bytevector-length from)
                      "bytevector-copy!")))
-        (if (> (+ at (- (cdr range) (car range))) (bytevector-length to))
+        (if (> (+ at (- (cdr range) (car range)))
+               (consent-datum-bytevector-length to))
             (eval-error "bytevector-copy! target range exceeds length"))
-        (bytevector-copy! to at from (car range) (cdr range))
+        (let loop ((source-index (car range)) (target-index at))
+          (if (< source-index (cdr range))
+              (begin
+                (consent-datum-bytevector-u8-set!
+                 (context-datum-heap context)
+                 to
+                 target-index
+                 (bytevector-u8-ref source source-index))
+                (loop (+ source-index 1) (+ target-index 1)))))
         consent-unspecified))
 
     (define (primitive-bytevector-append arguments context)
@@ -9775,7 +10402,8 @@ d"
       (charge-bytevector-allocation!
        (apply bytevector-append
               (map (lambda (argument)
-                     (expect-bytevector argument "bytevector-append"))
+                     (expect-host-bytevector
+                      argument "bytevector-append"))
                    arguments))
        context))
 
@@ -9828,6 +10456,9 @@ d"
     (define (eqv-value? left right)
       "Implement eqv? comparison with Consent Scheme numeric representation."
       (cond
+       ((or (consent-datum-object? left)
+            (consent-datum-object? right))
+        (consent-datum-same? left right))
        ((or (consent-symbol? left) (consent-symbol? right))
         (and (consent-symbol? left)
              (consent-symbol? right)
@@ -9841,6 +10472,7 @@ d"
     (define (eq-value? left right)
       "Implement eq? comparison with owned-symbol and number semantics."
       (or (eq? left right)
+          (consent-datum-same? left right)
           (and (consent-symbol? left)
                (consent-symbol? right)
                (consent-symbol-equivalent? left right))
@@ -9849,45 +10481,234 @@ d"
                (consent-number? right)
                (numeric-representation-eqv? left right))))
 
-    (define (equal-seen-pair? left right seen)
-      "Report whether LEFT/RIGHT was already visited during equal? traversal."
-      (cond
-       ((null? seen) #f)
-       ((and (eq? left (caar seen))
-             (eq? right (cdar seen)))
-        #t)
-       (else
-        (equal-seen-pair? left right (cdr seen)))))
+    (define (equal-graph-value? left right context)
+      "Iteratively compare non-identical values by congruence closure."
+      ;; Union-find records equivalence classes of owned and private host
+      ;; compounds. Each successful union schedules that kind's corresponding
+      ;; edges exactly once, avoiding the product traversal of a pair-of-node
+      ;; memo on bisimilar cycles with different periods.
+      (let ((absent (vector 'equal-comparison-absent))
+            (owned-nodes #f)
+            (host-nodes #f)
+            (pending (list (cons left right))))
+        (define (node-ref value)
+          "Return VALUE's union-find node, or ABSENT."
+          (if (consent-datum-object? value)
+              (if owned-nodes
+                  (consent-datum-object-map-ref
+                   owned-nodes value absent)
+                  absent)
+              (if host-nodes
+                  (consent-identity-map-ref host-nodes value absent)
+                  absent)))
+        (define (node-set! value node)
+          "Associate compound VALUE with union-find NODE."
+          (if (consent-datum-object? value)
+              (begin
+                (if (not owned-nodes)
+                    (set! owned-nodes (consent-make-datum-object-map)))
+                (consent-datum-object-map-set! owned-nodes value node))
+              (begin
+                (if (not host-nodes)
+                    (set! host-nodes (consent-make-identity-map)))
+                (consent-identity-map-set! host-nodes value node))))
+        (define (value-node value)
+          "Return VALUE's existing or fresh union-find node."
+          (let ((known (node-ref value)))
+            (if (eq? known absent)
+                (let ((node (vector #f 0)))
+                  (vector-set! node 0 node)
+                  (node-set! value node)
+                  node)
+                known)))
+        (define (node-root node)
+          "Return NODE's root with iterative path compression."
+          (let climb ((cursor node))
+            (let ((parent (vector-ref cursor 0)))
+              (if (eq? cursor parent)
+                  (begin
+                    (let compress ((path node))
+                      (let ((next (vector-ref path 0)))
+                        (if (not (eq? path cursor))
+                            (begin
+                              (vector-set! path 0 cursor)
+                              (compress next)))))
+                    cursor)
+                  (climb parent)))))
+        (define (nodes-seen-or-union! first second)
+          "Report one congruence class, or union two classes."
+          (let* ((first-root (node-root (value-node first)))
+                 (second-root (node-root (value-node second))))
+            (if (eq? first-root second-root)
+                #t
+                (let ((first-rank (vector-ref first-root 1))
+                      (second-rank (vector-ref second-root 1)))
+                  (cond
+                   ((< first-rank second-rank)
+                    (vector-set! first-root 0 second-root))
+                   ((> first-rank second-rank)
+                    (vector-set! second-root 0 first-root))
+                   (else
+                    (vector-set! second-root 0 first-root)
+                    (vector-set! first-root 1 (+ first-rank 1))))
+                  #f))))
+        (define (seen-or-mark! first second)
+          "Report or union FIRST/SECOND's compound congruence classes."
+          (nodes-seen-or-union! first second))
+        (define (push! first second)
+          "Schedule one pair of values for comparison."
+          (set! pending (cons (cons first second) pending)))
+        (define (push-pair-edges! first second owned?)
+          "Schedule FIRST/SECOND pair edges in recursive order."
+          (if owned?
+              (begin
+                (push!
+                 (consent-datum-cdr first) (consent-datum-cdr second))
+                (push!
+                 (consent-datum-car first) (consent-datum-car second)))
+              (begin
+                (push! (cdr first) (cdr second))
+                (push! (car first) (car second)))))
+        (define (push-vector-edges! first second length owned?)
+          "Schedule vector slots in ascending recursive order."
+          (let loop ((index (- length 1)))
+            (if (>= index 0)
+                (begin
+                  (if owned?
+                      (push!
+                       (consent-datum-vector-ref first index)
+                       (consent-datum-vector-ref second index))
+                      (push!
+                       (vector-ref first index)
+                       (vector-ref second index)))
+                  (loop (- index 1))))))
+        (define (compound-value? value)
+          "Return whether VALUE participates in graph comparison work."
+          (or (consent-datum-pair? value)
+              (pair? value)
+              (consent-datum-vector? value)
+              (vector? value)
+              (consent-datum-string? value)
+              (string? value)
+              (consent-datum-bytevector? value)
+              (bytevector? value)
+              (consent-record? value)
+              (consent-record-type? value)))
+        (define (owned-string-content=? first second length)
+          "Compare LENGTH owned string slots without host copies."
+          (let loop ((index 0))
+            (or
+             (= index length)
+             (and
+              (char=?
+               (consent-datum-string-ref-host first index)
+               (consent-datum-string-ref-host second index))
+              (loop (+ index 1))))))
+        (define (owned-bytevector-content=? first second length)
+          "Compare LENGTH owned bytevector slots without host copies."
+          (let loop ((index 0))
+            (or
+             (= index length)
+             (and
+              (= (consent-datum-bytevector-u8-ref first index)
+                 (consent-datum-bytevector-u8-ref second index))
+              (loop (+ index 1))))))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+          (let loop ()
+            (if (null? pending)
+                #t
+                (let* ((comparison (car pending))
+                     (first (car comparison))
+                     (second (cdr comparison)))
+                (set! pending (cdr pending))
+                (if (or (compound-value? first)
+                        (compound-value? second))
+                    (note-step! context))
+                (cond
+                 ((eqv-value? first second) (loop))
+                 ((and (consent-datum-pair? first)
+                       (consent-datum-pair? second))
+                  (if (not (seen-or-mark! first second))
+                      (push-pair-edges! first second #t))
+                  (loop))
+                 ((or (consent-datum-pair? first)
+                      (consent-datum-pair? second))
+                  #f)
+                 ((and (pair? first) (pair? second))
+                  (if (not (seen-or-mark! first second))
+                      (push-pair-edges! first second #f))
+                  (loop))
+                 ((or (pair? first) (pair? second)) #f)
+                 ((and (consent-datum-vector? first)
+                       (consent-datum-vector? second))
+                  (let ((length (consent-datum-vector-length first)))
+                    (if (not (= length
+                                (consent-datum-vector-length second)))
+                        #f
+                        (begin
+                          (if (not (seen-or-mark! first second))
+                              (push-vector-edges!
+                               first second length #t))
+                          (loop)))))
+                 ((or (consent-datum-vector? first)
+                      (consent-datum-vector? second))
+                  #f)
+                 ((and (vector? first) (vector? second))
+                  (let ((length (vector-length first)))
+                    (if (not (= length (vector-length second)))
+                        #f
+                        (begin
+                          (if (not (seen-or-mark! first second))
+                              (push-vector-edges!
+                               first second length #f))
+                          (loop)))))
+                 ((or (vector? first) (vector? second)) #f)
+                 ((and (consent-datum-string? first)
+                       (consent-datum-string? second))
+                  (let ((length (consent-datum-string-length first)))
+                    (if (not (= length
+                                (consent-datum-string-length second)))
+                        #f
+                        (if (seen-or-mark! first second)
+                            (loop)
+                            (and
+                             (owned-string-content=? first second length)
+                             (loop))))))
+                 ((or (consent-datum-string? first)
+                      (consent-datum-string? second))
+                  #f)
+                 ((and (consent-datum-bytevector? first)
+                       (consent-datum-bytevector? second))
+                  (let ((length (consent-datum-bytevector-length first)))
+                    (if (not (= length
+                                (consent-datum-bytevector-length second)))
+                        #f
+                        (if (seen-or-mark! first second)
+                            (loop)
+                            (and
+                             (owned-bytevector-content=?
+                              first second length)
+                             (loop))))))
+                 ((or (consent-datum-bytevector? first)
+                      (consent-datum-bytevector? second))
+                  #f)
+                 ((or (consent-record? first)
+                      (consent-record? second)
+                      (consent-record-type? first)
+                      (consent-record-type? second))
+                  #f)
+                   (else (and (equal? first second) (loop))))))))
+         (lambda ()
+           (if owned-nodes
+               (consent-datum-object-map-release! owned-nodes))))))
 
-    (define (equal-value? left right seen)
-      "Implement equal? comparison with cycle detection for pairs and vectors.\
-"
-      (cond
-       ((eqv-value? left right) #t)
-       ((and (pair? left) (pair? right))
-        (if (equal-seen-pair? left right seen)
-            #t
-            (let ((seen (cons (cons left right) seen)))
-              (and (equal-value? (car left) (car right) seen)
-                   (equal-value? (cdr left) (cdr right) seen)))))
-       ((and (vector? left) (vector? right))
-        (and (= (vector-length left) (vector-length right))
-             (if (equal-seen-pair? left right seen)
-                 #t
-                 (let ((seen (cons (cons left right) seen)))
-                   (let loop ((index 0))
-                     (or (= index (vector-length left))
-                         (and (equal-value? (vector-ref left index)
-                                            (vector-ref right index)
-                                            seen)
-                              (loop (+ index 1)))))))))
-       ((or (consent-record? left)
-            (consent-record? right)
-            (consent-record-type? left)
-            (consent-record-type? right))
-        #f)
-       (else
-        (equal? left right))))
+    (define (equal-value? left right context)
+      "Implement equal? with an allocation-free identity fast path."
+      (if (eqv-value? left right)
+          #t
+          (equal-graph-value? left right context)))
 
     (define (primitive-eq? arguments context)
       "Implement the `eq?` primitive with argument validation and Consent Sche\
@@ -9902,7 +10723,7 @@ eme values."
     (define (primitive-equal? arguments context)
       "Implement the `equal?` primitive with argument validation and Consent"
       "Scheme values."
-      (equal-value? (car arguments) (second arguments) '()))
+      (equal-value? (car arguments) (second arguments) context))
 
     (define (primitive-memq arguments context)
       "Implement the `memq` primitive with argument validation and Consent Sch\
@@ -9910,9 +10731,9 @@ eme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
-         ((not (pair? cursor)) #f)
-         ((eq-value? (car arguments) (car cursor)) cursor)
-         (else (loop (cdr cursor))))))
+         ((not (consent-datum-pair? cursor)) #f)
+         ((eq-value? (car arguments) (consent-datum-car cursor)) cursor)
+         (else (loop (consent-datum-cdr cursor))))))
 
     (define (primitive-memv arguments context)
       "Implement the `memv` primitive with argument validation and Consent Sch\
@@ -9920,9 +10741,9 @@ eme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
-         ((not (pair? cursor)) #f)
-         ((eqv-value? (car arguments) (car cursor)) cursor)
-         (else (loop (cdr cursor))))))
+         ((not (consent-datum-pair? cursor)) #f)
+         ((eqv-value? (car arguments) (consent-datum-car cursor)) cursor)
+         (else (loop (consent-datum-cdr cursor))))))
 
     (define (primitive-member arguments context)
       "Implement the `member` primitive with argument validation and Consent"
@@ -9930,9 +10751,11 @@ eme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
-         ((not (pair? cursor)) #f)
-         ((equal-value? (car arguments) (car cursor) '()) cursor)
-         (else (loop (cdr cursor))))))
+         ((not (consent-datum-pair? cursor)) #f)
+         ((equal-value?
+           (car arguments) (consent-datum-car cursor) context)
+          cursor)
+         (else (loop (consent-datum-cdr cursor))))))
 
     (define (primitive-assq arguments context)
       "Implement the `assq` primitive with argument validation and Consent Sch\
@@ -9940,11 +10763,13 @@ eme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
-         ((not (pair? cursor)) #f)
-         ((and (pair? (car cursor))
-               (eq-value? (car arguments) (caar cursor)))
-          (car cursor))
-         (else (loop (cdr cursor))))))
+         ((not (consent-datum-pair? cursor)) #f)
+         ((let ((entry (consent-datum-car cursor)))
+            (and (consent-datum-pair? entry)
+                 (eq-value?
+                  (car arguments) (consent-datum-car entry))
+                 entry)))
+         (else (loop (consent-datum-cdr cursor))))))
 
     (define (primitive-assv arguments context)
       "Implement the `assv` primitive with argument validation and Consent Sch\
@@ -9952,11 +10777,13 @@ eme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
-         ((not (pair? cursor)) #f)
-         ((and (pair? (car cursor))
-               (eqv-value? (car arguments) (caar cursor)))
-          (car cursor))
-         (else (loop (cdr cursor))))))
+         ((not (consent-datum-pair? cursor)) #f)
+         ((let ((entry (consent-datum-car cursor)))
+            (and (consent-datum-pair? entry)
+                 (eqv-value?
+                  (car arguments) (consent-datum-car entry))
+                 entry)))
+         (else (loop (consent-datum-cdr cursor))))))
 
     (define (primitive-assoc arguments context)
       "Implement the `assoc` primitive with argument validation and Consent"
@@ -9964,11 +10791,13 @@ eme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
-         ((not (pair? cursor)) #f)
-         ((and (pair? (car cursor))
-               (equal-value? (car arguments) (caar cursor) '()))
-          (car cursor))
-         (else (loop (cdr cursor))))))
+         ((not (consent-datum-pair? cursor)) #f)
+         ((let ((entry (consent-datum-car cursor)))
+            (and (consent-datum-pair? entry)
+                 (equal-value?
+                  (car arguments) (consent-datum-car entry) context)
+                 entry)))
+         (else (loop (consent-datum-cdr cursor))))))
 
     ;; Map library resolver implementation names to interpreter procedures.
     (define library-primitive-implementation-table
@@ -10294,6 +11123,7 @@ eme values."
        (cons 'primitive-list->string primitive-list->string)
        (cons 'primitive-list->vector primitive-list->vector)
        (cons 'primitive-list? primitive-list?)
+       (cons 'primitive-list-copy primitive-list-copy)
        (cons 'primitive-make-bytevector primitive-make-bytevector)
        (cons 'primitive-make-parameter primitive-make-parameter)
        (cons 'primitive-make-string primitive-make-string)
@@ -10416,9 +11246,15 @@ eme values."
 
     (define (rest-environment rest context)
       "Return the optional caller environment or a fresh base environment."
-      (if (or (null? rest) (not (car rest)))
-          (consent-make-base-environment (context-symbol-table context))
-          (own-environment-symbols! (car rest) context)))
+      (let ((environment
+             (if (or (null? rest) (not (car rest)))
+                 (consent-make-base-environment
+                  (context-symbol-table context))
+                 (car rest))))
+        (context-use-environment-datum-heap! context environment)
+        (if (and (not (null? rest)) (car rest))
+            (own-environment-symbols! environment context))
+        environment))
 
     (define (rest-options rest)
       "Return the optional caller options alist, defaulting to empty."
@@ -10649,8 +11485,9 @@ il!'"
             (consent-port-position port)
             (context-reader-options context)))
           '(datum invalid))))
-      (let ((result (consent-read-from-string-at
-                     (consent-port-source port)
+      (let ((result (consent-read-datum-from-string-at
+                     (context-datum-heap context)
+                     (port-reader-source port)
                      (consent-port-position port)
                      (context-reader-options context))))
         (set-consent-port-position! port (cdr result))
@@ -11065,7 +11902,7 @@ grant")))))))
         (set-context-interaction-environment! context environment)
         (connect-standard-streams! context (rest-options rest))
         (ensure-base-syntax! context environment)
-        (trampoline (own-runtime-datum expression context)
+        (trampoline (own-syntax-datum expression context)
                     environment
                     context)))
 
@@ -11086,8 +11923,8 @@ grant")))))))
              (environment (rest-environment rest context))
              (forms (consent-read-all
                      source
-                     (append (rest-options rest)
-                             (context-reader-options context)))))
+                     (append (context-reader-options context)
+                             (rest-options rest)))))
         (set-context-interaction-environment! context environment)
         (connect-standard-streams! context (rest-options rest))
         (ensure-base-syntax! context environment)
@@ -11131,7 +11968,7 @@ um."
          context
          (lambda ()
            (ok-result-datum
-            (trampoline (own-runtime-datum expression context)
+            (trampoline (own-syntax-datum expression context)
                         environment
                         context)
             context)))))
@@ -11162,8 +11999,8 @@ um."
          (lambda ()
            (let ((forms (consent-read-all
                          source
-                         (append (rest-options rest)
-                                 (context-reader-options context)))))
+                         (append (context-reader-options context)
+                                 (rest-options rest)))))
              (ok-result-datum
               (trampoline (make-sequence forms #t) environment context)
               context))))))
@@ -11186,13 +12023,14 @@ um."
     ;; through instead of being rebuilt per call.  This is the portable peer of
     ;; the Emacs session evaluator that drives `consent-repl-eval-source'.
     (define-record-type <consent-interaction-context>
-      (make-consent-interaction-context options symbol-table
+      (make-consent-interaction-context options symbol-table datum-heap
                                         environment syntax-environment
                                         libraries program-output-port
                                         program-input-port)
       consent-interaction-context?
       (options interaction-context-options)
       (symbol-table interaction-context-symbol-table)
+      (datum-heap interaction-context-datum-heap)
       (environment interaction-context-environment)
       (syntax-environment interaction-context-syntax-environment)
       (libraries interaction-context-libraries
@@ -11263,10 +12101,12 @@ um."
                              (and reader grant
                                   (make-program-input-port
                                    context grant reader)))))
+        (context-use-environment-datum-heap! context environment)
         (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
         (make-consent-interaction-context
          options (context-symbol-table context)
+         (context-datum-heap context)
          environment (context-syntax-environment context)
          (context-libraries context)
          (make-interaction-program-output-port)
@@ -11451,6 +12291,10 @@ g"
              (program-input-port
               (interaction-context-program-input-port interaction))
              (context (new-eval-context options)))
+        (set-context-datum-heap!
+         context (interaction-context-datum-heap interaction))
+        (set-context-symbol-table!
+         context (interaction-context-symbol-table interaction))
         (set-consent-port-contents! program-output-port "")
         (set-context-syntax-environment! context syntax-environment)
         (set-context-libraries! context libraries)
@@ -11469,7 +12313,7 @@ g"
                 (lambda ()
                   (ok-result-datum
                    (trampoline (make-sequence
-                                (list (own-runtime-datum form context))
+                                (list (own-syntax-datum form context))
                                 #t)
                                environment
                                context)

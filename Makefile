@@ -225,7 +225,9 @@ REFLECT_CROSSWALK_SELECTOR = \
   $(CONSENT_EMACS_REFLECT_BINDING_CROSSWALK_STRESS_TEST_SELECTOR)
 REFLECT_DYNAMIC_SELECTOR = \
   $(CONSENT_EMACS_REFLECT_DYNAMIC_MANIFEST_STRESS_TEST_SELECTOR)
-CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit \
+CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= \
+  test-portable-owned-reader-no-host-identity \
+  test-portable-gambit \
   test-portable-gambit-reflect test-portable-gambit-reflect-stress \
   test-portable-gambit-native test-portable-racket \
   test-portable-racket-reflect test-portable-racket-reflect-stress \
@@ -246,7 +248,9 @@ CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-reflect-documentation-stress \
 # host-independent, so one host is enough for the fast local loop; the full
 # host
 # matrix stays available through make test-full and the scheduled CI lane.
-CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-racket \
+CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS ?= \
+  test-portable-owned-reader-no-host-identity \
+  test-portable-racket \
   test-portable-racket-reflect test-portable-racket-reflect-stress
 # Trimmed default: the Emacs byte-compile lint gate, the portable-host compiler
 # warnings gate, one representative portable host, the full Emacs shard set,
@@ -283,7 +287,8 @@ CONSENT_FULL_TEST_JOBS ?= 16
   lint-elisp \
   lint-elisp-docstrings lint-portable lint-branding \
   lint-readability lint-line-length repl test test-full test-portable \
-  test-portable-shard test-portable-chibi test-portable-gambit \
+  test-portable-shard test-portable-owned-reader-no-host-identity \
+  test-portable-chibi test-portable-gambit \
   test-portable-gambit-evaluator test-portable-gambit-support \
   test-portable-gambit-reflect test-portable-gambit-reflect-stress \
   test-portable-gambit-native test-portable-gambit-native-run \
@@ -356,6 +361,9 @@ help:
 	  'Run the exhaustive local shard set across every host and Emacs shard.'
 	@printf '  %-26s %s\n' 'test-portable' \
 	  'Run the default portable R7RS host shards.'
+	@printf '  %-26s %s\n' \
+	  'test-portable-owned-reader-no-host-identity' \
+	  'Verify owned reading does not use host identity maps.'
 	@printf '  %-26s %s\n' 'test-portable-chibi' \
 	  'Run the optional portable R7RS Chibi full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit' \
@@ -822,6 +830,11 @@ test-portable-shard:
 	@test -n '$(CONSENT_PORTABLE_GROUP)' || { printf '%s\n' \
 	  'CONSENT_PORTABLE_GROUP is required' >&2; exit 2; }
 	$(CONSENT_PORTABLE_RUNNER)
+
+test-portable-owned-reader-no-host-identity:
+	CONSENT_GAMBIT='$(CONSENT_GAMBIT)' CONSENT_GUILE='$(CONSENT_GUILE)' \
+	  CONSENT_RACKET='$(CONSENT_RACKET)' \
+	  tools/check-owned-reader-no-host-identity.sh
 
 test-portable-chibi:
 	CONSENT_PORTABLE_HOST=chibi CONSENT_PORTABLE_GROUP_SET=direct \

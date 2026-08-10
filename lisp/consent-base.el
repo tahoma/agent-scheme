@@ -121,6 +121,7 @@
     ("list->string" consent--primitive-list->string 1 1)
     ("list->vector" consent--primitive-list->vector 1 1)
     ("list?" consent--primitive-list? 1 1)
+    ("list-copy" consent--primitive-list-copy 1 1)
     ("make-bytevector" consent--primitive-make-bytevector 1 2)
     ("make-parameter" consent--primitive-make-parameter 1 2)
     ("make-string" consent--primitive-make-string 1 2)
@@ -540,6 +541,9 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ("list?" "Return #t when an object is a proper list."
      ((obj any "Object to test."))
      (boolean "Whether OBJ is a proper list."))
+    ("list-copy" "Return a shallow copy of an object's pair spine."
+     ((obj any "Object whose pair spine is copied."))
+     (any "A fresh pair spine with the original final tail."))
     ("make-bytevector" "Return a newly allocated bytevector."
      ((k exact-non-negative-integer "Requested bytevector length.")
       (byte byte "Optional fill byte."))

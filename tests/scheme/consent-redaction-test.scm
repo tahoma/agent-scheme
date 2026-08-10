@@ -38,6 +38,39 @@
                (field-value redacted 'replacement))
    (test-equal "redaction policy" 'local-only
                (field-value redacted 'policy))
+   (test-assert
+    "all fixed secret spellings are recognized at string boundaries"
+    (and (secret-source? "sk-x")
+         (secret-source? "prefix ghp_x")
+         (secret-source? "gho_x suffix")
+         (secret-source? "prefix ghu_x")
+         (secret-source? "ghs_x suffix")
+         (secret-source? "prefix ghr_x")
+         (secret-source? "xox-secret")
+         (secret-source? "AKIA-secret")
+         (secret-source? "prefix PRIVATE KEY")
+         (not (secret-source? "prefix ghq_x"))
+         (not (secret-source? "SK-x"))
+         (not (secret-source? "prefix PRIVATE KE"))))
+   (let* ((long-prefix (make-string 4096 #\z))
+          (near-miss
+           (list (list 'source 'env)
+                 (list 'field (string-append long-prefix "credentiax"))
+                 (list 'value "ordinary")))
+          (contained
+           (list (list 'source 'env)
+                 (list 'field (string-append long-prefix "credential"))
+                 (list 'value "ordinary")))
+          (empty-name
+           (list (list 'source 'env)
+                 (list 'field "")
+                 (list 'value "ordinary"))))
+     (test-assert "long sensitive-name near miss stays ordinary"
+                  (not (secret-source? near-miss)))
+     (test-assert "long sensitive-name suffix is recognized"
+                  (secret-source? contained))
+     (test-assert "empty sensitive field name stays ordinary"
+                  (not (secret-source? empty-name))))
    (test-assert "secret unsafe for provider"
                 (not (safe-for-provider? secret 'openai)))))
 

@@ -185,6 +185,7 @@
        (list 'list->string 'primitive-list->string 1 1)
        (list 'list->vector 'primitive-list->vector 1 1)
        (list 'list? 'primitive-list? 1 1)
+       (list 'list-copy 'primitive-list-copy 1 1)
        (list 'make-bytevector 'primitive-make-bytevector 1 2)
        (list 'make-parameter 'primitive-make-parameter 1 2)
        (list 'make-string 'primitive-make-string 1 2)
@@ -615,6 +616,10 @@ it."
         (list? "Return #t when an object is a proper list."
          ((obj any "Object to test."))
          (boolean "Whether OBJ is a proper list."))
+        (list-copy
+         "Return a shallow copy of an object's pair spine."
+         ((obj any "Object whose pair spine is copied."))
+         (any "A fresh pair spine with the original final tail."))
         (make-bytevector "Return a newly allocated bytevector."
          ((k exact-non-negative-integer "Requested bytevector length.")
           (byte byte "Optional fill byte."))
@@ -1199,7 +1204,12 @@ ent."
          (description
            ("A list of every datum parsed from the port's contents.")))
         (effects state-read allocation))
-      (consent-read-all (read-port-string port)))
+      ;; Scheme-visible read results are owned by the evaluator boundary.
+      ;; This private host-syntax staging list must not enter the legacy
+      ;; process-lifetime provenance table.
+      (consent-read-all
+       (read-port-string port)
+       '((source-metadata . #f))))
 
     (define (try-read-file-text path)
       "Return PATH's contents as a string, or #f when it cannot be read."

@@ -351,6 +351,18 @@
     (should (equal (consent-datum->external shared)
                    "((a b) (a b))"))))
 
+(ert-deftest consent-reader-test-long-list-label-resolution-is-stack-safe ()
+  "Resolve labels in long, shallow lists without consuming Lisp stack."
+  (let* ((count 2000)
+         (source
+          (concat "("
+                  (mapconcat (lambda (_item) "0")
+                             (number-sequence 1 count)
+                             " ")
+                  ")"))
+         (datum (consent-read source)))
+    (should (= (length datum) count))))
+
 (defun consent-reader-test--bounded (source limits)
   "Read SOURCE and return its external representation bounded by LIMITS."
   (consent-datum->external-bounded (consent-read source) limits))

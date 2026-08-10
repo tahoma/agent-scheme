@@ -78,14 +78,20 @@ to the process-global intern table, closing a resource-exhaustion vector where
 untrusted code such as `(string->symbol (number->string i))` in a loop would
 otherwise grow interned-symbol memory without limit.  Reader-created identifiers
 are bounded by the reader's own node budgets rather than this dimension.
-**Source metadata entries** bound the portable reader's process-global source
-side table.  The table is not evicted during ordinary loading, so the loaded
-source graph remains introspectable up to the configured ceiling; trusted
-callers can retry with a higher `max-source-metadata` grant for unusually large
-or intentionally adversarial inputs.  The `10000000` default is calibrated
-above the current all-loadable-library source graph, which resolves 95 library
-names and retains 133727 source metadata entries, while leaving room for more
-than a tenfold growth in the ordinary runtime, library, and test surface.
+**Source metadata entries** bound provenance attachment during one reader run
+and retained host-key entries in runtime context tables. Owned notes live on the
+object they describe, and direct owned reads attach them during shell
+construction without an identity side table. Their lifetime follows ordinary
+heap reachability, so they do not increment the persistent context-table count:
+portable R7RS supplies neither a weak-key notification nor a decrement hook
+that could make such a count honest. Legacy private syntax has no owned field;
+its retained host keys use the bounded bootstrap or context side table and do
+consume the persistent count. Replacing one identity's current immutable note
+neither retains history nor consumes another entry. Trusted callers can retry
+with a higher `max-source-metadata` grant for unusually large inputs.
+Each textual input port retains only its current prepared reader snapshot. A
+source replacement replaces that cache entry, so incremental preprocessing does
+not create an allocation-history side table.
 **Output bytes** are charged at each textual port write, before the bytes land,
 so an unbounded printing loop fails closed.
 

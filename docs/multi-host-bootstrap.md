@@ -103,6 +103,8 @@ separately by a bootstrap or host adapter. Portable core owns:
 
 - reader, datum validation, writer, evaluator, macro expander, and library
   semantics
+- owned pair, string, vector, and bytevector identity, graph topology, and
+  mutation through `(consent datum)`
 - standard R7RS libraries and policy-visible declarations for host-effecting
   libraries
 - canonical datums for memory records, plans, rules, skills, transcripts,
@@ -140,6 +142,14 @@ Adapters must keep raw host objects out of Scheme values. Scheme code receives
 opaque handles and Scheme-readable records. A host adapter may keep a private
 side table from handles to live objects, but canonical state remains printable
 and auditable at the Scheme boundary.
+
+The portable runtime applies the same rule to ordinary compound data. Borrowed
+R7RS pairs, strings, vectors, and bytevectors may appear only in private parser,
+control, or ABI adapter state. A call-scoped native graph bridge preserves
+aliases, returned subobject identity, cycles, raised conditions, and mutation
+writeback while one compiled host call temporarily observes such containers.
+Raw mirrors cannot outlive that outer call. Shared conformance fixtures keep
+this owned portable behavior aligned with the Emacs bootstrap.
 
 ## Emacs as the First Host
 

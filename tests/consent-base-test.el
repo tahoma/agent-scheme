@@ -480,6 +480,27 @@
                   (make-polar +nan.0 0))")
           "(+inf.0+nan.0i +nan.0+nan.0i +nan.0+nan.0i)")))
 
+(ert-deftest consent-base-test-list-copy-copies-the-pair-spine ()
+  "Expose primitive list-copy with improper and cyclic spine topology."
+  (should
+   (equal
+    (consent-base-test--external
+     "(let* ((source (cons 'head 'tail))
+             (copy (list-copy source)))
+        (list (not (eq? source copy))
+              (eq? (car source) (car copy))
+              (eq? (cdr source) (cdr copy))))")
+    "(#t #t #t)"))
+  (should
+   (equal
+    (consent-base-test--external
+     "(let* ((source (cons 'head '()))
+             (_ (set-cdr! source source))
+             (copy (list-copy source)))
+        (list (not (eq? source copy))
+              (eq? copy (cdr copy))))")
+    "(#t #t)")))
+
 (ert-deftest consent-base-test-vectors-bytevectors-and-higher-order-calls ()
   "Evaluate vector, bytevector, apply, map, and for-each procedures."
   (should

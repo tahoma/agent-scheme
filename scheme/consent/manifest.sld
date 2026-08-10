@@ -50,6 +50,125 @@
          (consent-compiler-images consent-compiler-image-ref))
         (dependencies ((library (scheme base))))
         (provenance ((origin repo)))
+       (status internal)
+       (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (consent identity-map))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "identity-map.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-identity-map-fast-backend?
+          consent-make-identity-map
+          consent-identity-map-ref
+          consent-identity-map-set!))
+        (dependencies
+         ((library (scheme base))))
+        (provenance
+         ((origin repo)
+          (gambit-accelerator native-identity-table)
+          (optional-accelerator (library (srfi 69)))
+          (fallback identity-alist)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (consent datum))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "datum.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-datum-heap?
+          consent-make-datum-heap
+          consent-default-datum-heap
+          consent-datum-heap-id
+          consent-datum-heap-generation
+          consent-datum-heap-owner
+          consent-datum-heap-owner-set!
+          consent-datum-heap-mutation-hook-set!
+          consent-datum-object?
+          consent-datum-object-kind
+          consent-datum-object-heap-id
+          consent-datum-object-id
+          consent-datum-object-generation
+          consent-datum-object-owner
+          consent-datum-object-revision
+          consent-datum-object-mutable?
+          consent-datum-object-traversal
+          consent-datum-object-traversal-set!
+          consent-datum-object-source-metadata
+          consent-datum-object-source-metadata-set!
+          consent-make-datum-object-map
+          consent-datum-object-map-ref
+          consent-datum-object-map-set!
+          consent-datum-object-map-release!
+          consent-datum-object-map-probe-count
+          call-with-consent-datum-object-map
+          consent-call-with-datum-construction
+          consent-datum-same?
+          consent-datum-make-internal-slots
+          consent-datum-internal-slot-ref
+          consent-datum-internal-slot-set!
+          consent-datum-pair?
+          consent-datum-cons
+          consent-datum-car
+          consent-datum-cdr
+          consent-datum-set-car!
+          consent-datum-set-cdr!
+          consent-datum-list-copy
+          consent-datum-string?
+          consent-datum-string-from-host
+          consent-datum-string->host
+          consent-datum-make-string
+          consent-datum-string-copy-range
+          consent-datum-string-length
+          consent-datum-string-ref-host
+          consent-datum-string-set-host!
+          consent-datum-vector?
+          consent-datum-vector-from-host
+          consent-datum-vector-from-host-elements
+          consent-datum-vector->host
+          consent-datum-make-vector
+          consent-datum-vector-length
+          consent-datum-vector-ref
+          consent-datum-vector-set!
+          consent-datum-bytevector?
+          consent-datum-bytevector-from-host
+          consent-datum-bytevector->host
+          consent-datum-make-bytevector
+          consent-datum-bytevector-length
+          consent-datum-bytevector-u8-ref
+          consent-datum-bytevector-u8-set!
+          consent-datum-import
+          consent-datum-export))
+        (dependencies
+         ((library (scheme base))
+          (library (consent identity-map))))
+        (provenance
+         ((origin repo)
+          (identity heap-id-and-object-id)
+          (representation owned-opaque-compound-records)
+          (boundary private-host-container-accelerators)
+          (future-branch-isolation issue-721)))
+        (verification
+         ((test-status
+           (identity aliasing mutation cycles shared-writer native-bridge
+                     portable-host-suite compiled-host-suite))))
         (status internal)
         (canonical #t))
        (manifest-entry
@@ -1514,8 +1633,13 @@
         (realization portable-source)
         (exports
          (consent-read
+          consent-read-datum
           consent-read-all
+          consent-reader-source?
+          consent-make-reader-source
+          consent-reader-source-location-probe-count
           consent-read-from-string-at
+          consent-read-datum-from-string-at
           consent-read-recover
           consent-read-recover-from-string-at
           consent-resync-to-next-form
@@ -1534,6 +1658,8 @@
           consent-read-eof
           consent-read-eof?
           consent-source-metadata-count
+          consent-datum-source-metadata
+          consent-source-metadata->record
           consent-datum-source
           consent-datum-source-set!
           consent-copy-datum-source!
@@ -1574,6 +1700,8 @@
           (library (scheme inexact))
           (library (scheme write))
           (library (consent character))
+          (library (consent datum))
+          (library (consent identity-map))
           (library (consent numeric))
           (library (consent symbol))
           (library (consent symbol-boundary))))
@@ -1623,7 +1751,7 @@
           make-cell
           cell?
           cell-value
-          set-cell-value!
+          context-cell-set!
           make-environment
           environment?
           environment-frame
@@ -1631,6 +1759,8 @@
           environment-parent
           environment-imported-names
           set-environment-imported-names!
+          environment-datum-heap
+          context-use-environment-datum-heap!
           make-syntax-environment
           syntax-environment?
           syntax-environment-frame
@@ -1756,6 +1886,8 @@
           set-context-maximum-interned-symbols!
           context-symbol-table
           set-context-symbol-table!
+          context-datum-heap
+          set-context-datum-heap!
           context-host-callbacks
           set-context-host-callbacks!
           context-maximum-host-callbacks
@@ -1784,7 +1916,10 @@
           set-context-syntax-environment!
           context-libraries
           set-context-libraries!
+          context-native-binding-cache
+          set-context-native-binding-cache!
           context-source-copy-count
+          context-source-copy-set-fresh!
           context-source-copy-set!
           context-source-copy-source-ref
           context-copy-datum-source!
@@ -1945,6 +2080,8 @@
         (dependencies
          ((library (scheme base))
           (library (consent character))
+          (library (consent datum))
+          (library (consent identity-map))
           (library (consent reader))
           (library (consent symbol))
           (library (consent symbol-boundary))
@@ -2062,6 +2199,8 @@
           (library (scheme char))
           (library (scheme file))
           (library (consent character))
+          (library (consent datum))
+          (library (consent identity-map))
           (library (consent reader))
           (library (consent symbol))
           (library (consent symbol-boundary))
@@ -2163,6 +2302,8 @@
           consent-value->external))
         (dependencies
          ((library (scheme base))
+          (library (consent datum))
+          (library (consent identity-map))
           (library (consent reader))
           (library (consent symbol))
           (library (consent symbol-boundary))
@@ -2230,6 +2371,8 @@
           (library (scheme read))
           (library (scheme write))
           (library (consent character))
+          (library (consent datum))
+          (library (consent identity-map))
           (library (consent numeric))
           (library (consent reader))
           (library (consent symbol))

@@ -99,12 +99,6 @@
       (car k)
       (loop k (if (null? fill) (if #f #f) (car fill)))))
 
-(define (list-copy obj)
-  "Return a copy of OBJ's pair spine, preserving any final non-pair tail."
-  (if (pair? obj)
-      (cons (car obj) (list-copy (cdr obj)))
-      obj))
-
 (define (memq obj list)
   (define (loop cursor)
     (if (null? cursor)

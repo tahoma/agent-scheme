@@ -23,6 +23,8 @@
           consent-result->external
           consent-value->external)
   (import (scheme base)
+          (consent datum)
+          (consent identity-map)
           (consent reader)
           (consent symbol)
           (consent symbol-boundary)
@@ -40,8 +42,33 @@
     (define result-symbol-eq? consent-host-symbol-eq?)
     ;; Compare result datums across the owned/bootstrap boundary.
     (define result-datum-equal? consent-host-symbol-equal?)
-    ;; Look up result fields across the owned/bootstrap boundary.
-    (define result-assq consent-host-symbol-assq)
+    (define (result-pair? value)
+      "Report whether VALUE is a host or owned pair."
+      (or (pair? value) (consent-datum-pair? value)))
+
+    (define (result-car pair)
+      "Return host or owned PAIR's car."
+      (if (pair? pair)
+          (car pair)
+          (consent-datum-car pair)))
+
+    (define (result-cdr pair)
+      "Return host or owned PAIR's cdr."
+      (if (pair? pair)
+          (cdr pair)
+          (consent-datum-cdr pair)))
+
+    (define (result-assq key alist)
+      "Look up KEY in a host or owned result association list."
+      (let loop ((rest alist))
+        (cond
+         ((null? rest) #f)
+         ((not (result-pair? rest)) #f)
+         ((let ((entry (result-car rest)))
+            (and (result-pair? entry)
+                 (result-symbol-eq? key (result-car entry))
+                 entry)))
+         (else (loop (result-cdr rest))))))
 
     (define (result-field name . values)
       "Construct a named field for public result datums."
@@ -62,81 +89,224 @@
          (value . ("Runtime value to render as stable Scheme-readable data."))
          (maybe-seen (type list)
           (description
-           ("Internal cycle-detection list used while rendering"
-             "compound values."))))
+           ("Optional legacy ancestor list used only by internal callers."
+             "Ordinary calls omit it."))))
         (returns
          . ("A public datum representation of VALUE suitable for"
             "evaluation-result records."))
         (effects pure))
-      (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
-        (cond
-         ((or (boolean? value)
-              (null? value)
-              (result-symbol? value)
-              (char? value)
-              (number? value)
-              (consent-number? value)
-              (string? value)
-              (bytevector? value))
-          value)
-         ((identifier? value)
-          (identifier-name value))
-         ((consent-unspecified? value)
-          '(unspecified))
-         ((consent-eof-object? value)
-          '(eof-object))
-         ((consent-port? value)
-          (list 'port
-                (result-field 'medium (consent-port-medium value))
-                (result-field
-                 'open
-                 (if (consent-port-open? value) #t #f))))
-         ((environment-specifier? value)
-          '(environment))
-         ((consent-primitive-procedure? value)
-          (list 'procedure
-                (result-field 'kind 'primitive)
-                (result-field 'name (primitive-procedure-name value))))
-         ((consent-parameter? value)
-          (list 'procedure (result-field 'kind 'parameter)))
-         ((consent-procedure? value)
-          (list 'procedure (result-field 'kind 'compound)))
-         ((continuation? value)
-          (list 'procedure (result-field 'kind 'continuation)))
-         ((consent-error-object? value)
-          (list 'error-object
-                (result-field 'message
-                              (consent-error-object-message value))
-                (result-field
-                 'irritants
-                 (map (lambda (irritant)
-                        (value->result-datum irritant seen))
-                      (consent-error-object-irritants value)))))
-         ((consent-record-type? value)
-          (list 'record-type
-                (result-field 'name
-                              (consent-record-type-name value))))
-         ((consent-record? value)
-          (list 'record
-                (result-field
-                 'type
-                 (consent-record-type-name
-                  (consent-record-type value)))))
-         ((pair? value)
-          (if (memq value seen)
+      ;; A traversal entry holds state (`active' or `done') and its output.
+      ;; Maps are allocated lazily so scalar results keep the scalar hot path.
+      (let ((absent (vector 'result-graph-absent))
+            (owned-map #f)
+            (host-map #f)
+            (pending '())
+            (root (vector #f)))
+        (define (graph-ref item)
+          (if (consent-datum-object? item)
+              (if owned-map
+                  (consent-datum-object-map-ref owned-map item absent)
+                  absent)
+              (if host-map
+                  (consent-identity-map-ref host-map item absent)
+                  absent)))
+        (define (graph-set! item entry)
+          (if (consent-datum-object? item)
+              (begin
+                (if (not owned-map)
+                    (set! owned-map (consent-make-datum-object-map)))
+                (consent-datum-object-map-set! owned-map item entry))
+              (begin
+                (if (not host-map)
+                    (set! host-map (consent-make-identity-map)))
+                (consent-identity-map-set! host-map item entry))))
+        (define (push! task)
+          (set! pending (cons task pending)))
+        (define (push-visit! item setter)
+          (push! (vector 'visit item setter)))
+        (define (active-entry? entry)
+          (eq? (vector-ref entry 0) 'active))
+        (define (finish-entry! entry)
+          (vector-set! entry 0 'done))
+        (define (pair-cycle-marker item)
+          (if (or (consent-datum-pair? item) (pair? item))
               '(cycle)
-              (cons (value->result-datum (car value) (cons value seen))
-                    (value->result-datum (cdr value) (cons value seen)))))
-         ((vector? value)
-          (if (memq value seen)
-              #(cycle)
-              (list->vector
-               (map (lambda (item)
-                      (value->result-datum item (cons value seen)))
-                    (vector->list value)))))
-         (else
-         (list 'host-object
-                (result-field 'printed "#<host-object>"))))))
+              #(cycle)))
+        (define (visit-compound! item setter pair-kind? owned?)
+          (let ((entry (graph-ref item)))
+            (cond
+             ((not (eq? entry absent))
+              (setter
+               (if (active-entry? entry)
+                   (pair-cycle-marker item)
+                   (vector-ref entry 1))))
+             (pair-kind?
+              (let* ((copy (cons #f #f))
+                     (entry (vector 'active copy)))
+                (graph-set! item entry)
+                (setter copy)
+                (push! (vector 'finish entry))
+                (push-visit!
+                 (if owned?
+                     (consent-datum-cdr item)
+                     (cdr item))
+                 (lambda (rendered) (set-cdr! copy rendered)))
+                (push-visit!
+                 (if owned?
+                     (consent-datum-car item)
+                     (car item))
+                 (lambda (rendered) (set-car! copy rendered)))))
+             (else
+              (let* ((length
+                      (if owned?
+                          (consent-datum-vector-length item)
+                          (vector-length item)))
+                     (copy (make-vector length #f))
+                     (entry (vector 'active copy)))
+                (graph-set! item entry)
+                (setter copy)
+                (push! (vector 'finish entry))
+                (let loop ((index (- length 1)))
+                  (if (>= index 0)
+                      (begin
+                        (push-visit!
+                         (if owned?
+                             (consent-datum-vector-ref item index)
+                             (vector-ref item index))
+                         (lambda (rendered)
+                           (vector-set! copy index rendered)))
+                        (loop (- index 1))))))))))
+        (define (visit! item setter)
+          (cond
+           ((or (boolean? item)
+                (null? item)
+                (result-symbol? item)
+                (char? item)
+                (number? item)
+                (consent-number? item)
+                (string? item)
+                (bytevector? item))
+            (setter item))
+           ((or (consent-datum-string? item)
+                (consent-datum-bytevector? item))
+            (let ((entry (graph-ref item)))
+              (if (eq? entry absent)
+                  (let* ((copy
+                          (if (consent-datum-string? item)
+                              (consent-datum-string->host item)
+                              (consent-datum-bytevector->host item)))
+                         (entry (vector 'done copy)))
+                    (graph-set! item entry)
+                    (setter copy))
+                  (setter (vector-ref entry 1)))))
+           ((identifier? item)
+            (setter (identifier-name item)))
+           ((consent-unspecified? item)
+            (setter '(unspecified)))
+           ((consent-eof-object? item)
+            (setter '(eof-object)))
+           ((consent-port? item)
+            (setter
+             (list 'port
+                   (result-field 'medium (consent-port-medium item))
+                   (result-field
+                    'open
+                    (if (consent-port-open? item) #t #f)))))
+           ((environment-specifier? item)
+            (setter '(environment)))
+           ((consent-primitive-procedure? item)
+            (setter
+             (list 'procedure
+                   (result-field 'kind 'primitive)
+                   (result-field 'name
+                                 (primitive-procedure-name item)))))
+           ((consent-parameter? item)
+            (setter (list 'procedure (result-field 'kind 'parameter))))
+           ((consent-procedure? item)
+            (setter (list 'procedure (result-field 'kind 'compound))))
+           ((continuation? item)
+            (setter (list 'procedure (result-field 'kind 'continuation))))
+           ((consent-error-object? item)
+            (let ((entry (graph-ref item)))
+              (if (not (eq? entry absent))
+                  (setter
+                   (if (active-entry? entry)
+                       '(cycle)
+                       (vector-ref entry 1)))
+                  (let* ((irritants-field (result-field 'irritants #f))
+                         (rendered
+                          (list 'error-object
+                                (result-field
+                                 'message
+                                 (consent-error-object-message item))
+                                irritants-field))
+                         (entry (vector 'active rendered)))
+                    ;; Error objects are graph nodes too: their mutable
+                    ;; irritants may point back to the error or be shared by
+                    ;; many parents. Register before scheduling that edge.
+                    (graph-set! item entry)
+                    (setter rendered)
+                    (push! (vector 'finish entry))
+                    (push-visit!
+                     (consent-error-object-irritants item)
+                     (lambda (value)
+                       (set-car! (cdr irritants-field) value)))))))
+           ((consent-record-type? item)
+            (setter
+             (list 'record-type
+                   (result-field 'name
+                                 (consent-record-type-name item)))))
+           ((consent-record? item)
+            (setter
+             (list 'record
+                   (result-field
+                    'type
+                    (consent-record-type-name
+                     (consent-record-type item))))))
+           ((consent-datum-pair? item)
+            (visit-compound! item setter #t #t))
+           ((consent-datum-vector? item)
+            (visit-compound! item setter #f #t))
+           ((pair? item)
+            (visit-compound! item setter #t #f))
+           ((vector? item)
+            (visit-compound! item setter #f #f))
+           (else
+            (setter
+             (list 'host-object
+                   (result-field 'printed "#<host-object>"))))))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           ;; Preserve the old internal ancestor argument without making it
+           ;; the traversal's lookup structure. Seeded nodes are active cycle
+           ;; roots.
+           (if (not (null? maybe-seen))
+               (let seed ((rest (car maybe-seen)))
+                 (if (pair? rest)
+                     (begin
+                       (let ((item (car rest)))
+                         (if (or (consent-datum-pair? item)
+                                 (consent-datum-vector? item)
+                                 (pair? item)
+                                 (vector? item))
+                             (graph-set! item (vector 'active #f))))
+                       (seed (cdr rest))))))
+           (push-visit! value (lambda (rendered)
+                                (vector-set! root 0 rendered)))
+           (let loop ()
+             (if (pair? pending)
+                 (let ((task (car pending)))
+                   (set! pending (cdr pending))
+                   (if (eq? (vector-ref task 0) 'finish)
+                       (finish-entry! (vector-ref task 1))
+                       (visit! (vector-ref task 1)
+                               (vector-ref task 2)))
+                   (loop))))
+           (vector-ref root 0))
+         (lambda ()
+           (if owned-map
+               (consent-datum-object-map-release! owned-map))))))
 
     (define (strip-identifiers value . maybe-context)
       "Remove hygienic identifier wrappers from VALUE for readable output."
@@ -152,71 +322,110 @@
         (effects state-read state-write))
       (let ((context (if (null? maybe-context)
                          #f
-                         (car maybe-context))))
-        (letrec
-            ((copy-source!
-              (lambda (target source)
-                (if context
-                    (context-copy-datum-source!
-                     context target source #t)
-                    (consent-copy-datum-source! target source #t))))
-             (walk
-              (lambda (item seen)
-                (cond
-                 ((identifier? item)
-                  (identifier-name item))
-                 ((pair? item)
-                  (let ((prior
-                         (let loop ((entries seen))
-                           (cond
-                            ((null? entries) #f)
-                            ((host-eq? item (caar entries)) (cdar entries))
-                            (else (loop (cdr entries)))))))
-                    (if prior
-                        prior
-                        (let* ((copy (cons #f #f))
-                               (next-seen
-                                (cons (cons item copy) seen))
-                               (head (walk (car item) next-seen))
-                               (tail (walk (cdr item) next-seen)))
-                          (if (and (host-eq? head (car item))
-                                   (host-eq? tail (cdr item)))
-                              item
-                              (begin
-                                (set-car! copy head)
-                                (set-cdr! copy tail)
-                                (copy-source! copy item)))))))
-                 ((vector? item)
-                  (let ((prior
-                         (let loop ((entries seen))
-                           (cond
-                            ((null? entries) #f)
-                            ((host-eq? item (caar entries)) (cdar entries))
-                            (else (loop (cdr entries)))))))
-                    (if prior
-                        prior
-                        (let* ((copy
-                                (make-vector (vector-length item) #f))
-                               (next-seen
-                                (cons (cons item copy) seen)))
-                          (let loop ((index 0) (changed? #f))
-                            (if (< index (vector-length item))
-                                (let* ((element (vector-ref item index))
-                                       (stripped
-                                        (walk element next-seen)))
-                                  (vector-set! copy index stripped)
-                                  (loop
-                                   (+ index 1)
-                                   (or changed?
-                                       (not
-                                        (host-eq? stripped element)))))
-                                (if changed?
-                                    (copy-source! copy item)
-                                    item)))))))
-                 ((consent-record? item) item)
-                 ((consent-record-type? item) item)
-                 (else item)))))
-          (walk value '()))))
+                         (car maybe-context)))
+            (absent (vector 'strip-graph-absent))
+            (host-map #f)
+            (pending '())
+            (root (vector #f)))
+        (define (copy-source! target source)
+          (if context
+              (context-copy-datum-source! context target source #t)
+              (consent-copy-datum-source! target source #t)))
+        (define (graph-ref item)
+          (if host-map
+              (consent-identity-map-ref host-map item absent)
+              absent))
+        (define (graph-set! item entry)
+          (if (not host-map)
+              (set! host-map (consent-make-identity-map)))
+          (consent-identity-map-set! host-map item entry))
+        (define (push! task)
+          (set! pending (cons task pending)))
+        (define (push-visit! item setter)
+          (push! (vector 'visit item setter)))
+        (define (note-child! changed copy setter original rendered)
+          (setter rendered)
+          (if (not (host-eq? rendered original))
+              (vector-set! changed 0 #t)))
+        (define (visit-host-compound! item setter pair-kind?)
+          (let ((entry (graph-ref item)))
+            (if (not (eq? entry absent))
+                (setter (vector-ref entry 1))
+                (let* ((copy
+                        (if pair-kind?
+                            (cons #f #f)
+                            (make-vector (vector-length item) #f)))
+                       (entry (vector 'active copy))
+                       (changed (vector #f)))
+                  (graph-set! item entry)
+                  (push!
+                   (vector
+                    'finish
+                    (lambda ()
+                      (let ((output
+                             (if (vector-ref changed 0) copy item)))
+                        (if (vector-ref changed 0)
+                            (copy-source! copy item))
+                        (vector-set! entry 0 'done)
+                        (vector-set! entry 1 output)
+                        (setter output)))))
+                  (if pair-kind?
+                      (begin
+                        (push-visit!
+                         (cdr item)
+                         (lambda (rendered)
+                           (note-child! changed copy
+                                        (lambda (value)
+                                          (set-cdr! copy value))
+                                        (cdr item)
+                                        rendered)))
+                        (push-visit!
+                         (car item)
+                         (lambda (rendered)
+                           (note-child! changed copy
+                                        (lambda (value)
+                                          (set-car! copy value))
+                                        (car item)
+                                        rendered))))
+                      (let loop ((index (- (vector-length item) 1)))
+                        (if (>= index 0)
+                            (begin
+                              (push-visit!
+                               (vector-ref item index)
+                               (lambda (rendered)
+                                 (note-child!
+                                  changed
+                                  copy
+                                  (lambda (value)
+                                    (vector-set! copy index value))
+                                  (vector-ref item index)
+                                  rendered)))
+                              (loop (- index 1))))))))))
+        (define (visit! item setter)
+          (cond
+           ((identifier? item)
+            (setter (identifier-name item)))
+           ((consent-datum-object? item)
+            ;; Published runtime data is already identifier-free. Keep its
+            ;; owned identity instead of projecting and re-importing it.
+            (setter item))
+           ((pair? item)
+            (visit-host-compound! item setter #t))
+           ((vector? item)
+            (visit-host-compound! item setter #f))
+           (else (setter item))))
+        (push-visit! value (lambda (rendered)
+                             (vector-set! root 0 rendered)))
+        (let loop ()
+          (if (pair? pending)
+              (let ((task (car pending)))
+                (set! pending (cdr pending))
+                (if (eq? (vector-ref task 0) 'finish)
+                    ((vector-ref task 1))
+                    (visit! (vector-ref task 1)
+                            (vector-ref task 2)))
+                (loop))))
+        (vector-ref root 0)))
 
     (define (budget-result-field context)
       "Build the budget field for a public evaluation-result datum."
@@ -496,9 +705,9 @@
         (returns (type list)
          (description "The field values for FIELD, or the empty list."))
         (effects pure))
-      (let ((entry (and (pair? datum)
-                        (result-assq field (cdr datum)))))
-        (if entry (cdr entry) '())))
+      (let ((entry (and (result-pair? datum)
+                        (result-assq field (result-cdr datum)))))
+        (if entry (result-cdr entry) '())))
 
     (define (debugger-field-value datum field)
       "Return the first value for FIELD from a debugger datum."
@@ -510,7 +719,7 @@
         (returns . "The first field value for FIELD, or #f.")
         (effects pure))
       (let ((values (debugger-field-values datum field)))
-        (if (null? values) #f (car values))))
+        (if (null? values) #f (result-car values))))
 
     (define (debugger-expect-condition datum operation)
       "Return DATUM or raise when OPERATION expected a debugger condition."
@@ -522,8 +731,8 @@
         (returns (type pair)
          (description "DATUM when it is tagged as a debugger condition."))
         (effects error))
-      (if (not (and (pair? datum)
-                    (result-symbol-eq? (car datum) 'condition)))
+      (if (not (and (result-pair? datum)
+                    (result-symbol-eq? (result-car datum) 'condition)))
           (eval-error
            (string-append operation " expected a debugger condition")))
       datum)
@@ -546,12 +755,16 @@
             (consent-intern-symbol
              (context-symbol-table (car maybe-context))
              (result-symbol-name id))))
-       ((string? id)
+       ((or (string? id) (consent-datum-string? id))
+        (let ((name
+               (if (consent-datum-string? id)
+                   (consent-datum-string->host id)
+                   id)))
         (if (null? maybe-context)
-            (string->symbol id)
+            (string->symbol name)
             (consent-intern-symbol
              (context-symbol-table (car maybe-context))
-             id)))
+             name))))
        (else (eval-error "restart id must be a symbol or string"))))
 
     (define (debugger-condition-datum condition context)

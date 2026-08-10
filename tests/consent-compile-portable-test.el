@@ -452,6 +452,8 @@ failing closed on everything."
      (string-match-p
       "gambit_module_order=.*source%.sld"
       script))
+    (should-not (string-match-p "~~lib/srfi/69" script))
+    (should (string-match-p "standalone-version\\.err" script))
     (should (string-match-p "(native-libraries" manifest))
     (should (string-match-p "(data mapping avl)" manifest))
     (should (string-match-p "(agent context)" manifest))))

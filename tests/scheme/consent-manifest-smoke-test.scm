@@ -10,6 +10,7 @@
 ;;; nested interpretation.
 
 (import (scheme base)
+        (scheme read)
         (scheme write)
         (testing manifest)
         (testing harness)
@@ -439,5 +440,23 @@
 (test-equal 'manifest-smoke-srfi-261-portable-alias-target
              '(stdlib srfi-reference)
              (field srfi-261-portable-entry 'target)))
+
+;; Keep the compiled product's public datum path distinct from the private
+;; `(consent reader)' owner API. Standard `read' must allocate a labelled cycle
+;; in the active context's heap, preserve its identity through mutation, and
+;; publish the canonical shared representation.
+(testing-registry-case
+ 'manifest-smoke-owned-read-cycle '(portable core datum)
+(let* ((cycle (read (open-input-string "#0=(before . #0#)")))
+       (output (open-output-string)))
+  (test-assert 'manifest-smoke-owned-read-pair (pair? cycle))
+  (test-assert 'manifest-smoke-owned-read-self-cycle
+               (eq? cycle (cdr cycle)))
+  (set-car! cycle 'after)
+  (test-equal 'manifest-smoke-owned-read-mutation 'after (car cycle))
+  (write-shared cycle output)
+  (test-equal 'manifest-smoke-owned-write-shared-cycle
+              "#0=(after . #0#)"
+              (get-output-string output))))
 
 (testing-runner-main "Consent Manifest Smoke portable tests" (command-line))

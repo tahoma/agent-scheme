@@ -12,7 +12,10 @@ prior art on agentic harnesses and language agents for the Chunk 0.17
 Milestone M2 *REPL Agent Harness — Minimal Loop* work; and in
 [Scheme and Lisp Type Annotation References](#scheme-and-lisp-type-annotation-references)
 prior art for typed documentation metadata, library-edge contract hints, and
-type-related context for coding agents; and in
+type-related context for coding agents; in
+[Runtime Heap and Native-Boundary References](#runtime-heap-and-native-boundary-references),
+established handle-lifetime, root, and mutation-barrier designs for the owned
+datum heap and borrowed-host ABI; and in
 [Scheme and Lisp Prior-Art Corpus](scheme-lisp-prior-art.md), the broader
 Scheme/Lisp application, library, tooling, runtime, and book-code corpus that
 should inform Consent Scheme without becoming normative. Keep
@@ -100,6 +103,35 @@ historical grounding, and implementation techniques.
   [Docstring Metadata Convention](docstring-metadata.md) is influenced by that
   shape but defines its own R7RS-compatible public behavior and
   Scheme-readable metadata records.
+
+## Runtime Heap and Native-Boundary References
+
+These references ground Consent Scheme's owned-datum heap and borrowed-host
+boundary. They are implementation prior art rather than additions to Scheme's
+language semantics. The recurring pattern is a short-lived local reference
+scope, explicit promotion for durable references, and mutation-indexed work
+instead of repeated scans of historical heap state.
+
+- The [JNI design overview](https://docs.oracle.com/en/java/javase/25/docs/specs/jni/design.html#global-and-local-references)
+  makes local references valid for one native call and deletes that call's
+  registry when it returns. Global references require explicit creation and
+  deletion. Its array API similarly permits a temporary copy or pin and then
+  requires an explicit release that reconciles and frees the borrowed storage.
+- The [V8 embedder guide](https://v8.dev/docs/embed#handles-and-garbage-collection)
+  puts local handles in a `HandleScope`, deletes them together when the scope
+  ends, and reserves persistent handles for values that must survive calls.
+  Persistent handles have explicit reset or weak-lifetime mechanisms.
+- The [OCaml foreign-function interface](https://ocaml.org/manual/4.07/intfc.html#ss:c-gc-harmony)
+  distinguishes local roots from registered global roots. Generational global
+  roots must be changed through `caml_modify_generational_global_root`, allowing
+  the collector to avoid repeatedly scanning roots that did not change.
+- Detlefs, Knippel, Clinger, and Jacob's
+  [Concurrent Remembered Set Refinement in Generational Garbage Collection](https://www.usenix.org/conference/java-vm-02/concurrent-remembered-set-refinement-generational-garbage-collection)
+  surveys write barriers and remembered sets and describes update logs and
+  refinement whose work follows mutations rather than the size of old heap
+  regions. Consent's mutation observer is not a collector, but it follows the
+  same ownership rule: record writes at the write gateway instead of
+  rediscovering them by scanning unrelated history.
 
 ## R7RS-Large References
 

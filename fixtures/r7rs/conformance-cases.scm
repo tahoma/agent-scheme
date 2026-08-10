@@ -1964,6 +1964,143 @@ continuations.")
        (value
          b))
 )
+    ((id core-data-owned-pair-shared-mutation)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category core-data-types)
+     (section "6.4")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description
+       "Mutating one pair alias changes the single shared referent.")
+
+     (source
+       (form
+         (let* ((pair (cons (quote before) (quote tail)))
+                (aliases (list pair pair)))
+           (set-car! (car aliases) (quote after))
+           (list (eq? (car aliases) (cadr aliases))
+                 (car (cadr aliases))))))
+     (expect
+       (value
+         (#t after)))
+)
+    ((id core-data-owned-vector-shared-mutation)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category core-data-types)
+     (section "6.8")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description
+       "Mutating one vector alias changes the single shared referent.")
+
+     (source
+       (form
+         (let* ((vector (vector (quote before)))
+                (aliases (list vector vector)))
+           (vector-set! (car aliases) 0 (quote after))
+           (list (eq? (car aliases) (cadr aliases))
+                 (vector-ref (cadr aliases) 0)))))
+     (expect
+       (value
+         (#t after)))
+)
+    ((id core-data-owned-string-shared-mutation)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category core-data-types)
+     (section "6.7")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description
+       "String mutation is visible through every alias of the string.")
+
+     (source
+       (form
+         (let* ((string (string-copy "heap"))
+                (aliases (list string string)))
+           (string-set! (car aliases) 0 #\s)
+           (list (string-ref (car aliases) 0)
+                 (string-ref (cadr aliases) 0)
+                 (cadr aliases)))))
+     (expect
+       (value
+         (#\s #\s "seap")))
+)
+    ((id core-data-owned-bytevector-shared-mutation)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category core-data-types)
+     (section "6.9")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description
+       "Bytevector mutation is visible through every alias of the value.")
+
+     (source
+       (form
+         (let* ((bytes (bytevector 1 2 3))
+                (aliases (list bytes bytes)))
+           (bytevector-u8-set! (car aliases) 1 9)
+           (list (bytevector-u8-ref (car aliases) 1)
+                 (bytevector-u8-ref (cadr aliases) 1)))))
+     (expect
+       (value
+         (9 9)))
+)
+    ((id core-data-owned-pair-cycle-mutation-equality)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category equivalence)
+     (section "6.1")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description
+       "Pair mutation preserves identity and equal? terminates on cycles.")
+
+     (source
+       (form
+         (let ((left (cons (quote before) (quote ())))
+               (right (cons (quote before) (quote ()))))
+           (set-cdr! left left)
+           (set-cdr! right right)
+           (set-car! left (quote after))
+           (set-car! right (quote after))
+           (equal? left right))))
+     (expect
+       (value
+         #t))
+)
+    ((id core-data-owned-vector-cycle-mutation-equality)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category equivalence)
+     (section "6.1")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description
+       "Vector mutation preserves identity and equal? terminates on cycles.")
+
+     (source
+       (form
+         (let ((left (vector (quote before) #f))
+               (right (vector (quote before) #f)))
+           (vector-set! left 1 left)
+           (vector-set! right 1 right)
+           (vector-set! left 0 (quote after))
+           (vector-set! right 0 (quote after))
+           (equal? left right))))
+     (expect
+       (value
+         #t))
+)
     ((id reader-datum-label-cycle)
      (kind r7rs-conformance)
      (phase read)
@@ -2604,6 +2741,63 @@ expansion, prefix, and non-normalizing behavior.")
      (expect
        (value
          "(#0=(a) #0#)"))
+)
+    ((id standard-library-write-shared-after-alias-mutation)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category standard-libraries)
+     (section "6.13")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description
+       "write-shared preserves aliases after mutation through one local path.")
+
+     (source
+       (forms
+         (import (scheme base) (scheme write))
+         (let* ((shared (list (quote before)))
+                (left (vector shared))
+                (right (vector shared))
+                (out (open-output-string)))
+           (set-car! (vector-ref left 0) (quote after))
+           (write-shared (list left right) out)
+           (list (eq? (vector-ref left 0) (vector-ref right 0))
+                 (equal? left right)
+                 (get-output-string out)))))
+     (expect
+       (value
+         (#t #t "(#(#0=(after)) #(#0#))")))
+)
+    ((id standard-library-write-owned-cycles-after-mutation)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category standard-libraries)
+     (section "6.13")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description
+       "write labels mutated pair and vector cycles by owned identity.")
+
+     (source
+       (forms
+         (import (scheme base) (scheme write))
+         (let ((pair (cons (quote before) (quote ())))
+               (vector (vector (quote before) #f))
+               (pair-out (open-output-string))
+               (vector-out (open-output-string)))
+           (set-cdr! pair pair)
+           (set-car! pair (quote after))
+           (vector-set! vector 1 vector)
+           (vector-set! vector 0 (quote after))
+           (write pair pair-out)
+           (write vector vector-out)
+           (list (get-output-string pair-out)
+                 (get-output-string vector-out)))))
+     (expect
+       (value
+         ("#0=(after . #0#)" "#0=#(after #0#)")))
 )
     ((id standard-library-write-simple)
      (kind r7rs-conformance)
