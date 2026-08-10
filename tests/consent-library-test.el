@@ -2014,6 +2014,30 @@
       (consent--source-library-cache-reset)
       (delete-directory root t))))
 
+(ert-deftest consent-library-test-shared-cache-enforces-step-budget ()
+  "Enforce a tight step budget on shared source cache hits."
+  (let* ((root (make-temp-file "consent-shared-step-budget-" t))
+         (entry
+          (consent-library-test--cached-source-entry
+           root 'shared-immutable-data 'internal-runtime)))
+    (unwind-protect
+        (progn
+          (consent-library-test--write-cached-source root 1)
+          (consent--source-library-cache-reset)
+          (let ((consent--source-library-internal-imports-allowed t))
+            (let* ((cold
+                    (consent-library-test--register-cached-source entry))
+                   (step-cost
+                    (consent--eval-context-steps (car cold))))
+              (should (> step-cost 0))
+              (should-error
+               (consent-library-test--register-cached-source
+                entry
+                (list :max-steps (1- step-cost)))
+               :type 'consent-budget-error))))
+      (consent--source-library-cache-reset)
+      (delete-directory root t))))
+
 (ert-deftest consent-library-test-agent-generated-source-is-source-backed ()
   "Load `(agent generated-source)' from the shared portable source library."
   (let ((source-file

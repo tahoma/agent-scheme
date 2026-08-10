@@ -8,6 +8,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'ert)
 (require 'scheme)
 
@@ -27,7 +28,29 @@
       "tools/generate-unicode-data.el"
       consent-unicode-data-generator-test--root)
      nil
+     t))
+  (add-to-list
+   'load-path
+   (expand-file-name
+    "lisp" consent-unicode-data-generator-test--root))
+  (let ((noninteractive nil))
+    (load
+     (expand-file-name
+      "tools/benchmark-unicode.el"
+      consent-unicode-data-generator-test--root)
+     nil
      t)))
+
+(defconst
+  consent-unicode-data-generator-test--owned-library-byte-ceiling
+  150000
+  "Maximum combined bytes for the owned Unicode and character libraries.
+This leaves growth room while rejecting a gross return to expanded tables.")
+
+(defconst
+  consent-unicode-data-generator-test--unicode-library-bytes
+  103329
+  "Expected literal byte size of the deterministic generated Unicode library.")
 
 (defun consent-unicode-data-generator-test--write-file
     (directory name contents)
@@ -44,6 +67,43 @@
     (insert-file-contents
      (expand-file-name
       name consent-unicode-data-generator-test--root))
+    (buffer-string)))
+
+(defun consent-unicode-data-generator-test--repository-datum (name)
+  "Return the single Lisp-compatible datum in repository file NAME."
+  (with-temp-buffer
+    (insert-file-contents
+     (expand-file-name
+      name consent-unicode-data-generator-test--root))
+    (goto-char (point-min))
+    (let* ((datum (read (current-buffer)))
+           (extra
+            (condition-case nil
+                (read (current-buffer))
+              (end-of-file :end-of-file))))
+      (unless (eq extra :end-of-file)
+        (error "Expected one datum in %s" name))
+      datum)))
+
+(defun consent-unicode-data-generator-test--repository-file-size (name)
+  "Return the literal byte size of repository-relative file NAME."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally
+     (expand-file-name
+      name consent-unicode-data-generator-test--root))
+    (buffer-size)))
+
+(defun consent-unicode-data-generator-test--external (source)
+  "Evaluate SOURCE and return its stable external value representation."
+  (consent-value->external
+   (consent-eval-source
+    source nil '(:internal-libraries-allowed t))))
+
+(defun consent-unicode-data-generator-test--inserted-text (inserter)
+  "Return text produced by zero-argument INSERTER in a temporary buffer."
+  (with-temp-buffer
+    (funcall inserter)
     (buffer-string)))
 
 (defun consent-unicode-data-generator-test--scheme-forms (source head)
@@ -207,48 +267,67 @@
           (should (equal (gethash #x49 lower) '(#x49))))
       (delete-directory root t))))
 
-(ert-deftest consent-unicode-data-generator-test-merges-splits-and-indexes ()
-  "Merge ranges and split them across BMP pages and Unicode planes."
+(ert-deftest consent-unicode-data-generator-test-builds-property-buckets ()
+  "Keep canonical ranges while assigning them to coarse lookup buckets."
   (should
    (equal
     (consent--unicode-merge-ranges
      '((#x100 . #x101) (#xff . #xff) (#x105 . #x106)
        (#x102 . #x105)))
     '((#xff . #x106))))
-  (let* ((split
-          (consent--unicode-split-ranges
-           '((#xfe . #x101) (#xffff . #x10001)
-             (#x10ffff . #x10ffff))))
-         (index (consent--unicode-bucket-index split #'car)))
-    (should
-     (equal split
-            '((#xfe . #xff) (#x100 . #x101) (#xffff . #xffff)
-              (#x10000 . #x10001) (#x10ffff . #x10ffff))))
-    (should (= (length index) 273))
-    (should (= (nth 0 index) 0))
-    (should (= (nth 1 index) 1))
-    (should (= (nth 255 index) 2))
-    (should (= (nth 256 index) 3))
-    (should (= (nth 257 index) 4))
-    (should (= (nth 271 index) 4))
-    (should (= (nth 272 index) 5)))
+  (let* ((cross-bmp '(#xffe . #x1002))
+         (cross-plane '(#xffff . #x10001))
+         (last-scalar '(#x10ffff . #x10ffff))
+         (buckets
+          (consent--unicode-property-buckets
+           (list cross-bmp cross-plane last-scalar)))
+         (bmp (car buckets))
+         (supplementary (cadr buckets)))
+    (should (= (length bmp) 16))
+    (should (= (length supplementary) 16))
+    (should (equal (nth 0 bmp) (list cross-bmp)))
+    (should (equal (nth 1 bmp) (list cross-bmp)))
+    (should (equal (nth 2 bmp) nil))
+    (should (equal (nth 15 bmp) (list cross-plane)))
+    (should (equal (nth 0 supplementary) (list cross-plane)))
+    (should (equal (nth 1 supplementary) nil))
+    (should (equal (nth 15 supplementary) (list last-scalar))))
   (should-error
-   (consent--unicode-bucket-index
-    '((#x110000 . #x110000)) #'car)))
+   (consent--unicode-property-buckets '((#x110000 . #x110000))))
+  (should-error
+   (consent--unicode-property-buckets '((#x10 . #xf))))
+  (let ((pages
+         (consent--unicode-property-bmp0-pages
+          '((#xfe . #x101) (#x2ff . #x301)
+            (#xfff . #x1001)))))
+    (should (= (length pages) 16))
+    (should (equal (nth 0 pages) '((#xfe . #xff))))
+    (should (equal (nth 1 pages) '((#x100 . #x101))))
+    (should (equal (nth 2 pages) '((#x2ff . #x2ff))))
+    (should (equal (nth 3 pages) '((#x300 . #x301))))
+    (should (equal (nth 4 pages) nil))
+    (should (equal (nth 15 pages) '((#xfff . #xfff))))))
 
-(ert-deftest consent-unicode-data-generator-test-compacts-mapping-segments ()
-  "Compact equal deltas without joining entries across index buckets."
+(ert-deftest consent-unicode-data-generator-test-compacts-mapping-records ()
+  "Compact only stride-one or stride-two affine simple mappings."
   (let ((table (make-hash-table :test #'eql))
         (full (make-hash-table :test #'eql))
         (fallback (make-hash-table :test #'eql)))
-    (dolist (entry '((#x41 #x61) (#x42 #x62) (#xff #x100)
-                     (#x100 #x101) (#x102 #x104)))
+    (dolist (entry '((#x41 #x61) (#x42 #x62)
+                     (#x101 #x100) (#x103 #x102) (#x105 #x104)
+                     (#x201 #x200) (#x204 #x203)))
       (puthash (car entry) (cdr entry) table))
-    (should
-     (equal
-      (consent--unicode-simple-mapping-segments table)
-      '((#x41 #x42 32) (#xff #xff 1) (#x100 #x100 1)
-        (#x102 #x102 2))))
+    (let ((records (consent--unicode-simple-mapping-records table)))
+      (should
+       (equal records
+              '((#x41 #x42 1 32)
+                (#x101 #x105 2 -1)
+                (#x201 #x201 1 -1)
+                (#x204 #x204 1 -1))))
+      (should
+       (cl-every
+        (lambda (record) (memq (nth 2 record) '(1 2)))
+        records)))
     (puthash #x41 '(#x61) fallback)
     (puthash #x42 '(#x62) fallback)
     (puthash #x41 '(#x61) full)
@@ -258,6 +337,329 @@
       (consent--unicode-table-entries
        (consent--unicode-mapping-overrides full fallback))
       '((#x42 #x42) (#x43 #x44))))))
+
+(ert-deftest consent-unicode-data-generator-test-buckets-mapping-records ()
+  "Assign simple records directly to coarse BMP and plane buckets."
+  (let* ((cross-bmp '(#xfff #x1001 1 1))
+         (cross-plane '(#xffff #x10001 1 -1))
+         (last-scalar '(#x10ffff #x10ffff 1 0))
+         (buckets
+          (consent--unicode-simple-mapping-buckets
+           (list cross-bmp cross-plane last-scalar)))
+         (bmp (car buckets))
+         (supplementary (cadr buckets)))
+    (should (= (length bmp) 16))
+    (should (= (length supplementary) 16))
+    (should (equal (nth 0 bmp) (list cross-bmp)))
+    (should (equal (nth 1 bmp) (list cross-bmp)))
+    (should (equal (nth 15 bmp) (list cross-plane)))
+    (should (equal (nth 0 supplementary) (list cross-plane)))
+    (should (equal (nth 15 supplementary) (list last-scalar))))
+  (should-error
+   (consent--unicode-simple-mapping-buckets '((#x41 #x5a -32))))
+  (should-error
+   (consent--unicode-simple-mapping-buckets
+    '((#x110000 #x110000 1 0)))))
+
+(ert-deftest consent-unicode-data-generator-test-extracts-greek-affine-rules ()
+  "Compact every complete Greek affine family and retain other overrides."
+  (let ((table (make-hash-table :test #'eql))
+        expected-rules)
+    (dolist (lower consent--unicode-greek-affine-family-lowers)
+      (let ((target-lower (+ lower #x100))
+            (suffix #x399))
+        (push (list lower (+ lower 7) target-lower suffix)
+              expected-rules)
+        (dotimes (offset 8)
+          (puthash (+ lower offset)
+                   (list (+ target-lower offset) suffix)
+                   table))))
+    (puthash #xdf '(#x53 #x53) table)
+    (let* ((result (consent--unicode-extract-greek-affine-rules table))
+           (rules (car result))
+           (exceptions (cadr result)))
+      (should (equal rules (nreverse expected-rules)))
+      (should (= (hash-table-count exceptions) 1))
+      (should (equal (gethash #xdf exceptions) '(#x53 #x53)))
+      (should (= (hash-table-count table) 49)))
+    (puthash (car consent--unicode-greek-affine-family-lowers)
+             '(#x0 #x399)
+             table)
+    (should-error (consent--unicode-extract-greek-affine-rules table))))
+
+(ert-deftest consent-unicode-data-generator-test-formats-complete-records ()
+  "Put each generated fixed-width or variable-width record on one line."
+  (should
+   (equal
+    (consent-unicode-data-generator-test--inserted-text
+     (lambda ()
+       (consent--unicode-insert-record-table
+        "%synthetic-records"
+        "Synthetic fixed-width records."
+        "lower, upper, stride, delta"
+        '((#x41 #x42 1 32) (#x101 #x105 2 -1)))))
+    (concat
+     "    ;; Synthetic fixed-width records.\n"
+     "    ;; Record fields: lower, upper, stride, delta.\n"
+     "    (define %synthetic-records\n"
+     "      #(\n"
+     "        #x41 #x42 #x1 #x20\n"
+     "        #x101 #x105 #x2 #x-1\n"
+     "        ))\n\n")))
+  (let ((table (make-hash-table :test #'eql)))
+    (puthash #xdf '(#x53 #x53) table)
+    (puthash #x130 '(#x69 #x307) table)
+    (should
+     (equal
+      (consent-unicode-data-generator-test--inserted-text
+       (lambda ()
+         (consent--unicode-insert-mapping-table
+          "%synthetic-mappings"
+          "Synthetic variable-width mappings."
+          table)))
+      (concat
+       "    ;; Synthetic variable-width mappings.\n"
+       "    ;; Record fields: source followed by mapped scalars.\n"
+       "    (define %synthetic-mappings\n"
+       "      #(\n"
+       "        #(#xdf #x53 #x53)\n"
+       "        #(#x130 #x69 #x307)\n"
+       "        ))\n\n")))))
+
+(ert-deftest consent-unicode-data-generator-test-parses-single-version-source ()
+  "Derive every generated version spelling from the pinned string."
+  (let ((consent--unicode-data-version "18.2.3"))
+    (should (equal (consent--unicode-version-components) '(18 2 3)))
+    (let ((generated
+           (consent--unicode-generate-text
+            (expand-file-name
+             "vendor/unicode/17.0.0"
+             consent-unicode-data-generator-test--root))))
+      (should-not (string-match-p "17\\.0\\.0" generated))
+      (should
+       (string-match-p
+        "Generated Unicode 18\\.2\\.3 character data" generated))
+      (should
+       (string-match-p
+        "inputs in vendor/unicode/18\\.2\\.3" generated))
+      (should
+       (string-match-p
+        (regexp-quote "(unicode-version \"18.2.3\")")
+        generated))
+      (should
+       (string-match-p
+        (regexp-quote "(define %unicode-data-version '(18 2 3))")
+        generated))))
+  (dolist (invalid '("18.2" "18.next.3" "18.2.3.4"))
+    (let ((consent--unicode-data-version invalid))
+      (should-error (consent--unicode-version-components)))))
+
+(ert-deftest consent-unicode-data-generator-test-pinned-structure-counts ()
+  "Keep canonical and compact table counts deterministic for the pinned UCD."
+  (let* ((directory
+          (expand-file-name
+           (concat "vendor/unicode/" consent--unicode-data-version)
+           consent-unicode-data-generator-test--root))
+         (derived
+          (consent--unicode-input-path
+           directory "DerivedCoreProperties.txt"))
+         (property-list
+          (consent--unicode-input-path directory "PropList.txt"))
+         (unicode-data
+          (consent--unicode-parse-unicode-data
+           (consent--unicode-input-path directory "UnicodeData.txt")))
+         (digits (nth 0 unicode-data))
+         (simple-upper (nth 1 unicode-data))
+         (simple-lower (nth 2 unicode-data))
+         (effective-upper (consent--unicode-copy-table simple-upper))
+         (effective-lower (consent--unicode-copy-table simple-lower))
+         (case-folding
+          (consent--unicode-parse-case-folding
+           (consent--unicode-input-path directory "CaseFolding.txt")))
+         (simple-fold (nth 0 case-folding))
+         (effective-fold (nth 1 case-folding))
+         (alphabetic
+          (consent--unicode-property-ranges derived "Alphabetic"))
+         (uppercase
+          (consent--unicode-property-ranges derived "Uppercase"))
+         (lowercase
+          (consent--unicode-property-ranges derived "Lowercase"))
+         (whitespace
+          (consent--unicode-property-ranges property-list "White_Space")))
+    (consent--unicode-apply-special-casing
+     (consent--unicode-input-path directory "SpecialCasing.txt")
+     effective-lower effective-upper)
+    (let* ((full-upper
+            (consent--unicode-mapping-overrides
+             effective-upper simple-upper))
+           (full-lower
+            (consent--unicode-mapping-overrides
+             effective-lower simple-lower))
+           (full-fold
+            (consent--unicode-mapping-overrides
+             effective-fold simple-fold))
+           (upper-parts
+            (consent--unicode-extract-greek-affine-rules full-upper))
+           (fold-parts
+            (consent--unicode-extract-greek-affine-rules full-fold)))
+      (should
+       (equal
+        (mapcar #'length
+                (list alphabetic uppercase lowercase whitespace))
+        '(761 660 677 10)))
+      (should
+       (equal
+        (mapcar
+         (lambda (ranges)
+           (apply
+            #'+
+            (mapcar #'length
+                    (apply #'append
+                           (consent--unicode-property-buckets ranges)))))
+         (list alphabetic uppercase lowercase))
+        '(771 660 677)))
+      (should
+       (equal
+        (mapcar
+         (lambda (ranges)
+           (let* ((buckets
+                   (consent--unicode-property-buckets ranges))
+                  (bmp (car buckets))
+                  (bmp0-pages
+                   (consent--unicode-property-bmp0-pages (car bmp))))
+             (apply
+              #'+
+              (mapcar
+               #'length
+               (append bmp0-pages (cdr bmp) (cadr buckets))))))
+         (list alphabetic uppercase lowercase))
+        '(776 661 677)))
+      (should
+       (equal
+        (mapcar
+         (lambda (ranges)
+           (mapcar
+            #'length
+            (consent--unicode-property-bmp0-pages
+             (car (car (consent--unicode-property-buckets ranges))))))
+         (list alphabetic uppercase lowercase))
+        '((8 1 5 11 2 11 9 5 11 20 28 29 24 20 14 6)
+          (3 107 34 28 76 25 0 0 0 0 0 0 0 0 0 0)
+          (6 107 37 24 76 25 0 0 0 0 0 0 0 0 0 0))))
+      (should
+       (equal
+        (mapcar
+         (lambda (table)
+           (length (consent--unicode-simple-mapping-records table)))
+         (list simple-upper simple-lower simple-fold))
+        '(204 186 209)))
+      (should
+       (= (length (consent--unicode-decimal-block-starts digits)) 77))
+      (should
+       (equal
+        (mapcar
+         (lambda (table)
+           (apply
+            #'+
+            (mapcar
+             #'length
+             (apply
+              #'append
+              (consent--unicode-simple-mapping-buckets
+               (consent--unicode-simple-mapping-records table))))))
+         (list simple-upper simple-lower simple-fold))
+        '(204 186 209)))
+      (should (= (length (car upper-parts)) 6))
+      (should (= (hash-table-count (cadr upper-parts)) 54))
+      (should (= (hash-table-count full-lower) 1))
+      (should (= (length (car fold-parts)) 6))
+      (should (= (hash-table-count (cadr fold-parts)) 56)))))
+
+(ert-deftest consent-unicode-data-generator-test-generated-layout-is-compact ()
+  "Omit dense indexes and representation-count APIs from generated source."
+  (let ((generated
+         (consent-unicode-data-generator-test--repository-file
+          "scheme/consent/unicode-data.sld")))
+    (dolist (obsolete '("%unicode-whitespace-index"
+                        "%unicode-alphabetic-index"
+                        "%unicode-uppercase-index"
+                        "%unicode-lowercase-index"
+                        "%unicode-simple-uppercase-index"
+                        "%unicode-simple-lowercase-index"
+                        "%unicode-simple-foldcase-index"
+                        "%unicode-simple-uppercase-records"
+                        "%unicode-simple-lowercase-records"
+                        "%unicode-simple-foldcase-records"
+                        "%unicode-alphabetic-bmp-page-windows"
+                        "%unicode-uppercase-bmp-page-windows"
+                        "%unicode-lowercase-bmp-page-windows"
+                        "%unicode-data-counts"
+                        "consent-unicode-data-counts"))
+      (should-not (string-match-p (regexp-quote obsolete) generated)))
+    (dolist (current '("%unicode-alphabetic-bmp-buckets"
+                       "%unicode-alphabetic-bmp0-pages"
+                       "%unicode-alphabetic-supplementary-buckets"
+                       "%unicode-uppercase-bmp0-pages"
+                       "%unicode-lowercase-bmp0-pages"
+                       "%unicode-whitespace-ranges"
+                       "%unicode-simple-uppercase-bmp-buckets"
+                       "%unicode-simple-uppercase-supplementary-buckets"
+                       "%unicode-simple-lowercase-bmp-buckets"
+                       "%unicode-simple-foldcase-bmp-buckets"
+                       "%unicode-full-uppercase-greek-affine-rules"
+                       "%property-range-contains?"
+                       "%greek-affine-full-mapping-ref"))
+      (should (string-match-p (regexp-quote current) generated)))
+    (dolist (name '(%unicode-alphabetic-bmp-buckets
+                    %unicode-uppercase-bmp-buckets
+                    %unicode-lowercase-bmp-buckets))
+      (should
+       (string-match-p
+        (regexp-quote
+         (format
+          (concat "(define %s\n"
+                  "      #(\n"
+                  "        ;; U+0000..U+0FFF.\n"
+                  "        #()")
+          name))
+        generated)))))
+
+(ert-deftest consent-unicode-data-generator-test-checks-record-lookups ()
+  "Exercise bucket boundaries, stride holes, and Greek affine full mappings."
+  (should
+   (equal
+    (consent-unicode-data-generator-test--external
+     (concat
+      "(import (scheme base) (consent unicode-data))\n"
+      "(list\n"
+      " (consent-unicode-alphabetic? #xff)\n"
+      " (consent-unicode-alphabetic? #x100)\n"
+      " (consent-unicode-alphabetic? #x2c1)\n"
+      " (consent-unicode-alphabetic? #x2c2)\n"
+      " (consent-unicode-uppercase? #x3fd)\n"
+      " (consent-unicode-uppercase? #x3ff)\n"
+      " (consent-unicode-uppercase? #x400)\n"
+      " (consent-unicode-uppercase? #x42f)\n"
+      " (consent-unicode-uppercase? #x430)\n"
+      " (consent-unicode-alphabetic? #xfff)\n"
+      " (consent-unicode-alphabetic? #x1000)\n"
+      " (consent-unicode-alphabetic? #x33ff)\n"
+      " (consent-unicode-alphabetic? #x3400)\n"
+      " (consent-unicode-alphabetic? #x3fff)\n"
+      " (consent-unicode-alphabetic? #x4000)\n"
+      " (consent-unicode-alphabetic? #x4dbf)\n"
+      " (consent-unicode-alphabetic? #x4dc0)\n"
+      " (consent-unicode-whitespace? #x205f)\n"
+      " (consent-unicode-whitespace? #x2060)\n"
+      " (consent-unicode-simple-uppercase #x101)\n"
+      " (consent-unicode-simple-uppercase #x102)\n"
+      " (consent-unicode-simple-uppercase #x103)\n"
+      " (consent-unicode-full-uppercase #x1f80)\n"
+      " (consent-unicode-full-uppercase #x1f87))"))
+    (concat
+     "(#t #t #t #f #t #t #t #t #f "
+     "#f #t #f #t #t #t #t #f #t #f "
+     "256 258 258 (7944 921) (7951 921))"))))
 
 (ert-deftest consent-unicode-data-generator-test-validates-decimal-blocks ()
   "Accept complete decimal blocks and reject missing or incorrect digits."
@@ -305,7 +707,7 @@
       (delete-directory root t))))
 
 (ert-deftest consent-unicode-data-generator-test-versions-stay-coherent ()
-  "Keep every checked-in Unicode version declaration synchronized."
+  "Keep every Unicode version and provenance declaration synchronized."
   (let* ((makefile
           (consent-unicode-data-generator-test--repository-file "Makefile"))
          (manifest
@@ -323,8 +725,25 @@
          (metadata-definition
           (consent-unicode-data-generator-test--generated-definition
            generated '%unicode-data-metadata))
+         (semantic-expectation
+          (consent-unicode-data-generator-test--repository-datum
+           "tests/fixtures/unicode-17.0.0-semantic-digest.scm"))
+         (semantic-fields (cdr semantic-expectation))
          (generated-components (cadr (nth 2 version-definition)))
-         (metadata (cadr (nth 2 metadata-definition))))
+         (metadata (cadr (nth 2 metadata-definition)))
+         (expected-metadata
+          `((unicode-version ,consent--unicode-data-version)
+            (source unicode-character-database)
+            (license Unicode-3.0)
+            (case-mapping default-non-turkic)
+            (conditional-special-casing final-sigma-omitted)
+            (fallback
+             (unassigned classification-false mapping-identity))
+            (inputs
+             ,@(mapcar
+                (lambda (entry)
+                  `((file ,(car entry)) (sha256 ,(cdr entry))))
+                consent--unicode-input-hashes)))))
     (should
      (string-match
       (concat "^CONSENT_UNICODE_VERSION[[:space:]]*[?]="
@@ -339,9 +758,132 @@
          manifest library)
         (cons 'unicode components))))
     (should (equal generated-components components))
+    (should (equal metadata expected-metadata))
+    (should (eq (car semantic-expectation)
+                'consent-unicode-semantic-digest))
     (should
-     (equal (cadr (assq 'unicode-version metadata))
-            consent--unicode-data-version))))
+     (equal (mapcar #'car semantic-fields)
+            '(schema unicode-version scalar-count byte-count sha256)))
+    (should (cl-every (lambda (field) (= (length field) 2))
+                      semantic-fields))
+    (should (equal (cadr (assq 'schema semantic-fields)) 1))
+    (should
+     (equal (cadr (assq 'unicode-version semantic-fields))
+            consent--unicode-data-version))
+    (should (equal (cadr (assq 'scalar-count semantic-fields)) 1112064))
+    (should (> (cadr (assq 'byte-count semantic-fields)) 0))
+    (should
+     (string-match-p
+      "\\`[[:xdigit:]]\\{64\\}\\'"
+      (cadr (assq 'sha256 semantic-fields))))))
+
+(ert-deftest consent-unicode-data-generator-test-provenance-is-deep-copied ()
+  "Keep nested generated input provenance private from callers."
+  (let* ((first-input (car consent--unicode-input-hashes))
+         (expected-file (car first-input))
+         (expected-hash (cdr first-input)))
+    (should
+     (equal
+      (consent-unicode-data-generator-test--external
+       (concat
+        "(import (scheme base) (consent unicode-data))\n"
+        "(let* ((metadata (consent-unicode-data-metadata))\n"
+        "       (inputs (cdr (assq 'inputs metadata)))\n"
+        "       (input (car inputs))\n"
+        "       (file (cadr (assq 'file input)))\n"
+        "       (hash (cadr (assq 'sha256 input))))\n"
+        "  (string-set! file 0 #\\X)\n"
+        "  (string-set! hash 0 #\\0)\n"
+        "  (set-car! input '(file \"poisoned\"))\n"
+        "  (let* ((fresh (consent-unicode-data-metadata))\n"
+        "         (fresh-input (car (cdr (assq 'inputs fresh)))))\n"
+        "    (list (cadr (assq 'file fresh-input))\n"
+        "          (cadr (assq 'sha256 fresh-input)))))"))
+      (format "(\"%s\" \"%s\")" expected-file expected-hash)))))
+
+(ert-deftest consent-unicode-data-generator-test-bounds-owned-source-size ()
+  "Reject gross deterministic growth in owned character source data."
+  (let* ((unicode-bytes
+          (consent-unicode-data-generator-test--repository-file-size
+           "scheme/consent/unicode-data.sld"))
+         (bytes
+          (+
+           unicode-bytes
+           (consent-unicode-data-generator-test--repository-file-size
+            "scheme/consent/char.sld"))))
+    (should
+     (= unicode-bytes
+        consent-unicode-data-generator-test--unicode-library-bytes))
+    (should
+     (<= bytes
+         consent-unicode-data-generator-test--owned-library-byte-ceiling))))
+
+(ert-deftest consent-unicode-data-generator-test-benchmark-schema-smoke ()
+  "Keep benchmark metrics and records deterministic without timing gates."
+  (let ((expected-metrics
+         '(unicode.scheme-char.import.cold
+           unicode.scheme-char.import.warm-fresh-context
+           unicode.char-alphabetic.ascii.persistent
+           unicode.char-alphabetic.bmp.persistent
+           unicode.char-downcase.bmp-hit.persistent
+           unicode.char-downcase.occupied-miss.persistent
+           unicode.char-downcase.empty-bmp-miss.persistent
+           unicode.char-upcase.supplementary-hit.persistent
+           unicode.string-upcase.full.persistent))
+        observed)
+    (let ((process-environment (copy-sequence process-environment)))
+      (setenv "CONSENT_UNICODE_BENCHMARK_ITERATIONS" "2")
+      (setenv "CONSENT_UNICODE_BENCHMARK_IMPORT_ITERATIONS" "3")
+      (cl-letf
+          (((symbol-function 'consent--unicode-benchmark-measure)
+            (lambda (metric iterations _thunk _validate)
+              (push (list metric iterations) observed)))
+           ((symbol-function
+             'consent--unicode-benchmark-prepare-interaction)
+            (lambda (_options) 'synthetic-interaction)))
+        (consent--unicode-benchmark-run)))
+    (should
+     (equal (nreverse observed)
+            '((unicode.scheme-char.import.cold 1)
+              (unicode.scheme-char.import.warm-fresh-context 3)
+              (unicode.char-alphabetic.ascii.persistent 2)
+              (unicode.char-alphabetic.bmp.persistent 2)
+              (unicode.char-downcase.bmp-hit.persistent 2)
+              (unicode.char-downcase.occupied-miss.persistent 2)
+              (unicode.char-downcase.empty-bmp-miss.persistent 2)
+              (unicode.char-upcase.supplementary-hit.persistent 2)
+              (unicode.string-upcase.full.persistent 2))))
+    (should (equal consent--unicode-benchmark-metrics expected-metrics))
+    (let* ((text
+            (consent--unicode-benchmark-render
+             'unicode.char-alphabetic.ascii.persistent
+             4
+             '(2.5 3 0.25)))
+           (parsed (read-from-string text))
+           (record (car parsed)))
+      (should
+       (string-match-p
+        "\\`[[:space:]]*\\'" (substring text (cdr parsed))))
+      (should
+       (equal
+        record
+        '(consent-benchmark
+          (schema-version 1)
+          (metric unicode.char-alphabetic.ascii.persistent)
+          (iterations 4)
+          (seconds 2.5)
+          (seconds-per-iteration 0.625)
+          (garbage-collections 3)
+          (garbage-collection-seconds 0.25))))
+      (should-error
+       (consent--unicode-benchmark-render
+        'unicode.unknown 1 '(0.0 0 0.0)))
+      (should-error
+       (consent--unicode-benchmark-render
+        'unicode.char-alphabetic.ascii.persistent 0 '(0.0 0 0.0)))
+      (should-error
+       (consent--unicode-benchmark-render
+        'unicode.char-alphabetic.ascii.persistent 1 '(-1.0 0 0.0))))))
 
 (ert-deftest consent-unicode-data-generator-test-checks-output-freshness ()
   "Write deterministic output and reject stale or missing checked output."

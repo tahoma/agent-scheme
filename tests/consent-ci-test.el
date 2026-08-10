@@ -1049,7 +1049,17 @@ reflection 6.800\n"
     (should (consent-ci-test--yaml-contains-p
              (concat "|| fromJSON('[{\"source_metadata\":\"on\","
                      "\"docstring_retention\":\"full\"}]')")
-             workflow))))
+             workflow))
+    ;; Exhaustive owned Unicode semantics run once on an independent host in
+    ;; scheduled and manually dispatched full-metadata CI, never per push.
+    (dolist (needle
+             '("name: Verify exhaustive Unicode semantics"
+               "CONSENT_UNICODE_SEMANTIC_HOST: gambit"
+               "make check-unicode-semantics"
+               "(github.event_name == 'schedule' || github.event_name ==\
+ 'workflow_dispatch') && matrix.combo.source_metadata == 'on' &&\
+ matrix.combo.docstring_retention == 'full'"))
+      (should (consent-ci-test--yaml-contains-p needle workflow)))))
 
 (ert-deftest consent-ci-test-compiled-caches-exclude-product-binaries ()
   "Keep fallback compiled caches from restoring runnable product binaries."
@@ -1156,10 +1166,18 @@ reflection 6.800\n"
                  "CONSENT_TEST_SHARD_TARGETS\
  \\?=.*CONSENT_PORTABLE_TEST_SHARD_TARGETS"
                  makefile))
+    (should-not (string-match-p
+                 "CONSENT_TEST_SHARD_TARGETS\
+ \\?=.*check-unicode-semantics"
+                 makefile))
     ;; Exhaustive opt-in set and target remain available.
     (should (string-match-p
              "CONSENT_FULL_TEST_SHARD_TARGETS\
  \\?=.*CONSENT_PORTABLE_TEST_SHARD_TARGETS"
+             makefile))
+    (should (string-match-p
+             "CONSENT_FULL_TEST_SHARD_TARGETS\
+ \\?=.*check-unicode-semantics"
              makefile))
     (should (string-match-p "^test-full:" makefile))))
 
@@ -1239,7 +1257,7 @@ reflection 6.800\n"
              (mapcar #'ert-test-name (ert-select-tests selector t)))
            partition-selectors))
          (flattened (apply #'append parts)))
-    (should (= (length aggregate) 225))
+    (should (= (length aggregate) 226))
     (should (= (length flattened)
                (length (delete-dups (copy-sequence flattened)))))
     (should (equal (sort aggregate #'string-lessp)

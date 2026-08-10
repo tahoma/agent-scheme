@@ -80,8 +80,9 @@ redistributed under the Unicode License v3 (`Unicode-3.0`); the license text is
 in `LICENSES/Unicode-3.0.txt` and attribution is recorded in `NOTICE`.
 
 The generated `(consent unicode-data)` library exports zero-argument procedures
-for Scheme-readable version, provenance, and structural counts plus pure scalar
-query procedures. Its raw vectors and aggregate templates are private, so an
+for Scheme-readable version and provenance plus pure scalar query procedures.
+Storage counts remain generator-test details rather than becoming an internal
+runtime API. Its raw vectors and aggregate templates are private, so an
 importing program cannot mutate process-shared Unicode backing data; aggregate
 and full-mapping queries return fresh deep data, including fresh strings.
 `(scheme char)` owns the public character API and its constant-time ASCII
@@ -96,14 +97,24 @@ without calling a host Unicode API. The `(scheme char)` manifest and the
 generated metadata query expose the supported Unicode version to reflection,
 and `(features)` includes `full-unicode`.
 
-The generator builds lookup indexes rather than rebuilding them at runtime.
-Property and simple-mapping searches are bounded first by a 256-code-point BMP
-page or a supplementary Unicode plane. Decimal values store one start per
-validated ten-character block. Simple case mappings store sorted
-lower/upper/delta segments, with one-code-point segments for sparse exceptions.
-Full string tables store only mappings that differ from the corresponding
-simple mapping; this includes expansions and any identity override required by
-the pinned data.
+The generator emits final lookup structures rather than rebuilding or
+decompressing them at runtime. Property ranges in the common
+`U+0000..U+0FFF` region use direct 256-code pages; the rest use visible coarse
+BMP buckets and supplementary-plane buckets. The ten White_Space ranges need
+no index. Decimal values store one start per validated ten-character block.
+Simple case mappings store sorted `lower`, `upper`, `stride`, and `delta`
+records in direct coarse buckets. Strides are limited to one for contiguous
+mappings and two for alternating case pairs, so sparse exceptions remain
+explicit instead of being joined by artificial patterns. Full string tables
+store only mappings that differ from the corresponding simple mapping;
+repeated Greek families use explicit affine rules, while unrelated expansions
+remain complete records.
+
+Generated source preserves those record boundaries: every logical record is
+kept together on one line and every table documents its field order. Indexing
+is selected from the actual density of each table rather than imposed as a
+uniform 273-entry prefix array. These layouts are private implementation
+choices and are protected by representation-independent semantic tests.
 
 To adopt a new Unicode version, add a new pinned UCD directory, review the UCD
 format and semantic changes, update the generator version and hashes,
@@ -183,7 +194,7 @@ replace an owned path.
 ## Verification contract
 
 The portable character suite verifies the generated version and provenance
-queries, structural counts, representative property and decimal entries across
+queries, representative property and decimal entries across
 scripts, simple versus length-changing full case mappings, supplementary-plane
 casing, and unassigned-scalar fallback. The shared conformance corpus
 exercises every base and case-insensitive character/string comparison in
@@ -191,6 +202,19 @@ true, false, equality, prefix, and variadic forms; the complete scalar validity
 boundary; BMP,
 supplementary, and maximum scalar crossings through strings, vectors, ports,
 and native adapters; and canonical reader/writer external forms.
+
+The opt-in `make check-unicode-semantics` oracle additionally queries the
+exported `(consent unicode-data)` semantics consumed by `(scheme char)` for
+every one of the 1,112,064 Unicode scalar values. It hashes a canonical stream
+containing four classification results, the decimal value, all three simple
+character mappings, and all three full string mappings. Querying that owned API
+directly excludes the test host's Unicode tables. The checked digest is
+independent of the generated table layout and therefore guards semantic
+equivalence across table compression, compiler linkage, and future
+representation changes. It runs in `make test-full`, not the default fast test
+loop, and has no wall-clock pass/fail threshold. The ordinary character and
+conformance suites cover the public wrapper's ASCII fast paths and mapping
+glue.
 
 UTF-8 fixtures cover every one- through four-byte branch boundary, both sides
 of the surrogate gap, multibyte and empty range slices, malformed continuation

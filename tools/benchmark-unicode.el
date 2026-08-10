@@ -29,6 +29,21 @@
 (defconst consent--unicode-benchmark-default-import-iterations 3
   "Default fresh-context count for the warm Unicode import metric.")
 
+(defconst consent--unicode-benchmark-schema-version 1
+  "Scheme-readable record schema emitted by the Unicode benchmark.")
+
+(defconst consent--unicode-benchmark-metrics
+  '(unicode.scheme-char.import.cold
+    unicode.scheme-char.import.warm-fresh-context
+    unicode.char-alphabetic.ascii.persistent
+    unicode.char-alphabetic.bmp.persistent
+    unicode.char-downcase.bmp-hit.persistent
+    unicode.char-downcase.occupied-miss.persistent
+    unicode.char-downcase.empty-bmp-miss.persistent
+    unicode.char-upcase.supplementary-hit.persistent
+    unicode.string-upcase.full.persistent)
+  "Stable metric names emitted by the Unicode benchmark.")
+
 (defun consent--unicode-benchmark-positive-integer-env (name default)
   "Return positive integer environment variable NAME, or DEFAULT."
   (let ((raw (getenv name)))
@@ -45,24 +60,38 @@
   (list :max-steps (max 1000000 (* iterations 10000))
         :max-host-callbacks (max 100000 (* iterations 100))))
 
-(defun consent--unicode-benchmark-emit (metric iterations timing)
-  "Print METRIC for ITERATIONS using benchmark TIMING."
+(defun consent--unicode-benchmark-render (metric iterations timing)
+  "Return the record for METRIC and ITERATIONS using benchmark TIMING."
   (let ((seconds (nth 0 timing))
         (collections (nth 1 timing))
         (collection-seconds (nth 2 timing)))
-    (princ
-     (format
-      (concat
-       "(consent-benchmark (schema-version 1) (metric %s) "
-       "(iterations %d) (seconds %.9f) "
-       "(seconds-per-iteration %.9f) (garbage-collections %d) "
-       "(garbage-collection-seconds %.9f))\n")
-      (symbol-name metric)
-      iterations
-      seconds
-      (/ seconds iterations)
-      collections
-      collection-seconds))))
+    (unless (memq metric consent--unicode-benchmark-metrics)
+      (error "Unknown Unicode benchmark metric: %S" metric))
+    (unless (and (integerp iterations) (> iterations 0))
+      (error "Unicode benchmark iterations must be positive: %S"
+             iterations))
+    (unless (and (numberp seconds) (>= seconds 0)
+                 (integerp collections) (>= collections 0)
+                 (numberp collection-seconds)
+                 (>= collection-seconds 0))
+      (error "Malformed Unicode benchmark timing: %S" timing))
+    (format
+     (concat
+      "(consent-benchmark (schema-version %d) (metric %s) "
+      "(iterations %d) (seconds %.9f) "
+      "(seconds-per-iteration %.9f) (garbage-collections %d) "
+      "(garbage-collection-seconds %.9f))\n")
+     consent--unicode-benchmark-schema-version
+     (symbol-name metric)
+     iterations
+     seconds
+     (/ seconds iterations)
+     collections
+     collection-seconds)))
+
+(defun consent--unicode-benchmark-emit (metric iterations timing)
+  "Print METRIC for ITERATIONS using benchmark TIMING."
+  (princ (consent--unicode-benchmark-render metric iterations timing)))
 
 (defun consent--unicode-benchmark-measure
     (metric iterations thunk validate)
@@ -116,6 +145,30 @@
                   (benchmark-bmp\
                    (- remaining 1)\
                    (char-alphabetic? #\\x03BB))))"
+           "(define (benchmark-downcase-bmp-hit remaining value)\
+              (if (= remaining 0)\
+                  (char->integer value)\
+                  (benchmark-downcase-bmp-hit\
+                   (- remaining 1)\
+                   (char-downcase #\\x0391))))"
+           "(define (benchmark-downcase-occupied-miss remaining value)\
+              (if (= remaining 0)\
+                  (char->integer value)\
+                  (benchmark-downcase-occupied-miss\
+                   (- remaining 1)\
+                   (char-downcase #\\x03A2))))"
+           "(define (benchmark-downcase-empty-miss remaining value)\
+              (if (= remaining 0)\
+                  (char->integer value)\
+                  (benchmark-downcase-empty-miss\
+                   (- remaining 1)\
+                   (char-downcase #\\x4E00))))"
+           "(define (benchmark-upcase-supplementary-hit remaining value)\
+              (if (= remaining 0)\
+                  (char->integer value)\
+                  (benchmark-upcase-supplementary-hit\
+                   (- remaining 1)\
+                   (char-upcase #\\x10428))))"
            "(define (benchmark-full-string remaining value)\
               (if (= remaining 0)\
                   value\
@@ -181,6 +234,38 @@
           interaction "benchmark-bmp" iterations))
        (lambda (result)
          (consent--unicode-benchmark-validate-result result "#t")))
+      (consent--unicode-benchmark-measure
+       'unicode.char-downcase.bmp-hit.persistent
+       iterations
+       (lambda ()
+         (consent--unicode-benchmark-interaction-call
+          interaction "benchmark-downcase-bmp-hit" iterations))
+       (lambda (result)
+         (consent--unicode-benchmark-validate-result result "945")))
+      (consent--unicode-benchmark-measure
+       'unicode.char-downcase.occupied-miss.persistent
+       iterations
+       (lambda ()
+         (consent--unicode-benchmark-interaction-call
+          interaction "benchmark-downcase-occupied-miss" iterations))
+       (lambda (result)
+         (consent--unicode-benchmark-validate-result result "930")))
+      (consent--unicode-benchmark-measure
+       'unicode.char-downcase.empty-bmp-miss.persistent
+       iterations
+       (lambda ()
+         (consent--unicode-benchmark-interaction-call
+          interaction "benchmark-downcase-empty-miss" iterations))
+       (lambda (result)
+         (consent--unicode-benchmark-validate-result result "19968")))
+      (consent--unicode-benchmark-measure
+       'unicode.char-upcase.supplementary-hit.persistent
+       iterations
+       (lambda ()
+         (consent--unicode-benchmark-interaction-call
+          interaction "benchmark-upcase-supplementary-hit" iterations))
+       (lambda (result)
+         (consent--unicode-benchmark-validate-result result "66560")))
       (consent--unicode-benchmark-measure
        'unicode.string-upcase.full.persistent
        iterations

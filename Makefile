@@ -4,6 +4,9 @@ CONSENT_UNICODE_DATA_DIR ?= vendor/unicode/$(CONSENT_UNICODE_VERSION)
 CONSENT_UNICODE_DATA_OUTPUT ?= scheme/consent/unicode-data.sld
 CONSENT_UNICODE_BENCHMARK_ITERATIONS ?= 100
 CONSENT_UNICODE_BENCHMARK_IMPORT_ITERATIONS ?= 3
+CONSENT_UNICODE_SEMANTIC_HOST ?= racket
+CONSENT_UNICODE_SEMANTIC_EXPECTED ?= \
+  tests/fixtures/unicode-17.0.0-semantic-digest.scm
 # Gambit is the default compile host: `gsc -exe -nopreload' produces a
 # standalone
 # native executable with no runtime dependency, so the default `make compile'
@@ -261,7 +264,8 @@ CONSENT_TEST_SHARD_TARGETS ?= lint-elisp lint-portable lint-branding \
 # native-build install/dist shard isolated by #556, and the parity gate.
 CONSENT_FULL_TEST_SHARD_TARGETS ?= lint-elisp lint-portable lint-branding \
   lint-readability $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) \
-  $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-emacs-native-build test-parity
+  $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-emacs-native-build \
+  check-unicode-semantics test-parity
 CONSENT_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_PORTABLE_TEST_SHARD_TARGETS))
 CONSENT_EMACS_TEST_JOBS ?= $(words $(CONSENT_EMACS_TEST_SHARD_TARGETS))
 # Default `make test' parallelism (#556): raised from the shard-count fallback
@@ -274,7 +278,8 @@ CONSENT_FULL_TEST_JOBS ?= 16
 .DEFAULT_GOAL := help
 
 .PHONY: help print-version clean clean-compile compile install uninstall dist \
-  compile-elisp update-unicode-data check-unicode-data benchmark-unicode \
+  compile-elisp update-unicode-data check-unicode-data \
+  check-unicode-semantics benchmark-unicode \
   lint-elisp \
   lint-elisp-docstrings lint-portable lint-branding \
   lint-readability lint-line-length repl test test-full test-portable \
@@ -328,6 +333,8 @@ help:
 	  'Regenerate the pinned Unicode Scheme data library.'
 	@printf '  %-26s %s\n' 'check-unicode-data' \
 	  'Verify the generated Unicode library is current.'
+	@printf '  %-26s %s\n' 'check-unicode-semantics' \
+	  'Verify exhaustive owned Unicode semantics against a digest.'
 	@printf '  %-26s %s\n' 'benchmark-unicode' \
 	  'Measure opt-in Unicode import and operation costs.'
 	@printf '  %-26s %s\n' 'lint-elisp' \
@@ -470,6 +477,8 @@ help:
 	@printf '  %-50s %s\n' \
 	  'CONSENT_UNICODE_BENCHMARK_IMPORT_ITERATIONS=N' \
 	  'Fresh contexts measured by the warm Unicode import metric.'
+	@printf '  %-50s %s\n' 'CONSENT_UNICODE_SEMANTIC_HOST=HOST' \
+	  'Portable host used by the exhaustive Unicode semantic check.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_JOBS=N' \
 	  'Parallel jobs used by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SHARD_TARGETS=a b' \
@@ -709,6 +718,13 @@ check-unicode-data:
 	$(EMACS) -Q --batch --load tools/generate-unicode-data.el -- \
 	  --ucd-dir '$(CONSENT_UNICODE_DATA_DIR)' \
 	  --output '$(CONSENT_UNICODE_DATA_OUTPUT)' --check
+
+check-unicode-semantics:
+	CONSENT_UNICODE_SEMANTIC_HOST='$(CONSENT_UNICODE_SEMANTIC_HOST)' \
+	CONSENT_UNICODE_SEMANTIC_VERSION='$(CONSENT_UNICODE_VERSION)' \
+	CONSENT_UNICODE_SEMANTIC_EXPECTED='$(abspath \
+	  $(CONSENT_UNICODE_SEMANTIC_EXPECTED))' \
+	  tools/check-unicode-semantics.sh
 
 benchmark-unicode:
 	@$(EMACS) -Q --batch --eval "(setq load-prefer-newer t)" \

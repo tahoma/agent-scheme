@@ -54,20 +54,6 @@
   (test-equal 'unicode-data-version-metadata
               '(unicode-version "17.0.0")
               version-field)
-  (test-equal
-   'unicode-private-data-counts
-   '((alphabetic-range-segments 931)
-     (uppercase-range-segments 661)
-     (lowercase-range-segments 678)
-     (whitespace-range-segments 10)
-     (decimal-blocks 77)
-     (simple-uppercase-segments 694)
-     (simple-lowercase-segments 678)
-     (simple-foldcase-segments 701)
-     (full-uppercase-overrides 102)
-     (full-lowercase-overrides 1)
-     (full-foldcase-overrides 104))
-   (consent-unicode-data-counts))
   (test-assert 'unicode-property-queries
                (and (consent-unicode-alphabetic? #x3bb)
                     (consent-unicode-uppercase? #x391)
@@ -151,17 +137,12 @@
                 '(#x53 #x53)
                 (consent-unicode-full-uppercase #xdf)))
   (let ((version (consent-unicode-data-version))
-        (counts (consent-unicode-data-counts))
         (metadata (consent-unicode-data-metadata)))
     (set-car! version 0)
-    (set-car! (car counts) 'changed)
     (string-set! (cadr (assq 'unicode-version metadata)) 0 #\x)
     (test-equal 'unicode-version-query-is-fresh
                 '(17 0 0)
                 (consent-unicode-data-version))
-    (test-equal 'unicode-counts-query-is-fresh
-                '(alphabetic-range-segments 931)
-                (car (consent-unicode-data-counts)))
     (test-equal 'unicode-metadata-strings-are-fresh
                 '(unicode-version "17.0.0")
                 (assq 'unicode-version

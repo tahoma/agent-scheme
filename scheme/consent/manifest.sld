@@ -1368,7 +1368,6 @@
         (exports
          (consent-unicode-data-version
           consent-unicode-data-metadata
-          consent-unicode-data-counts
           consent-unicode-alphabetic?
           consent-unicode-uppercase?
           consent-unicode-lowercase?

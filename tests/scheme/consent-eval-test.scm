@@ -2012,7 +2012,7 @@ ged "
            (append user-directories (list cache-directory))))
         (lambda ()
           (let ((load-unicode-library
-                 (lambda (symbol-table . maybe-maximum-value-nodes)
+                 (lambda (symbol-table . maybe-budget-options)
                    (let* ((options
                            (append
                             (list
@@ -2020,12 +2020,9 @@ ged "
                             (if symbol-table
                                 (list (cons 'symbol-table symbol-table))
                                 '())
-                            (if (null? maybe-maximum-value-nodes)
+                            (if (null? maybe-budget-options)
                                 '()
-                                (list
-                                 (cons
-                                  'max-value-nodes
-                                  (car maybe-maximum-value-nodes))))))
+                                (car maybe-budget-options))))
                           (reader-options
                            (cons (cons 'source-metadata #f) options))
                           (context (new-eval-context options))
@@ -2053,9 +2050,13 @@ ged "
                    (isolated-load
                     (load-unicode-library (consent-make-symbol-table)))
                    (isolated (car isolated-load))
+                   (step-cost (cadr first-load))
                    (value-node-cost (car (cddr first-load))))
               (check 'shared-unicode-default-domain-instance-identity
                      (and first cached (eq? first cached))
+                     #t)
+              (check 'shared-unicode-cold-step-cost-positive
+                     (> step-cost 0)
                      #t)
               (check 'shared-unicode-cached-step-cost-parity
                      (cadr cached-load)
@@ -2065,8 +2066,28 @@ ged "
                      value-node-cost)
               (check 'shared-unicode-cached-value-node-budget-enforced
                      (guard (condition (else #t))
-                       (load-unicode-library #f (- value-node-cost 1))
+                       (load-unicode-library
+                        #f
+                        (list
+                         (cons 'max-value-nodes (- value-node-cost 1))))
                        #f)
+                     #t)
+              (check 'shared-unicode-cached-step-budget-enforced
+                     (guard
+                      (condition
+                       ((and
+                         (error-object? condition)
+                         (string=?
+                          (error-object-message condition)
+                          (string-append
+                           "consent budget error: "
+                           "evaluation step budget exceeded")))
+                        #t)
+                       (else #f))
+                      (load-unicode-library
+                       #f
+                       (list (cons 'max-steps (- step-cost 1))))
+                      #f)
                      #t)
               (check 'shared-unicode-isolated-domain-does-not-share
                      (and isolated (not (eq? first isolated)))
