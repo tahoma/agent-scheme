@@ -40,6 +40,22 @@ historical grounding, and implementation techniques.
   extension-specification archive. Use SRFIs only when a ticket explicitly
   adopts non-core behavior or needs compatibility research.
 
+### Unicode Character Data
+
+- [Unicode 17.0.0](https://www.unicode.org/versions/Unicode17.0.0/) is the
+  release pinned by Consent Scheme's generated character tables.
+- [UAX #44: Unicode Character Database](https://www.unicode.org/reports/tr44/)
+  defines the UCD file formats, property model, case-mapping sources, and
+  versioning rules used by the generator.
+- [Unicode 17.0.0 UCD](https://www.unicode.org/Public/17.0.0/ucd/) is the
+  versioned source directory for `UnicodeData.txt`,
+  `DerivedCoreProperties.txt`, `PropList.txt`, `SpecialCasing.txt`, and
+  `CaseFolding.txt`. The pinned repository copies and hashes live under
+  `vendor/unicode/17.0.0/`.
+- [Unicode licensing FAQ](https://www.unicode.org/faq/unicode_license.html)
+  identifies the Unicode License v3 as `Unicode-3.0`; the repository carries
+  its full text in `LICENSES/Unicode-3.0.txt`.
+
 ### Books and Guides
 
 - [The Scheme Programming Language, 2nd edition](https://www.scheme.com/tspl2d/intro.html)

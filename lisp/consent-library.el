@@ -41,6 +41,31 @@
 (defvar consent--source-library-procedures (make-hash-table :test #'equal)
   "Cached source-backed procedures keyed by library and procedure name.")
 
+(cl-defstruct (consent--source-library-file-entry
+               (:constructor consent--make-source-library-file-entry
+                             (signature forms))
+               (:copier nil))
+  "Cached signature and canonical forms for one source library."
+  signature forms)
+
+(cl-defstruct (consent--source-library-instance-entry
+               (:constructor consent--make-source-library-instance-entry
+                             (library step-cost value-node-cost))
+               (:copier nil))
+  "Cached immutable source library and its logical evaluation costs."
+  library step-cost value-node-cost)
+
+(defvar consent--source-library-file-cache (make-hash-table :test #'equal)
+  "Source-library signatures and parsed forms keyed by absolute file name.")
+
+(defvar consent--source-library-instance-cache
+  (make-hash-table :test #'equal)
+  "Manifest-authorized immutable library entries keyed by metadata.")
+
+(defvar consent--source-library-cache-symbol-table
+  (consent--make-symbol-table)
+  "Private symbol domain owning canonical cached source-library forms.")
+
 (defvar consent--source-library-internal-imports-allowed nil
   "Non-nil while loading trusted runtime source libraries.")
 
@@ -69,6 +94,13 @@
 
 (defvar consent--primitive-library-provider-declarations nil
   "Provider-contributed primitive-library declarations.")
+
+(defun consent--source-library-cache-reset ()
+  "Clear cached source-library forms and immutable instances."
+  (clrhash consent--source-library-file-cache)
+  (clrhash consent--source-library-instance-cache)
+  (setq consent--source-library-cache-symbol-table
+        (consent--make-symbol-table)))
 
 (declare-function consent--apply-procedure "consent-interpreter")
 (declare-function consent--make-empty-syntax-environment "consent-macro")
@@ -99,11 +131,9 @@
     (key source-file description &optional root)
   "Return the single define-library form for KEY from manifest SOURCE-FILE."
   (let ((forms
-         (consent-read-all
-          (consent--manifest-source-library-source
-           source-file
-           key
-           root))))
+         (consent--source-library-file-entry-forms
+          (consent--source-library-file-entry
+           source-file key root))))
     (unless (= (length forms) 1)
       (consent--eval-error
        "%s must contain exactly one form: %s"
@@ -2309,57 +2339,246 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
   (expand-file-name source-file
                     (or root (consent--library-default-manifest-root))))
 
-(defun consent--manifest-source-library-source (source-file key &optional root)
-  "Return source text for root-relative SOURCE-FILE owned by KEY."
-  (let ((path (consent--manifest-source-library-file source-file root)))
-    (unless (file-readable-p path)
+(defun consent--source-library-file-signature (path key)
+  "Return a cache signature for source-library PATH owned by KEY."
+  (unless (file-readable-p path)
+    (consent--eval-error
+     "manifest source library file is not readable for %s: %s"
+     key path))
+  (let ((attributes (file-attributes path 'string)))
+    (unless attributes
       (consent--eval-error
        "manifest source library file is not readable for %s: %s"
        key path))
-    (with-temp-buffer
-      (insert-file-contents path)
-      (buffer-string))))
+    (list
+     (file-attribute-size attributes)
+     (file-attribute-modification-time attributes)
+     (file-attribute-status-change-time attributes)
+     (file-attribute-inode-number attributes)
+     (file-attribute-device-number attributes))))
+
+(defun consent--source-library-instance-cache-evict-path (path)
+  "Remove cached immutable source-library instances loaded from PATH."
+  (let (keys)
+    (maphash
+     (lambda (cache-key _library)
+       (when (equal (car cache-key) path)
+         (push cache-key keys)))
+     consent--source-library-instance-cache)
+    (dolist (cache-key keys)
+      (remhash cache-key consent--source-library-instance-cache))))
+
+(defun consent--source-library-file-entry (source-file key &optional root)
+  "Return current cached source-library entry for SOURCE-FILE and KEY."
+  (let* ((path
+          (consent--manifest-source-library-file source-file root))
+         (signature
+          (consent--source-library-file-signature path key))
+         (cached (gethash path consent--source-library-file-cache)))
+    (if (and cached
+             (equal signature
+                    (consent--source-library-file-entry-signature cached)))
+        cached
+      (let* ((source
+              (with-temp-buffer
+                (insert-file-contents path)
+                (buffer-string)))
+             (max-lisp-eval-depth
+              (max max-lisp-eval-depth
+                   consent--source-library-lisp-eval-depth))
+             (forms
+              (consent-read-all
+               source
+               (list :source-metadata nil
+                     :symbol-table
+                     consent--source-library-cache-symbol-table)))
+             (entry
+              (consent--make-source-library-file-entry
+               signature forms)))
+        (puthash path entry consent--source-library-file-cache)
+        (consent--source-library-instance-cache-evict-path path)
+        entry))))
+
+(defun consent--copy-source-library-datum
+    (value symbol-table &optional seen)
+  "Copy cached VALUE into SYMBOL-TABLE with fresh mutable datums."
+  (let ((seen (or seen (make-hash-table :test #'eq))))
+    (cond
+     ((consent-symbol-p value)
+      (consent--intern-symbol (consent-symbol-name value) symbol-table))
+     ((consp value)
+      (or (gethash value seen)
+          (let ((copy (cons nil nil)))
+            (puthash value copy seen)
+            (setcar copy
+                    (consent--copy-source-library-datum
+                     (car value) symbol-table seen))
+            (setcdr copy
+                    (consent--copy-source-library-datum
+                     (cdr value) symbol-table seen))
+            copy)))
+     ((stringp value)
+      (or (gethash value seen)
+          (let ((copy (copy-sequence value)))
+            (puthash value copy seen)
+            copy)))
+     ((vectorp value)
+      (or (gethash value seen)
+          (let ((copy (make-vector (length value) nil)))
+            (puthash value copy seen)
+            (dotimes (index (length value))
+              (aset copy index
+                    (consent--copy-source-library-datum
+                     (aref value index) symbol-table seen)))
+            copy)))
+     ((consent-bytevector-p value)
+      (or (gethash value seen)
+          (let ((copy
+                 (consent--make-bytevector
+                  (copy-sequence (consent-bytevector-bytes value)))))
+            (puthash value copy seen)
+            copy)))
+     (t value))))
+
+(defun consent--source-library-forms-for-context (entry context)
+  "Return fresh forms from cached file ENTRY in CONTEXT's symbol domain."
+  (let ((max-lisp-eval-depth
+         (max max-lisp-eval-depth
+              consent--source-library-lisp-eval-depth)))
+    (mapcar
+     (lambda (form)
+       (consent--copy-source-library-datum
+        form
+        (consent--eval-context-symbol-table context)))
+     (consent--source-library-file-entry-forms entry))))
+
+(defun consent--shared-immutable-source-library-p (entry context)
+  "Return non-nil when manifest ENTRY may be shared by CONTEXT."
+  ;; This realization is a trusted repository-manifest assertion, not an
+  ;; inferred property.  Reviewers must verify that no mutable aggregate or
+  ;; context-sensitive state crosses the declared library's export boundary.
+  (and consent--source-library-internal-imports-allowed
+       (eq (plist-get entry :realization) 'shared-immutable-data)
+       (eq (plist-get entry :visibility) 'internal-runtime)
+       (eq (plist-get entry :source-kind) 'portable-source)
+       (null (plist-get entry :primitive-overlay-library))
+       (eq (consent--eval-context-symbol-table context)
+           consent--symbol-table)))
+
+(defun consent--source-library-instance-cache-key (path file-entry entry)
+  "Return immutable instance key for PATH, FILE-ENTRY, and manifest ENTRY."
+  (list
+   path
+   (consent--source-library-file-entry-signature file-entry)
+   (plist-get entry :name)
+   (plist-get entry :source-kind)
+   (plist-get entry :realization)
+   (plist-get entry :visibility)
+   (plist-get entry :source-version)
+   (consent--manifest-entry-exports-declared-p entry)
+   (plist-get entry :exports)
+   (plist-get entry :primitive-overlay-library)))
+
+(defun consent--source-library-charge-cached-steps (context step-cost)
+  "Charge CONTEXT the logical STEP-COST of a cached source library."
+  ;; Evaluation budgets are part of the observable result and replay contract.
+  ;; A process cache may avoid host work, but it must not make those logical
+  ;; costs depend on whether another context happened to load the library first.
+  (dotimes (_ step-cost)
+    (consent--note-step context)))
+
+(defun consent--source-library-charge-cached-value-nodes
+    (context value-node-cost)
+  "Charge CONTEXT the logical VALUE-NODE-COST of a cached source library."
+  ;; Reusing the immutable instance avoids host allocation, but the value-node
+  ;; budget describes the source program's logical work just like the step
+  ;; budget.  Replay the cold load's aggregate charge on every cache hit.
+  (consent--note-value-allocation context value-node-cost))
+
+(defun consent--finish-manifest-source-library (entry context)
+  "Apply manifest ENTRY's overlay and export filter in CONTEXT."
+  (let ((key (plist-get entry :name))
+        (exports (plist-get entry :exports))
+        (overlay-library (plist-get entry :primitive-overlay-library)))
+    (when overlay-library
+      (let ((overlay-entry
+             (consent--library-collection-manifest-entry overlay-library)))
+        (unless overlay-entry
+          (consent--eval-error
+           "manifest primitive overlay library is not declared: %s"
+           overlay-library))
+        (consent--register-library-primitive-bindings
+         key
+         (consent--manifest-exported-primitive-specs overlay-entry)
+         context)))
+    (when (consent--manifest-entry-exports-declared-p entry)
+      (let ((library
+             (gethash key (consent--eval-context-libraries context))))
+        (unless library
+          (consent--eval-error
+           "manifest source library registered a different name: %s"
+           key))
+        (setf (consent--library-exports library)
+              (consent--filter-library-exports
+               (consent--library-exports library)
+               exports
+               key))))))
 
 (defun consent--register-manifest-source-library
     (entry context environment)
   "Register the source library described by manifest ENTRY."
   (let ((key (plist-get entry :name))
         (source-file (plist-get entry :source-file))
-        (root (plist-get entry :root))
-        (exports (plist-get entry :exports))
-        (overlay-library (plist-get entry :primitive-overlay-library)))
+        (root (plist-get entry :root)))
     (unless source-file
       (consent--eval-error
        "manifest source library has no source-file: %s"
        key))
     (unless (gethash key (consent--eval-context-libraries context))
-      (consent--register-source-library
-       (consent--manifest-source-library-source source-file key root)
-       context
-       environment)
-      (when overlay-library
-        (let ((overlay-entry
-               (consent--library-collection-manifest-entry overlay-library)))
-          (unless overlay-entry
-            (consent--eval-error
-             "manifest primitive overlay library is not declared: %s"
-             overlay-library))
-         (consent--register-library-primitive-bindings
-          key
-          (consent--manifest-exported-primitive-specs overlay-entry)
-          context)))
-      (when (consent--manifest-entry-exports-declared-p entry)
-        (let ((library (gethash key (consent--eval-context-libraries
-          context))))
-          (unless library
-            (consent--eval-error
-             "manifest source library registered a different name: %s"
-             key))
-          (setf (consent--library-exports library)
-                (consent--filter-library-exports
-                 (consent--library-exports library)
-                 exports
-                 key)))))))
+      (let* ((path
+              (consent--manifest-source-library-file source-file root))
+             (file-entry
+              (consent--source-library-file-entry source-file key root))
+             (sharep
+              (consent--shared-immutable-source-library-p entry context))
+             (instance-key
+              (and sharep
+                   (consent--source-library-instance-cache-key
+                    path file-entry entry)))
+             (cached
+              (and instance-key
+                   (gethash instance-key
+                            consent--source-library-instance-cache))))
+        (if cached
+            (progn
+              (consent--source-library-charge-cached-steps
+               context
+               (consent--source-library-instance-entry-step-cost cached))
+              (consent--source-library-charge-cached-value-nodes
+               context
+               (consent--source-library-instance-entry-value-node-cost cached))
+              (puthash
+               key
+               (consent--source-library-instance-entry-library cached)
+               (consent--eval-context-libraries context)))
+          (let ((steps-before (consent--eval-context-steps context))
+                (value-nodes-before
+                 (consent--eval-context-value-nodes context)))
+            (consent--register-source-library-forms
+             (consent--source-library-forms-for-context file-entry context)
+             context
+             environment)
+            (consent--finish-manifest-source-library entry context)
+            (when sharep
+              (puthash
+               instance-key
+               (consent--make-source-library-instance-entry
+                (gethash key
+                         (consent--eval-context-libraries context))
+                (- (consent--eval-context-steps context) steps-before)
+                (- (consent--eval-context-value-nodes context)
+                   value-nodes-before))
+               consent--source-library-instance-cache))))))))
 
 (defun consent--manifest-entry-exports-declared-p (entry)
   "Return non-nil when manifest ENTRY explicitly declares exports.
@@ -2691,18 +2910,12 @@ When REPLACE is non-nil, replace an existing declaration from the same\
                  '(base-snapshot))
            (consent--manifest-implementation-routable-p entry))))
 
-(defun consent--register-source-library
-    (source context environment)
-  "Evaluate one define-library SOURCE into CONTEXT."
+(defun consent--register-source-library-forms
+    (forms context environment)
+  "Evaluate one source library from parsed FORMS into CONTEXT."
   (let* ((max-lisp-eval-depth
           (max max-lisp-eval-depth consent--source-library-lisp-eval-depth))
-         (consent--source-library-internal-imports-allowed t)
-         (forms
-          (consent-read-all
-           source
-           (consent--eval-context-reader-options
-            context
-            '(:source-metadata nil)))))
+         (consent--source-library-internal-imports-allowed t))
     (unless (= (length forms) 1)
       (consent--eval-error
        "source library must contain exactly one form"))
@@ -2710,6 +2923,18 @@ When REPLACE is non-nil, replace an existing declaration from the same\
      (car forms)
      environment
      context)))
+
+(defun consent--register-source-library
+    (source context environment)
+  "Read and evaluate one define-library SOURCE into CONTEXT."
+  (consent--register-source-library-forms
+   (consent-read-all
+    source
+    (consent--eval-context-reader-options
+     context
+     '(:source-metadata nil)))
+   context
+   environment))
 
 (defun consent--find-library-export (name exports)
   "Return export named NAME from EXPORTS, or nil."

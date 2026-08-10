@@ -7,13 +7,6 @@
 
 (import (scheme base) (scheme char))
 
-(define (range lower upper)
-  "Return the inclusive integer range from LOWER through UPPER."
-  (let loop ((value upper) (result '()))
-    (if (< value lower)
-        result
-        (loop (- value 1) (cons value result)))))
-
 (define (all? predicate values)
   "Return whether PREDICATE accepts every member of VALUES."
   (or (null? values)
@@ -24,25 +17,18 @@
   "Return whether PREDICATE accepts the character for every code."
   (all? (lambda (code) (predicate (integer->char code))) codes))
 
-(let* ((upper
-        (append (range 65 90)
-                (range 192 214)
-                (range 216 222)
-                '(304 376 7838)
-                (range 913 929)
-                (range 931 939)))
-       (lower
-        (append (range 97 122)
-                (range 224 246)
-                (range 248 255)
-                '(170 181 186 305)
-                (range 945 961)
-                (range 962 971)))
-       (outside '(64 91 96 123 169 171 185 187 215 880 930 940 128578)))
+(let* ((upper '(65 90 192 214 216 222 256 304 376 7838
+                913 929 931 939 #x10400 #x10427))
+       (lower '(97 122 170 181 186 224 246 248 255 305
+                945 961 962 971 #x10428 #x1044f))
+       (alphabetic-without-case '(#x5d0 #x627 #x4e00))
+       (outside '(64 91 96 123 169 171 185 187 215 885 894 930
+                  #x378 #x1f642)))
   (list
    (codes-satisfy? char-upper-case? upper)
    (codes-satisfy? char-lower-case? lower)
-   (codes-satisfy? char-alphabetic? (append upper lower))
+   (codes-satisfy? char-alphabetic?
+                   (append upper lower alphabetic-without-case))
    (all? (lambda (code)
            (let ((character (integer->char code)))
              (and (not (char-upper-case? character))

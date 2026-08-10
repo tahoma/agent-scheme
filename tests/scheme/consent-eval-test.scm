@@ -42,6 +42,10 @@
               consent-read)
         (only (consent version)
               consent-version-datum)
+        (only (consent library)
+              consent-runtime-source-files
+              eval-import
+              library-registry-ref)
         (only (consent runtime)
               audit-process-capability-result!
               audit-network-capability-result!
@@ -57,6 +61,8 @@
               consent-default-maximum-source-metadata
               consent-procedure?
               context-audit-events
+              context-steps
+              context-value-nodes
               documentation-metadata?
               documentation-metadata-fields
               network-capability-handle
@@ -430,6 +436,21 @@
                             '((source-metadata . #t)))))
        "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) \
 (span 10) (phase read))"))
+
+(testing-registry-case
+ 'evaluated-direct-literal-preserves-source-metadata
+ '(portable core reflection)
+(let ((source
+       (consent-syntax-source
+        (raw-consent-eval-source
+         "\"fresh\""
+         #f
+         '((source-metadata . #t))))))
+  (check 'evaluated-direct-literal-preserves-source-metadata
+         (and source
+              (eq? (cadr (assq 'origin (cdr source))) 'source)
+              (eq? (cadr (assq 'phase (cdr source))) 'read))
+         #t)))
 
 (testing-registry-case
  'reader-native-number-predicate-preserves-canonical-record '(portable core)
@@ -1767,6 +1788,12 @@ ged "
          (and char-spec
               (cadr (assq 'source-file char-spec)))
          "consent/char.sld")
+  (check 'runtime-source-library-unicode-data-file
+         (if (member "consent/unicode-data.sld"
+                     (consent-runtime-source-files))
+             #t
+             #f)
+         #t)
   (check 'standard-source-library-cxr-file
          (and cxr-spec
               (cadr (assq 'source-file cxr-spec)))
@@ -1923,6 +1950,152 @@ ged "
                (- after-second after-first)))))))
 
 (testing-registry-case
+ 'manifest-source-library-literals-are-context-isolated
+ '(portable core security)
+(if compiled-host-run?
+    (check 'compiled-native-library-literal-isolation-not-applicable #t #t)
+    (let ((first
+       (consent-value->external
+        (consent-eval-source
+         "(import (scheme base) (agent redaction))
+          (let ((text (redact \"sk-first\" 'test)))
+            (string-set! text 0 #\\X)
+            text)")))
+      (second
+       (consent-value->external
+        (consent-eval-source
+         "(import (scheme base) (agent redaction))
+          (let* ((text (redact \"sk-second\" 'test))
+                 (observed (string-copy text)))
+            (string-set! text 0 #\\[)
+            observed)"))))
+  (check 'source-library-first-context-mutation
+         first
+         "\"Xredacted]\"")
+  (check 'source-library-second-context-isolation
+         second
+         "\"[redacted]\""))))
+
+(testing-registry-case
+ 'manifest-source-library-literals-preserve-source-metadata
+ '(portable core security reflection)
+(if compiled-host-run?
+    (check 'compiled-native-library-source-metadata-not-applicable #t #t)
+    (let ((source-present?
+       (lambda ()
+         (consent-value->external
+          (consent-eval-source
+           "(import (scheme base) (agent redaction) (agent reflect))
+            (let ((source (syntax-source (redact \"sk-source\" 'test))))
+              (and source
+                   (eq? (cadr (assq 'origin (cdr source))) 'source)
+                   (eq? (cadr (assq 'phase (cdr source))) 'read)))")))))
+  (check 'source-library-first-context-source-metadata
+         (source-present?)
+         "#t")
+  (check 'source-library-cached-context-source-metadata
+         (source-present?)
+         "#t"))))
+
+(testing-registry-case
+ 'shared-unicode-library-instance-cache
+ '(portable core performance unicode library security)
+(if compiled-host-run?
+    (check 'compiled-native-unicode-source-cache-not-applicable #t #t)
+    (let ((user-directories (consent-library-user-directory-list))
+          (cache-directory "tests/fixtures/unicode-cache-key"))
+      (dynamic-wind
+        (lambda ()
+          ;; The search-directory list is part of the immutable-data cache
+          ;; key. A harmless distinct list makes the first load deterministic.
+          (consent-set-library-user-directories!
+           (append user-directories (list cache-directory))))
+        (lambda ()
+          (let ((load-unicode-library
+                 (lambda (symbol-table . maybe-budget-options)
+                   (let* ((options
+                           (append
+                            (list
+                             (cons 'internal-libraries-allowed #t))
+                            (if symbol-table
+                                (list (cons 'symbol-table symbol-table))
+                                '())
+                            (if (null? maybe-budget-options)
+                                '()
+                                (car maybe-budget-options))))
+                          (reader-options
+                           (cons (cons 'source-metadata #f) options))
+                          (context (new-eval-context options))
+                          (environment
+                           (if symbol-table
+                               (consent-make-base-environment symbol-table)
+                               (consent-make-base-environment)))
+                          (import-form
+                           (consent-read
+                            "(import (scheme base) (scheme char))"
+                            reader-options))
+                          (library-name
+                           (consent-read
+                            "(consent unicode-data)"
+                            reader-options)))
+                     (eval-import import-form environment context)
+                     (list
+                      (library-registry-ref context library-name)
+                      (context-steps context)
+                      (context-value-nodes context))))))
+            (let* ((first-load (load-unicode-library #f))
+                   (cached-load (load-unicode-library #f))
+                   (first (car first-load))
+                   (cached (car cached-load))
+                   (isolated-load
+                    (load-unicode-library (consent-make-symbol-table)))
+                   (isolated (car isolated-load))
+                   (step-cost (cadr first-load))
+                   (value-node-cost (car (cddr first-load))))
+              (check 'shared-unicode-default-domain-instance-identity
+                     (and first cached (eq? first cached))
+                     #t)
+              (check 'shared-unicode-cold-step-cost-positive
+                     (> step-cost 0)
+                     #t)
+              (check 'shared-unicode-cached-step-cost-parity
+                     (cadr cached-load)
+                     (cadr first-load))
+              (check 'shared-unicode-cached-value-node-cost-parity
+                     (car (cddr cached-load))
+                     value-node-cost)
+              (check 'shared-unicode-cached-value-node-budget-enforced
+                     (guard (condition (else #t))
+                       (load-unicode-library
+                        #f
+                        (list
+                         (cons 'max-value-nodes (- value-node-cost 1))))
+                       #f)
+                     #t)
+              (check 'shared-unicode-cached-step-budget-enforced
+                     (guard
+                      (condition
+                       ((and
+                         (error-object? condition)
+                         (string=?
+                          (error-object-message condition)
+                          (string-append
+                           "consent budget error: "
+                           "evaluation step budget exceeded")))
+                        #t)
+                       (else #f))
+                      (load-unicode-library
+                       #f
+                       (list (cons 'max-steps (- step-cost 1))))
+                      #f)
+                     #t)
+              (check 'shared-unicode-isolated-domain-does-not-share
+                     (and isolated (not (eq? first isolated)))
+                     #t))))
+        (lambda ()
+          (consent-set-library-user-directories! user-directories))))))
+
+(testing-registry-case
  'data-avl-tree-source-import '(portable core)
 (check 'data-avl-tree-source-import
        (consent-value->external
@@ -1969,6 +2142,112 @@ ged "
            (lambda ()
              (consent-set-library-user-directories! user-directories))))
        "fixture-tool"))
+
+(testing-registry-case
+ 'manifest-source-library-shared-datum-isolation '(portable core security)
+(let ((user-directories (consent-library-user-directory-list)))
+  (dynamic-wind
+    (lambda ()
+      (consent-set-library-user-directories!
+       (append user-directories '("tests/fixtures/manifest-root"))))
+    (lambda ()
+      (let ((first
+             (consent-value->external
+              (consent-eval-source
+               "(import (scheme base) (fixture tool) (agent reflect))
+                (define (field datum name)
+                  (cadr (assq name (cdr datum))))
+                (define (metadata-field datum name)
+                  (cadr (assq name (field datum 'fields))))
+                (define (read-source? source)
+                  (and source
+                       (eq? (field source 'origin) 'source)
+                       (eq? (field source 'phase) 'read)))
+                (let* ((value (fixture-shared-literal-ref))
+                       (same (fixture-shared-literal-ref))
+                       (expansion
+                        (macroexpand (fixture-template-form-ref)))
+                      (template
+                       (cadr (field expansion 'expanded)))
+                      (source
+                       (syntax-source
+                        (cdr (fixture-shared-literal-ref))))
+                      (doc
+                       (metadata-field
+                        (documentation 'fixture-documented)
+                        'documentation)))
+                  (string-set! (cdr value) 0 #\\X)
+                  (string-set! (vector-ref template 0) 0 #\\X)
+                  (string-set! doc 0 #\\X)
+                  (list (eq? value same)
+                        (eq? value (car value))
+                        (string=? (cdr same) \"Xresh\")
+                        (string=? (vector-ref template 0) \"Xresh\")
+                        (read-source? source)
+                        (string=? doc \"Xresh documentation\")))"
+               #f
+               '((docstring-retention . full)))))
+            (second
+             (consent-value->external
+              (consent-eval-source
+               "(import (scheme base) (fixture tool) (agent reflect))
+                (define (field datum name)
+                  (cadr (assq name (cdr datum))))
+                (define (metadata-field datum name)
+                  (cadr (assq name (field datum 'fields))))
+                (let ((value (fixture-shared-literal-ref))
+                      (template
+                       (cadr
+                        (field
+                         (macroexpand (fixture-template-form-ref))
+                         'expanded)))
+                      (doc
+                       (metadata-field
+                        (documentation 'fixture-documented)
+                        'documentation)))
+                  (list (eq? value (car value))
+                        (string=? (cdr value) \"fresh\")
+                        (string=? (vector-ref template 0) \"fresh\")
+                        (string=? doc \"fresh documentation\")))"
+               #f
+               '((docstring-retention . full))))))
+        (check 'source-library-context-owned-graph-preserved
+               first
+               "(#t #t #t #t #t #t)")
+        (check 'source-library-cached-graph-isolated
+               second
+               "(#t #t #t #t)")))
+    (lambda ()
+      (consent-set-library-user-directories! user-directories)))))
+
+(testing-registry-case
+ 'manifest-source-library-macroexpand-preserves-source
+ '(portable core security reflection)
+(let ((user-directories (consent-library-user-directory-list)))
+  (dynamic-wind
+    (lambda ()
+      (consent-set-library-user-directories!
+       (append user-directories '("tests/fixtures/manifest-root"))))
+    (lambda ()
+      (check-external
+       'manifest-source-library-macroexpand-preserves-source
+       "(import (scheme base) (fixture tool) (agent reflect))
+        (define (field datum name)
+          (cadr (assq name (cdr datum))))
+        (define (read-source? source)
+          (and source
+               (eq? (field source 'origin) 'source)
+               (eq? (field source 'phase) 'read)))
+        (let* ((expansion
+                (macroexpand (fixture-template-form-ref)))
+               (source (field expansion 'source))
+               (step-source
+                (field (car (field expansion 'steps)) 'source)))
+          (list (read-source? source)
+                (read-source? step-source)))"
+       "(#t #t)"))
+    (lambda ()
+      (consent-set-library-user-directories! user-directories)))))
 
 (testing-registry-case
  'srfi-16-case-lambda-alias-import '(portable core)
@@ -3338,6 +3617,7 @@ age \"example\")))))")))
                    (let ((bytes (string->utf8 \"agent\")))
                      (list (pair? (memq 'r7rs available))
                            (pair? (memq 'srfi-0 available))
+                           (pair? (memq 'full-unicode available))
                            (pair? (memq 'consent available))
                            (setting)
                            (parameterize ((setting 'inner))
@@ -3346,7 +3626,8 @@ age \"example\")))))")))
                            bytes
                            (utf8->string bytes)
                            (utf8->string bytes 1 4))))"
-                "(#t #t #t outer inner outer #u8(97 103 101 110 116) \"agent\" \
+                "(#t #t #t #t outer inner outer #u8(97 103 101 110 116) \
+\"agent\" \
 \"gen\")"))
 
 (testing-registry-case

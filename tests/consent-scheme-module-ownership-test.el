@@ -19,25 +19,79 @@
     (insert-file-contents (expand-file-name path consent--test-root))
     (buffer-string)))
 
-(defun consent-scheme-module-ownership-test--imports-eval-p (source)
-  "Return non-nil when SOURCE imports the portable evaluator module.
-Only actual import forms count; prose mentions of the library name in
-comments or docstrings do not."
+(defun consent-scheme-module-ownership-test--imports-library-p (source library)
+  "Return non-nil when SOURCE imports LIBRARY.
+Only actual import forms count; prose mentions of LIBRARY in comments or
+docstrings do not."
   (with-temp-buffer
     (insert source)
     (scheme-mode)
     (goto-char (point-min))
-    (let (found)
+    (let ((library-name (car (read-from-string library)))
+          found)
       (while (and (not found)
                   (re-search-forward "(import\\_>" nil t))
         (let ((start (match-beginning 0)))
           (unless (nth 8 (syntax-ppss start))
             (goto-char start)
+            (let ((form (read (current-buffer))))
+              (dolist (import-set (cdr form))
+                (let ((candidate import-set))
+                  (while (and (consp candidate)
+                              (memq (car candidate)
+                                    '(only except prefix rename)))
+                    (setq candidate (cadr candidate)))
+                  (when (equal candidate library-name)
+                    (setq found t))))))))
+      found)))
+
+(defun consent-scheme-module-ownership-test--library-name-pattern (library)
+  "Return a whitespace-tolerant regexp for printed LIBRARY."
+  (let ((parts
+         (mapcar
+          (lambda (part)
+            (regexp-quote (symbol-name part)))
+          (car (read-from-string library)))))
+    (concat "([ \t\n\r]*"
+            (mapconcat #'identity parts "[ \t\n\r]+")
+            "[ \t\n\r]*)")))
+
+(defun consent-scheme-module-ownership-test--manifest-dependency-p
+    (entry library)
+  "Return non-nil when manifest ENTRY declares a dependency on LIBRARY."
+  (consent-scheme-module-ownership-test--code-match-p
+   entry
+   (concat
+    "(library\\_>[ \t\n\r]*"
+    (consent-scheme-module-ownership-test--library-name-pattern library)
+    "[ \t\n\r]*)")))
+
+(defun consent-scheme-module-ownership-test--imports-eval-p (source)
+  "Return non-nil when SOURCE imports the portable evaluator module."
+  (consent-scheme-module-ownership-test--imports-library-p
+   source
+   "(consent eval)"))
+
+(defun consent-scheme-module-ownership-test--manifest-entry (source name)
+  "Return SOURCE's manifest entry for library NAME, or nil."
+  (with-temp-buffer
+    (insert source)
+    (scheme-mode)
+    (goto-char (point-min))
+    (let ((name-pattern
+           (regexp-quote (format "(name %s)" name)))
+          found)
+      (while (and (not found)
+                  (re-search-forward "(manifest-entry\\_>" nil t))
+        (let ((start (match-beginning 0)))
+          (unless (nth 8 (syntax-ppss start))
+            (goto-char start)
             (forward-sexp)
-            (setq found
-                  (string-match-p
-                   "(consent eval)"
-                   (buffer-substring-no-properties start (point)))))))
+            (let ((entry
+                   (buffer-substring-no-properties start (point))))
+              (if (consent-scheme-module-ownership-test--code-match-p
+                   entry name-pattern)
+                  (setq found entry))))))
       found)))
 
 (defun consent-scheme-module-ownership-test--contains-symbol-p (source symbol)
@@ -162,6 +216,39 @@ comments or docstrings do not."
      (string-match-p "(define (apply-syntax-transformer" eval))
     (should
      (string-match-p "(define (consent-expand-source" macro))))
+
+(ert-deftest
+  consent-scheme-module-ownership-test-bootstrap-avoids-unused-char-imports ()
+  "Keep unused Unicode-backed character imports out of bootstrap modules."
+  (should
+   (consent-scheme-module-ownership-test--imports-library-p
+    "(define-library (example) (import (only (scheme\n char) char?)))"
+    "(scheme char)"))
+  (should
+   (consent-scheme-module-ownership-test--manifest-dependency-p
+    "(manifest-entry (dependencies ((library (scheme\n char)))))"
+    "(scheme char)"))
+  (let ((manifest
+         (consent-scheme-module-ownership-test--read
+          "scheme/consent/manifest.sld")))
+    (dolist (module '(("scheme/consent/macro.sld" "(consent macro)")
+                      ("scheme/consent/numeric.sld" "(consent numeric)")
+                      ("scheme/consent/runtime.sld" "(consent runtime)")))
+      (let ((path (car module))
+            (name (cadr module)))
+        (ert-info ((format "path=%s" path))
+          (should-not
+           (consent-scheme-module-ownership-test--imports-library-p
+            (consent-scheme-module-ownership-test--read path)
+            "(scheme char)")))
+        (ert-info ((format "manifest-name=%s" name))
+          (let ((entry
+                 (consent-scheme-module-ownership-test--manifest-entry
+                  manifest name)))
+            (should entry)
+            (should-not
+             (consent-scheme-module-ownership-test--manifest-dependency-p
+              entry "(scheme char)"))))))))
 
 (ert-deftest consent-scheme-module-ownership-test-interpreter-owns-backend ()
   "Keep the portable interpreter backend out of the evaluator facade."

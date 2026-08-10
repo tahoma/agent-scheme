@@ -1,4 +1,5 @@
 fixtures/srfi-27/reference/conftest.scm whitespace=-trailing-space,-blank-at-eof
+vendor/unicode/17.0.0/*.txt whitespace=-trailing-space,-blank-at-eof
 scheme/stdlib/reference/r7rs-large/2016-07-red-edition-report.md whitespace=-trailing-space,-blank-at-eof
 scheme/stdlib/reference/r7rs-large/2019-02-tangerine-edition-report.md whitespace=-trailing-space,-blank-at-eof
 scheme/stdlib/reference/r7rs-large/2022-02-yellow-edition-report.txt whitespace=-trailing-space,-blank-at-eof

@@ -43,7 +43,6 @@
           expand-expression/fully
           expand-sequence-forms)
   (import (scheme base)
-          (scheme char)
           (consent reader)
           (consent symbol)
           (consent symbol-boundary)
@@ -1609,14 +1608,26 @@ e"
                (identifier-datum-name operator))
               (else #f)))))
 
-    (define (macro-step-record index macro-name input output)
+    (define (macro-datum-source datum context)
+      "Return DATUM's global or CONTEXT-owned source metadata."
+      (or (context-source-copy-source-ref context datum)
+          (consent-datum-source datum)))
+
+    (define (macro-step-record
+             index macro-name input output provenance-context)
       "Return one Scheme-readable top-level macro expansion step."
       (list 'step
             (macro-field 'index (consent-make-canonical-integer index))
             (macro-field 'macro macro-name)
-            (macro-field 'input (strip-identifiers input))
-            (macro-field 'output (strip-identifiers output))
-            (macro-field 'source (consent-datum-source input))))
+            (macro-field
+             'input
+             (strip-identifiers input provenance-context))
+            (macro-field
+             'output
+             (strip-identifiers output provenance-context))
+            (macro-field
+             'source
+             (macro-datum-source input provenance-context))))
 
     (define (macro-option-name datum)
       "Return NAME as a supported macro expansion option name."
@@ -1683,6 +1694,17 @@ s."
          (context-base-syntax-installed context))
         child))
 
+    (define (macro-provenance-context context child form)
+      "Return the context that owns source provenance for FORM and its output."
+      ;; Direct program syntax remains in the global reader table, so CHILD can
+      ;; own transient expansion state. Cached source-library syntax instead
+      ;; lives only in CONTEXT's bounded overlay; expansion output escapes back
+      ;; to that caller and therefore inherits caller-owned provenance.
+      (cond
+       ((consent-datum-source form) child)
+       ((context-source-copy-source-ref context form) context)
+       (else child)))
+
     (define (macro-visible-expanded expanded)
       "Return EXPANDED in the readable shape used by expansion records."
       (if (syntax-scope? expanded)
@@ -1704,7 +1726,8 @@ s."
                     #t))))
           (expand-expression/fully target environment context)))
 
-    (define (macro-trace-top-level form environment context one-step?)
+    (define (macro-trace-top-level
+             form environment context provenance-context one-step?)
       "Return a top-level expansion trace for FORM."
       (let loop ((current form)
                  (index 0)
@@ -1714,7 +1737,8 @@ s."
         (let* ((macro-name (macro-active-name current environment context))
                (expanded (expand-expression current environment context))
                (visible-expanded (macro-visible-expanded expanded)))
-          (consent-copy-datum-source! visible-expanded current)
+          (context-copy-datum-source!
+           provenance-context visible-expanded current)
           (if (not (macro-symbol-eq? expanded current))
               (let ((name (or macro-name 'syntax))
                     (step-index (+ index 1)))
@@ -1725,14 +1749,22 @@ s."
                                 (reverse
                                  (cons
                                   (macro-step-record
-                                   step-index name current visible-expanded)
+                                   step-index
+                                   name
+                                   current
+                                   visible-expanded
+                                   provenance-context)
                                   steps)))
                           (cons 'macros (reverse (cons name macros))))
                     (loop expanded
                           step-index
                           (cons
                            (macro-step-record
-                            step-index name current visible-expanded)
+                            step-index
+                            name
+                            current
+                            visible-expanded
+                            provenance-context)
                            steps)
                           (if (macro-memq name macros)
                               macros
@@ -1754,24 +1786,34 @@ s."
                  field))
            (debugger-condition-datum condition context)))
 
-    (define (macro-expansion-result status mode original expanded
-                                    steps macros errors)
+    (define (macro-expansion-result
+             status mode original expanded steps macros errors
+             provenance-context)
       "Build a Scheme-readable macro expansion result datum."
       (list 'macro-expansion
             (macro-field 'status status)
             (macro-field 'mode mode)
-            (macro-field 'original (strip-identifiers original))
+            (macro-field
+             'original
+             (strip-identifiers original provenance-context))
             (macro-field 'expanded
-                         (if expanded (strip-identifiers expanded) #f))
+                         (if expanded
+                             (strip-identifiers
+                              expanded provenance-context)
+                             #f))
             (macro-field 'steps steps)
             (macro-field 'macros macros)
-            (macro-field 'source (consent-datum-source original))
+            (macro-field
+             'source
+             (macro-datum-source original provenance-context))
             (macro-field 'warnings '())
             (macro-field 'errors errors)))
 
     (define (macroexpand/result form environment context options mode)
       "Return macro expansion introspection for FORM."
       (let* ((child (macro-introspection-context context options))
+             (provenance-context
+              (macro-provenance-context context child form))
              (trace #f))
         (guard (condition
                 (else
@@ -1782,11 +1824,16 @@ s."
                   #f
                   (if trace (macro-trace-ref trace 'steps) '())
                   (if trace (macro-trace-ref trace 'macros) '())
-                  (list (macro-condition-datum condition child)))))
+                  (list (macro-condition-datum condition child))
+                  provenance-context)))
           (ensure-base-syntax! child environment)
           (set! trace
                 (macro-trace-top-level
-                 form environment child (macro-symbol-eq? mode 'one-step)))
+                 form
+                 environment
+                 child
+                 provenance-context
+                 (macro-symbol-eq? mode 'one-step)))
           (let ((expanded
                  (if (macro-symbol-eq? mode 'one-step)
                      (macro-trace-ref trace 'expanded)
@@ -1801,7 +1848,8 @@ s."
              expanded
              (macro-trace-ref trace 'steps)
              (macro-trace-ref trace 'macros)
-             '())))))
+             '()
+             provenance-context)))))
 
     (define (consent-macroexpand form environment context options)
       "Return a full macro expansion introspection datum for FORM."

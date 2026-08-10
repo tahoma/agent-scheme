@@ -71,9 +71,7 @@
           consent-numeric-backend-limb-bits
           consent-numeric-backend-positive-fixnum-limit
           consent-numeric))
-        (dependencies
-         ((library (scheme base))
-          (library (scheme char))))
+        (dependencies ((library (scheme base))))
         (provenance ((origin repo)))
         (verification
          ((test-status
@@ -381,7 +379,7 @@
         (source-kind source-library)
         (source (path "char.sld"))
         (api-version (compat 0))
-        (source-version unknown)
+        (source-version (unicode 17 0 0))
         (realization portable-source)
         (exports
          (char-alphabetic?
@@ -407,10 +405,17 @@
           string-foldcase
           string-upcase))
         (dependencies
-         ((library (scheme base))))
+         ((library (scheme base))
+          (library (consent unicode-data))))
         (provenance
          ((origin repo)
-          (semantics consent-owned-bootstrap-unicode-profile)))
+          (generated-from unicode-character-database)
+          (upstream-license Unicode-3.0)
+          (semantics consent-owned-unicode-profile)))
+        (verification
+         ((test-status
+          (generated-data classification boundary-cases simple-case
+                          full-case compiled-host-suite))))
         (status implemented)
         (canonical #t))
        (manifest-entry
@@ -1350,6 +1355,49 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (consent unicode-data))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "unicode-data.sld"))
+        (api-version internal)
+        (source-version (unicode 17 0 0))
+        (realization shared-immutable-data)
+        (exports
+         (consent-unicode-data-version
+          consent-unicode-data-metadata
+          consent-unicode-alphabetic?
+          consent-unicode-uppercase?
+          consent-unicode-lowercase?
+          consent-unicode-whitespace?
+          consent-unicode-decimal-value
+          consent-unicode-simple-uppercase
+          consent-unicode-simple-lowercase
+          consent-unicode-simple-foldcase
+          consent-unicode-full-uppercase
+          consent-unicode-full-lowercase
+          consent-unicode-full-foldcase))
+        (dependencies
+         ((library (scheme base))))
+        (provenance
+         ((origin repo-generated)
+          (generated #t)
+          (upstream-source-url
+           "https://www.unicode.org/Public/17.0.0/ucd/")
+          (upstream-license Unicode-3.0)
+          (generator (path "tools/generate-unicode-data.el"))))
+        (verification
+         ((test-status
+          (input-hashes deterministic-regeneration generator-unit
+                        mutation-isolation portable-host-suite
+                        compiled-host-suite))))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (consent character))
         (owner consent-core)
         (provider repo-source)
@@ -1736,6 +1784,10 @@
           set-context-syntax-environment!
           context-libraries
           set-context-libraries!
+          context-source-copy-count
+          context-source-copy-set!
+          context-source-copy-source-ref
+          context-copy-datum-source!
           context-include-paths
           context-include-directory
           set-context-include-directory!

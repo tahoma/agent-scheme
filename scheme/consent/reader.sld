@@ -537,10 +537,10 @@ r"
                      (car maybe-limit))))
             (if (>= consent-source-metadata-entry-count limit)
                 (error
-                  "consent datum limit error: source metadata count exceeds ma\
-ximum source metadata"
-                       consent-source-metadata-entry-count
-                       limit))
+                 "consent datum limit error: source metadata count exceeds \
+maximum source metadata"
+                 consent-source-metadata-entry-count
+                 limit))
             (set! consent-source-metadata
                   (cons (cons datum source)
                         consent-source-metadata))

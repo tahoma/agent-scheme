@@ -19,3 +19,7 @@ Per-file provenance is recorded with SPDX identifiers
 (SPDX-License-Identifier, SPDX-FileCopyrightText). Any third-party material
 vendored in the future retains its upstream license, recorded via SPDX
 headers or a REUSE.toml entry; see docs/licensing.md.
+
+This product includes Unicode Character Database files and derived character
+tables from Unicode, Inc., redistributed under the Unicode License v3. See
+LICENSES/Unicode-3.0.txt and vendor/unicode/17.0.0/README.md.

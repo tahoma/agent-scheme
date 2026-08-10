@@ -195,6 +195,15 @@ jobs:
           "${gambit_prefix}/bin/gsi" -:r7rs -e \
             '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
+      - name: Verify exhaustive Unicode semantics
+        if: >-2
+          ${{ (github.event_name == 'schedule' || github.event_name ==
+          'workflow_dispatch') && matrix.combo.source_metadata == 'on' &&
+          matrix.combo.docstring_retention == 'full' }}
+        env:
+          CONSENT_UNICODE_SEMANTIC_HOST: gambit
+        run: make check-unicode-semantics
+
       - name: Run portable R7RS Gambit shard
         shell: bash
         env:

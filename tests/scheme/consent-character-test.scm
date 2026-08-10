@@ -2,12 +2,14 @@
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; This suite checks the owned-record contracts and adapters at their direct
-;;; R7RS host boundaries.  The shared fixture corpus exhausts `(scheme char)'.
+;;; This suite checks the owned-record contracts, generated Unicode table
+;;; invariants, and adapters at their direct R7RS host boundaries. The shared
+;;; fixture corpus exercises `(scheme char)' behavior through Consent.
 
 (import (scheme base)
         (scheme process-context)
         (consent character)
+        (consent unicode-data)
         (only (consent runtime)
               consent-host-datum->consent-datum)
         (only (consent library)
@@ -29,6 +31,122 @@
   (or (null? values)
       (and (predicate (car values))
            (all? predicate (cdr values)))))
+
+(define (unicode-property-flags code)
+  "Return alphabetic, uppercase, and lowercase query results for CODE."
+  (list (consent-unicode-alphabetic? code)
+        (consent-unicode-uppercase? code)
+        (consent-unicode-lowercase? code)))
+
+(define (unicode-simple-mappings code)
+  "Return simple uppercase, lowercase, and fold query results for CODE."
+  (list (consent-unicode-simple-uppercase code)
+        (consent-unicode-simple-lowercase code)
+        (consent-unicode-simple-foldcase code)))
+
+(testing-registry-case
+ 'generated-unicode-data-contract '(portable runtime character unicode data)
+(let ((version-field
+       (assq 'unicode-version (consent-unicode-data-metadata))))
+  (test-equal 'unicode-data-version
+              '(17 0 0)
+              (consent-unicode-data-version))
+  (test-equal 'unicode-data-version-metadata
+              '(unicode-version "17.0.0")
+              version-field)
+  (test-assert 'unicode-property-queries
+               (and (consent-unicode-alphabetic? #x3bb)
+                    (consent-unicode-uppercase? #x391)
+                    (consent-unicode-lowercase? #x3b1)
+                    (consent-unicode-whitespace? #x3000)
+                    (not (consent-unicode-alphabetic? #x1f642))))
+  (test-equal
+   'unicode-property-range-edges
+   '((#f #f #f) (#t #t #f) (#t #f #t) (#f #f #f))
+   (map unicode-property-flags '(#x375 #x376 #x377 #x378)))
+  (test-equal
+   'unicode-property-bmp-page-boundary
+   '((#t #f #t) (#t #t #f) (#t #f #t))
+   (map unicode-property-flags '(#xff #x100 #x101)))
+  (test-equal
+   'unicode-property-supplementary-boundaries
+   '((#f #f #f) (#t #t #f) (#t #t #f) (#t #f #t)
+     (#t #f #t) (#f #f #f) (#f #f #f) (#t #t #f)
+     (#t #f #t) (#f #f #f))
+   (map unicode-property-flags
+        '(#x103ff #x10400 #x10427 #x10428 #x1044f #x1049e
+          #x1d3ff #x1d400 #x1d41a #x10ffff)))
+  (test-equal
+   'unicode-decimal-block-boundaries
+   '(#f 0 9 #f #f 0 9 0 9 9 #f #f 0 9 #f #f 0 9 #f #f)
+   (map consent-unicode-decimal-value
+        '(#x1049f #x104a0 #x104a9 #x104aa
+          #x1d7cd #x1d7ce #x1d7d7 #x1d7d8 #x1d7e1 #x1d7ff #x1d800
+          #x1e94f #x1e950 #x1e959 #x1e95a
+          #x1fbef #x1fbf0 #x1fbf9 #x1fbfa #x10ffff)))
+  (test-equal 'unicode-simple-mapping-queries
+              '(#x3b1 #x10400 #x10428)
+              (list (consent-unicode-simple-lowercase #x391)
+                    (consent-unicode-simple-uppercase #x10428)
+                    (consent-unicode-simple-foldcase #x10400)))
+  (test-equal
+   'unicode-simple-mapping-bmp-page-boundary
+   '((#x178 #xff #xff) (#x100 #x101 #x101) (#x100 #x101 #x101))
+   (map unicode-simple-mappings '(#xff #x100 #x101)))
+  (test-equal
+   'unicode-simple-mapping-supplementary-boundaries
+   '((#x103ff #x103ff #x103ff)
+     (#x10400 #x10428 #x10428)
+     (#x10427 #x1044f #x1044f)
+     (#x10400 #x10428 #x10428)
+     (#x10427 #x1044f #x1044f)
+     (#x10450 #x10450 #x10450)
+     (#x1d400 #x1d400 #x1d400)
+     (#x378 #x378 #x378)
+     (#x10ffff #x10ffff #x10ffff))
+   (map unicode-simple-mappings
+        '(#x103ff #x10400 #x10427 #x10428 #x1044f #x10450
+          #x1d400 #x378 #x10ffff)))
+  (test-equal 'unicode-full-mapping-queries
+              '((#x53 #x53) (#x69 #x307) (#x73 #x73) (#xc0))
+              (list (consent-unicode-full-uppercase #xdf)
+                    (consent-unicode-full-lowercase #x130)
+                    (consent-unicode-full-foldcase #x1e9e)
+                    (consent-unicode-full-uppercase #xe0)))
+  (test-equal
+   'unicode-full-mapping-override-neighborhoods
+   '(((#xde) (#x53 #x53) (#xc0))
+     ((#x12f) (#x69 #x307) (#x131))
+     ((#x1e9d) (#x73 #x73) (#x1e9f)))
+   (list
+    (map consent-unicode-full-uppercase '(#xde #xdf #xe0))
+    (map consent-unicode-full-lowercase '(#x12f #x130 #x131))
+    (map consent-unicode-full-foldcase '(#x1e9d #x1e9e #x1e9f))))
+  (test-equal
+   'unicode-full-mapping-identity-fallbacks
+   '(((#x378) (#x10ffff))
+     ((#x378) (#x10ffff))
+     ((#x378) (#x10ffff)))
+   (list
+    (map consent-unicode-full-uppercase '(#x378 #x10ffff))
+    (map consent-unicode-full-lowercase '(#x378 #x10ffff))
+    (map consent-unicode-full-foldcase '(#x378 #x10ffff))))
+  (let ((mapping (consent-unicode-full-uppercase #xdf)))
+    (set-car! mapping 0)
+    (test-equal 'unicode-full-mapping-query-is-fresh
+                '(#x53 #x53)
+                (consent-unicode-full-uppercase #xdf)))
+  (let ((version (consent-unicode-data-version))
+        (metadata (consent-unicode-data-metadata)))
+    (set-car! version 0)
+    (string-set! (cadr (assq 'unicode-version metadata)) 0 #\x)
+    (test-equal 'unicode-version-query-is-fresh
+                '(17 0 0)
+                (consent-unicode-data-version))
+    (test-equal 'unicode-metadata-strings-are-fresh
+                '(unicode-version "17.0.0")
+                (assq 'unicode-version
+                      (consent-unicode-data-metadata))))))
 
 (testing-registry-case
  'unicode-scalar-boundaries '(portable runtime character unicode)

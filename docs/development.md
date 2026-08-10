@@ -104,6 +104,96 @@ with dependency-free or explicitly unblocked issues.
   definition shape, docstrings, and rich metadata layout.
 - Follow the commit-message rules in [Contributing](contributing.md).
 
+## Unicode data generation
+
+The portable character implementation consumes the pinned Unicode 17.0.0 UCD
+inputs under `vendor/unicode/17.0.0/`. Regenerate the checked-in Scheme table
+library after changing those inputs, their hashes, or the generator:
+
+```sh
+make update-unicode-data
+make check-unicode-data
+```
+
+The update target uses the required Emacs runtime, verifies all input SHA-256
+hashes, and writes `scheme/consent/unicode-data.sld`. The check target performs
+the same transformation in memory and fails if the checked-in output differs.
+Build and test targets never download Unicode data; updating the pinned release
+is an explicit reviewed repository change. Follow
+[Portable Character Model and Unicode Profile](character-model.md) for the UCD
+source files, fallback policy, default non-Turkic casing choice, license, and
+upgrade procedure.
+
+## Exhaustive Unicode semantic check
+
+Run the representation-independent Unicode oracle after changing generated
+tables, their lookup representation, or `(scheme char)` behavior:
+
+```sh
+make check-unicode-semantics
+CONSENT_UNICODE_SEMANTIC_HOST=gambit make check-unicode-semantics
+```
+
+The portable program observes the exported `(consent unicode-data)` query API
+consumed by `(scheme char)` for all 1,112,064 Unicode scalar values in
+ascending order. It covers the four owned classification properties, decimal
+value, simple upper/lower/fold mappings, and full string upper/lower/fold
+mappings. Surrogate code points are excluded because they are not Unicode
+scalar values. Querying the owned data API directly prevents a test host's own
+`(scheme char)` implementation and Unicode release from entering the oracle.
+The ordinary character and conformance suites separately cover the public
+wrapper's ASCII fast paths, character/string conversions, and full-map glue.
+The data queries include the corresponding ASCII results, so the digest also
+fixes the semantic values those fast paths must preserve.
+
+The program writes a canonical binary stream, and the wrapper compares its
+byte count and SHA-256 digest with the checked Unicode 17.0.0 expectation. The
+stream contains no generated-table representation details, so representation
+changes pass when exported semantics remain identical. The target has no
+wall-clock assertion. It is deliberately outside the default `make test` loop
+and joins the opt-in `make test-full` and exhaustive CI lanes instead.
+
+Schema 1 begins with the ASCII bytes for `Consent Unicode semantics`, followed
+by NUL, byte `1`, and NUL. Each ascending scalar record contains:
+
+- the scalar as three big-endian bytes;
+- one flag byte whose low four bits are Alphabetic, Uppercase, Lowercase, and
+  White_Space in that order;
+- one decimal byte, using `255` when there is no decimal value;
+- the simple uppercase, lowercase, and foldcase scalars as three big-endian
+  bytes each; and
+- each full mapping as a one-byte scalar count followed by three big-endian
+  bytes per mapped scalar.
+
+The scalar itself is encoded in every record, so omission, duplication, or
+ordering drift changes the digest as well as a property or mapping change.
+For the same Unicode release, treat a digest change as a semantic change:
+validate it against an independent representation or UCD-derived oracle before
+updating the checked expectation. A Unicode upgrade updates the pinned inputs,
+version metadata, semantic expectation, and review evidence together.
+
+## Unicode performance benchmark
+
+Use the opt-in same-process benchmark to compare Unicode import and lookup costs
+across revisions on the same machine under equivalent checkout conditions:
+
+```sh
+make benchmark-unicode
+CONSENT_UNICODE_BENCHMARK_ITERATIONS=500 \
+  CONSENT_UNICODE_BENCHMARK_IMPORT_ITERATIONS=5 make benchmark-unicode
+```
+
+The command emits one Scheme-readable `consent-benchmark` record per metric. It
+measures the first `(scheme char)` import, warm imports into fresh contexts, and
+persistent ASCII and BMP classification. Simple case-mapping measurements cover
+a BMP hit, an occupied-region identity miss, an empty BMP-region identity miss,
+and a supplementary-plane hit; the final metric exercises full string
+upcasing. Each record includes stable metric and schema names, elapsed and
+per-iteration seconds, and garbage-collection counts. The benchmark has no
+pass/fail wall-time threshold and is not part of `make test` or CI; compare
+equivalent runs instead of treating timings from unlike machines as
+regressions.
+
 ## Emacs Lisp Docstrings
 
 Checked-in Emacs Lisp implementation docstrings under `lisp/` must fit within
