@@ -68,6 +68,13 @@ does; retaining an ERT test does not make it the semantic source of truth.
   escaped-symbol writer round trips on both bootstraps. ERT retains the Emacs
   adapter checks for explicit hash-table handle plumbing, input-name ownership,
   isolated handles, bulk identity, recovery, and incremental reads.
+- `(consent datum)` heap identity, metadata, mutation gateway, graph
+  import/export, cross-heap topology, and borrowed-host call bridge are
+  canonical in `tests/scheme/consent-datum-test.scm`. Shared R7RS fixtures
+  exercise pair/vector aliases, string/bytevector mutation, cyclic equality,
+  and writer labeling through both evaluator bootstraps. Reader tests retain
+  multi-element pair and vector datum-label cycles in both direct and
+  self-hosted lanes.
 - `(consent character)` owned-record construction, the complete Unicode scalar
   boundary, host/native adapter contracts, and NUL-through-maximum nested datum
   round trips are canonical in `tests/scheme/consent-character-test.scm`.
@@ -200,17 +207,34 @@ Scheme-plan shards directly; the aggregate live targets run the Emacs-host
 checks beside them, never as their discovery or process-control parent.
 
 The same plan makes compiled self-host coverage auditable rather than an
-allowlist hidden in shell orchestration. All 62 ordinary `full` programs carry
-exactly one of `compiled` or `self-host-gap`; the compiled shard contains 47
-programs total. The 16 current gaps are acceptance inputs to #346 and #432.
-Their issue comments
-name the exact registered cases or first failing manual checks. As those runtime
-defects ship, their programs move into `compiled`; the plan test rejects an
-unclassified full-suite program or a program tagged both ways.
+allowlist hidden in shell orchestration. All 65 ordinary `full` programs carry
+exactly one of `compiled` or `self-host-gap`: 44 are compiled and 21 are named
+gaps. The compiled selector contains 45 programs because it also includes the
+compiled-only runtime manifest smoke program. The current gaps are acceptance
+inputs to #120, #346, and #432. Their issue comments name the exact registered
+cases or first failing manual checks. As those runtime defects ship, their
+programs move into `compiled`; the plan test rejects an unclassified full-suite
+program or a program tagged both ways.
 
-The plan also partitions the 61 direct programs exactly once across seven
+The #120 set includes `consent-reader-test.scm`, `consent-numeric-test.scm`,
+`consent-numeric-generated-test.scm`, `consent-fixture-test.scm`,
+`consent-symbol-test.scm`, and `consent-datum-test.scm`. They directly import
+private portable reader, evaluator, numeric, symbol, datum-owner, or dispatcher
+APIs whose borrowed-host calls may retain source, options, closures, or
+representation-owner records; native registration therefore rejects their
+owned compound arguments instead of constructing a durable host mirror.
+Compiled Scheme-visible reading remains exercised without that ABI: the agent
+reliability and native CLI daemon adapter programs read structured fixture
+files through `(scheme read)`, with 20 and 238 assertions in focused
+Racket-compiled runs. The compiled-only manifest smoke additionally reads a
+labelled cycle through `(scheme read)`, checks self-identity and mutation, and
+verifies its canonical `write-shared` representation. Compiled standard-library
+random and property programs exercise public numeric semantics without crossing
+the private numeric dispatcher boundary.
+
+The plan also partitions the 65 direct programs exactly once across seven
 behavior surfaces (`runtime`, `evaluator`, `integration`, `agent`, `library`,
-`random`, and `property`) and the 46 compiled programs exactly once across six
+`random`, and `property`) and the 45 compiled programs exactly once across six
 parallel counterparts. CI uses those names as first-class Guile, Gauche,
 Gambit-compiled, and Racket-compiled jobs; aggregate local and exhaustive-lane
 runs launch the same selectors through `tools/run-portable-test-set.sh` and

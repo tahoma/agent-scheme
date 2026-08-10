@@ -88,9 +88,11 @@
               (+ remainder-value divisor))
         (cons quotient-value remainder-value))))
 
-;; Racket carries the full alternate-profile oracle matrix. Other hosts run a
-;; bounded default-profile slice while the fixed boundary suite continues to
-;; exercise every profile everywhere, including compiled self-host products.
+;; Racket carries the full alternate-profile oracle matrix. Other direct hosts
+;; run a bounded default-profile generated slice while the fixed boundary suite
+;; exercises every profile directly. The bounded `--host-run' branch remains a
+;; future #120 owner/dispatcher ABI canary; the current compiled plan rejects
+;; that private compound boundary and does not admit this program.
 (define extended-generated-profiles?
   (let ((host (get-environment-variable "CONSENT_PORTABLE_HOST")))
     (and (not (get-environment-variable "TESTING_RUNNER_HOST_RUN"))
@@ -567,10 +569,10 @@
   (let* ((backend consent-default-numeric-backend)
          (zero (numeric backend 'integer-zero))
          (small (numeric backend 'integer-from-small -42))
-         ;; A self-hosted program cannot manufacture a native host bignum:
-         ;; its `(expt 2 100)` result is already an owned Consent number.
-         ;; Keep the large native import on direct hosts and exercise the same
-         ;; dispatcher seam with a bounded native value under `--host-run`.
+         ;; A future #120 self-hosted ABI cannot manufacture a native host
+         ;; bignum: its `(expt 2 100)` result is already an owned Consent
+         ;; number. Keep the large native import on direct hosts; the bounded
+         ;; `--host-run' branch below remains its future dispatcher canary.
          (imported-host
           (if (get-environment-variable "TESTING_RUNNER_HOST_RUN")
               42

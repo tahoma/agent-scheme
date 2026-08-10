@@ -468,7 +468,9 @@ s."
       "(malformed MESSAGE).  An incomplete read carries the reader's"
       "open-construct stack so the continuation prompt can render nesting"
       "depth, mirroring the Emacs twin's recovery-step read path."
-      (let* ((step (consent-read-recover-from-string-at buffer 0))
+      (let* ((step
+              (consent-read-recover-from-string-at
+               buffer 0 '((source-metadata . #f))))
              (status (consent-recovery-step-status step)))
         (cond
          ((eq? status 'datum)

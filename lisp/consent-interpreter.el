@@ -3400,12 +3400,32 @@ the maximum endpoint for DESCRIPTION."
       (consent--eval-error "make-list length must be non-negative"))
     (make-list length fill)))
 
-(defun consent--primitive-list-copy (arguments _context)
+(defun consent--primitive-list-copy (arguments context)
   "Primitive list-copy over ARGUMENTS."
   (let ((value (car arguments)))
-    (if (consent--proper-list-p value)
-        (copy-sequence value)
-      value)))
+    (if (not (consp value))
+        value
+      (let ((copies (make-hash-table :test #'eq))
+            (cursor value)
+            head
+            tail
+            (count 0))
+        (catch 'complete
+          (while (consp cursor)
+            (let ((known (gethash cursor copies)))
+              (when known
+                (setcdr tail known)
+                (throw 'complete nil)))
+            (let ((copy (cons (car cursor) nil)))
+              (puthash cursor copy copies)
+              (if tail
+                  (setcdr tail copy)
+                (setq head copy))
+              (setq tail copy
+                    cursor (cdr cursor)
+                    count (1+ count))))
+          (setcdr tail cursor))
+        (consent--charge-value-allocation head count context)))))
 
 (defun consent--eqv-p (left right)
   "Return non-nil if LEFT and RIGHT are eqv? under the current value model."

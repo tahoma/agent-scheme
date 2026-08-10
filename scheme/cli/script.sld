@@ -333,7 +333,13 @@ d"
             (interaction
              (consent-make-interaction-context
               (cli-script-host-run-options root path))))
-        (let loop ((rest (consent-read-all source)))
+        ;; Interaction evaluation owns each form before publication. Keep the
+        ;; transient host parser graph out of the legacy global provenance
+        ;; index; source-aware evaluator entry points use context-local sinks.
+        (let loop ((rest
+                    (consent-read-all
+                     source
+                     '((source-metadata . #f)))))
           (if (null? rest)
               #t
               (let ((result

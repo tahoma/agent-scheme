@@ -21,6 +21,30 @@
                 (consent-eval-source-result raw-consent-eval-source-result))
         (only (consent macro)
               consent-syntax-source)
+        (only (consent datum)
+              consent-datum-bytevector?
+              consent-datum-bytevector-length
+              consent-datum-car
+              consent-datum-cdr
+              consent-datum-cons
+              consent-datum-export
+              consent-datum-heap-mutation-hook-set!
+              consent-datum-list-copy
+              consent-datum-make-vector
+              consent-datum-object-revision
+              consent-datum-pair?
+              consent-datum-same?
+              consent-datum-set-cdr!
+              consent-datum-string?
+              consent-datum-string-length
+              consent-datum-string->host
+              consent-datum-vector?
+              consent-datum-vector-length
+              consent-datum-vector-ref
+              consent-datum-vector-set!
+              consent-make-datum-heap)
+        (only (consent identity-map)
+              consent-identity-map-fast-backend?)
         (prefix (agent approval) native-approval:)
         (only (agent session)
               session-manager-current-id)
@@ -34,16 +58,25 @@
               consent-host-symbol-memq
               consent-host-symbol-assq)
         (only (consent reader)
+              consent-datum-source
+              consent-datum-source-metadata
+              consent-datum-source-set!
               consent-datum->external
               consent-number?
               consent-number-value
               consent-make-canonical-integer
               consent-source-metadata-count
+              consent-source-metadata->record
               consent-read)
+        (only (consent result)
+              strip-identifiers
+              value->result-datum)
         (only (consent version)
               consent-version-datum)
         (only (consent library)
+              consent-library-catalog-entry
               consent-runtime-source-files
+              consent-runtime-datum->native-datum
               eval-import
               library-registry-ref)
         (only (consent runtime)
@@ -51,6 +84,12 @@
               audit-network-capability-result!
               authorize-process-capability
               authorize-network-capability
+              charge-bytevector-allocation!
+              charge-list-allocation!
+              charge-string-allocation!
+              charge-vector-allocation!
+              consent-host-datum->consent-datum
+              consent-native-library-ref
               consent-register-native-library!
               consent-set-library-search-directories!
               consent-library-search-directory-list
@@ -61,16 +100,25 @@
               consent-default-maximum-source-metadata
               consent-procedure?
               context-audit-events
+              context-datum-heap
+              context-source-copy-count
+              context-copy-datum-source!
+              context-source-copy-set-fresh!
+              context-source-copy-set!
+              context-source-copy-source-ref
               context-steps
               context-value-nodes
               documentation-metadata?
               documentation-metadata-fields
+              make-identifier
               network-capability-handle
               network-port-capability-handle
               new-eval-context
               process-capability-handle
               process-port-capability-handle
-              procedure-body)
+              proper-list-elements
+              procedure-body
+              value-node-count)
         (testing registry)
         (testing runner)
         (stdlib testing))
@@ -290,12 +338,14 @@
 ;; Compare ACTUAL and EXPECTED across the private bootstrap-symbol boundary.
 (define (check-value name actual expected)
   "Compare ACTUAL and EXPECTED through the owned-symbol boundary."
-  (let ((matches? (consent-host-symbol-equal? expected actual)))
+  (let* ((native-actual
+          (consent-runtime-datum->native-datum actual))
+         (matches? (consent-host-symbol-equal? expected native-actual)))
     (if (not matches?)
         (begin
           (write (list 'consent-check-mismatch
                        (list 'name name)
-                       (list 'actual actual)
+                       (list 'actual native-actual)
                        (list 'expected expected)))
           (newline)))
     (test-assert name matches?)))
@@ -507,6 +557,384 @@
              (if source-note source-note 'missing-source)))))
        "(limited (source (origin source) (source-id #f) (line 1) (column 2) (o\
 ffset 1) (span 7) (phase read)))"))
+
+(testing-registry-case
+ 'value-node-count-owned-graph-linear '(portable core datum performance)
+(let* ((context (new-eval-context '()))
+       (heap (context-datum-heap context))
+       (size 16384)
+       (deep
+        (let build ((remaining size) (result '()))
+          (if (= remaining 0)
+              result
+              (build
+               (- remaining 1)
+               (consent-datum-cons heap remaining result)))))
+       (shared (consent-datum-cons heap 'leaf '()))
+       (root (consent-datum-make-vector heap 2 shared))
+       (cycle (consent-datum-cons heap 'cycle '())))
+  (consent-datum-vector-set! heap root 1 shared)
+  (consent-datum-set-cdr! heap cycle cycle)
+  (check
+   'value-node-count-owned-graph-linear
+   (list
+    (value-node-count deep '())
+    (value-node-count root '())
+    (value-node-count cycle '())
+    (value-node-count root (list root)))
+   (list (+ (* 2 size) 1) 4 2 0))))
+
+(testing-registry-case
+ 'datum-list-copy-construction-has-zero-mutation-events
+ '(portable core datum performance graph mutation)
+(let* ((heap (consent-make-datum-heap))
+       (entry (consent-datum-cons heap 'b '()))
+       (last (consent-datum-cons heap 'c entry))
+       (source (consent-datum-cons heap 'a entry))
+       (mutation-events 0))
+  (consent-datum-set-cdr! heap entry last)
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! mutation-events (+ mutation-events 1))
+     #t))
+  (let* ((result (consent-datum-list-copy heap source))
+         (copy (car result))
+         (copy-entry (consent-datum-cdr copy))
+         (copy-last (consent-datum-cdr copy-entry)))
+    (check
+     'datum-list-copy-construction-has-zero-mutation-events
+     (list
+      mutation-events
+      (cdr result)
+      (list (consent-datum-object-revision copy)
+            (consent-datum-object-revision copy-entry)
+            (consent-datum-object-revision copy-last))
+      (not (consent-datum-same? source copy))
+      (not (consent-datum-same? entry copy-entry))
+      (consent-datum-same?
+       copy-entry (consent-datum-cdr copy-last)))
+     '(0 3 (0 0 0) #t #t #t)))))
+
+(testing-registry-case
+ 'datum-export-traverses-mixed-host-owned-cycle
+ '(portable core datum performance graph)
+(let* ((heap (consent-make-datum-heap))
+       (root (consent-datum-make-vector heap 2 #f))
+       (child (consent-datum-cons heap 'child root))
+       (wrapper (vector child child))
+       (copy-count 0)
+       (initialized? #t))
+  (consent-datum-vector-set! heap root 0 wrapper)
+  (consent-datum-vector-set! heap root 1 wrapper)
+  (let* ((exported
+          (consent-datum-export
+           root
+           (lambda (item) item)
+           (lambda (target source)
+             (set! copy-count (+ copy-count 1))
+             (set!
+              initialized?
+              (and
+               initialized?
+               (cond
+                ((consent-datum-same? source root)
+                 (and (vector? (vector-ref target 0))
+                      (eq? (vector-ref target 0)
+                           (vector-ref target 1))))
+                ((eq? source wrapper)
+                 (and (pair? (vector-ref target 0))
+                      (eq? (vector-ref target 0)
+                           (vector-ref target 1))))
+                ((consent-datum-same? source child)
+                 (vector? (cdr target)))
+                (else #f))))
+             target)))
+         (exported-wrapper (vector-ref exported 0))
+         (exported-child (vector-ref exported-wrapper 0)))
+    (check
+     'datum-export-traverses-mixed-host-owned-cycle
+     (list
+      copy-count
+      initialized?
+      (not (eq? wrapper exported-wrapper))
+      (eq? exported-wrapper (vector-ref exported 1))
+      (eq? exported-child (vector-ref exported-wrapper 1))
+      (eq? exported (cdr exported-child))
+      (not (consent-datum-pair? exported-child)))
+     '(3 #t #t #t #t #t #t)))))
+
+(testing-registry-case
+ 'host-datum-conversion-linear-topology
+ '(portable core datum performance graph)
+(let* ((size 16384)
+       (deep
+        (let build ((remaining size) (result '()))
+          (if (= remaining 0)
+              result
+              (build (- remaining 1) (cons remaining result)))))
+       (shared (cons 7 '()))
+       (root (vector shared shared))
+       (cycle (cons 9 '()))
+       (unchanged-child (cons 'stable '()))
+       (unchanged (vector unchanged-child unchanged-child))
+       (callable (lambda () 'value))
+       (wrapped-child (cons callable '()))
+       (wrapped-root (vector wrapped-child wrapped-child))
+       (wrapper-count 0))
+  (set-cdr! cycle cycle)
+  (consent-datum-source-set! deep 'deep-source)
+  (let* ((converted-deep (consent-host-datum->consent-datum deep))
+         (converted-root (consent-host-datum->consent-datum root))
+         (converted-cycle (consent-host-datum->consent-datum cycle))
+         (converted-unchanged
+          (consent-host-datum->consent-datum unchanged))
+         (converted-wrapped
+          (consent-host-datum->consent-datum
+           wrapped-root
+           (lambda (procedure)
+             (set! wrapper-count (+ wrapper-count 1))
+             'wrapped)))
+         (converted-wrapped-child (vector-ref converted-wrapped 0))
+         (deep-valid?
+          (let loop ((cursor converted-deep) (index 1))
+            (if (> index size)
+                (null? cursor)
+                (and
+                 (pair? cursor)
+                 (consent-number? (car cursor))
+                 (= (consent-number-value (car cursor)) index)
+                 (loop (cdr cursor) (+ index 1)))))))
+    (check
+     'host-datum-conversion-linear-topology
+     (list
+      deep-valid?
+      (consent-datum-source converted-deep)
+      (eq? (vector-ref converted-root 0)
+           (vector-ref converted-root 1))
+      (eq? converted-cycle (cdr converted-cycle))
+      (eq? converted-unchanged unchanged)
+      (eq? (vector-ref converted-wrapped 0)
+           (vector-ref converted-wrapped 1))
+      wrapper-count
+      (consent-host-symbol-eq?
+       (car converted-wrapped-child) 'wrapped))
+     '(#t deep-source #t #t #t #t 1 #t)))))
+
+(testing-registry-case
+ 'proper-list-elements-mixed-linear-cycle-safe
+ '(portable core datum performance graph)
+(let* ((context (new-eval-context '()))
+       (heap (context-datum-heap context))
+       (size 16384)
+       (mixed
+        (let build ((remaining size) (result '()))
+          (if (= remaining 0)
+              result
+              (build
+               (- remaining 1)
+               (if (= (modulo remaining 2) 0)
+                   (consent-datum-cons heap remaining result)
+                   (cons remaining result))))))
+       (host-cycle (cons 'host #f))
+       (owned-cycle (consent-datum-cons heap 'owned #f))
+       (mixed-host (cons 'host #f))
+       (mixed-owned (consent-datum-cons heap 'owned mixed-host)))
+  (set-cdr! host-cycle host-cycle)
+  (consent-datum-set-cdr! heap owned-cycle owned-cycle)
+  (set-cdr! mixed-host mixed-owned)
+  (let ((elements (proper-list-elements mixed "mixed list")))
+    (check
+     'proper-list-elements-mixed-linear-cycle-safe
+     (list
+      (length elements)
+      (car elements)
+      (guard (condition (else #t))
+        (proper-list-elements host-cycle "host cycle")
+        #f)
+      (guard (condition (else #t))
+        (proper-list-elements owned-cycle "owned cycle")
+        #f)
+      (guard (condition (else #t))
+        (proper-list-elements mixed-host "mixed cycle")
+        #f))
+     (list size 1 #t #t #t)))))
+
+;; Return the smallest elapsed-jiffy reading across ATTEMPTS runs of THUNK.
+(define (consent-test-minimum-probe-jiffies thunk attempts)
+  (let loop ((remaining attempts) (best #f))
+    (if (= remaining 0)
+        best
+        (let ((elapsed (thunk)))
+          (loop (- remaining 1)
+                (if (or (not best) (< elapsed best)) elapsed best))))))
+
+;; Measure repeated lookup of the oldest key after ENTRY-COUNT provenance
+;; attachments. Owned keys read their object-local slot without retaining a
+;; context entry; host keys exercise the configured identity-hash adapter.
+(define (consent-test-context-source-index-probe
+         entry-count lookup-count host-keys?)
+  (let* ((canonical
+          (consent-read
+           "\"context-provenance\""
+           '((source-metadata . #t))))
+         (context
+          (new-eval-context
+           (list (cons 'max-source-metadata (+ entry-count 1)))))
+         (heap (context-datum-heap context))
+         (make-key
+          (if host-keys?
+              (lambda (index) (vector index))
+              (lambda (index) (consent-datum-cons heap index '()))))
+         (oldest (make-key 0)))
+    (context-source-copy-set! context oldest canonical)
+    (let fill ((index 1))
+      (if (< index entry-count)
+          (begin
+            (context-source-copy-set! context (make-key index) canonical)
+            (fill (+ index 1)))))
+    (if (not (= (context-source-copy-count context)
+                (if host-keys? entry-count 0)))
+        (error "context source-copy probe lost its bounded count"))
+    (let ((started (current-jiffy)))
+      (let lookup ((remaining lookup-count))
+        (if (> remaining 0)
+            (begin
+              (if (not (context-source-copy-source-ref context oldest))
+                  (error "context source-copy probe lost oldest key"))
+              (lookup (- remaining 1)))))
+      (- (current-jiffy) started))))
+
+(testing-registry-case
+ 'context-source-copy-index-scaling '(portable core datum performance)
+(let* ((owned-small
+        (consent-test-minimum-probe-jiffies
+         (lambda ()
+           (consent-test-context-source-index-probe 1024 32768 #f))
+         2))
+       (owned-large
+        (consent-test-minimum-probe-jiffies
+         (lambda ()
+           (consent-test-context-source-index-probe 8192 32768 #f))
+         2))
+       (host-small
+        (and
+         (consent-identity-map-fast-backend?)
+         (consent-test-minimum-probe-jiffies
+          (lambda ()
+            (consent-test-context-source-index-probe 1024 32768 #t))
+          2)))
+       (host-large
+        (and
+         (consent-identity-map-fast-backend?)
+         (consent-test-minimum-probe-jiffies
+          (lambda ()
+            (consent-test-context-source-index-probe 8192 32768 #t))
+          2)))
+       (jitter (quotient (jiffies-per-second) 20)))
+  (write
+   (list 'context-source-copy-index-probe
+         (list 'owned-entries-1024 owned-small)
+         (list 'owned-entries-8192 owned-large)
+         (list 'host-entries-1024 host-small)
+         (list 'host-entries-8192 host-large)
+         (list 'jiffies-per-second (jiffies-per-second))))
+  (newline)
+  (check 'owned-context-source-lookup-entry-count-independent
+         (<= owned-large (+ (* 4 (max 1 owned-small)) jitter))
+         #t)
+  (check 'host-context-source-lookup-entry-count-independent
+         (or (not host-small)
+             (<= host-large (+ (* 4 (max 1 host-small)) jitter)))
+         #t)))
+
+(testing-registry-case
+ 'context-source-copy-direct-owner-does-not-retain-context-entry
+ '(portable core datum)
+(let* ((context
+        (new-eval-context '((max-source-metadata . 1))))
+       (target (consent-datum-cons (context-datum-heap context) #f #f))
+       (older
+        (consent-read
+         "\"older\""
+         '((source-metadata . #t) (source-id . older))))
+       (newer
+        (consent-read
+         "\"newer\""
+         '((source-metadata . #t) (source-id . newer)))))
+  ;; Direct owners carry one current note in the object itself. They must not
+  ;; consume the context side-table budget or leave allocation-history debt.
+  (context-source-copy-set! context target (vector 'unannotated))
+  (let replace ((remaining 32))
+    (if (> remaining 0)
+        (begin
+          (context-source-copy-set! context target older)
+          (context-source-copy-set! context target newer)
+          (replace (- remaining 1)))))
+  (let ((source (context-source-copy-source-ref context target)))
+    (check 'context-source-copy-direct-owner-keeps-current-note
+           (list
+            (context-source-copy-count context)
+            (and source (cadr (assq 'source-id (cdr source)))))
+           '(0 newer)))
+  (let ((later (consent-datum-cons
+                (context-datum-heap context) 'later 'target)))
+    (context-source-copy-set! context later older)
+    (check 'later-direct-owner-has-no-history-debt
+           (list
+            (context-source-copy-count context)
+            (and (context-source-copy-source-ref context later) #t))
+           '(0 #t)))))
+
+(testing-registry-case
+ 'context-source-copy-defers-source-record-materialization
+ '(portable core datum performance reflection)
+(let* ((context
+        (new-eval-context '((max-source-metadata . 2))))
+       (heap (context-datum-heap context))
+       (canonical
+        (consent-read
+         "\"compact\""
+         '((source-metadata . #t) (source-id . compact-source))))
+       (raw (consent-datum-source-metadata canonical))
+       (host-copy (vector 'host-copy))
+       (owned-copy (consent-datum-cons heap #f #f)))
+  ;; Source realization retains the one compact immutable note through its
+  ;; host-side context map. Moving it to a direct owner must preserve that
+  ;; identity; only the observable ref below materializes a public record.
+  (context-source-copy-set-fresh! context host-copy canonical)
+  (context-copy-datum-source! context owned-copy host-copy #t)
+  (let ((public (context-source-copy-source-ref context host-copy)))
+    (check
+     'context-source-copy-keeps-compact-note-until-observed
+     (list
+      (eq? raw (consent-datum-source-metadata owned-copy))
+      (and (pair? public) (eq? (car public) 'source))
+      (and public (cadr (assq 'source-id (cdr public))))
+      (context-source-copy-count context))
+     '(#t #t compact-source 1)))))
+
+(testing-registry-case
+ 'context-source-copy-retains-immutable-metadata-snapshot
+ '(portable core datum)
+(let* ((context
+        (new-eval-context '((max-source-metadata . 2))))
+       (target (consent-datum-cons (context-datum-heap context) #f #f))
+       (canonical
+        (consent-read
+         "\"canonical\""
+         '((source-metadata . #t) (source-id . original)))))
+  (context-source-copy-set! context target canonical)
+  (consent-datum-source-set!
+   canonical
+   '((source-id changed-after-copy)))
+  (let ((snapshot (context-source-copy-source-ref context target)))
+    (check
+     'context-source-copy-retains-immutable-metadata-snapshot
+     (list
+      (context-source-copy-count context)
+      (and snapshot (cadr (assq 'source-id (cdr snapshot)))))
+     '(0 original)))))
 
 (testing-registry-case
  'simple-string-docstring-reflection '(portable core)
@@ -2055,6 +2483,12 @@ ged "
               (check 'shared-unicode-default-domain-instance-identity
                      (and first cached (eq? first cached))
                      #t)
+              (check 'shared-unicode-cached-environment-reusable
+                     (consent-value->external
+                      (consent-eval-source
+                       "(import (scheme base) (scheme char))
+                        (char-alphabetic? #\\A)"))
+                     "#t")
               (check 'shared-unicode-cold-step-cost-positive
                      (> step-cost 0)
                      #t)
@@ -3333,6 +3767,73 @@ ash))
                 "(4 beta #t)"))
 
 (testing-registry-case
+ 'deep-equality-is-stack-safe-and-cycle-aware
+ '(portable core datum performance graph)
+(check-external/options
+ 'deep-equality-is-stack-safe-and-cycle-aware
+ "(let* ((size 24000)
+         (left (make-list size 'same))
+         (right (make-list size 'same))
+         (left-last (list-tail left (- size 1)))
+         (right-last (list-tail right (- size 1)))
+         (same-acyclic? (equal? left right)))
+    (set-car! right-last 'different)
+    (let ((different-at-end? (equal? left right)))
+      (set-car! right-last 'same)
+      (set-cdr! left-last left)
+      (set-cdr! right-last right)
+      (let* ((left-shared (list 'shared))
+             (right-shared (list 'shared))
+             (left-root (vector left-shared left-shared #f))
+             (right-root (vector right-shared right-shared #f)))
+        (vector-set! left-root 2 left-root)
+        (vector-set! right-root 2 right-root)
+        (list same-acyclic?
+              different-at-end?
+              (equal? left right)
+              (equal? left-root right-root)))))"
+ '((max-steps . 2000000)
+   (max-value-nodes . 500000)
+   (max-host-callbacks . 2000000))
+ "(#t #f #t #t)"))
+
+(testing-registry-case
+ 'deep-list-copy-is-stack-safe-and-topology-preserving
+ '(portable core datum performance graph)
+(check-external/options
+ 'deep-list-copy-is-stack-safe-and-topology-preserving
+ "(let* ((size 24000)
+         (source (make-list size 'value))
+         (copy (list-copy source))
+         (shared (list 'shared))
+         (shared-source (list shared shared))
+         (shared-copy (list-copy shared-source))
+         (cycle (list 'a 'b))
+         (lasso-cycle (list 'b 'c))
+         (lasso (cons 'a lasso-cycle))
+         (improper-tail (vector 'tail))
+         (improper (cons 'head improper-tail)))
+    (set-cdr! (cdr cycle) cycle)
+    (set-cdr! (cdr lasso-cycle) lasso-cycle)
+    (let ((cycle-copy (list-copy cycle))
+          (lasso-copy (list-copy lasso))
+          (improper-copy (list-copy improper)))
+      (list (= (length copy) size)
+            (not (eq? source copy))
+            (eq? shared (car shared-copy))
+            (eq? (car shared-copy) (cadr shared-copy))
+            (not (eq? cycle cycle-copy))
+            (eq? cycle-copy (cddr cycle-copy))
+            (not (eq? lasso lasso-copy))
+            (eq? (cdr lasso-copy)
+                 (cdr (cdr (cdr lasso-copy))))
+            (eq? improper-tail (cdr improper-copy)))))"
+ '((max-steps . 5000000)
+   (max-value-nodes . 500000)
+   (max-host-callbacks . 2000000))
+ "(#t #t #t #t #t #t #t #t #t)"))
+
+(testing-registry-case
  'records-construct-predicate-access-and-mutate '(portable core)
 (check-external 'records-construct-predicate-access-and-mutate
                 "(define-record-type <pare>
@@ -3356,6 +3857,50 @@ ash))
                    (list (eq? left (cddr left))
                          (equal? left right)))"
                 "(#t #t)"))
+
+;; Return a host pair cycle with LENGTH copies of LABEL.
+(define (make-label-cycle length label)
+  (let ((root (cons label '())))
+    (let loop ((index 1) (tail root))
+      (if (= index length)
+          (begin
+            (set-cdr! tail root)
+            root)
+          (let ((next (cons label '())))
+            (set-cdr! tail next)
+            (loop (+ index 1) next))))))
+
+;; Return CYCLE's node at zero-based INDEX.
+(define (cycle-node-ref cycle index)
+  (let loop ((node cycle) (remaining index))
+    (if (= remaining 0)
+        node
+        (loop (cdr node) (- remaining 1)))))
+
+(testing-registry-case
+ 'coprime-cycle-equality-respects-step-budget
+ '(portable core datum performance graph budget)
+(let* ((left (make-label-cycle 97 'same))
+       (right (make-label-cycle 101 'same))
+       (right-copy (make-label-cycle 101 'same))
+       (mismatch (make-label-cycle 101 'same)))
+  (set-car! (cycle-node-ref mismatch 50) 'different)
+  (check
+   'coprime-cycle-equality-respects-step-budget
+   (consent-eval
+    (list
+     'list
+     (list 'equal? (list 'quote left) (list 'quote right))
+     (list 'equal? (list 'quote left) (list 'quote mismatch))
+     (list
+      'equal?
+      (list 'quote (vector left left))
+      (list 'quote (vector right right-copy))))
+    #f
+    '((max-steps . 1500)
+      (max-value-nodes . 5000)
+      (max-host-callbacks . 10000)))
+   '(#t #f #t))))
 
 (testing-registry-case
  'base-scalar-helpers '(portable core)
@@ -3450,8 +3995,62 @@ ash))
                  (vector-set! v 1 'changed)
                  (define b (bytevector 1 2 3))
                  (bytevector-u8-set! b 1 9)
-                 (list v b)"
+                (list v b)"
                 "(#(a changed c) #u8(1 9 3))"))
+
+(testing-registry-case
+ 'base-vector-copy-overlap-snapshots-source
+ '(portable core datum mutation performance)
+(check-external
+ 'base-vector-copy-overlap-snapshots-source
+ "(let ((right (vector 0 1 2 3 4))
+        (left (vector 0 1 2 3 4)))
+    (vector-copy! right 1 right 0 4)
+    (vector-copy! left 0 left 1 5)
+    (list right left))"
+ "(#(0 0 1 2 3) #(1 2 3 4 4))"))
+
+(testing-registry-case
+ 'large-vector-copy-overlap-is-linear
+ '(portable core datum mutation performance)
+(check-external/options
+ 'large-vector-copy-overlap-is-linear
+ "(let* ((size 24000)
+         (last (- size 1))
+         (right (make-vector size 'middle))
+         (left (make-vector size 'middle)))
+    (vector-set! right 0 'first)
+    (vector-set! right last 'last)
+    (vector-set! left 0 'first)
+    (vector-set! left last 'last)
+    (vector-copy! right 1 right 0 last)
+    (vector-copy! left 0 left 1 size)
+    (list (and (eq? (vector-ref right 0) 'first)
+               (eq? (vector-ref right 1) 'first)
+               (eq? (vector-ref right last) 'middle))
+          (and (eq? (vector-ref left 0) 'middle)
+               (eq? (vector-ref left (- last 1)) 'last)
+               (eq? (vector-ref left last) 'last))))"
+ '((max-steps . 200000)
+   (max-value-nodes . 200000)
+   (max-host-callbacks . 1000000))
+ "(#t #t)"))
+
+(testing-registry-case
+ 'base-string-copy-overlap-snapshots-source
+ '(portable core datum mutation performance)
+(check-external
+ 'base-string-copy-overlap-snapshots-source
+ "(let ((right (string-copy \"abcde\"))
+        (left (string-copy \"abcde\")))
+    (string-copy! right 1 right 0 4)
+    (string-copy! left 0 left 1 5)
+    (list right
+          left
+          (string=? right \"aabcd\")
+          (string<? \"abc\" \"abd\")
+          (string>? \"abd\" \"abc\")))"
+ "(\"aabcd\" \"bcdee\" #t #t #t)"))
 
 (testing-registry-case
  'base-derived-string-vector-iteration '(portable core)
@@ -5756,6 +6355,43 @@ x-rules) (library #f)) #f #f #f #t)"))
         #t))))
 
 (testing-registry-case
+ 'grant-revoke-returns-owned-revoked-grant
+ '(portable core capability datum boundary)
+(let* ((options
+        '((capability-grants
+           (capability-grant
+            (id portable-return-grant)
+            (domain file)
+            (operations read)
+            (scope (project-root ".")
+                   (paths ("fixtures/r7rs"))
+                   (remote denied)
+                   (symlinks resolve-within-root))
+            (expires never)))))
+       (revoked
+        (raw-consent-eval-source
+         "(import (scheme base) (consent capability))
+          (grant-revoke! 'portable-return-grant)"
+         #f
+         options)))
+  (check 'grant-revoke-return-value
+         (consent-value->external revoked)
+         (expected-datum-external
+          "(capability-grant
+             (id portable-return-grant)
+             (domain file)
+             (operations read)
+             (scope (project-root \".\")
+                    (paths (\"fixtures/r7rs\"))
+                    (remote denied)
+                    (symlinks resolve-within-root))
+             (expires never)
+             (status revoked))"))
+  (check 'grant-revoke-return-is-owned
+         (consent-datum-pair? revoked)
+         #t)))
+
+(testing-registry-case
  'standard-file-policy-allowed-audits '(portable core)
 (let* ((result
        (consent-eval-source-result
@@ -7253,8 +7889,186 @@ ed 5) (host-calls 1)))"))
          "2")
   (check 'parent-primitive-remains-bound
          (consent-value->external
-          (consent-eval-source "(+ 1 2)" parent))
+         (consent-eval-source "(+ 1 2)" parent))
          "3")))
+
+(testing-registry-case
+ 'reused-environment-retains-owned-heap '(portable core datum mutation)
+(let ((environment (consent-make-base-environment)))
+  (raw-consent-eval-source
+   "(define binding 'before)
+    (define pair (list 1))
+    (define text (string-copy \"a\"))
+    (define vector-value (vector 2))
+    (define bytes (bytevector 3))"
+   environment)
+  (check 'reused-environment-retains-owned-heap
+         (consent-value->external
+          (raw-consent-eval-source
+           "(set! binding 'after)
+            (set-car! pair 9)
+            (string-set! text 0 #\\b)
+            (vector-set! vector-value 0 8)
+            (bytevector-u8-set! bytes 0 7)
+            (list binding
+                  (car pair)
+                  text
+                  (vector-ref vector-value 0)
+                  (bytevector-u8-ref bytes 0))"
+           environment))
+         "(after 9 \"b\" 8 7)")))
+
+(testing-registry-case
+ 'scheme-visible-compounds-are-owned '(portable core datum boundary)
+(let* ((value
+        (raw-consent-eval-source
+         "(import (scheme base) (scheme read) (scheme write))
+          (let ((out (open-output-string)))
+            (display \"port\" out)
+            (vector '(quoted)
+                    (cons 'constructed '())
+                    \"literal\"
+                    #(vector-literal)
+                    #u8(1 2)
+                    (read (open-input-string \"(read-value)\"))
+                    (get-output-string out)
+                    (read-string 0 (open-input-string \"ignored\"))))"))
+       (quoted (consent-datum-vector-ref value 0))
+       (constructed (consent-datum-vector-ref value 1))
+       (literal (consent-datum-vector-ref value 2))
+       (vector-literal (consent-datum-vector-ref value 3))
+       (bytevector-literal (consent-datum-vector-ref value 4))
+       (read-value (consent-datum-vector-ref value 5))
+       (port-output (consent-datum-vector-ref value 6))
+       (empty-read (consent-datum-vector-ref value 7)))
+  (check 'scheme-visible-compounds-are-owned
+         (and (consent-datum-vector? value)
+              (consent-datum-pair? quoted)
+              (consent-datum-pair? constructed)
+              (consent-datum-string? literal)
+              (consent-datum-vector? vector-literal)
+              (consent-datum-bytevector? bytevector-literal)
+              (consent-datum-pair? read-value)
+              (consent-datum-string? port-output)
+              (consent-datum-string? empty-read)
+              (or compiled-host-run?
+                  (and (not (pair? quoted))
+                       (not (pair? constructed))
+                       (not (string? literal))
+                       (not (vector? vector-literal))
+                       (not (bytevector? bytevector-literal))
+                       (not (pair? read-value))
+                       (not (string? port-output))
+                       (not (string? empty-read)))))
+         #t)))
+
+(testing-registry-case
+ 'fresh-constructor-charges-own-linear-shapes
+ '(portable core datum performance mutation)
+(let* ((context (new-eval-context '()))
+       (heap (context-datum-heap context))
+       (element (consent-datum-cons heap 'kept '()))
+       (mutation-events 0))
+  (consent-datum-source-set! element 'element-source)
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! mutation-events (+ mutation-events 1))
+     #t))
+  (let* ((list-value
+          (charge-list-allocation!
+           (list element 'middle element) context))
+         (second-pair (consent-datum-cdr list-value))
+         (third-pair (consent-datum-cdr second-pair))
+         (string-value (charge-string-allocation! "abcd" context))
+         (bytes-value
+          (charge-bytevector-allocation! (bytevector 1 2 3) context))
+         (vector-value
+          (charge-vector-allocation!
+           (vector element 'different 7 element) context)))
+    (check
+     'fresh-constructor-charges-own-linear-shapes
+     (list
+      (context-value-nodes context)
+      mutation-events
+      (and
+       (consent-datum-pair? list-value)
+       (consent-datum-pair? second-pair)
+       (consent-datum-pair? third-pair)
+       (null? (consent-datum-cdr third-pair)))
+      (list
+       (consent-datum-object-revision list-value)
+       (consent-datum-object-revision second-pair)
+       (consent-datum-object-revision third-pair)
+       (consent-datum-object-revision string-value)
+       (consent-datum-object-revision bytes-value)
+       (consent-datum-object-revision vector-value))
+      (and
+       (consent-datum-same? element (consent-datum-car list-value))
+       (consent-datum-same? element (consent-datum-car third-pair))
+       (consent-datum-same?
+        element (consent-datum-vector-ref vector-value 3)))
+      (consent-datum-source element)
+      (list
+       (consent-datum-string? string-value)
+       (consent-datum-string-length string-value)
+       (consent-datum-bytevector? bytes-value)
+       (consent-datum-bytevector-length bytes-value)
+       (consent-datum-vector? vector-value)
+       (consent-datum-vector-length vector-value)))
+     '(17 0 #t (0 0 0 0 0 0) #t element-source
+       (#t 4 #t 3 #t 4))))))
+
+(testing-registry-case
+ 'make-compound-primitives-initialize-owned-values
+ '(portable core datum performance)
+(let* ((value
+        (raw-consent-eval-source
+         "(vector (make-list 4 'x)
+                  (make-string 4 #\\a)
+                  (make-vector 4 'x)
+                  (make-bytevector 4 7))"))
+       (list-value (consent-datum-vector-ref value 0))
+       (string-value (consent-datum-vector-ref value 1))
+       (vector-value (consent-datum-vector-ref value 2))
+       (bytes-value (consent-datum-vector-ref value 3)))
+  (check
+   'make-compound-primitives-initialize-owned-values
+   (list
+    (consent-datum-pair? list-value)
+    (consent-datum-string? string-value)
+    (consent-datum-vector? vector-value)
+    (consent-datum-bytevector? bytes-value)
+    (consent-datum-object-revision list-value)
+    (consent-datum-object-revision string-value)
+    (consent-datum-object-revision vector-value)
+    (consent-datum-object-revision bytes-value))
+   '(#t #t #t #t 0 0 0 0))))
+
+(testing-registry-case
+ 'string-range-primitives-copy-only-requested-characters
+ '(portable core datum performance mutation)
+(let* ((value
+        (raw-consent-eval-source
+         "(let ((source (make-string 20000 #\\λ)))
+            (string-set! source 9999 #\\ω)
+            (let ((slice (substring source 9998 10000))
+                  (copy (string-copy source 9998 10000)))
+              (string-set! slice 0 #\\ξ)
+              (vector slice copy
+                      (string-ref source 9998)
+                      (string-ref source 9999))))"))
+       (slice (consent-datum-vector-ref value 0))
+       (copy (consent-datum-vector-ref value 1)))
+  (check
+   'string-range-primitives-copy-only-requested-characters
+   (list (consent-datum-string->host slice)
+         (consent-datum-string->host copy)
+         (consent-datum-export (consent-datum-vector-ref value 2))
+         (consent-datum-export (consent-datum-vector-ref value 3))
+         (consent-datum-object-revision slice)
+         (consent-datum-object-revision copy))
+   '("ξω" "λω" #\λ #\ω 1 0))))
 
 (testing-registry-case
  'set-mutates-local '(portable core)
@@ -7813,31 +8627,35 @@ te-pulls'."
 ;; A compiled realization of a portable source library must win over
 ;; re-interpreting that source while retaining its manifest-defined primitive
 ;; overlay. Compilation changes realization, not library semantics.
+(define (native-approval-test-bindings status-procedure)
+  "Return the native approval bindings using STATUS-PROCEDURE."
+  (list
+   (cons 'consent-approval-statuses '(1729))
+   (cons 'consent-make-approval-store
+         native-approval:consent-make-approval-store)
+   (cons 'consent-approval-store?
+         native-approval:consent-approval-store?)
+   (cons 'approval-store-request!
+         native-approval:approval-store-request!)
+   (cons 'approval-store-status status-procedure)
+   (cons 'approval-store-ref native-approval:approval-store-ref)
+   (cons 'approval-store-records
+         native-approval:approval-store-records)
+   (cons 'approval-store-resolve!
+         native-approval:approval-store-resolve!)
+   (cons 'approval-store-cancel!
+         native-approval:approval-store-cancel!)
+   (cons 'approval-store-pending
+         native-approval:approval-store-pending)))
+
 (testing-registry-case
  'registered-native-source-library-keeps-manifest-semantics
  '(portable core compiler)
 (begin
   (consent-register-native-library!
    '(agent approval)
-   (list
-    (cons 'consent-approval-statuses '(1729))
-    (cons 'consent-make-approval-store
-          native-approval:consent-make-approval-store)
-    (cons 'consent-approval-store?
-          native-approval:consent-approval-store?)
-    (cons 'approval-store-request!
-          native-approval:approval-store-request!)
-    (cons 'approval-store-status
-          native-approval:approval-store-status)
-    (cons 'approval-store-ref native-approval:approval-store-ref)
-    (cons 'approval-store-records
-          native-approval:approval-store-records)
-    (cons 'approval-store-resolve!
-          native-approval:approval-store-resolve!)
-    (cons 'approval-store-cancel!
-          native-approval:approval-store-cancel!)
-    (cons 'approval-store-pending
-          native-approval:approval-store-pending)))
+   (native-approval-test-bindings
+    native-approval:approval-store-status))
   (test-assert
    'registered-native-source-library-used
    (raw-consent-eval-source
@@ -7852,6 +8670,256 @@ te-pulls'."
      (procedure? approval-request!)"
     #f
     '((internal-libraries-allowed . #t))))))
+
+(testing-registry-case
+ 'unallowlisted-native-compound-argument-fails-closed
+ '(portable core datum boundary condition policy)
+(let ((called? #f))
+  (consent-register-native-library!
+   '(agent approval)
+   (native-approval-test-bindings
+    (lambda (value id)
+      (set! called? #t)
+      value)))
+  (let ((rejected?
+         (raw-consent-eval-source
+          "(import (only (agent approval) approval-store-status))
+           (guard
+            (condition
+             (else
+              (and
+               (error-object? condition)
+               (string=?
+                (error-object-message condition)
+                (string-append
+                 \"native-binding-borrow-unavailable: \"
+                 \"binding is not allowlisted\")))))
+            (approval-store-status (list 'borrowed) 'unused))"
+          #f
+          '((internal-libraries-allowed . #t)))))
+    (test-assert
+     'unallowlisted-native-compound-argument-rejected
+     rejected?)
+    (test-assert
+     'unallowlisted-native-compound-binding-not-invoked
+     (not called?)))
+  (consent-register-native-library!
+   '(agent approval)
+   (native-approval-test-bindings
+    native-approval:approval-store-status))))
+
+;; Force the reader exports through the same compiled-library wrapper used by
+;; a standalone runtime. Raw metadata access must preserve the original owned
+;; datum argument and the identity-bearing metadata it returns; materialization
+;; must accept that preserved value before publishing ordinary Consent data.
+(define (native-reader-source-metadata-test-bindings)
+  "Return a complete reader export table with the three exercised bindings."
+  (let* ((entry (consent-library-catalog-entry '(consent reader)))
+         (exports
+          (cadr (consent-host-symbol-assq 'exports entry))))
+    (map
+     (lambda (name)
+       (cons
+        name
+        (cond
+         ((consent-host-symbol-eq?
+           name 'consent-datum-source-metadata)
+          consent-datum-source-metadata)
+         ((consent-host-symbol-eq?
+           name 'consent-source-metadata->record)
+          consent-source-metadata->record)
+         ((consent-host-symbol-eq?
+           name 'consent-datum-source-set!)
+          consent-datum-source-set!)
+         (else (lambda arguments #f)))))
+     exports)))
+
+(testing-registry-case
+ 'native-reader-raw-source-metadata-policy
+ '(portable core datum boundary compiler)
+(let ((key '(consent reader))
+      (previous (consent-native-library-ref '(consent reader))))
+  (dynamic-wind
+    (lambda ()
+      (consent-register-native-library!
+       key
+       (native-reader-source-metadata-test-bindings)))
+    (lambda ()
+      (test-assert
+       'native-reader-raw-source-metadata-preserves-identity
+       (raw-consent-eval-source
+        "(import (scheme base)
+                 (only (consent reader)
+                       consent-datum-source-metadata
+                       consent-source-metadata->record
+                       consent-datum-source-set!))
+         (let* ((datum (list 'datum))
+                (metadata (list 'custom-source))
+                (ignored
+                 (consent-datum-source-set! datum metadata))
+                (raw (consent-datum-source-metadata datum)))
+           (and (eq? raw metadata)
+                (equal? (consent-source-metadata->record raw)
+                        metadata)))"
+        #f
+        '((internal-libraries-allowed . #t)))))
+    (lambda ()
+      (consent-register-native-library! key previous)))))
+
+(testing-registry-case
+ 'interpreted-guard-owns-fresh-native-condition-graph
+ '(portable core datum boundary condition graph)
+(begin
+  (consent-register-native-library!
+   '(agent approval)
+   (native-approval-test-bindings
+    (lambda arguments
+      (let* ((pair (cons "fresh" '()))
+             (vector (vector pair pair)))
+        (set-cdr! pair pair)
+        (raise vector)))))
+  (let* ((condition
+          (raw-consent-eval-source
+           "(import (only (agent approval) approval-store-status))
+            (guard (condition (else condition))
+              (approval-store-status #f #f))"
+           #f
+           '((internal-libraries-allowed . #t))))
+         (left (consent-datum-vector-ref condition 0))
+         (right (consent-datum-vector-ref condition 1)))
+    (test-assert 'interpreted-native-condition-is-owned
+                 (and (consent-datum-vector? condition)
+                      (consent-datum-pair? left)
+                      (consent-datum-string?
+                       (consent-datum-car left))))
+    (test-assert 'interpreted-native-condition-keeps-sharing
+                 (consent-datum-same? left right))
+    (test-assert 'interpreted-native-condition-keeps-cycle
+                 (consent-datum-same?
+                  left
+                  (consent-datum-cdr left))))
+  (consent-register-native-library!
+   '(agent approval)
+   (native-approval-test-bindings
+    native-approval:approval-store-status))))
+
+(testing-registry-case
+ 'unallowlisted-native-callable-argument-fails-closed
+ '(portable core datum boundary condition policy)
+(let ((called? #f))
+  (consent-register-native-library!
+   '(agent approval)
+   (native-approval-test-bindings
+    (lambda (value id)
+      (set! called? #t)
+      value)))
+  (let ((rejected?
+         (raw-consent-eval-source
+          "(import (only (agent approval) approval-store-status))
+           (guard
+            (condition
+             (else
+              (and
+               (error-object? condition)
+               (string=?
+                (error-object-message condition)
+                (string-append
+                 \"native-binding-borrow-unavailable: \"
+                 \"binding is not allowlisted\")))))
+            (approval-store-status (lambda () #t) 'unused))"
+          #f
+          '((internal-libraries-allowed . #t)))))
+    (test-assert
+     'unallowlisted-native-callable-argument-rejected
+     rejected?)
+    (test-assert
+     'unallowlisted-native-callable-binding-not-invoked
+     (not called?)))
+  (consent-register-native-library!
+   '(agent approval)
+   (native-approval-test-bindings
+    native-approval:approval-store-status))))
+
+;; Graph projection and result rendering index identity by the current graph,
+;; preserving sharing without rescanning an ever-growing ancestor list.
+(testing-registry-case
+ 'result-and-syntax-graph-indexing
+ '(portable core datum graph performance)
+(let* ((heap (consent-make-datum-heap))
+       (count 12000)
+       (tail
+        (let loop ((index count) (result '()))
+          (if (= index 0)
+              result
+              (loop (- index 1)
+                    (consent-datum-cons heap index result)))))
+       (root (consent-datum-make-vector heap 2 tail)))
+  (consent-datum-vector-set! heap root 1 tail)
+  (let ((rendered (value->result-datum root)))
+    (test-equal 'result-deep-owned-graph-length
+                count
+                (length (vector-ref rendered 0)))
+    (test-assert 'result-shared-owned-graph-identity
+                 (eq? (vector-ref rendered 0)
+                      (vector-ref rendered 1))))
+  (let ((cycle (consent-datum-cons heap 'cycle-name '())))
+    (consent-datum-set-cdr! heap cycle cycle)
+    (test-equal 'result-owned-cycle-marker
+                '(cycle)
+                (cdr (value->result-datum cycle))))
+  (let* ((identifier (make-identifier 'stripped-name #f))
+         (shared (cons identifier '()))
+         (input (vector shared shared))
+         (stripped (strip-identifiers input)))
+    (test-assert 'identifier-strip-keeps-shared-host-identity
+                 (eq? (vector-ref stripped 0)
+                      (vector-ref stripped 1)))
+    (test-equal 'identifier-strip-converts-name
+                'stripped-name
+                (car (vector-ref stripped 0))))
+  (let* ((cycle (cons (make-identifier 'cycle-name #f) '()))
+         (stripped #f))
+    (set-cdr! cycle cycle)
+    (set! stripped (strip-identifiers cycle))
+    (test-assert 'identifier-strip-keeps-host-cycle
+                 (eq? stripped (cdr stripped))))
+  (let* ((shared (list 'quoted-name))
+         (input (vector shared shared))
+         (owned (consent-eval (list 'quote input))))
+    (test-assert 'syntax-projection-keeps-shared-identity
+                 (consent-datum-same?
+                  (consent-datum-vector-ref owned 0)
+                  (consent-datum-vector-ref owned 1))))
+  (let* ((owned (consent-datum-cons heap 'mixed-cycle '()))
+         (host (cons owned '())))
+    (consent-datum-set-cdr! heap owned host)
+    (let* ((projected (consent-eval (list 'quote owned)))
+           (host-edge (consent-datum-cdr projected)))
+      (test-assert 'syntax-projection-keeps-mixed-cycle
+                   (consent-datum-same?
+                    projected
+                    (consent-datum-car host-edge)))))))
+
+;; Long list validation remains linear and cyclic inputs terminate for both
+;; list? and list-consuming operations.
+(testing-registry-case
+ 'long-owned-list-cycle-validation
+ '(portable core datum list performance)
+(check 'long-owned-list-cycle-validation
+       (consent-eval-source
+        "(let* ((items (make-list 1024 0))
+                (tail (list-tail items 1023)))
+           (and (list? items)
+                (begin
+                  (set-cdr! tail items)
+                  (and (not (list? items))
+                       (guard (condition (else #t))
+                         (list->vector items)
+                         #f)))))"
+        #f
+        '((max-steps . 500000)
+          (max-host-callbacks . 100000)))
+       #t))
 
 ;; Keep this import-error regression at the end: Racket's R7RS host preserves
 ;; enough handler state after this rejected import to perturb later checks.

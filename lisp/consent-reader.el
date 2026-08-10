@@ -1534,31 +1534,42 @@ Signal if the sequence exceeds MAXIMUM-LENGTH."
 
 (defun consent--resolve-datum-labels (datum reader)
   "Replace label placeholders inside DATUM with their resolved values."
-  (let ((seen (make-hash-table :test #'eq)))
+  (let ((seen (make-hash-table :test #'eq))
+        pending)
     (cl-labels
-        ((resolve (value)
-           (cond
-            ((consent--datum-label-p value)
+        ((resolve-reference (value)
+           (while (consent--datum-label-p value)
              (unless (consent--datum-label-filled value)
                (consent--reader-error
                 reader
                 "undefined datum label %s"
                 (consent--datum-label-id value)))
-             (resolve (consent--datum-label-value value)))
-            ((consp value)
-             (unless (gethash value seen)
-               (puthash value t seen)
-               (setcar value (resolve (car value)))
-               (setcdr value (resolve (cdr value))))
-             value)
-            ((vectorp value)
-             (unless (gethash value seen)
-               (puthash value t seen)
-               (cl-loop for index from 0 below (length value)
-                        do (aset value index (resolve (aref value index)))))
-             value)
-            (t value))))
-      (resolve datum))))
+             (setq value (consent--datum-label-value value)))
+           value))
+      (setq datum (resolve-reference datum)
+            pending (list datum))
+      ;; Traverse explicitly so a long, shallow list does not consume one
+      ;; Emacs Lisp call frame per cons cell.
+      (while pending
+        (let ((value (pop pending)))
+          (cond
+           ((consp value)
+            (unless (gethash value seen)
+              (puthash value t seen)
+              (let ((head (resolve-reference (car value)))
+                    (tail (resolve-reference (cdr value))))
+                (setcar value head)
+                (setcdr value tail)
+                (push tail pending)
+                (push head pending))))
+           ((vectorp value)
+            (unless (gethash value seen)
+              (puthash value t seen)
+              (cl-loop for index from 0 below (length value)
+                       for item = (resolve-reference (aref value index))
+                       do (aset value index item)
+                       do (push item pending)))))))
+      datum)))
 
 (defun consent--read-datum (reader depth)
   "Read one datum from READER at DEPTH."

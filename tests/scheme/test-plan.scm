@@ -8,24 +8,35 @@
 (testing-plan
  (version 1)
  (programs
-  ((program
+  (;; Issue #120 owns the borrowed-host owner/adapter ABI needed to self-host
+   ;; this direct private reader API suite. Compiled Scheme-visible `read'
+   ;; remains covered by the agent reliability and native CLI daemon adapter
+   ;; programs through the context-owned `(scheme read)' primitive.
+   (program
     (path "tests/scheme/consent-reader-test.scm")
-    (tags (full direct compiled core registered)))
+    (tags (full direct core self-host-gap registered)))
    (program
     (path "tests/scheme/consent-character-test.scm")
     (tags (full direct compiled core runtime registered)))
+   ;; Issue #120 owns self-hosting these direct numeric owner and dispatcher
+   ;; suites. Compiled standard-library random/property programs and the
+   ;; context-owned `(scheme read)' path retain Scheme-visible numeric
+   ;; coverage without borrowing their private records or text adapters.
    (program
     (path "tests/scheme/consent-numeric-test.scm")
-    (tags (full direct compiled core runtime registered)))
+    (tags (full direct core runtime self-host-gap registered)))
    (program
     (path "tests/scheme/consent-numeric-generated-test.scm")
-    (tags (full direct compiled core runtime generated registered)))
+    (tags (full direct core runtime generated self-host-gap registered)))
    (program
     (path "tests/scheme/current-ports-test.scm")
     (tags (full direct compiled core registered)))
+   ;; Issue #120 also owns this direct private reader/evaluator API fixture
+   ;; runner. Its native one-shot calls may retain source, options, closures,
+   ;; or owner records; they stay fail-closed until the compiled ABI exists.
    (program
     (path "tests/scheme/consent-fixture-test.scm")
-    (tags (full direct compiled conformance registered)))
+    (tags (full direct conformance self-host-gap registered)))
    (program
    (path "tests/scheme/consent-native-cli-daemon-adapter-test.scm")
     (tags (full direct compiled integration registered)))
@@ -115,16 +126,25 @@
     (tags (full direct integration self-host-gap registered)))
    (program
     (path "tests/scheme/data-avl-tree-test.scm")
-    (tags (full direct data self-host-gap registered)))
+    (tags (full direct compiled data registered)))
    (program
     (path "tests/scheme/data-avl-tree-smoke-test.scm")
     (tags (full direct compiled data registered)))
    (program
     (path "tests/scheme/data-transient-map-test.scm")
     (tags (full direct compiled data registered)))
+   ;; Issue #120 owns self-hosting this direct borrowed-host symbol
+   ;; owner/adapter ABI suite. Reader and fixture programs cover Scheme-visible
+   ;; compiled symbols.
    (program
     (path "tests/scheme/consent-symbol-test.scm")
-    (tags (full direct compiled runtime registered)))
+    (tags (full direct runtime self-host-gap registered)))
+   ;; Issue #120 owns self-hosting this direct borrowed-host owner/adapter ABI
+   ;; suite. Evaluator, reader, and fixture programs cover Scheme-visible
+   ;; compiled datum behavior.
+   (program
+    (path "tests/scheme/consent-datum-test.scm")
+    (tags (full direct core runtime self-host-gap registered)))
    (program
     (path "tests/scheme/consent-compiler-plan-test.scm")
     (tags (full direct compiled compiler registered)))

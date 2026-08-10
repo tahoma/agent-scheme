@@ -54,6 +54,41 @@ generated-main project-import, and native-library-registration inventories are
 gone. Backend code remains responsible for lowering and linking a resolved
 plan, not for choosing the graph it compiles.
 
+Native registration is deliberately narrower than native compilation. The
+`consent-runtime` image compiles every root in its plan, but its
+`native-libraries` field contains 16 libraries. Thirteen directly linked
+Consent core/owner libraries keep one bootstrap ABI. Representation-owner
+bindings use explicit preservation policies; default conversion rejects before
+it would allocate an unclassified borrowed mirror or callback shim. The other
+three entries, `(agent task)`, `(agent transcript)`, and `(agent context)`, are
+stateless call-scoped transforms: registration validates their complete exact
+inventory of 46 procedures and 10 constants before any binding is exposed.
+
+General project roots whose exports can retain a compound value in a closure,
+record, parameter, or module state are omitted. An interpreted import then
+resolves the canonical embedded source realization, even though the borrowed
+backend still compiles and links that root for direct callers. This avoids a
+durable borrowed-host compound heap. Expanding the allowlist requires an exact
+non-retention audit and a corresponding binding inventory. Making compiled
+internal libraries consume Consent-owned compounds directly belongs to #120's
+native lowering and owned primitive realization.
+
+`(consent reader)` remains native because the compiled evaluator,
+interpreter, and `(scheme read)` primitive must share its numeric, character,
+symbol, recovery, and datum-owner records. Its generic interpreted bindings do
+not thereby gain permission to borrow owned source or option graphs. The
+direct `consent-reader-test.scm`, `consent-numeric-test.scm`,
+`consent-numeric-generated-test.scm`, `consent-fixture-test.scm`,
+`consent-symbol-test.scm`, and `consent-datum-test.scm` exercise those private
+reader, evaluator, numeric, symbol, datum-owner, or dispatcher calls and are
+explicit #120 self-host gaps; source-realizing an owner would instead create a
+second record-owner universe.
+Scheme-visible compiled reading stays covered through the context-owned
+`(scheme read)` path: focused Racket-compiled runs of the agent reliability and
+native CLI daemon adapter programs pass 20 and 238 assertions while reading
+their structured fixture files. Compiled random/property suites exercise public
+numeric behavior without crossing the private numeric dispatcher boundary.
+
 ## 2. The embedded source store is a capability-addressable VFS underlay
 
 The embedded-source mechanism (`consent-register-embedded-source!` /

@@ -1765,7 +1765,6 @@ EOF
   done <<EOF
 $compiler_source_list
 EOF
-
   gambit_module_source() {
     case "$1" in
       consent/embedded-source) printf '%s\n' \
@@ -1892,8 +1891,8 @@ EOF
     # of leaving an empty log behind.
     cgu_rc=0
     # shellcheck disable=SC2086
-    "$gsc" -:r7rs,"$cgu_search" -c $cgu_moduleflag -o "$cgu_cout" "$cgu_src" \
-      >>"$cgu_log" 2>&1 || cgu_rc=$?
+    "$gsc" -:r7rs,"$cgu_search" -c $cgu_moduleflag -o "$cgu_cout" \
+      "$cgu_src" >>"$cgu_log" 2>&1 || cgu_rc=$?
     if [ "$cgu_rc" -ne 0 ]; then
       printf 'consent compile: gsc -c exited %s for %s\n' "$cgu_rc" \
         "$cgu_ref" >>"$cgu_log"
@@ -2017,6 +2016,27 @@ EOF
   [ -f "$runner" ] \
     || die "gsc -exe did not create $runner; see $logs_dir/gsc-exe.log"
   chmod +x "$runner"
+
+  # Hide the build host's Gambit module tree for one startup probe. This makes
+  # a missing linked accelerator fail here instead of after artifact download
+  # on a machine without Gambit installed.
+  isolated_gambit_lib=$(mktemp -d \
+    "${TMPDIR:-/tmp}/consent-gambit-lib.XXXXXX") \
+    || die "could not create the isolated Gambit module directory"
+  if ! isolated_version=$(
+    "$runner" "-:~~lib=$isolated_gambit_lib,search=" --version \
+      2>"$logs_dir/standalone-version.err"
+  ); then
+    rm -rf "$isolated_gambit_lib"
+    die \
+      "compiled Gambit runner depends on an unlinked host module;" \
+      "see $logs_dir/standalone-version.err"
+  fi
+  rm -rf "$isolated_gambit_lib"
+  [ "$isolated_version" = "Consent Scheme $version" ] \
+    || die \
+      "isolated Gambit runner returned '$isolated_version', expected" \
+      "'Consent Scheme $version'"
   cat > "$logs_dir/compile.log" <<EOF
 (consent-compile-timing
   (compile-host gambit)

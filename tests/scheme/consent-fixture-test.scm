@@ -24,12 +24,17 @@
                 (consent-eval-result raw-consent-eval-result)
                 (consent-eval-source-result raw-consent-eval-source-result))
         (consent symbol)
+        (only (consent symbol-boundary) consent-host-symbol-eq?)
         (testing registry)
         (testing runner)
         (stdlib testing))
 
 ;; Unique marker for unset CI matrix defaults.
 (define consent-test-option-unset (list 'unset))
+
+;; Return #t inside a compiled self-host test program.
+(define compiled-host-run?
+  (if (get-environment-variable "TESTING_RUNNER_HOST_RUN") #t #f))
 
 ;; Return #t when VALUE is the unset marker.
 (define (consent-test-option-unset? value)
@@ -224,9 +229,15 @@
 
 ;; Return #t when VALUE is an owned symbol named NAME.
 (define (fixture-symbol=? value name)
-  (and (consent-symbol? value)
-       (string=? (consent-symbol-name value)
-                 (symbol->string name))))
+  (cond
+   ((symbol? value) (eq? value name))
+   ((consent-symbol? value)
+    (consent-host-symbol-eq? value name))
+   (else #f)))
+
+;; Return #t when VALUE is a fixture control symbol in either host posture.
+(define (fixture-symbol? value)
+  (or (symbol? value) (consent-symbol? value)))
 
 ;; Return the entry named NAME in fixture ALIST.
 (define (fixture-entry alist name)
@@ -260,12 +271,16 @@
           (apply string-append (reverse parts))
           (loop (cons part parts))))))
 
-;; Load the canonical fixture corpus through the Consent Scheme reader.
+;; Load the canonical fixture corpus through the active Consent reader.
+;; Self-hosted `read` already owns the schema in this context; crossing the
+;; native reader boundary would retain a mirror of the entire corpus graph.
 (define (read-suite)
   (call-with-input-file
    "fixtures/r7rs/conformance-cases.scm"
    (lambda (port)
-     (consent-read (fixture-port-text port)))))
+     (if compiled-host-run?
+         (read port)
+         (consent-read (fixture-port-text port))))))
 
 ;; Extract the case list from a shared fixture SUITE datum.
 (define (suite-cases suite)
@@ -307,13 +322,15 @@
     #t)
    (else #f)))
 
-;; Return a host symbol for owned fixture SYMBOL.
+;; Return a fixture control symbol suitable for the active host posture.
 (define (fixture-host-symbol symbol)
-  (string->symbol (consent-symbol-name symbol)))
+  (if (symbol? symbol)
+      symbol
+      (string->symbol (consent-symbol-name symbol))))
 
-;; Return SOURCE's variant as a host symbol.
+;; Return SOURCE's variant as a fixture control symbol.
 (define (source-variant source)
-  (if (and (pair? source) (consent-symbol? (car source)))
+  (if (and (pair? source) (fixture-symbol? (car source)))
       (fixture-host-symbol (car source))
       #f))
 
@@ -367,7 +384,7 @@
 (define (option-entry-valid? entry)
   (and (list? entry)
        (= (length entry) 2)
-       (consent-symbol? (car entry))))
+       (fixture-symbol? (car entry))))
 
 ;; Validate optional oracle eligibility metadata when a case carries it.
 (define (oracle-metadata-valid? case)
@@ -387,11 +404,11 @@
 ;; Validate one fixture CASE against the shared corpus schema.
 (define (case-valid? case)
   (let ((phase
-         (and (consent-symbol? (field case 'phase))
+         (and (fixture-symbol? (field case 'phase))
               (fixture-host-symbol (field case 'phase)))))
     (and (all? (lambda (name) (field-present? case name))
                fixture-required-fields)
-       (consent-symbol? (field case 'id))
+       (fixture-symbol? (field case 'id))
        (memq (fixture-host-symbol (field case 'kind)) fixture-kinds)
        (memq phase fixture-phases)
        (string? (field case 'section))
@@ -555,7 +572,10 @@
       (if (not matched?)
           (begin
             (display "fixture mismatch ")
-            (display (consent-symbol-name (field case 'id)))
+            (display
+             (if (symbol? (field case 'id))
+                 (symbol->string (field case 'id))
+                 (consent-symbol-name (field case 'id))))
             (display ": expected ")
             (display (consent-datum->external expect))
             (display ", actual ")

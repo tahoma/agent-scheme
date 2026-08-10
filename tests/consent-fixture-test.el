@@ -20,7 +20,7 @@
     (consent-test-fixture-validate-suite suite)))
 
 (ert-deftest consent-fixture-test-preserves-migrated-inventory ()
-  "Pin the case, phase, and typed-expectation inventory from schema v1."
+  "Pin the case, phase, and typed-expectation inventory."
   (let* ((cases (consent-test-fixture-cases))
          (phases
           (mapcar
@@ -32,12 +32,12 @@
            (lambda (case)
              (car (consent-test-fixture-field case 'expect)))
            cases)))
-    (should (= (length cases) 159))
-    (should (= (cl-count 'eval phases) 129))
+    (should (= (length cases) 167))
+    (should (= (cl-count 'eval phases) 137))
     (should (= (cl-count 'eval-result phases) 1))
     (should (= (cl-count 'read phases) 28))
     (should (= (cl-count 'read-all phases) 1))
-    (should (= (cl-count 'value expectation-types) 119))
+    (should (= (cl-count 'value expectation-types) 127))
     (should (= (cl-count 'serialized-value expectation-types) 1))
     (should (= (cl-count 'values expectation-types) 2))
     (should (= (cl-count 'condition expectation-types) 36))

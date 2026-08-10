@@ -47,6 +47,8 @@
            (stdlib json)
            (data mapping avl)
            (consent character)
+           (consent datum)
+           (consent identity-map)
            (consent symbol)
            (consent symbol-boundary)
            (consent base)
@@ -64,38 +66,34 @@
            (cli repl-chrome)
            (cli repl-shell)
            (cli script)))
-         ;; Borrowed-host images register this root subset as compiled
-         ;; realizations of the same portable source libraries. The compiler
-         ;; plan validates that each name is reachable and resolves its source
-         ;; unit; backends must not maintain parallel implementation or
-         ;; registration inventories. In particular, `(consent character)' and
-         ;; `(consent symbol)' are semantic value owners, never adapters over
-         ;; host values. They are registered in borrowed-host images so
-         ;; interpreted imports share the compiled core's character and symbol
-         ;; record types and its single symbol table. The transient overlay
-         ;; remains an ordinary compiled dependency; interpreted imports can
-         ;; evaluate it from source because its private records never cross the
-         ;; core interface. These wrappers are bootstrap ABI only; a native
-         ;; Consent image links callers and callees directly.
+         ;; Borrowed-host images register this fail-closed root subset as
+         ;; compiled realizations of the same portable source libraries. The
+         ;; compiler plan validates that each name is reachable and resolves
+         ;; its source unit; backends must not maintain parallel implementation
+         ;; or registration inventories. The Consent core entries preserve one
+         ;; directly linked bootstrap ABI, including its character, compound
+         ;; datum, numeric, reader, runtime, and symbol record owners. Their
+         ;; boundary rejects before conversion would allocate an unclassified
+         ;; borrowed mirror or callback shim rather than assuming that every
+         ;; core export may borrow one. The three agent entries are stateless,
+         ;; call-scoped transforms whose exact procedure and constant
+         ;; inventories are validated before registration.
+         ;;
+         ;; Every other project root remains compiled and linked, but is not
+         ;; registered for interpreted imports. Its canonical source library is
+         ;; resolved instead. This includes any library whose exports can retain
+         ;; compounds in a closure, record, parameter, or module state. That
+         ;; routing prevents borrowed-host containers from becoming a durable
+         ;; second heap while #120 supplies native lowering over Consent-owned
+         ;; base primitives. The transient overlay and identity map likewise
+         ;; remain ordinary compiled dependencies because their private records
+         ;; never cross the core interface.
          (native-libraries
-          ((data avl-tree)
-           (agent task)
+          ((agent task)
            (agent transcript)
-           (agent models openai)
-           (agent registry)
-           (agent proposal)
-           (agent runner)
-           (agent prompt)
-           (agent generated-source)
-           (agent approval)
            (agent context)
-           (agent helper)
-           (agent job)
-           (agent memory)
-           (agent plan)
-           (agent redaction)
-           (agent session)
            (consent character)
+           (consent datum)
            (consent symbol)
            (consent symbol-boundary)
            (consent base)
@@ -106,12 +104,7 @@
            (consent numeric)
            (consent reader)
            (consent runtime)
-           (consent version)
-           (cli native-cli)
-           (cli process-host)
-           (cli repl-chrome)
-           (cli repl-shell)
-           (cli script)))
+           (consent version)))
          (generated-units
           ((compiler-unit
             (name (consent embedded-source))

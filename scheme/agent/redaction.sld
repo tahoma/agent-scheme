@@ -62,6 +62,19 @@
       (list->string
        (map char-downcase (string->list text))))
 
+    (define (string-prefix-at? text start prefix)
+      "Return #t when PREFIX begins at START in TEXT."
+      (let ((prefix-length (string-length prefix))
+            (text-length (string-length text)))
+        (and
+         (<= (+ start prefix-length) text-length)
+         (let match ((index 0))
+           (or (= index prefix-length)
+               (and
+                (char=? (string-ref text (+ start index))
+                        (string-ref prefix index))
+                (match (+ index 1))))))))
+
     (define (string-contains? haystack needle)
       "Return #t when NEEDLE occurs in HAYSTACK."
       (let ((haystack-length (string-length haystack))
@@ -69,9 +82,7 @@
         (let loop ((index 0))
           (cond
            ((> (+ index needle-length) haystack-length) #f)
-           ((string=? (substring haystack index (+ index needle-length))
-                      needle)
-            #t)
+           ((string-prefix-at? haystack index needle) #t)
            (else (loop (+ index 1)))))))
 
     (define (sensitive-name? name)
@@ -96,16 +107,31 @@
 
     (define (secret-string? text)
       "Return #t when TEXT contains a recognizable secret spelling."
-      (and (string? text)
-           (or (string-contains? text "sk-")
-               (string-contains? text "ghp_")
-               (string-contains? text "gho_")
-               (string-contains? text "ghu_")
-               (string-contains? text "ghs_")
-               (string-contains? text "ghr_")
-               (string-contains? text "xox")
-               (string-contains? text "AKIA")
-               (string-contains? text "PRIVATE KEY"))))
+      (and
+       (string? text)
+       (let ((length (string-length text)))
+         (let scan ((index 0))
+           (if (= index length)
+               #f
+               (let ((first (string-ref text index)))
+                 (or
+                  (cond
+                   ((char=? first #\s)
+                    (string-prefix-at? text index "sk-"))
+                   ((char=? first #\g)
+                    (or (string-prefix-at? text index "ghp_")
+                        (string-prefix-at? text index "gho_")
+                        (string-prefix-at? text index "ghu_")
+                        (string-prefix-at? text index "ghs_")
+                        (string-prefix-at? text index "ghr_")))
+                   ((char=? first #\x)
+                    (string-prefix-at? text index "xox"))
+                   ((char=? first #\A)
+                    (string-prefix-at? text index "AKIA"))
+                   ((char=? first #\P)
+                    (string-prefix-at? text index "PRIVATE KEY"))
+                   (else #f))
+                  (scan (+ index 1)))))))))
 
     (define (record-head datum)
       "Return DATUM's record head or #f for association-list payloads."

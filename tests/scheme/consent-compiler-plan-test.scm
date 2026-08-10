@@ -109,12 +109,14 @@
    'symbol-boundary-before-reader
    (ordered-before? '(consent symbol-boundary) '(consent reader)))
   (test-assert
-   'borrowed-host-shares-compiled-symbol-storage
+   'borrowed-host-shares-compiled-value-owners
    (let ((native-libraries
           (consent-compiler-plan-native-libraries plan)))
      (and
-      (member '(data avl-tree) native-libraries)
+      (not (member '(data avl-tree) native-libraries))
       (not (member '(data transient-map) native-libraries))
+      (not (member '(consent identity-map) native-libraries))
+      (member '(consent datum) native-libraries)
       (member '(consent symbol) native-libraries)
       (member '(consent symbol-boundary) native-libraries))))
   (test-assert
@@ -155,6 +157,41 @@
       (native-libraries
        (consent-compiler-plan-native-libraries plan))
       (names (unit-names units)))
+  (test-equal
+   'native-registration-allowlist-size
+   16
+   (length native-libraries))
+  (test-equal
+   'native-registration-allowlist
+   '((agent task)
+     (agent transcript)
+     (agent context)
+     (consent character)
+     (consent datum)
+     (consent symbol)
+     (consent symbol-boundary)
+     (consent base)
+     (consent eval)
+     (consent interpreter)
+     (consent library)
+     (consent macro)
+     (consent numeric)
+     (consent reader)
+     (consent runtime)
+     (consent version))
+   native-libraries)
+  (test-assert
+   'retaining-libraries-use-source-registration
+   (let loop ((rest '((data avl-tree)
+                      (agent approval)
+                      (agent prompt)
+                      (agent registry)
+                      (agent session)
+                      (cli repl-chrome))))
+     (or (null? rest)
+         (and (member (car rest) roots)
+              (not (member (car rest) native-libraries))
+              (loop (cdr rest))))))
   (test-assert
    'native-libraries-are-roots
    (let loop ((rest native-libraries))

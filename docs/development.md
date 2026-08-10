@@ -592,17 +592,20 @@ Use `CONSENT_COMPILE_BUILD_DIR` to place those generated files elsewhere:
 CONSENT_COMPILE_BUILD_DIR=/tmp/consent-compile make compile
 ```
 
-The build runs smoke commands against the executable before reporting success:
+The build runs version and scalar-evaluation smoke commands against the
+executable before reporting success:
 
 ```sh
 build/compile/<host>/bin/consent --version
 build/compile/<host>/bin/consent --eval '(+ 1 2)'
-build/compile/<host>/bin/consent --script tests/scheme/consent-reader-test.scm
 ```
 
+The build then writes a temporary pure script containing a function definition
+and assertion and runs it with `--script`. Separate temporary probes verify
+that `--eval`, `--script`, and bare-path execution deny an ungranted file write.
 The smoke also runs a script by bare path (`consent FILE`, equivalent to
-`consent --script FILE`) and as an executable `/bin/sh` polyglot, exercising the
-shebang-handling boundary end to end. See
+`consent --script FILE`) and as an executable `/bin/sh` polyglot, exercising
+the shebang-handling boundary end to end. See
 [executable-scripts.md](executable-scripts.md) for how to write and run an
 executable Consent Scheme script.
 
@@ -672,7 +675,11 @@ make clean-compile && make install   # exits 2: "run `make compile` first"
 The host is chosen with `CONSENT_COMPILE_HOST`, which **defaults to Gambit**. The
 Gambit binary (`gsc -exe -nopreload`) is a standalone native executable:
 relocatable, with no runtime dependency, so the default install flow produces an
-artifact that works on a machine without a Scheme toolchain:
+artifact that works on a machine without a Scheme toolchain. The build
+uses Gambit's built-in identity tables, so the hot graph registry has no
+external module dependency. Its startup smoke hides the build host's Gambit
+module tree, so any accidentally unlinked dependency fails before the
+standalone artifact is published:
 
 ```sh
 make compile        # CONSENT_COMPILE_HOST defaults to gambit
@@ -1042,6 +1049,7 @@ CONSENT_GAMBIT=gsi make test-portable-gambit
 CONSENT_GAMBIT=gsi make test-portable-gambit-reflect
 CONSENT_GAMBIT=gsi make test-portable-gambit-reflect-stress
 CONSENT_GAMBIT=gsi CONSENT_GAMBIT_COMPILER=gsc make test-portable-gambit-native
+CONSENT_PORTABLE_HOST=racket make test-portable-owned-reader-no-host-identity
 CONSENT_RACKET=racket make test-portable-racket
 CONSENT_RACKET=racket make test-portable-racket-reflect
 CONSENT_RACKET=racket make test-portable-racket-reflect-stress
@@ -1072,6 +1080,11 @@ make test-emacs-integration
 CONSENT_PARITY_HOST=guile make test-parity
 ```
 
+The owned-reader identity-map target runs the focused poisoned-backend
+regression. Set `CONSENT_PORTABLE_HOST` to `racket`, `gambit`, or `guile`; the
+default is Racket. The normal local aggregates include it once, and CI runs it
+once per available host on the canonical metadata/docstring combination.
+
 The opt-in `test-emacs-native-build` shard runs the four full host-compile +
 install/dist tests when invoked directly (`make test-emacs-native-build`) or
 through `make test-full`; the trimmed `make test` skips it.
@@ -1098,14 +1111,27 @@ critical path, while the aggregate log still reports one complete host suite.
 The Racket bridge generates
 temporary `#lang r7rs` collection wrappers for checked-in `.sld` libraries
 because Racket's R7RS package resolves imports as Racket collection modules.
-The compiled self-host plan is the gold-standard product corpus: 46 programs
-cover reader behavior, runtime manifests, registered agent semantics, testing
-infrastructure, models, data structures, random/property facilities, generators,
-the shared R7RS fixture corpus, and the complete SRFI 180 reference corpus. The
-remaining 16 ordinary programs are explicitly tagged `self-host-gap` and
-assigned to implementation issues #346 (symbol identity and macro-introduced
-identifiers) or #432 (compiled-rooted nested evaluation). The target is to drive
-that set to zero; it is not a permanent reduced suite.
+The compiled self-host plan is the gold-standard product corpus. Its selector
+contains 45 programs: 44 of the 65 ordinary `full` programs plus the
+compiled-only runtime manifest smoke program. Those 44 ordinary programs cover
+Scheme-visible reader and numeric behavior, registered agent semantics, testing
+infrastructure, models, data structures, random/property facilities,
+generators, and the complete SRFI 180 reference corpus. In particular, the
+compiled agent-reliability and native CLI daemon adapter programs read real
+structured fixture files through `(scheme read)`; focused Racket-compiled runs
+exercise 20 and 238 assertions, respectively. The compiled-only manifest smoke
+also reads a labelled cycle through `(scheme read)`, checks its self-identity,
+mutates it, and verifies `write-shared` output. Six direct private owner/adapter
+suites remain outside this selector: `consent-reader-test.scm`,
+`consent-numeric-test.scm`, `consent-numeric-generated-test.scm`,
+`consent-fixture-test.scm`, `consent-symbol-test.scm`, and
+`consent-datum-test.scm`. Their borrowed-host ABI belongs to #120. Compiled
+random/property suites retain public numeric coverage without crossing that
+private dispatcher boundary. The remaining 21 ordinary programs are
+explicitly tagged `self-host-gap` and assigned to implementation issues #120,
+#346 (symbol identity and macro-introduced identifiers), or #432
+(compiled-rooted nested evaluation).
+The target is to drive that set to zero; it is not a permanent reduced suite.
 Local `test-portable-compiled` and `test-portable-gambit-native` targets compile
 before invoking the matching `*-run` consumer through `consent --host-run`. CI
 exposes the phases separately and prioritizes each compile step before direct
@@ -1263,18 +1289,12 @@ warns about them.
   a freshly built binary run directly, for example
   `build/compile/gambit/bin/consent --host-run FILE`.
 
-- **Keep multi-element cyclic-render assertions off the portable test files.** A
-  `tests/scheme/*.scm` file runs both directly on each interpreted host and
-  self-hosted via `consent --host-run`. Under self-host, a multi-element
-  datum-label cycle read by the Consent reader (`#0=(1 2 3 . #0#)`,
-  `#0=#(1 #0#)`) does not come back with the back-reference `eq?`-identical to the
-  labeled head, so identity-based cycle detection (`memq`/`eq?` against an
-  ancestor path) never terminates (hangs on Chibi, errors on Racket-compiled).
-  Immediate self-cycles (`#1=(a . #1#)`) and shared non-cyclic labels
-  (`(#1=(a b) #1#)`) do work self-hosted. Keep real multi-element cyclic-render
-  assertions on the Emacs host (`tests/*.el`), where the reader builds genuinely
-  `eq?`-shared cyclic structure, and keep the portable Scheme cases
-  datum-label-free.
+- **Exercise cyclic reader data in direct and self-hosted lanes.** The portable
+  owned compound heap preserves datum-label identity for multi-element pair and
+  vector cycles such as `#0=(1 2 3 . #0#)` and `#0=#(1 #0#)`. Keep these cases
+  in the portable reader suite, and keep representative cyclic mutation and
+  writer cases in the shared fixture suite, so both compiled hosts and the
+  Emacs bootstrap must preserve the same cycle behavior.
 
 - **Compiled-host `standard-source-library-*-file` failures are usually a stale
   install.** If the compiled-host shards (`test-portable-gambit-native`,

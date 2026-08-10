@@ -56,6 +56,8 @@
           (scheme char)
           (scheme file)
           (consent character)
+          (consent datum)
+          (consent identity-map)
           (consent reader)
           (consent symbol)
           (consent symbol-boundary)
@@ -3059,16 +3061,12 @@ ntry"
                 base-syntax-environment))))))
 
     (define (source-library-copy-seen-ref seen value)
-      "Return VALUE's copy recorded in mutable association list SEEN."
-      (let loop ((entries (cdr seen)))
-        (cond
-         ((null? entries) #f)
-         ((host-eq? value (caar entries)) (cdar entries))
-         (else (loop (cdr entries))))))
+      "Return VALUE's copy recorded in identity map SEEN."
+      (consent-identity-map-ref seen value #f))
 
     (define (source-library-copy-seen-set! seen value copy)
       "Record COPY as VALUE's context-local realization in SEEN."
-      (set-cdr! seen (cons (cons value copy) (cdr seen))))
+      (consent-identity-map-set! seen value copy))
 
     (define (source-library-datum-label-syntax? source)
       "Report whether SOURCE may contain R7RS shared-datum label syntax."
@@ -3097,7 +3095,7 @@ ntry"
 
     (define (source-library-copy-source! copy source context)
       "Record COPY's canonical SOURCE in CONTEXT-local provenance."
-      (context-source-copy-set! context copy source))
+      (context-source-copy-set-fresh! context copy source))
 
     (define (source-library-copy-tree value context)
       "Copy acyclic mutable VALUE while preserving default-domain symbols."
@@ -3174,8 +3172,15 @@ ntry"
       "Return CONTEXT-owned mutable copies of canonical source FORMS."
       ;; Custom symbol tables parse afresh and never reach this helper.
       (if shared-datum?
-          (source-library-copy-datum
-           forms (list 'source-library-copy-seen) context)
+          (if (consent-identity-map-fast-backend?)
+              (source-library-copy-datum
+               forms (consent-make-identity-map) context)
+              ;; Manifest realization reparses shared syntax on the portable
+              ;; compatibility backend. Keep this guard so no future caller
+              ;; silently routes an ultra-critical graph copy through the
+              ;; adapter's identity-alist fallback.
+              (eval-error
+               "shared source copy requires a fast identity-map backend"))
           (source-library-copy-tree forms context)))
 
     (define (manifest-source-library-forms
@@ -3195,26 +3200,45 @@ ntry"
                         consent-default-symbol-table)
               (let* ((cached
                       (assoc/equal source manifest-source-library-form-cache))
-                     (forms
-                      (if cached
-                          (cadr cached)
-                          (let ((parsed
-                                 (consent-read-all
-                                  source
-                                  (context-reader-options context))))
-                            (set! manifest-source-library-form-cache
-                                  (cons
-                                   (list
-                                    source
-                                    parsed
-                                    (source-library-datum-label-syntax? source))
-                                   manifest-source-library-form-cache))
-                            parsed)))
-                     (shared-datum?
-                      (if cached
-                          (third cached)
-                          (third (car manifest-source-library-form-cache)))))
-                (source-library-copy-forms forms shared-datum? context))
+                     (uncached-shared-datum?
+                      (and
+                       (not cached)
+                       (source-library-datum-label-syntax? source))))
+                (if (and uncached-shared-datum?
+                         (not (consent-identity-map-fast-backend?)))
+                    ;; The compatibility identity map is intentionally an
+                    ;; association list. Reparse rare labelled sources into the
+                    ;; caller's context instead of turning graph realization
+                    ;; quadratic on a host without identity hashing.
+                    (consent-read-all source (context-reader-options context))
+                    (let* ((forms
+                            (if cached
+                                (cadr cached)
+                                (let ((parsed
+                                       (consent-read-all
+                                        source
+                                        ;; Canonical syntax intentionally lives
+                                        ;; in this process cache. Keep its
+                                        ;; provenance in the matching
+                                        ;; compatibility index rather than a
+                                        ;; first caller's short-lived context.
+                                        (cons
+                                         (cons 'source-metadata-sink #f)
+                                         (context-reader-options context)))))
+                                  (set! manifest-source-library-form-cache
+                                        (cons
+                                         (list
+                                          source
+                                          parsed
+                                          uncached-shared-datum?)
+                                         manifest-source-library-form-cache))
+                                  parsed)))
+                           (shared-datum?
+                            (if cached
+                                (third cached)
+                                uncached-shared-datum?)))
+                      (source-library-copy-forms
+                       forms shared-datum? context))))
               (consent-read-all source (context-reader-options context)))))
 
     (define (shared-immutable-source-library-entry? entry)
@@ -3318,7 +3342,396 @@ ntry"
         (let ((host (consent-number-value value)))
           (if (number? host) host value))))
 
-    (define (native-callback-result value seen convert-symbols?)
+    (define (native-egress-container? value)
+      "Report whether VALUE is a host or owned traversable container."
+      (or (pair? value)
+          (vector? value)
+          (consent-datum-object? value)))
+
+    (define (native-egress-authorize-any! value)
+      "Permit VALUE to enter an explicitly audited native conversion."
+      #t)
+
+    (define (native-egress-reject-borrow! value)
+      "Reject VALUE before an unclassified native binding can borrow it."
+      (if (or (consent-datum-object? value)
+              (native-interpreted-callable? value))
+          (error
+           "native-binding-borrow-unavailable: binding is not allowlisted"))
+      #t)
+
+    ;; One owned-state box supplies the sole intrusive-map token for an outer
+    ;; native operation. Each object maps to
+    ;; #(bridge-entry completed-target walk-generation walk-node), fusing the
+    ;; bridge index, cross-root egress cache, and current-walk index that used
+    ;; to overlap as three independent maps.
+    (define (make-native-owned-state)
+      "Return a lazy box for one outer operation's owned-object map."
+      (vector #f))
+
+    (define (native-owned-state-map state create?)
+      "Return STATE's owned-object map, optionally allocating it."
+      (or (vector-ref state 0)
+          (and create?
+               (let ((created (consent-make-datum-object-map)))
+                 (vector-set! state 0 created)
+                 created))))
+
+    (define (native-owned-object-state-ref state source absent)
+      "Return SOURCE's composite native state, or ABSENT."
+      (let ((map (native-owned-state-map state #f)))
+        (if map
+            (consent-datum-object-map-ref map source absent)
+            absent)))
+
+    (define (native-owned-object-state! state source)
+      "Return SOURCE's existing or fresh composite native state."
+      (let* ((absent (vector 'native-owned-object-state-absent))
+             (known (native-owned-object-state-ref state source absent)))
+        (if (eq? known absent)
+            (let ((created (vector #f #f #f #f)))
+              (consent-datum-object-map-set!
+               (native-owned-state-map state #t) source created)
+              created)
+            known)))
+
+    (define (native-owned-state-release! state)
+      "Release STATE's intrusive owned-object map when allocated."
+      (let ((map (native-owned-state-map state #f)))
+        (if map (consent-datum-object-map-release! map)))
+      state)
+
+    (define (make-native-egress-state owned-state)
+      "Return cross-root host conversion state sharing OWNED-STATE."
+      (vector #f owned-state))
+
+    (define (call-with-fresh-native-egress-state procedure)
+      "Call PROCEDURE with fresh egress state and release it on every exit."
+      (let* ((owned-state (make-native-owned-state))
+             (state (make-native-egress-state owned-state)))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda () (procedure state))
+         (lambda () (native-owned-state-release! owned-state)))))
+
+    (define (native-egress-state-ref state source absent)
+      "Return SOURCE's completed conversion from STATE, or ABSENT."
+      (if (consent-datum-object? source)
+          (let* ((owned-state (vector-ref state 1))
+                 (object-state
+                  (native-owned-object-state-ref
+                   owned-state source absent)))
+            (if (eq? object-state absent)
+                absent
+                (or (vector-ref object-state 1) absent)))
+          (let ((map (vector-ref state 0)))
+            (if map
+                (consent-identity-map-ref map source absent)
+                absent))))
+
+    (define (native-egress-state-set! state source target)
+      "Memoize SOURCE's completed conversion as TARGET in STATE."
+      (if (consent-datum-object? source)
+          (vector-set!
+           (native-owned-object-state! (vector-ref state 1) source)
+           1
+           target)
+          (let ((map (vector-ref state 0)))
+            (if (not map)
+                (begin
+                  (require-native-fast-identity-maps!)
+                  (set! map (consent-make-identity-map))
+                  (vector-set! state 0 map)))
+            (consent-identity-map-set! map source target)))
+      target)
+
+    (define (native-egress-graph
+             value
+             state
+             leaf
+             copy-host-source
+             reuse-owned
+             allocate-owned
+             finish-owned
+             authorize)
+      "Convert one mixed host/owned graph iteratively in expected O(V+E)."
+      "Host pairs/vectors use copy-on-change. Owned containers always project"
+      "to host shells unless REUSE-OWNED returns an existing mirror. Shells"
+      "are allocated for the full dirty graph before any edge is initialized,"
+      "so mixed-domain cycles and sharing never recurse through LEAF."
+      (authorize value)
+      (if (not (native-egress-container? value))
+          (leaf value)
+          (let ((absent (vector 'native-egress-absent)))
+            (let ((cached
+                   (native-egress-state-ref state value absent)))
+              (if (not (eq? cached absent))
+                  cached
+                  (let ((host-nodes #f)
+                        (walk-generation
+                         (vector 'native-egress-walk-generation))
+                        (nodes '())
+                        (scan-work '())
+                        (dirty-work '()))
+                    (define (local-node-ref source)
+                      "Return SOURCE's current-walk node, or #f."
+                      "A node is #(source owned? kind edges parents dirty? copy"
+                      "reused?). A compound edge points to a local node; a"
+                      "fixed edge carries a converted leaf or prior result."
+                      (if (consent-datum-object? source)
+                          (let* ((owned-state (vector-ref state 1))
+                                 (object-state
+                                  (native-owned-object-state-ref
+                                   owned-state source #f)))
+                            (and object-state
+                                 (eq? (vector-ref object-state 2)
+                                      walk-generation)
+                                 (vector-ref object-state 3)))
+                          (and
+                           host-nodes
+                           (consent-identity-map-ref
+                            host-nodes source #f))))
+                    (define (local-node-set! source node)
+                      "Index SOURCE as NODE in the current walk."
+                      (if (consent-datum-object? source)
+                          (let ((object-state
+                                 (native-owned-object-state!
+                                  (vector-ref state 1) source)))
+                            (vector-set!
+                             object-state 2 walk-generation)
+                            (vector-set! object-state 3 node))
+                          (begin
+                            (if (not host-nodes)
+                                (begin
+                                  (require-native-fast-identity-maps!)
+                                  (set! host-nodes
+                                        (consent-make-identity-map))))
+                            (consent-identity-map-set!
+                             host-nodes source node))))
+                    (define (source-kind source owned?)
+                      "Return SOURCE's compound kind."
+                      (if owned?
+                          (consent-datum-object-kind source)
+                          (if (pair? source) 'pair 'vector)))
+                    (define (source-length source owned? kind)
+                      "Return SOURCE's traversable outgoing-edge count."
+                      (case kind
+                        ((pair) 2)
+                        ((vector)
+                         (if owned?
+                             (consent-datum-vector-length source)
+                             (vector-length source)))
+                        (else 0)))
+                    (define (mark-dirty! node)
+                      "Mark NODE changed and schedule one parent propagation."
+                      (if (not (vector-ref node 5))
+                          (begin
+                            (vector-set! node 5 #t)
+                            (set! dirty-work (cons node dirty-work)))))
+                    (define (make-node source)
+                      "Allocate and index one current-walk graph node."
+                      (let* ((owned? (consent-datum-object? source))
+                             (kind (source-kind source owned?))
+                             (candidate
+                              (if owned?
+                                  (reuse-owned source absent)
+                                  absent))
+                             (reused? (not (eq? candidate absent)))
+                             (length
+                              (if reused?
+                                  0
+                                  (source-length source owned? kind)))
+                             (node
+                              (vector source
+                                      owned?
+                                      kind
+                                      (make-vector length #f)
+                                      '()
+                                      #f
+                                      (if reused? candidate #f)
+                                      reused?)))
+                        (local-node-set! source node)
+                        (set! nodes (cons node nodes))
+                        (if owned? (mark-dirty! node))
+                        (if (> length 0)
+                            (set! scan-work (cons node scan-work)))
+                        node))
+                    (define (node-for source)
+                      "Return SOURCE's current-walk node, allocating it once."
+                      (or (local-node-ref source) (make-node source)))
+                    (define (source-edge node index)
+                      "Return NODE's source child at logical edge INDEX."
+                      (let ((source (vector-ref node 0))
+                            (owned? (vector-ref node 1)))
+                        (case (vector-ref node 2)
+                          ((pair)
+                           (if owned?
+                               (if (= index 0)
+                                   (consent-datum-car source)
+                                   (consent-datum-cdr source))
+                               (if (= index 0)
+                                   (car source)
+                                   (cdr source))))
+                          ((vector)
+                           (if owned?
+                               (consent-datum-vector-ref source index)
+                               (vector-ref source index))))))
+                    (define (fixed-edge! node index source converted)
+                      "Store one converted fixed edge and mark changes."
+                      (vector-set!
+                       (vector-ref node 3)
+                       index
+                       (vector #f converted source))
+                      (if (not
+                           (native-slot-value-same? converted source))
+                          (mark-dirty! node)))
+                    (define (scan-edge! node index source)
+                      "Record one SOURCE edge without recursive descent."
+                      (authorize source)
+                      (if (native-egress-container? source)
+                          (let ((prior
+                                 (native-egress-state-ref
+                                  state source absent)))
+                            (if (not (eq? prior absent))
+                                (fixed-edge! node index source prior)
+                                (let ((child (node-for source)))
+                                  (vector-set!
+                                   (vector-ref node 3)
+                                   index
+                                   (vector #t child #f))
+                                  (vector-set!
+                                   child
+                                   4
+                                   (cons node (vector-ref child 4))))))
+                          (fixed-edge! node index source (leaf source))))
+                    (define (allocate-copy! node)
+                      "Allocate NODE's selected target shell."
+                      (if (not (vector-ref node 7))
+                          (let* ((source (vector-ref node 0))
+                                 (owned? (vector-ref node 1))
+                                 (kind (vector-ref node 2))
+                                 (copy
+                                  (case kind
+                                    ((pair) (cons #f #f))
+                                    ((string)
+                                     (consent-datum-string->host source))
+                                    ((bytevector)
+                                     (consent-datum-bytevector->host source))
+                                    ((vector)
+                                     (make-vector
+                                      (source-length
+                                       source owned? kind)
+                                      #f))
+                                    (else
+                                     (error
+                                      "native egress: unsupported datum kind"
+                                      kind)))))
+                            (vector-set! node 6 copy)
+                            (if owned?
+                                (allocate-owned copy source)))))
+                    (define (edge-result edge)
+                      "Return EDGE's converted fixed value or child target."
+                      (if (vector-ref edge 0)
+                          (let ((child (vector-ref edge 1)))
+                            (if (vector-ref child 5)
+                                (vector-ref child 6)
+                                (vector-ref child 0)))
+                          (vector-ref edge 1)))
+                    (define (fill-copy! node)
+                      "Initialize NODE and finalize provenance or snapshots."
+                      (if (not (vector-ref node 7))
+                          (let ((source (vector-ref node 0))
+                                (owned? (vector-ref node 1))
+                                (kind (vector-ref node 2))
+                                (edges (vector-ref node 3))
+                                (copy (vector-ref node 6)))
+                            (case kind
+                              ((pair)
+                               (set-car!
+                                copy
+                                (edge-result (vector-ref edges 0)))
+                               (set-cdr!
+                                copy
+                                (edge-result (vector-ref edges 1))))
+                              ((vector)
+                               (let loop ((index 0))
+                                 (if (< index (vector-length edges))
+                                     (begin
+                                       (vector-set!
+                                        copy
+                                        index
+                                        (edge-result
+                                         (vector-ref edges index)))
+                                       (loop (+ index 1)))))))
+                            (if owned?
+                                (finish-owned copy source)
+                                (copy-host-source copy source)))))
+                    (let ((root (make-node value)))
+                      (let scan ()
+                        (if (pair? scan-work)
+                            (let* ((node (car scan-work))
+                                   (length
+                                    (vector-length (vector-ref node 3))))
+                              (set! scan-work (cdr scan-work))
+                              (let edge-loop ((index 0))
+                                (if (< index length)
+                                    (begin
+                                      (scan-edge!
+                                       node index (source-edge node index))
+                                      (edge-loop (+ index 1)))))
+                              (scan))))
+                      (let propagate ()
+                        (if (pair? dirty-work)
+                            (let ((node (car dirty-work)))
+                              (set! dirty-work (cdr dirty-work))
+                              (let parent-loop
+                                  ((parents (vector-ref node 4)))
+                                (if (pair? parents)
+                                    (begin
+                                      (mark-dirty! (car parents))
+                                      (parent-loop (cdr parents)))))
+                              (propagate))))
+                      ;; All dirty shells exist before any outgoing edge is
+                      ;; written, which closes arbitrary mixed-domain cycles.
+                      (let allocate ((rest nodes))
+                        (if (pair? rest)
+                            (begin
+                              (if (vector-ref (car rest) 5)
+                                  (allocate-copy! (car rest)))
+                              (allocate (cdr rest)))))
+                      (let fill ((rest nodes))
+                        (if (pair? rest)
+                            (begin
+                              (if (vector-ref (car rest) 5)
+                                  (fill-copy! (car rest)))
+                              (fill (cdr rest)))))
+                      (let remember ((rest nodes))
+                        (if (pair? rest)
+                            (let ((node (car rest)))
+                              (native-egress-state-set!
+                               state
+                               (vector-ref node 0)
+                               (if (vector-ref node 5)
+                                   (vector-ref node 6)
+                                   (vector-ref node 0)))
+                              (remember (cdr rest)))))
+                      (if (vector-ref root 5)
+                          (vector-ref root 6)
+                          value))))))))
+
+    (define (native-copy-source-noop! target source)
+      "Return TARGET without attaching durable source metadata."
+      target)
+
+    (define (native-owned-reuse-none source absent)
+      "Decline owned SOURCE reuse by returning ABSENT."
+      absent)
+
+    (define (native-owned-allocation-noop! target source)
+      "Return TARGET without registering a call-scoped mirror."
+      target)
+
+    (define (native-callback-result value convert-symbols?)
       "Convert an interpreted callback's result for native consumption."
       "Owned characters become host characters, and canonical number records"
       "become bounded host numbers -- a custom resync"
@@ -3332,137 +3745,68 @@ ntry"
       "higher-order host controls such as `call-with-input-file' return callba\
 ck"
       "results opaquely and preserve their Consent symbol identity instead."
-      "Pairs and vectors are walked copy-on-write so untouched structure keeps\
-"
-      "its identity, and SEEN returns cyclic data unchanged on revisit."
-      (cond
-       ((and convert-symbols? (consent-symbol? value))
-        (host-string->symbol (consent-symbol-name value)))
-       ((consent-character? value)
-        (consent-character->host-character value))
-       ((consent-number? value)
-        (native-number-or-owned value))
-       ((consent-eof-object? value)
-        (eof-object))
-       ((pair? value)
-        (if (host-memq value seen)
-            value
-            (let* ((next-seen (cons value seen))
-                   (head
-                    (native-callback-result
-                     (car value)
-                     next-seen
-                     convert-symbols?))
-                   (tail
-                    (native-callback-result
-                     (cdr value)
-                     next-seen
-                     convert-symbols?)))
-              (if (and (host-eq? head (car value))
-                       (host-eq? tail (cdr value)))
-                  value
-                  (cons head tail)))))
-       ((vector? value)
-        (if (host-memq value seen)
-            value
-            (let* ((next-seen (cons value seen))
-                   (length (vector-length value))
-                   (converted
-                    (let loop ((index 0) (acc '()) (changed #f))
-                      (if (= index length)
-                          (and changed (reverse acc))
-                          (let* ((element (vector-ref value index))
-                                 (next
-                                  (native-callback-result
-                                   element
-                                   next-seen
-                                   convert-symbols?)))
-                            (loop (+ index 1)
-                                  (cons next acc)
-                                  (or changed
-                                      (not (host-eq? next element)))))))))
-              (if converted (list->vector converted) value))))
-       (else value)))
+      "One mixed-domain worklist preserves host/owned cycles and sharing."
+      (let ((bridge native-call-graph-bridge))
+        (define (convert state)
+          (native-egress-graph
+           value
+           state
+           (lambda (leaf)
+             (cond
+              ((and convert-symbols? (consent-symbol? leaf))
+               (host-string->symbol (consent-symbol-name leaf)))
+              ((consent-character? leaf)
+               (consent-character->host-character leaf))
+              ((consent-number? leaf) (native-number-or-owned leaf))
+              ((consent-eof-object? leaf) (eof-object))
+              (else leaf)))
+           native-copy-source-noop!
+           (if bridge
+               (lambda (owned absent)
+                 (native-bridge-owned-reuse bridge owned absent))
+               native-owned-reuse-none)
+           (if bridge
+               (lambda (native owned)
+                 (native-bridge-allocate-owned! bridge owned native))
+               native-owned-allocation-noop!)
+           (if bridge
+               (lambda (native owned)
+                 (native-bridge-finish-owned! bridge owned native))
+               native-copy-source-noop!)
+           native-egress-authorize-any!))
+        (if bridge
+            (convert (ensure-native-bridge-egress-state! bridge))
+            (call-with-fresh-native-egress-state convert))))
 
-    (define (native-pair-spine-cyclic? value)
-      "Return #t when VALUE's cdr chain contains a cycle."
-      (let loop ((slow value) (fast value))
-        (if (not (pair? fast))
-            #f
-            (let ((next (cdr fast)))
-              (if (not (pair? next))
-                  #f
-                  (let ((next-slow (cdr slow))
-                        (next-fast (cdr next)))
-                    (or (host-eq? next-slow next-fast)
-                        (loop next-slow next-fast))))))))
-
-    (define (native-runtime-datum-result value seen)
-      "Convert runtime VALUE to borrowed-host data without quadratic list walk\
-s."
-      (cond
-       ((consent-symbol? value)
-        (host-string->symbol (consent-symbol-name value)))
-       ((consent-character? value)
-        (consent-character->host-character value))
-       ((consent-number? value)
-        (native-number-or-owned value))
-       ((consent-eof-object? value)
-        (eof-object))
-       ((pair? value)
-        (cond
-         ((host-memq value seen) value)
-         ;; Cyclic results remain owned, matching the existing graph walk's
-         ;; conservative behavior when it revisits a container.
-         ((native-pair-spine-cyclic? value) value)
-         (else
-          ;; Walk the cdr spine iteratively. A recursive pair-at-a-time walk
-          ;; searches an ever-growing ancestor list for every result field,
-          ;; making ordinary long event lists quadratic at the host boundary.
-          (let loop ((cursor value) (heads '()) (changed? #f))
-            (if (pair? cursor)
-                (let ((head
-                       (native-runtime-datum-result
-                        (car cursor)
-                        (cons cursor seen))))
-                  (loop (cdr cursor)
-                        (cons head heads)
-                        (or changed? (not (host-eq? head (car cursor))))))
-                (let ((tail
-                       (native-runtime-datum-result cursor seen)))
-                  (if (and (not changed?) (host-eq? tail cursor))
-                      value
-                      (let rebuild ((rest heads) (result tail))
-                        (if (null? rest)
-                            result
-                            (rebuild (cdr rest)
-                                     (cons (car rest) result)))))))))))
-       ((vector? value)
-        (if (host-memq value seen)
-            value
-            (let* ((next-seen (cons value seen))
-                   (length (vector-length value))
-                   (converted
-                    (let loop ((index 0) (acc '()) (changed? #f))
-                      (if (= index length)
-                          (and changed? (reverse acc))
-                          (let* ((element (vector-ref value index))
-                                 (next
-                                  (native-runtime-datum-result
-                                   element
-                                   next-seen)))
-                            (loop (+ index 1)
-                                  (cons next acc)
-                                  (or changed?
-                                      (not (host-eq? next element)))))))))
-              (if converted (list->vector converted) value))))
-       (else value)))
+    (define (native-runtime-datum-result value)
+      "Convert runtime VALUE to host data with linear, stack-safe graph walks."
+      (call-with-fresh-native-egress-state
+       (lambda (state)
+         (native-egress-graph
+          value
+          state
+          (lambda (leaf)
+            (cond
+             ((consent-symbol? leaf)
+              (host-string->symbol (consent-symbol-name leaf)))
+             ((consent-character? leaf)
+              (consent-character->host-character leaf))
+             ((consent-number? leaf) (native-number-or-owned leaf))
+             ((consent-eof-object? leaf) (eof-object))
+             (else leaf)))
+          native-copy-source-noop!
+          native-owned-reuse-none
+          native-owned-allocation-noop!
+          native-copy-source-noop!
+          native-egress-authorize-any!))))
 
     (define (consent-runtime-datum->native-datum value)
       "Convert runtime VALUE to ordinary host-facing Scheme data."
       "This is the context-free egress half of the native-call bridge. It is"
       "used for public result datums that contain no live evaluator callbacks.\
 "
+      "Source provenance stays with the owned graph; the returned host copy"
+      "must not become a process-lifetime metadata root."
       #((parameters
          (value (type object)
           (description "Runtime datum about to return to native code.")))
@@ -3471,21 +3815,18 @@ s."
           ("VALUE with owned symbols, characters, canonical numbers, and EOF"
             "records converted to their ordinary host representations.")))
         (effects pure allocation))
-      (native-runtime-datum-result value '()))
-
-    ;; Cache host callback shims so a compiled library can return a stored
-    ;; callback (for example an AVL tree's ordering) as the same interpreted
-    ;; procedure identity that originally crossed the boundary.
-    (define native-callback-shim-cache '())
+      (native-runtime-datum-result value))
 
     (define (native-callback-origin procedure)
-      "Return PROCEDURE's interpreted callback origin, or #f."
-      (let loop ((rest native-callback-shim-cache))
-        (cond
-         ((null? rest) #f)
-         ((host-eq? procedure (car (car rest)))
-          (cadr (car rest)))
-         (else (loop (cdr rest))))))
+      "Return PROCEDURE's same-call interpreted callback origin, or #f."
+      (and
+       native-call-graph-bridge
+       (let ((index
+              (native-bridge-callback-origin-index
+               native-call-graph-bridge)))
+         (and
+          index
+          (consent-identity-map-ref index procedure #f)))))
 
     (define (native-callback-shim
              value context . maybe-convert-symbols?)
@@ -3498,44 +3839,637 @@ host"
       "The closure's result crosses back under the callback result conversion"
       "(canonical records become raw host numbers), so native higher-order"
       "code can consume what the closure returns."
-      (let ((convert-symbols?
-             (and (pair? maybe-convert-symbols?)
-                  (car maybe-convert-symbols?))))
-        (let find ((rest native-callback-shim-cache))
-        (cond
-         ((null? rest)
-          (let* ((applier (consent-native-applier-ref))
-                 (shim
-                  (lambda arguments
-                    (let ((result
-                           (applier
-                            value
-                            (map (lambda (argument)
-                                   (native-result-value argument))
-                                 arguments)
-                            context)))
-                      (apply values
-                             (map (lambda (item)
-                                    (native-callback-result
-                                     item
-                                     '()
-                                     convert-symbols?))
-                                  (values-list result)))))))
-            (set! native-callback-shim-cache
-                  (cons (list shim value context convert-symbols?)
-                        native-callback-shim-cache))
-            shim))
-         ((and (host-eq? value (cadr (car rest)))
-               (host-eq? context (list-ref (car rest) 2))
-               (host-eq? convert-symbols? (list-ref (car rest) 3)))
-          (car (car rest)))
-         (else (find (cdr rest)))))))
+      (let* ((convert-symbols?
+              (and (pair? maybe-convert-symbols?)
+                   (car maybe-convert-symbols?)))
+             (bridge (current-native-graph-bridge context))
+             (scope (and bridge (native-bridge-scope bridge)))
+             (cached
+              (and bridge
+                   (native-bridge-callback-shim-ref
+                    bridge value context convert-symbols?))))
+        (or
+         cached
+         (let* ((applier (consent-native-applier-ref))
+                (shim
+                 (lambda arguments
+                   (let ((active (current-native-graph-bridge context)))
+                     (if (and scope
+                              (or (not active)
+                                  (not (host-eq?
+                                        scope
+                                        (native-bridge-scope active)))))
+                         (error
+                          "native callback shim escaped its call scope"))
+                     (if active
+                         (call-with-native-scalar-only-bridge
+                          active
+                          'callback
+                          (lambda ()
+                            (let* ((callback-arguments
+                                    (native-bridge-native-values->owned
+                                     active arguments))
+                                   (result
+                                    (applier
+                                     value callback-arguments context)))
+                              (apply
+                               values
+                               (map
+                                (lambda (item)
+                                  (native-bridge-owned->native
+                                   active item convert-symbols?))
+                                (values-list result))))))
+                         (let* ((callback-arguments
+                                 (map
+                                  (lambda (argument)
+                                    (native-result-value argument context))
+                                  arguments))
+                                (result
+                                 (applier
+                                  value callback-arguments context)))
+                           (apply
+                            values
+                            (map
+                             (lambda (item)
+                               (native-callback-result
+                                item convert-symbols?))
+                             (values-list result)))))))))
+           (if bridge
+               (native-bridge-record-callback-shim!
+                bridge value context convert-symbols? shim))
+           shim))))
 
     ;; Context of the native call currently crossing the import boundary.
     ;; The native binding shim maintains it dynamically so callable arguments
     ;; applied by native higher-order code run in the calling program's
     ;; context.
     (define native-call-context #f)
+
+    ;; The active native graph bridge is dynamically scoped with the outermost
+    ;; native call. Re-entrant calls and callbacks share that one transaction;
+    ;; its identity maps and callback shims become unreachable on outer unwind.
+    ;; Raw host mirrors and callback shims must not escape or be retained by a
+    ;; native library. Stateful native code retains Consent-owned values or
+    ;; opaque handles, never borrowed host containers.
+    (define native-call-graph-bridge #f)
+
+    (define (require-native-fast-identity-maps!)
+      "Reject native borrowing without the host identity-hash backend."
+      (if (not (consent-identity-map-fast-backend?))
+          (error
+           "native-borrowing-unavailable: fast identity maps are required")))
+
+    (define (make-native-graph-bridge context)
+      "Return a fresh outer-call graph bridge for CONTEXT."
+      ;; Slots zero and one are the context and scan list. Slot two is the
+      ;; fused lazy owned-object state; slot three lazily indexes native
+      ;; identity. Slot four lazily
+      ;; holds call-scoped callback indexes; slot five is the unique scope
+      ;; token. Slot six records a dynamically scoped compound-entry
+      ;; prohibition for callbacks or re-entrant native transitions. Slot
+      ;; seven lazily memoizes mixed-domain egress across argument roots.
+      ;; The portable alist backend preserves identity semantics but would make
+      ;; graph and callback transitions silently quadratic. Native borrowing
+      ;; is therefore unavailable unless the host provides identity hashing.
+      (require-native-fast-identity-maps!)
+      (vector context
+              '()
+              (make-native-owned-state)
+              #f
+              #f
+              (list 'native-call-scope)
+              #f
+              #f))
+
+    (define (native-bridge-context bridge)
+      "Return BRIDGE's owning evaluation context."
+      (vector-ref bridge 0))
+
+    (define (set-native-bridge-context! bridge context)
+      "Update BRIDGE to use the active evaluation CONTEXT."
+      (vector-set! bridge 0 context))
+
+    (define (native-bridge-entries bridge)
+      "Return BRIDGE's owned/native mapping entries."
+      (vector-ref bridge 1))
+
+    (define (set-native-bridge-entries! bridge entries)
+      "Replace BRIDGE's owned/native mapping ENTRIES."
+      (vector-set! bridge 1 entries))
+
+    (define (ensure-native-bridge-egress-state! bridge)
+      "Return BRIDGE's call-scoped mixed-domain egress state."
+      (or (vector-ref bridge 7)
+          (let ((created
+                 (make-native-egress-state
+                  (native-bridge-owned-index bridge))))
+            (vector-set! bridge 7 created)
+            created)))
+
+    (define (native-bridge-owned-index bridge)
+      "Return BRIDGE's fused lazy owned-object state."
+      (vector-ref bridge 2))
+
+    (define (ensure-native-bridge-owned-index! bridge)
+      "Return BRIDGE's fused lazy owned-object state."
+      (native-bridge-owned-index bridge))
+
+    (define (native-bridge-native-index bridge)
+      "Return BRIDGE's native-object identity index, or #f when unallocated."
+      (vector-ref bridge 3))
+
+    (define (ensure-native-bridge-native-index! bridge)
+      "Return BRIDGE's native-object identity index, allocating it lazily."
+      (or (native-bridge-native-index bridge)
+          (let ((created (consent-make-identity-map)))
+            (vector-set! bridge 3 created)
+            created)))
+
+    (define (native-bridge-callback-indexes bridge)
+      "Return BRIDGE's callback identity indexes, or #f when unallocated."
+      (vector-ref bridge 4))
+
+    (define (ensure-native-bridge-callback-indexes! bridge)
+      "Return BRIDGE's callback identity indexes, allocating them lazily."
+      (or (native-bridge-callback-indexes bridge)
+          (let ((created
+                 (vector (consent-make-identity-map)
+                         (consent-make-identity-map))))
+            (vector-set! bridge 4 created)
+            created)))
+
+    (define (native-bridge-callback-forward-index bridge)
+      "Return BRIDGE's forward callback index, or #f when unallocated."
+      (let ((indexes (native-bridge-callback-indexes bridge)))
+        (and indexes (vector-ref indexes 0))))
+
+    (define (native-bridge-callback-origin-index bridge)
+      "Return BRIDGE's reverse callback index, or #f when unallocated."
+      (let ((indexes (native-bridge-callback-indexes bridge)))
+        (and indexes (vector-ref indexes 1))))
+
+    (define (native-bridge-callback-shim-ref
+             bridge callable context convert-symbols?)
+      "Return BRIDGE's shim for one callable/context/policy key, or #f."
+      (let* ((forward (native-bridge-callback-forward-index bridge))
+             (policies
+              (and
+               forward
+               (consent-identity-map-ref forward context #f))))
+        (and
+         policies
+         (let ((callables
+                (consent-identity-map-ref
+                 policies convert-symbols? #f)))
+           (and
+            callables
+            (consent-identity-map-ref
+             callables callable #f))))))
+
+    (define (native-bridge-record-callback-shim!
+             bridge callable context convert-symbols? shim)
+      "Index SHIM by its host-identity callback key and reverse origin."
+      (let* ((indexes
+              (ensure-native-bridge-callback-indexes! bridge))
+             (forward (vector-ref indexes 0))
+             (policies
+              (or
+               (consent-identity-map-ref forward context #f)
+               (let ((created (consent-make-identity-map)))
+                 (consent-identity-map-set! forward context created)
+                 created)))
+             (callables
+              (or
+               (consent-identity-map-ref
+                policies convert-symbols? #f)
+               (let ((created (consent-make-identity-map)))
+                 (consent-identity-map-set!
+                  policies convert-symbols? created)
+                 created))))
+        (consent-identity-map-set!
+         callables callable shim)
+        (consent-identity-map-set!
+         (vector-ref indexes 1) shim callable)
+        shim))
+
+    (define (native-bridge-scope bridge)
+      "Return BRIDGE's unique outer-call scope token."
+      (vector-ref bridge 5))
+
+    (define (native-bridge-compound-prohibition bridge)
+      "Return BRIDGE's active compound-entry prohibition, or #f."
+      (vector-ref bridge 6))
+
+    (define (set-native-bridge-compound-prohibition! bridge reason)
+      "Set BRIDGE's compound-entry prohibition to REASON or #f."
+      (vector-set! bridge 6 reason))
+
+    (define (native-bridge-reject-compound! reason)
+      "Raise the fail-closed compound-transition error for REASON."
+      (error
+       (case reason
+         ((callback)
+          "native-compound-callback-unavailable: scalar values required")
+         ((reentrant)
+          "native-compound-reentry-unavailable: scalar values required")
+         (else
+          "native-compound-transition-unavailable: scalar values required"))))
+
+    (define (call-with-native-scalar-only-bridge bridge reason thunk)
+      "Call THUNK while BRIDGE rejects compound entries for nested REASON."
+      (if (pair? (native-bridge-entries bridge))
+          (native-bridge-reject-compound! reason))
+      (let ((previous
+             (native-bridge-compound-prohibition bridge)))
+        (dynamic-wind
+         (lambda ()
+           (set-native-bridge-compound-prohibition! bridge reason))
+         thunk
+         (lambda ()
+           (set-native-bridge-compound-prohibition! bridge previous)))))
+
+    (define (current-native-graph-bridge context)
+      "Return the active graph bridge when it belongs to CONTEXT's heap."
+      (and native-call-graph-bridge
+           (host-eq?
+            (context-datum-heap context)
+            (context-datum-heap
+             (native-bridge-context native-call-graph-bridge)))
+           native-call-graph-bridge))
+
+    ;; A mapping entry is `#(owned native kind snapshot)'. SNAPSHOT records the
+    ;; native object's last synchronized contents, so finalization can
+    ;; distinguish replacement of a referent from mutation inside that
+    ;; referent.
+    (define (native-bridge-owned-entry bridge value)
+      "Return BRIDGE's entry for owned VALUE, or #f."
+      (and
+       (consent-datum-object? value)
+       (let ((object-state
+              (native-owned-object-state-ref
+               (native-bridge-owned-index bridge) value #f)))
+         (and object-state (vector-ref object-state 0)))))
+
+    (define (native-bridge-native-entry bridge value)
+      "Return BRIDGE's entry for host VALUE, or #f."
+      (let ((index (native-bridge-native-index bridge)))
+        (and index (consent-identity-map-ref index value #f))))
+
+    (define (native-vector-snapshot vector)
+      "Return a shallow identity snapshot of host VECTOR."
+      (let* ((length (vector-length vector))
+             (snapshot (make-vector length #f)))
+        (let loop ((index 0))
+          (if (< index length)
+              (begin
+                (vector-set! snapshot index (vector-ref vector index))
+                (loop (+ index 1)))))
+        snapshot))
+
+    (define (native-string-snapshot string)
+      "Return a character-vector snapshot of host STRING in one traversal."
+      ;; R7RS permits variable-width host strings whose indexed access is not
+      ;; constant time. Traverse once, then use O(1) vector indexing during
+      ;; reconciliation.
+      (let ((snapshot (make-vector (string-length string) #f))
+            (index 0))
+        (string-for-each
+         (lambda (character)
+           (vector-set! snapshot index character)
+           (set! index (+ index 1)))
+         string)
+        snapshot))
+
+    (define (native-bytevector-snapshot bytevector)
+      "Return a byte-for-byte copy of host BYTEVECTOR."
+      (let* ((length (bytevector-length bytevector))
+             (snapshot (make-bytevector length 0)))
+        (let loop ((index 0))
+          (if (< index length)
+              (begin
+                (bytevector-u8-set!
+                 snapshot index (bytevector-u8-ref bytevector index))
+                (loop (+ index 1)))))
+        snapshot))
+
+    (define (native-bridge-snapshot kind native)
+      "Return the synchronization snapshot for native object KIND."
+      (case kind
+        ((pair) (vector (car native) (cdr native)))
+        ((string) (native-string-snapshot native))
+        ((vector) (native-vector-snapshot native))
+        ((bytevector) (native-bytevector-snapshot native))
+        (else #f)))
+
+    (define (native-bridge-add-entry! bridge owned native)
+      "Record the OWNED/NATIVE identity pair in BRIDGE and return its entry."
+      (or (native-bridge-owned-entry bridge owned)
+          (native-bridge-native-entry bridge native)
+          (begin
+            (if (native-bridge-compound-prohibition bridge)
+                (native-bridge-reject-compound!
+                 (native-bridge-compound-prohibition bridge)))
+            (let* ((kind (consent-datum-object-kind owned))
+                   (entry
+                    (vector owned
+                            native
+                            kind
+                            #f)))
+              (set-native-bridge-entries!
+               bridge
+               (cons entry (native-bridge-entries bridge)))
+              (vector-set!
+               (native-owned-object-state!
+                (ensure-native-bridge-owned-index! bridge) owned)
+               0
+               entry)
+              (consent-identity-map-set!
+               (ensure-native-bridge-native-index! bridge) native entry)
+              entry))))
+
+    (define (native-bridge-owned-reuse bridge owned absent)
+      "Return OWNED's existing borrowed mirror in BRIDGE, or ABSENT."
+      (let ((entry (native-bridge-owned-entry bridge owned)))
+        (if entry (vector-ref entry 1) absent)))
+
+    (define (native-bridge-allocate-owned! bridge owned native)
+      "Register OWNED's shell before mixed graph edges are initialized."
+      ;; Identity registration closes host-to-owned back edges without
+      ;; recursive conversion. Snapshot only after all slots are initialized;
+      ;; scanning a fresh vector/string/bytevector shell here would duplicate
+      ;; the full O(N) snapshot immediately taken by FINISH-OWNED!.
+      (native-bridge-add-entry! bridge owned native)
+      native)
+
+    (define (native-bridge-finish-owned! bridge owned native)
+      "Snapshot OWNED's complete NATIVE mirror after edge initialization."
+      (let ((entry (native-bridge-owned-entry bridge owned)))
+        (if entry
+            (vector-set!
+             entry
+             3
+             (native-bridge-snapshot
+              (consent-datum-object-kind owned) native))))
+      native)
+
+    (define (native-bridge-owned->native
+             bridge value convert-symbols? . maybe-allow-borrow?)
+      "Convert VALUE through one call-scoped mixed-domain graph worklist."
+      (let ((authorize
+             (if (or (null? maybe-allow-borrow?)
+                     (car maybe-allow-borrow?))
+                 native-egress-authorize-any!
+                 native-egress-reject-borrow!)))
+        (native-egress-graph
+         value
+         (ensure-native-bridge-egress-state! bridge)
+         (lambda (item)
+           (cond
+            ((and convert-symbols? (consent-symbol? item))
+             (host-string->symbol (consent-symbol-name item)))
+            ((consent-character? item)
+             (consent-character->host-character item))
+            ((consent-number? item) (native-number-or-owned item))
+            ((consent-eof-object? item) (eof-object))
+            ((or (consent-procedure? item)
+                 (consent-primitive-procedure? item)
+                 (continuation? item)
+                 (consent-parameter? item))
+             (native-callback-shim
+              item (native-bridge-context bridge) #t))
+            (else item)))
+         ;; Borrowed mirrors must not enter durable source metadata indexes;
+         ;; all bridge state becomes unreachable when the outer call unwinds.
+         native-copy-source-noop!
+         (lambda (owned absent)
+           (native-bridge-owned-reuse bridge owned absent))
+         (lambda (native owned)
+           (native-bridge-allocate-owned! bridge owned native))
+         (lambda (native owned)
+           (native-bridge-finish-owned! bridge owned native))
+         authorize)))
+
+    (define (native-slot-value-same? left right)
+      "Report whether native slot values LEFT and RIGHT keep one referent."
+      (cond
+       ((and (number? left) (number? right)) (eqv? left right))
+       ((and (char? left) (char? right)) (eqv? left right))
+       (else (host-eq? left right))))
+
+    (define (native-bridge-slot-specs entries)
+      "Return changed pair/vector writeback slot specifications for ENTRIES."
+      (let entry-loop ((rest entries) (specs '()))
+        (if (null? rest)
+            (reverse specs)
+            (let* ((entry (car rest))
+                   (native (vector-ref entry 1))
+                   (kind (vector-ref entry 2))
+                   (snapshot (vector-ref entry 3)))
+              (if (not snapshot)
+                  (entry-loop (cdr rest) specs)
+                  (case kind
+                ((pair)
+                 (let* ((head (car native))
+                        (previous-head (vector-ref snapshot 0))
+                        (next-specs
+                         (if (native-slot-value-same? head previous-head)
+                             specs
+                             (cons
+                              (vector entry 0 head previous-head)
+                              specs)))
+                        (tail (cdr native))
+                        (previous-tail (vector-ref snapshot 1)))
+                   (entry-loop
+                    (cdr rest)
+                    (if (native-slot-value-same? tail previous-tail)
+                        next-specs
+                        (cons
+                         (vector entry 1 tail previous-tail)
+                         next-specs)))))
+                ((vector)
+                 (let vector-loop ((index 0) (next-specs specs))
+                   (if (= index (vector-length native))
+                       (entry-loop (cdr rest) next-specs)
+                       (let ((current (vector-ref native index))
+                             (previous (vector-ref snapshot index)))
+                         (vector-loop
+                          (+ index 1)
+                          (if (native-slot-value-same? current previous)
+                              next-specs
+                              (cons
+                               (vector entry index current previous)
+                               next-specs)))))))
+                (else (entry-loop (cdr rest) specs))))))))
+
+    (define (native-bridge-sync-atomic-entry! bridge entry)
+      "Copy native string or bytevector ENTRY mutations into its owned object."
+      (let ((heap (context-datum-heap (native-bridge-context bridge)))
+            (owned (vector-ref entry 0))
+            (native (vector-ref entry 1))
+            (kind (vector-ref entry 2))
+            (snapshot (vector-ref entry 3)))
+        (if snapshot
+            (case kind
+          ((string)
+           (let ((index 0))
+             (string-for-each
+              (lambda (current)
+                (if (not
+                     (char=? current (vector-ref snapshot index)))
+                    (begin
+                      (consent-datum-string-set-host!
+                       heap owned index current)
+                      (vector-set! snapshot index current)))
+                (set! index (+ index 1)))
+              native)))
+          ((bytevector)
+           (let loop ((index 0))
+             (if (< index (bytevector-length native))
+                 (let ((current (bytevector-u8-ref native index)))
+                   (if (not (= current
+                               (bytevector-u8-ref snapshot index)))
+                       (begin
+                         (consent-datum-bytevector-u8-set!
+                          heap owned index current)
+                         (bytevector-u8-set!
+                          snapshot index current)))
+                   (loop (+ index 1))))))))))
+
+    (define (native-bridge-register-imported!
+             bridge target source root)
+      "Copy fresh imported TARGET's native provenance without retaining it."
+      ;; ROOT is the temporary multi-value carrier. Known borrowed mirrors are
+      ;; intercepted before allocation, so COPY-SOURCE sees fresh result or
+      ;; condition nodes only. They receive provenance, never bridge entries
+      ;; or mutation snapshots, and die normally with their owning context.
+      (if (not (host-eq? source root))
+          (context-copy-datum-source!
+           (native-bridge-context bridge) target source #t))
+      target)
+
+    (define (native-bridge-import-reuse bridge source absent)
+      "Return SOURCE's already-owned bridge identity, or ABSENT."
+      (let ((entry
+             (and
+              (or (pair? source)
+                  (string? source)
+                  (vector? source)
+                  (bytevector? source))
+              (native-bridge-native-entry bridge source))))
+        (if entry (vector-ref entry 0) absent)))
+
+    (define (native-bridge-apply-slot! bridge spec value)
+      "Apply converted VALUE to one changed native slot SPEC."
+      (let* ((entry (vector-ref spec 0))
+             (slot (vector-ref spec 1))
+             (current (vector-ref spec 2))
+             (previous (vector-ref spec 3))
+             (heap (context-datum-heap (native-bridge-context bridge)))
+             (owned (vector-ref entry 0))
+             (snapshot (vector-ref entry 3)))
+        (if (not (native-slot-value-same? current previous))
+            (case (vector-ref entry 2)
+              ((pair)
+               (if (= slot 0)
+                   (consent-datum-set-car! heap owned value)
+                   (consent-datum-set-cdr! heap owned value)))
+              ((vector)
+               (consent-datum-vector-set! heap owned slot value))))
+        (vector-set! snapshot slot current)))
+
+    (define (native-bridge-reconcile-values bridge values)
+      "Own native VALUES and synchronize mapped compound mutations."
+      (let* ((entries (native-bridge-entries bridge))
+             (specs (native-bridge-slot-specs entries))
+             (all-values
+              (append values
+                      (map (lambda (spec) (vector-ref spec 2)) specs)))
+             (converted
+              (if (null? all-values)
+                  '()
+                  (let* ((length (length all-values))
+                         (root (list->vector all-values))
+                         (owned-root
+                          (consent-datum-import
+                           (context-datum-heap
+                            (native-bridge-context bridge))
+                           root
+                           (lambda (value)
+                             (native-result-leaf
+                              value (native-bridge-context bridge)))
+                           (lambda (target source)
+                             (native-bridge-register-imported!
+                              bridge target source root))
+                           (lambda (source absent)
+                             (native-bridge-import-reuse
+                              bridge source absent)))))
+                    (let extract ((index 0) (result '()))
+                      (if (= index length)
+                          (reverse result)
+                          (extract
+                           (+ index 1)
+                           (cons
+                            (consent-datum-vector-ref owned-root index)
+                            result)))))))
+             (result-count (length values)))
+        (let apply-slots ((rest specs)
+                          (owned-values
+                           (let drop ((count result-count)
+                                      (rest converted))
+                             (if (= count 0)
+                                 rest
+                                 (drop (- count 1) (cdr rest))))))
+          (if (pair? rest)
+              (begin
+                (native-bridge-apply-slot!
+                 bridge (car rest) (car owned-values))
+                (apply-slots (cdr rest) (cdr owned-values)))))
+        (let sync-atomic ((rest entries))
+          (if (pair? rest)
+              (begin
+                (native-bridge-sync-atomic-entry! bridge (car rest))
+                (sync-atomic (cdr rest)))))
+        (let take ((count result-count) (rest converted) (result '()))
+          (if (= count 0)
+              (reverse result)
+              (take (- count 1) (cdr rest) (cons (car rest) result))))))
+
+    (define (native-scalar-result-values? values)
+      "Report whether VALUES contain no compound datum requiring import."
+      (let loop ((rest values))
+        (or
+         (null? rest)
+         (and
+          (not
+           (or (consent-datum-object? (car rest))
+               (pair? (car rest))
+               (string? (car rest))
+               (vector? (car rest))
+               (bytevector? (car rest))))
+          (loop (cdr rest))))))
+
+    (define (native-bridge-native-values->owned bridge values)
+      "Convert native VALUES and synchronize any mapped mutations."
+      (if (and (native-bridge-compound-prohibition bridge)
+               (not (native-scalar-result-values? values)))
+          (native-bridge-reject-compound!
+           (native-bridge-compound-prohibition bridge)))
+      ;; A scalar-only call has neither borrowed entries nor result topology to
+      ;; preserve. Convert leaves directly, avoiding substitution maps, the
+      ;; temporary root vector, and a datum-import traversal.
+      (if (and (null? (native-bridge-entries bridge))
+               (native-scalar-result-values? values))
+          (map
+           (lambda (value)
+             (native-result-leaf value (native-bridge-context bridge)))
+           values)
+          (native-bridge-reconcile-values bridge values)))
+
+    ;; Owner libraries expose representation records whose exact identity must
+    ;; survive native compilation in both directions. Their procedures perform
+    ;; any explicit host projection themselves.
+    (define native-preserved-owner-libraries
+      '((consent datum)))
 
     ;; Some internal-library exports operate on reader-owned Consent datums
     ;; whose
@@ -3559,8 +4493,7 @@ host"
           consent-symbol-table?
           consent-symbol-table-from-root
           consent-symbol-table-root
-          consent-symbol-table-root-set!
-          consent-intern-symbol))
+          consent-symbol-table-root-set!))
         (((consent symbol-boundary)
           consent-host-symbol?
           consent-host-symbol-name
@@ -3590,6 +4523,8 @@ host"
           consent-result->external
           consent-value->external))
         (((consent reader)
+          consent-datum-source-metadata
+          consent-source-metadata->record
           consent-datum-source
           consent-datum-source-set!
           consent-copy-datum-source!
@@ -3633,7 +4568,9 @@ host"
           consent-host-symbol-memq
           consent-host-symbol-assq
           consent-host-symbol-member
-          consent-host-symbol-assoc))))
+          consent-host-symbol-assoc))
+        (((consent reader)
+          consent-datum-source-metadata))))
 
     ;; Accessors that intentionally publish a host scalar payload should keep
     ;; that surface instead of rewrapping the result back into a Consent
@@ -3649,6 +4586,84 @@ host"
         (agent generated-source)
         (agent models openai)))
 
+    ;; Only these compiled bindings may borrow owned compounds through the
+    ;; call-scoped graph adapter. Higher-order or retaining libraries stay on
+    ;; their source realization instead of widening this private ABI.
+    (define native-compound-borrow-bindings
+      '((((agent task)
+          task-state?
+          task-transition-allowed?
+          validate-task-transition
+          make-task-condition
+          task-field-value
+          task-record?
+          agent-task?
+          agent-step?
+          agent-action?
+          agent-observation?
+          agent-decision?
+          task-pause?
+          task-stop?
+          task-wait?
+          task-failure?
+          agent-completion?
+          task-record-valid?
+          validate-task-record
+          make-agent-task
+          make-agent-step
+          make-agent-action
+          make-agent-observation
+          make-agent-decision
+          make-task-pause
+          make-task-stop
+          make-task-wait
+          make-task-failure
+          make-agent-completion))
+        (((agent transcript)
+          make-transcript-event
+          transcript-event?
+          transcript-field-value
+          transcript-event-replay-mode
+          transcript-replayable?
+          transcript-recorded-observation?
+          transcript-event->fixture-case
+          transcript-event-summary
+          transcript-raw-view
+          transcript-summary-view
+          transcript-rotate
+          transcript-export))
+        (((agent context)
+          context-field
+          context-present?
+          make-request-context
+          make-conversation-summary
+          make-focus-context
+          make-context-bundle))))
+
+    ;; Public immutable data bindings that native code may borrow directly.
+    (define native-compound-borrow-data-bindings
+      '((((agent task)
+          task-states
+          task-pause-states
+          task-terminal-states
+          task-allowed-transitions
+          task-pause-reasons
+          task-stop-reasons))
+        (((agent transcript)
+          transcript-event-kinds
+          transcript-replay-modes
+          transcript-export-formats
+          transcript-retention-default))
+        (((agent context)))))
+
+    ;; A small number of directly linked core bindings safely copy a compound
+    ;; argument during the call without retaining its borrowed mirror. Keep
+    ;; these exceptions separate from the three complete agent inventories:
+    ;; adding one core binding must not make every export in that owner part of
+    ;; the call-scoped borrow ABI.
+    (define native-core-compound-borrow-bindings
+      '((((consent symbol) consent-intern-symbol))))
+
     (define (native-binding-policy-member? table library-key name)
       "Report whether TABLE marks NAME in LIBRARY-KEY for special handling."
       (let loop ((rest table))
@@ -3659,13 +4674,114 @@ host"
                   (library-memq name (cdar entry))
                   (loop (cdr rest)))))))
 
+    (define (native-binding-policy-names table library-key)
+      "Return TABLE's names for LIBRARY-KEY, or #f when it is absent."
+      (let loop ((rest table))
+        (if (null? rest)
+            #f
+            (let ((entry (car rest)))
+              (if (library-datum-equal? (caar entry) library-key)
+                  (cdar entry)
+                  (loop (cdr rest)))))))
+
+    (define (native-interpreted-callable? value)
+      "Report whether VALUE is a callable owned by the interpreter."
+      (or (consent-procedure? value)
+          (consent-primitive-procedure? value)
+          (continuation? value)
+          (consent-parameter? value)))
+
+    (define (native-binding-table-ref bindings name)
+      "Return NAME's native binding pair from BINDINGS, or #f."
+      (let loop ((rest bindings))
+        (cond
+         ((null? rest) #f)
+         ((library-symbol-eq? name (car (car rest))) (car rest))
+         (else (loop (cdr rest))))))
+
+    (define (validate-native-borrow-binding-inventory! key bindings)
+      "Validate the complete typed compound-borrow inventory for KEY."
+      (let ((procedure-names
+             (native-binding-policy-names
+              native-compound-borrow-bindings key)))
+        (if procedure-names
+            (let ((data-names
+                   (native-binding-policy-names
+                    native-compound-borrow-data-bindings key)))
+              (let actual-loop ((rest bindings) (seen '()))
+                (if (pair? rest)
+                    (let* ((binding (car rest))
+                           (name (car binding))
+                           (allowed?
+                            (if (procedure? (cdr binding))
+                                (library-memq name procedure-names)
+                                (and data-names
+                                     (library-memq name data-names)))))
+                      (if (or (library-memq name seen) (not allowed?))
+                          (error
+                           (string-append
+                            "native-binding-inventory-mismatch: "
+                            "unexpected binding")))
+                      (actual-loop (cdr rest) (cons name seen)))))
+              (let procedure-loop ((rest procedure-names))
+                (if (pair? rest)
+                    (let ((binding
+                           (native-binding-table-ref bindings (car rest))))
+                      (if (not (and binding (procedure? (cdr binding))))
+                          (error
+                           (string-append
+                            "native-binding-inventory-mismatch: "
+                            "missing procedure")))
+                      (procedure-loop (cdr rest)))))
+              (let data-loop ((rest data-names))
+                (if (pair? rest)
+                    (let ((binding
+                           (native-binding-table-ref bindings (car rest))))
+                      (if (not (and binding
+                                    (not (procedure? (cdr binding)))))
+                          (error
+                           "native-binding-inventory-mismatch: missing data"))
+                      (data-loop (cdr rest)))))))))
+
+    (define (native-binding-name-count bindings name)
+      "Return how many BINDINGS entries are named NAME."
+      (let loop ((rest bindings) (count 0))
+        (if (null? rest)
+            count
+            (loop
+             (cdr rest)
+             (if (library-symbol-eq? name (car (car rest)))
+                 (+ count 1)
+                 count)))))
+
+    (define (validate-native-core-borrow-bindings! key bindings)
+      "Validate every sparse core borrow exception for native library KEY."
+      (let ((names
+             (native-binding-policy-names
+              native-core-compound-borrow-bindings key)))
+        (if names
+            (let loop ((rest names) (seen '()))
+              (if (pair? rest)
+                  (let* ((name (car rest))
+                         (binding (native-binding-table-ref bindings name)))
+                    (if (or (library-memq name seen)
+                            (not (= (native-binding-name-count bindings name)
+                                    1))
+                            (not (and binding (procedure? (cdr binding)))))
+                        (error
+                         (string-append
+                          "native-binding-inventory-mismatch: "
+                          "invalid core borrow binding")))
+                    (loop (cdr rest) (cons name seen))))))))
+
     (define (native-binding-argument-policy library-key name)
       "Return how NAME in LIBRARY-KEY should receive its arguments."
       (cond
-       ((native-binding-policy-member?
-         native-preserved-argument-bindings
-         library-key
-         name)
+       ((or (library-member library-key native-preserved-owner-libraries)
+            (native-binding-policy-member?
+             native-preserved-argument-bindings
+             library-key
+             name))
         'preserve)
        ((library-member library-key native-callback-argument-libraries)
         'callback)
@@ -3674,10 +4790,11 @@ host"
     (define (native-binding-result-policy library-key name)
       "Return how NAME in LIBRARY-KEY should publish its result."
       (cond
-       ((native-binding-policy-member?
-         native-preserved-result-bindings
-         library-key
-         name)
+       ((or (library-member library-key native-preserved-owner-libraries)
+            (native-binding-policy-member?
+             native-preserved-result-bindings
+             library-key
+             name))
         'preserve)
        ((native-binding-policy-member?
          native-host-result-bindings
@@ -3692,12 +4809,18 @@ host"
         (cond
          ((library-symbol-eq? policy 'preserve) argument)
          ((and (library-symbol-eq? policy 'callback)
-               (or (consent-procedure? argument)
-                   (consent-primitive-procedure? argument)
-                   (continuation? argument)
-                   (consent-parameter? argument)))
+               (native-interpreted-callable? argument))
           (native-callback-shim argument context #t))
-         (else (consent-native-argument-value argument context)))))
+         (else
+          (native-argument-value-with-policy
+           argument
+           context
+           (or
+            (not (library-symbol-eq? policy 'convert))
+            (native-binding-policy-member?
+             native-compound-borrow-bindings library-key name)
+            (native-binding-policy-member?
+             native-core-compound-borrow-bindings library-key name)))))))
 
     (define (native-binding-result library-key name value)
       "Bridge native VALUE back for NAME in LIBRARY-KEY."
@@ -3705,8 +4828,28 @@ host"
         (cond
          ((library-symbol-eq? policy 'preserve) value)
          ((library-symbol-eq? policy 'host)
-          (native-callback-result value '() #t))
+          (native-callback-result value #t))
          (else (native-result-value value)))))
+
+    (define (native-binding-results
+             library-key name bridge results)
+      "Bridge one native binding's RESULTS through its per-call BRIDGE."
+      (let ((policy (native-binding-result-policy library-key name)))
+        (cond
+         ((library-symbol-eq? policy 'consent)
+          (native-converted-results-value
+           (native-bridge-native-values->owned bridge results)))
+         (else
+          ;; Preserved and explicitly host-facing results do not enter the
+          ;; owned heap, but mutations to converted arguments still do.
+          (native-bridge-native-values->owned bridge '())
+          (native-converted-results-value
+           (map
+            (lambda (value)
+              (if (library-symbol-eq? policy 'preserve)
+                  value
+                  (native-callback-result value #t)))
+            results))))))
 
     (define (consent-apply-callable value arguments)
       "Apply callable VALUE to ARGUMENTS across the native import boundary."
@@ -3727,7 +4870,8 @@ host"
           (apply (native-callback-shim value native-call-context #f)
                  arguments)))
 
-    (define (native-nested-argument value context seen)
+    (define (native-nested-argument
+             value context . maybe-allow-borrow?)
       "Convert one value nested inside a container crossing into native code."
       "Callables nested in data follow the callback convention -- a custom"
       "reader resync strategy or a policy-confirmation-function inside an"
@@ -3737,53 +4881,62 @@ host"
       "canonical number records, and the interpreter's eof record become host"
       "Scheme values"
       "instead of leaking reader/runtime representation details into native"
-      "consumers. Pairs and vectors are walked copy-on-write so untouched"
-      "structure keeps its identity. SEEN guards against cyclic data, which"
-      "is returned unchanged on revisit."
-      (cond
-       ((consent-symbol? value)
-        (host-string->symbol (consent-symbol-name value)))
-       ((consent-character? value)
-        (consent-character->host-character value))
-       ((consent-number? value)
-        (native-number-or-owned value))
-       ((consent-eof-object? value)
-        (eof-object))
-       ((or (consent-procedure? value)
-            (consent-primitive-procedure? value)
-            (continuation? value)
-            (consent-parameter? value))
-        (native-callback-shim value context #t))
-       ((pair? value)
-        (if (host-memq value seen)
-            value
-            (let* ((next-seen (cons value seen))
-                   (head (native-nested-argument (car value) context
-                     next-seen))
-                   (tail (native-nested-argument (cdr value) context
-                     next-seen)))
-              (if (and (host-eq? head (car value))
-                       (host-eq? tail (cdr value)))
-                  value
-                  (cons head tail)))))
-       ((vector? value)
-        (if (host-memq value seen)
-            value
-            (let* ((next-seen (cons value seen))
-                   (length (vector-length value))
-                   (converted
-                    (let loop ((index 0) (acc '()) (changed #f))
-                      (if (= index length)
-                          (and changed (reverse acc))
-                          (let* ((element (vector-ref value index))
-                                 (next (native-nested-argument
-                                        element context next-seen)))
-                            (loop (+ index 1)
-                                  (cons next acc)
-                                  (or changed
-                                      (not (host-eq? next element)))))))))
-              (if converted (list->vector converted) value))))
-       (else value)))
+      "consumers. One worklist crosses host and owned nodes without recursion."
+      (let ((bridge (current-native-graph-bridge context))
+            (allow-borrow?
+             (or (null? maybe-allow-borrow?)
+                 (car maybe-allow-borrow?))))
+        (if bridge
+            (native-bridge-owned->native
+             bridge value #t allow-borrow?)
+            (call-with-fresh-native-egress-state
+             (lambda (state)
+               (native-egress-graph
+                value
+                state
+                (lambda (leaf)
+                  (cond
+                   ((consent-symbol? leaf)
+                    (host-string->symbol (consent-symbol-name leaf)))
+                   ((consent-character? leaf)
+                    (consent-character->host-character leaf))
+                   ((consent-number? leaf)
+                    (native-number-or-owned leaf))
+                   ((consent-eof-object? leaf) (eof-object))
+                   ((or (consent-procedure? leaf)
+                        (consent-primitive-procedure? leaf)
+                        (continuation? leaf)
+                        (consent-parameter? leaf))
+                    (native-callback-shim leaf context #t))
+                   (else leaf)))
+                native-copy-source-noop!
+                native-owned-reuse-none
+                native-owned-allocation-noop!
+                native-copy-source-noop!
+                (if allow-borrow?
+                    native-egress-authorize-any!
+                    native-egress-reject-borrow!)))))))
+
+    (define (native-argument-value-with-policy
+             value context allow-borrow?)
+      "Convert VALUE for CONTEXT under explicit ALLOW-BORROW?."
+      (if (and (not allow-borrow?)
+               (native-interpreted-callable? value))
+          (native-egress-reject-borrow! value))
+      (if (or (pair? value)
+              (vector? value)
+              (consent-datum-object? value)
+              (consent-symbol? value)
+              (consent-character? value)
+              (consent-number? value)
+              (consent-eof-object? value))
+          (let ((bridge (current-native-graph-bridge context)))
+            (if bridge
+                (native-bridge-owned->native
+                 bridge value #t allow-borrow?)
+                (native-nested-argument
+                 value context allow-borrow?)))
+          value))
 
     (define (consent-native-argument-value value context)
       "Convert one argument crossing into native code."
@@ -3809,72 +4962,49 @@ host"
          (description
           ("VALUE converted to the host-facing argument form: host symbols,"
            "characters, numbers, or eof objects for scalar runtime records;"
-           "host callbacks for nested callables; and copy-on-write container"
-           "rewrites when needed.")))
+           "host callbacks for nested callables; and topology-preserving host"
+           "containers for owned graph arguments.")))
         (effects pure allocation))
-      (if (or (pair? value)
-              (vector? value)
-              (consent-symbol? value)
-              (consent-character? value)
-              (consent-number? value)
-              (consent-eof-object? value))
-          (native-nested-argument value context '())
-          value))
+      (native-argument-value-with-policy value context #t))
 
-    (define (native-own-result-datum datum context seen)
-      "Intern symbols nested in DATUM through the active caller CONTEXT."
+    (define (native-result-procedure procedure context)
+      "Return the runtime wrapper for native PROCEDURE in CONTEXT."
+      (or (native-callback-origin procedure)
+          ;; R7RS does not require repeated procedure results to be `eqv?'.
+          ;; A fresh wrapper avoids retaining every transient host closure in
+          ;; a long-lived evaluation context's static binding-cell cache.
+          (native-binding-value
+           '(native result) 'result procedure #f)))
+
+    (define (native-result-leaf value context)
+      "Convert native scalar VALUE for runtime CONTEXT."
       (cond
-         ((consent-symbol? datum)
-          (consent-intern-symbol
-           (context-symbol-table context)
-           (consent-symbol-name datum)))
-         ((host-symbol? datum)
-          (consent-intern-symbol
-           (context-symbol-table context)
-           (host-symbol->string datum)))
-         ((pair? datum)
-          (if (host-memq datum seen)
-              datum
-              (let* ((next-seen (cons datum seen))
-                     (head
-                      (native-own-result-datum
-                       (car datum) context next-seen))
-                     (tail
-                      (native-own-result-datum
-                       (cdr datum) context next-seen)))
-                (if (and (host-eq? head (car datum))
-                         (host-eq? tail (cdr datum)))
-                    datum
-                    (let ((result (cons head tail)))
-                      (context-copy-datum-source!
-                       context result datum)
-                      result)))))
-         ((vector? datum)
-          (if (host-memq datum seen)
-              datum
-              (let* ((next-seen (cons datum seen))
-                     (length (vector-length datum))
-                     (converted
-                      (let loop ((index 0) (result '()) (changed #f))
-                        (if (= index length)
-                            (and changed (reverse result))
-                            (let* ((element (vector-ref datum index))
-                                   (next
-                                    (native-own-result-datum
-                                     element context next-seen)))
-                              (loop (+ index 1)
-                                    (cons next result)
-                                    (or changed
-                                        (not (host-eq? next element)))))))))
-                (if converted
-                    (let ((result (list->vector converted)))
-                      (context-copy-datum-source!
-                       context result datum)
-                      result)
-                    datum))))
-         (else datum)))
+       ((and context (consent-symbol? value))
+        (consent-intern-symbol
+         (context-symbol-table context)
+         (consent-symbol-name value)))
+       ((and context (host-symbol? value))
+        (consent-intern-symbol
+         (context-symbol-table context)
+         (host-symbol->string value)))
+       (else
+        (consent-host-datum->consent-datum
+         value
+         (lambda (procedure)
+           (native-result-procedure procedure context))))))
 
-    (define (native-result-value value)
+    (define (native-own-result-datum datum context)
+      "Import native DATUM into CONTEXT's owned compound heap."
+      "The shared datum importer memoizes source objects before descending,"
+      "so aliases and cycles cross the private host adapter exactly once."
+      (consent-datum-import
+       (context-datum-heap context)
+       datum
+       (lambda (value) (native-result-leaf value context))
+       (lambda (target source)
+         (context-copy-datum-source! context target source #t))))
+
+    (define (native-result-value value . maybe-context)
       "Convert one native RESULT for interpreted use."
       "Native unwrap accessors return raw host numbers (consent-number-value,"
       "read positions); interpreted callers expect canonical records,"
@@ -3882,23 +5012,21 @@ host"
       "host procedure result (a REPL chrome lookup, for example) wraps as a"
       "native primitive through the shared binding cells so repeated lookups"
       "stay eqv? and the interpreted world can both recognize and apply it."
-      "Every other host-owned datum crosses under the shared host-datum"
-      "bridge, which canonicalizes numbers/eof and preserves source metadata"
-      "on rebuilt structure."
-      (let ((converted
-             (consent-host-datum->consent-datum
-              value
-              (lambda (procedure)
-                (or (native-callback-origin procedure)
-                    (cell-value
-                     (native-binding-cell
-                      '(native result)
-                      'result
-                      procedure
-                      native-call-context)))))))
-        (if native-call-context
-            (native-own-result-datum converted native-call-context '())
-            converted)))
+      "Every host compound result is imported through the active context's"
+      "memoized datum heap conversion, which preserves aliases, cycles, and"
+      "source provenance while canonicalizing scalar leaves."
+      (let ((context
+             (if (null? maybe-context)
+                 native-call-context
+                 (car maybe-context))))
+        (if context
+            (let ((bridge (current-native-graph-bridge context)))
+              (if bridge
+                  (car
+                   (native-bridge-native-values->owned
+                    bridge (list value)))
+                  (native-own-result-datum value context)))
+            (native-result-leaf value #f))))
 
     (define (native-results-value results converter)
       "Convert host RESULTS with CONVERTER and preserve multiple values."
@@ -3906,6 +5034,132 @@ host"
         (if (and (pair? converted) (null? (cdr converted)))
             (car converted)
             (make-multiple-values converted))))
+
+    (define (native-converted-results-value results)
+      "Return converted RESULTS as one value or a multiple-values wrapper."
+      (if (and (pair? results) (null? (cdr results)))
+          (car results)
+          (make-multiple-values results)))
+
+    (define (invoke-with-native-condition-bridge
+             bridge invoke . maybe-reconciliation-state)
+      "Invoke through BRIDGE and own any arbitrary raised native datum."
+      ;; Return a tagged outcome from `guard' and raise only after its handler
+      ;; has exited. Gauche bypasses an enclosing exception handler when a
+      ;; `guard' clause itself raises, which would let native failures escape
+      ;; top-level evaluation-result capture.
+      (let ((start-reconciliation!
+             (if (pair? maybe-reconciliation-state)
+                 (car maybe-reconciliation-state)
+                 (lambda () #f)))
+            (complete-reconciliation!
+             (if (and (pair? maybe-reconciliation-state)
+                      (pair? (cdr maybe-reconciliation-state)))
+                 (cadr maybe-reconciliation-state)
+                 (lambda () #f)))
+            (outcome
+             (guard
+              (condition (else (cons #f condition)))
+              (call-with-values
+               (lambda () (invoke bridge))
+               (lambda results (cons #t results))))))
+        (if (car outcome)
+            (apply values (cdr outcome))
+            (let ((condition (cdr outcome)))
+              ;; Conversion still occurs while the bridge is active, so
+              ;; raising a current argument or subobject preserves its owned
+              ;; identity. Native error objects become the runtime's portable
+              ;; error record before a borrowed host can render an owned
+              ;; irritant as opaque host data.
+              (start-reconciliation!)
+              (let ((owned-condition
+                     (if (error-object? condition)
+                         (let ((irritants
+                                (error-object-irritants condition)))
+                           ;; Guile's R7RS adapter returns #f, rather than the
+                           ;; required empty list, for an error with no
+                           ;; irritants. Normalize that host representation at
+                           ;; the boundary before graph reconciliation.
+                           (make-consent-error-object
+                            (error-object-message condition)
+                            (native-bridge-native-values->owned
+                             bridge
+                             (if (list? irritants) irritants '()))))
+                         (car
+                          (native-bridge-native-values->owned
+                           bridge (list condition))))))
+                (complete-reconciliation!)
+                (raise owned-condition))))))
+
+    (define (call-with-native-graph-bridge context invoke receive)
+      "Invoke one native call through CONTEXT's outer-call graph bridge."
+      (let ((active (current-native-graph-bridge context)))
+        (if active
+            ;; Re-entrant calls share the outer transaction only for scalars.
+            ;; Compound state would require repeated scans for uninstrumented
+            ;; host mutations, so reject it instead of hiding quadratic work.
+            (call-with-native-scalar-only-bridge
+             active
+             'reentrant
+             (lambda ()
+               (let ((previous-context native-call-context)
+                     (previous-bridge-context
+                      (native-bridge-context active)))
+                 (dynamic-wind
+                  (lambda ()
+                    (set! native-call-context context)
+                    (set-native-bridge-context! active context))
+                  (lambda ()
+                    (call-with-values
+                     (lambda ()
+                       (invoke-with-native-condition-bridge active invoke))
+                     (lambda results (receive active results))))
+                  (lambda ()
+                    (set! native-call-context previous-context)
+                    (set-native-bridge-context!
+                     active previous-bridge-context))))))
+            (let ((previous-context native-call-context)
+                  (previous-bridge native-call-graph-bridge)
+                  (bridge (make-native-graph-bridge context))
+                  (reconciliation-state 'pending))
+              (dynamic-wind
+               (lambda ()
+                 (set! native-call-context context)
+                 (set! native-call-graph-bridge bridge))
+               (lambda ()
+                 (call-with-values
+                  (lambda ()
+                    (invoke-with-native-condition-bridge
+                     bridge
+                     invoke
+                     (lambda ()
+                       (set! reconciliation-state 'started))
+                     (lambda ()
+                       (set! reconciliation-state 'completed))))
+                  (lambda results
+                    (set! reconciliation-state 'started)
+                    (let ((value (receive bridge results)))
+                      (set! reconciliation-state 'completed)
+                      value))))
+               (lambda ()
+                 ;; Restore dynamic state before a writeback error can escape.
+                 (set! native-call-context previous-context)
+                 (set! native-call-graph-bridge previous-bridge)
+                 ;; Mutations performed before a native exception remain
+                 ;; observable. Release the intrusive header map even when
+                 ;; reconciliation itself raises.
+                 (dynamic-wind
+                  (lambda () #t)
+                  (lambda ()
+                    (if (library-symbol-eq?
+                         reconciliation-state 'pending)
+                        (begin
+                          (set! reconciliation-state 'started)
+                          (native-bridge-native-values->owned bridge '())
+                          (set! reconciliation-state 'completed))))
+                  (lambda ()
+                    (native-owned-state-release!
+                     (native-bridge-owned-index bridge))))))))))
 
     (define (consent-call-native-library procedure context . arguments)
       "Call native PROCEDURE through the runtime representation boundary."
@@ -3921,19 +5175,16 @@ host"
         (returns (type object)
          (description "PROCEDURE's result converted back into CONTEXT."))
         (effects procedure-call allocation))
-      (let ((previous native-call-context))
-        (dynamic-wind
-         (lambda () (set! native-call-context context))
-         (lambda ()
-           (call-with-values
-            (lambda ()
-              (apply procedure
-                     (map (lambda (argument)
-                            (consent-native-argument-value argument context))
-                          arguments)))
-            (lambda results
-              (native-results-value results native-result-value))))
-         (lambda () (set! native-call-context previous)))))
+      (call-with-native-graph-bridge
+       context
+       (lambda (bridge)
+         (apply procedure
+                (map (lambda (argument)
+                       (consent-native-argument-value argument context))
+                     arguments)))
+       (lambda (bridge results)
+         (native-converted-results-value
+          (native-bridge-native-values->owned bridge results)))))
 
     (define (native-binding-value
              library-key
@@ -3955,29 +5206,20 @@ host"
            (host-string->symbol
             (string-append "native:" (library-symbol-name name)))
            (lambda (arguments context)
-             (let ((previous native-call-context))
-               (dynamic-wind
-                (lambda () (set! native-call-context context))
-                (lambda ()
-                  (call-with-values
-                   (lambda ()
-                     (apply value
-                            (map (lambda (argument)
-                                   (native-binding-argument
-                                    library-key
-                                    name
-                                    argument
-                                    context))
-                                 arguments)))
-                   (lambda results
-                     (native-results-value
-                      results
-                      (lambda (result)
-                        (native-binding-result
-                         library-key
-                         name
-                         result))))))
-                (lambda () (set! native-call-context previous)))))
+             (call-with-native-graph-bridge
+              context
+              (lambda (bridge)
+                (apply value
+                       (map (lambda (argument)
+                              (native-binding-argument
+                               library-key
+                               name
+                               argument
+                               context))
+                            arguments)))
+              (lambda (bridge results)
+                (native-binding-results
+                 library-key name bridge results))))
            0
            #f
            (if (null? maybe-documentation)
@@ -3989,25 +5231,30 @@ host"
           ;; numbers.
           (native-binding-result library-key name value)))
 
-    ;; Cache pairing each registered native value and boundary policy with its
-    ;; shared binding cell.
-    (define native-binding-cells '())
+    (define (ensure-context-native-binding-cache! context)
+      "Return CONTEXT's native binding cache, allocating it when absent."
+      "Native registration and result wrapping require the hash-backed"
+      "identity-map adapter before populating this ultra-critical cache."
+      (or (context-native-binding-cache context)
+          (begin
+            (require-native-fast-identity-maps!)
+            (let ((cache (consent-make-identity-map)))
+              (set-context-native-binding-cache! context cache)
+              cache))))
 
-    (define (native-binding-cell
-             library-key name value . maybe-context)
-      "Return the shared binding cell for native VALUE, creating it on first"
-      "use. Internal libraries re-export one another's bindings ((consent"
-      "eval) re-exports the (consent runtime) predicates, for example), and"
-      "importing two such libraries into one program is only compatible when"
-      "both export records carry the same boundary policy. Procedure cells are\
-"
-      "shared globally. Data cells are shared only within one evaluation"
-      "context because symbol-bearing constants must be interned into that"
-      "context's sole symbol table."
-      (let* ((context
-              (if (null? maybe-context) #f (car maybe-context)))
-             (cache-context (if (procedure? value) #f context))
-             (argument-policy
+    (define (native-binding-cache-level! cache key)
+      "Return CACHE's identity-keyed child map for KEY, creating it once."
+      (or (consent-identity-map-ref cache key #f)
+          (let ((created (consent-make-identity-map)))
+            (consent-identity-map-set! cache key created)
+            created)))
+
+    (define (native-binding-cell library-key name value context)
+      "Return CONTEXT's shared binding cell for native VALUE."
+      "The context-local nested identity maps key VALUE, argument policy,"
+      "then result policy. This preserves binding-location identity across"
+      "same-context re-exports without scanning or retaining process history."
+      (let* ((argument-policy
               (native-binding-argument-policy library-key name))
              (result-policy
               (native-binding-result-policy library-key name))
@@ -4015,63 +5262,55 @@ host"
               (consent-native-library-documentation-ref
                library-key
                name))
-             (entry
-              (let loop ((rest native-binding-cells))
-                (if (null? rest)
-                    #f
-                    (let ((candidate (car rest)))
-                      (if (and
-                           (library-symbol-eq?
-                            (list-ref candidate 0) value)
-                           (library-symbol-eq?
-                            (list-ref candidate 1) argument-policy)
-                           (library-symbol-eq?
-                            (list-ref candidate 2) result-policy)
-                           (host-eq?
-                            (list-ref candidate 3) cache-context))
-                          candidate
-                          (loop (cdr rest))))))))
-        (let ((cell
-               (if entry
-                   (list-ref entry 4)
-                   (let ((created
-                          (make-cell
-                           (if (procedure? value)
-                               (native-binding-value
-                                library-key
-                                name
-                                value
-                                documentation)
-                               (let ((previous native-call-context))
-                                 (dynamic-wind
-                                  (lambda ()
-                                    (set! native-call-context context))
-                                  (lambda ()
-                                    (native-binding-value
-                                     library-key
-                                     name
-                                     value
-                                     documentation))
-                                  (lambda ()
-                                    (set! native-call-context previous))))))))
-                     (set! native-binding-cells
-                           (cons
-                            (list
-                             value
-                             argument-policy
-                             result-policy
-                             cache-context
-                             created)
-                            native-binding-cells))
-                     created))))
-          (if documentation
-              (set-primitive-procedure-documentation!
-               (cell-value cell) documentation))
-          cell)))
+             (value-cache
+              (native-binding-cache-level!
+               (ensure-context-native-binding-cache! context)
+               value))
+             (argument-cache
+              (native-binding-cache-level!
+               value-cache argument-policy))
+             (existing
+              (consent-identity-map-ref
+               argument-cache result-policy #f))
+             (cell
+              (or existing
+                  (let ((created
+                         (make-cell
+                          (if (procedure? value)
+                              (native-binding-value
+                               library-key
+                               name
+                               value
+                               documentation)
+                              (let ((previous native-call-context))
+                                (dynamic-wind
+                                 (lambda ()
+                                   (set! native-call-context context))
+                                 (lambda ()
+                                   (native-binding-value
+                                    library-key
+                                    name
+                                    value
+                                    documentation))
+                                 (lambda ()
+                                   (set! native-call-context previous))))))))
+                    (consent-identity-map-set!
+                     argument-cache result-policy created)
+                    created))))
+        (if documentation
+            (set-primitive-procedure-documentation!
+             (cell-value cell) documentation))
+        cell))
 
     (define (register-native-library! key bindings context)
       "Register internal library KEY from its compiled-in native BINDINGS tabl\
 e."
+      (validate-native-borrow-binding-inventory! key bindings)
+      (validate-native-core-borrow-bindings! key bindings)
+      ;; The binding-cell cache itself is an ultra-critical identity lookup,
+      ;; independent of whether this particular library exports compound data.
+      (require-native-fast-identity-maps!)
+      (ensure-context-native-binding-cache! context)
       (let ((value-environment (consent-make-empty-environment))
             (syntax-environment (library-make-empty-syntax-environment #f)))
         (for-each

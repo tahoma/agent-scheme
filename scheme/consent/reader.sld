@@ -2,15 +2,22 @@
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; This library mirrors the Emacs Lisp reader in portable Scheme.  It returns
-;;; native Scheme datums, but it still enforces the same resource limits and
-;;; reader-directive behavior so portable bootstrap tests exercise the same
-;;; language boundary.
+;;; This library mirrors the Emacs Lisp reader in portable Scheme. The
+;;; `consent-read', `consent-read-all', and incremental syntax APIs build
+;;; private host-native syntax while bootstrapping. Scheme-visible reads use
+;;; the explicit heap-taking `consent-read-datum' entry points. Metadata,
+;;; validation, and writer boundaries accept both representations under the
+;;; same resource and rendering rules.
 
 (define-library (consent reader)
   (export consent-read
+          consent-read-datum
           consent-read-all
+          consent-reader-source?
+          consent-make-reader-source
+          consent-reader-source-location-probe-count
           consent-read-from-string-at
+          consent-read-datum-from-string-at
           consent-read-recover
           consent-read-recover-from-string-at
           consent-resync-to-next-form
@@ -29,6 +36,8 @@
           consent-read-eof
           consent-read-eof?
           consent-source-metadata-count
+          consent-datum-source-metadata
+          consent-source-metadata->record
           consent-datum-source
           consent-datum-source-set!
           consent-copy-datum-source!
@@ -68,6 +77,8 @@
           (scheme inexact)
           (scheme write)
           (consent character)
+          (consent datum)
+          (consent identity-map)
           (consent numeric)
           (consent symbol)
           (consent symbol-boundary))
@@ -85,23 +96,38 @@
     ;; Default maximum total datum node count accepted by reader validation.
     (define consent-default-maximum-total-nodes 1000000)
 
+    ;; Repeated incremental reads share this immutable lexical snapshot. The
+    ;; public constructor pays character decoding and line indexing once.
+    (define-record-type <consent-reader-source>
+      (make-consent-reader-source-record
+       text characters line-starts offset-lines)
+      consent-reader-source?
+      (text prepared-reader-source-text)
+      (characters prepared-reader-source-characters)
+      (line-starts prepared-reader-source-line-starts)
+      (offset-lines prepared-reader-source-offset-lines))
+
     ;; Reader records own one parse run's immutable source and mutable cursor.
     (define-record-type <reader>
       ;; Reader state is mutable only for cursor position, fold-case mode, and
       ;; node count.  SOURCE remains the immutable snapshot of input text.
-      (make-reader source characters position length line-starts fold-case
+      (make-reader source characters position length line-starts offset-lines
+                   fold-case
                    symbol-table
                    node-count datum-labels
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
                    maximum-total-nodes maximum-source-metadata source-id
-                   source-metadata recovery pending-stack)
+                   source-metadata source-metadata-table source-metadata-sink
+                   source-metadata-count construction-make construction-fill
+                   construction-fixup recovery pending-stack)
       reader?
       (source reader-source)
       (characters reader-characters)
       (position reader-position set-reader-position!)
       (length reader-length)
       (line-starts reader-line-starts)
+      (offset-lines reader-offset-lines)
       (fold-case reader-fold-case set-reader-fold-case!)
       (symbol-table reader-symbol-table)
       (node-count reader-node-count set-reader-node-count!)
@@ -114,7 +140,21 @@
       (maximum-total-nodes reader-maximum-total-nodes)
       (maximum-source-metadata reader-maximum-source-metadata)
       (source-id reader-source-id)
-      (source-metadata reader-source-metadata)
+      (source-metadata reader-source-metadata set-reader-source-metadata!)
+      ;; Direct owned publication uses object fields and keeps this false.
+      ;; Legacy syntax readers use either a read-scoped or global host table.
+      (source-metadata-table reader-source-metadata-table)
+      ;; Context-backed readers publish immutable notes into the context's
+      ;; indexed overlay instead of retaining private syntax process-wide.
+      (source-metadata-sink reader-source-metadata-sink)
+      (source-metadata-count reader-source-metadata-count
+                             set-reader-source-metadata-count!)
+      ;; Heap-taking reader entry points receive one-shot shell, initial-fill,
+      ;; and datum-label-fixup capabilities. Legacy syntax readers keep these
+      ;; fields false.
+      (construction-make reader-construction-make)
+      (construction-fill reader-construction-fill)
+      (construction-fixup reader-construction-fixup)
       ;; RECOVERY toggles errors-as-data: when set, reader errors raise a
       ;; structured <reader-condition> the recovery driver can resynchronize
       ;; past instead of unwinding the whole read.
@@ -125,14 +165,61 @@
       ;; callers can render nesting depth and the pending construct kind.
       (pending-stack reader-pending-stack set-reader-pending-stack!))
 
-    ;; Validation records own the post-read resource budget for host datums.
+    ;; Validation records own the post-read resource budget for mixed datums.
     (define-record-type <validation>
-      ;; Validation walks host-created datums after parsing.  It has its own
-      ;; counter so callers cannot bypass node limits by constructing values.
+      ;; Validation walks host-created or owned datums after parsing. It has
+      ;; its own counter so callers cannot bypass node limits by constructing
+      ;; values.
       (make-validation node-count maximum-total-nodes)
       validation?
       (node-count validation-node-count set-validation-node-count!)
       (maximum-total-nodes validation-maximum-total-nodes))
+
+    ;; Datum labels are keyed by decimal spelling. A reader-local digit radix
+    ;; trie makes lookup deterministically linear in the label's digit count;
+    ;; untrusted spellings cannot force the collision chains possible in an
+    ;; open-address hash table.
+
+    (define (make-reader-label-node)
+      "Return one empty radix-trie node with ten digit edges."
+      (make-vector 11 #f))
+
+    (define (make-reader-label-table)
+      "Return an empty reader-local datum-label table."
+      (vector 0 (make-reader-label-node)))
+
+    (define (reader-label-digit-edge char)
+      "Return CHAR's one-based decimal-trie edge index."
+      (+ 1 (- (char->integer char) (char->integer #\0))))
+
+    (define (reader-label-table-ref table id)
+      "Return ID's label cell from TABLE, or #f."
+      (let ((node (vector-ref table 1)))
+        (string-for-each
+         (lambda (char)
+           (if node
+               (set! node
+                     (vector-ref node (reader-label-digit-edge char)))))
+         id)
+        (and node (vector-ref node 0))))
+
+    (define (reader-label-table-set! table id value)
+      "Associate ID with VALUE in TABLE and return VALUE."
+      (let ((node (vector-ref table 1)))
+        (string-for-each
+         (lambda (char)
+           (let* ((edge (reader-label-digit-edge char))
+                  (child (vector-ref node edge)))
+             (if (not child)
+                 (begin
+                   (set! child (make-reader-label-node))
+                   (vector-set! node edge child)))
+             (set! node child)))
+         id)
+        (if (not (vector-ref node 0))
+            (vector-set! table 0 (+ (vector-ref table 0) 1)))
+        (vector-set! node 0 value)
+        value))
 
     ;; The exported EOF sentinel lets incremental readers distinguish end of
     ;; input from any Scheme datum a source string can contain.
@@ -144,10 +231,6 @@
     ;; input.
     (define consent-read-eof (make-consent-read-eof))
 
-    ;; Identity side table for source metadata.  It keeps metadata auxiliary so
-    ;; ordinary datum equality and external writing remain R7RS datums.
-    (define consent-source-metadata '())
-
     ;; Default cap for the portable source side table. Portable R7RS has no
     ;; weak hash table, so the table remains explicit runtime state. Keep the
     ;; cap option-backed so trusted callers can retry with a higher bound.
@@ -158,17 +241,181 @@
     ;; Read names from owned and bootstrap symbols.
     (define reader-datum-symbol-name consent-host-symbol-name)
 
-    ;; Current number of retained source metadata entries in the portable
-    ;; table.
+    (define (reader-pair? value)
+      "Report whether VALUE is a host-native or owned pair."
+      (or (pair? value) (consent-datum-pair? value)))
+
+    (define (reader-car value)
+      "Return VALUE's car across the host and owned representations."
+      (if (pair? value)
+          (car value)
+          (consent-datum-car value)))
+
+    (define (reader-cdr value)
+      "Return VALUE's cdr across the host and owned representations."
+      (if (pair? value)
+          (cdr value)
+          (consent-datum-cdr value)))
+
+    (define (reader-string? value)
+      "Report whether VALUE is a host-native or owned string."
+      (or (string? value) (consent-datum-string? value)))
+
+    (define (reader-string-length value)
+      "Return VALUE's string length across both representations."
+      (if (consent-datum-string? value)
+          (consent-datum-string-length value)
+          (string-length value)))
+
+    (define (reader-string->host value)
+      "Return VALUE as host text for the external writer adapter."
+      (if (consent-datum-string? value)
+          (consent-datum-string->host value)
+          value))
+
+    (define (reader-string-prefix->host value length)
+      "Return VALUE's first LENGTH characters without projecting an owned tail."
+      (if (consent-datum-string? value)
+          (let ((output (open-output-string)))
+            (do ((index 0 (+ index 1)))
+                ((= index length) (get-output-string output))
+              (write-char
+               (consent-datum-string-ref-host value index)
+               output)))
+          (substring value 0 length)))
+
+    (define (reader-vector? value)
+      "Report whether VALUE is a host-native or owned vector."
+      (or (vector? value) (consent-datum-vector? value)))
+
+    (define (reader-vector-length value)
+      "Return VALUE's vector length across both representations."
+      (if (consent-datum-vector? value)
+          (consent-datum-vector-length value)
+          (vector-length value)))
+
+    (define (reader-vector-ref value index)
+      "Return VALUE's vector element at INDEX across both representations."
+      (if (consent-datum-vector? value)
+          (consent-datum-vector-ref value index)
+          (vector-ref value index)))
+
+    (define (reader-bytevector? value)
+      "Report whether VALUE is a host-native or owned bytevector."
+      (or (bytevector? value) (consent-datum-bytevector? value)))
+
+    (define (reader-bytevector-length value)
+      "Return VALUE's bytevector length across both representations."
+      (if (consent-datum-bytevector? value)
+          (consent-datum-bytevector-length value)
+          (bytevector-length value)))
+
+    (define (reader-bytevector-u8-ref value index)
+      "Return VALUE's byte at INDEX across both representations."
+      (if (consent-datum-bytevector? value)
+          (consent-datum-bytevector-u8-ref value index)
+          (bytevector-u8-ref value index)))
+
+    (define (reader-owned-construction? reader)
+      "Report whether READER publishes compounds directly into an owned heap."
+      (if (reader-construction-make reader) #t #f))
+
+    (define (reader-make-owned-shell reader kind length)
+      "Allocate one KIND shell of LENGTH through READER's owned capability."
+      (let ((make-shell (reader-construction-make reader)))
+        (if (not make-shell)
+            (error "owned reader construction is unavailable" kind))
+        (make-shell kind length)))
+
+    (define (reader-fill-owned-slot! reader object index value)
+      "Fill owned OBJECT's construction slot through READER's capability."
+      (let ((fill-slot! (reader-construction-fill reader)))
+        (if (not fill-slot!)
+            (error "owned reader construction is unavailable" object))
+        (fill-slot! object index value)))
+
+    (define (reader-fixup-owned-slot! reader object index value)
+      "Replace one owned construction slot during datum-label resolution."
+      (let ((fixup-slot! (reader-construction-fixup reader)))
+        (if (not fixup-slot!)
+            (error "owned reader label fixup is unavailable" object))
+        (fixup-slot! object index value)))
+
+    ;; Mixed reader boundaries can contain owned datums and private host
+    ;; syntax in one graph. Owned keys use stable heap/object IDs; bootstrap
+    ;; host keys use the host identity-map adapter.
+    (define (make-reader-identity-map)
+      "Return an empty hybrid owned-datum and host-syntax identity map."
+      ;; Allocate each backing table only when its first key arrives. Scalar
+      ;; writes and all-owned/all-host traversals should not pay for unused
+      ;; identity domains.
+      (vector #f #f))
+
+    (define (reader-identity-map-ref map key default)
+      "Return identity KEY's value in hybrid MAP, or DEFAULT."
+      (let ((table
+             (vector-ref map (if (consent-datum-object? key) 0 1))))
+        (if (not table)
+            default
+            (if (consent-datum-object? key)
+                (consent-datum-object-map-ref table key default)
+                (consent-identity-map-ref table key default)))))
+
+    (define (reader-identity-map-set! map key value)
+      "Associate identity KEY with VALUE in hybrid MAP and return VALUE."
+      (let* ((owned? (consent-datum-object? key))
+             (index (if owned? 0 1))
+             (table
+              (or
+               (vector-ref map index)
+               (let ((created
+                      (if owned?
+                          (consent-make-datum-object-map)
+                          (consent-make-identity-map))))
+                 (vector-set! map index created)
+                 created))))
+        (if owned?
+            (consent-datum-object-map-set! table key value)
+            (consent-identity-map-set! table key value)))
+      value)
+
+    (define (reader-identity-map-clear! map values)
+      "Mark every identity in VALUES absent from active-set MAP."
+      (let loop ((rest values))
+        (if (not (null? rest))
+            (begin
+              (reader-identity-map-set! map (car rest) #f)
+              (loop (cdr rest))))))
+
+    (define (reader-identity-map-release! map)
+      "Release MAP's call-scoped owned-object backend when allocated."
+      (let ((owned (vector-ref map 0)))
+        (if owned (consent-datum-object-map-release! owned)))
+      map)
+
+    ;; Legacy private host syntax has no field for provenance, so it uses one
+    ;; process-global identity map. Owned and canonical record values carry one
+    ;; current metadata slot and therefore leave no allocation-history entry in
+    ;; this table.
+    (define consent-source-metadata #f)
+
+    (define (ensure-consent-source-metadata!)
+      "Return the lazily allocated legacy host-syntax provenance table."
+      (if (not consent-source-metadata)
+          (set! consent-source-metadata (consent-make-identity-map)))
+      consent-source-metadata)
+
+    ;; Count unique current entries in the legacy host-syntax compatibility
+    ;; table. Replacing one key's metadata does not increase this count.
     (define consent-source-metadata-entry-count 0)
 
     (define (consent-source-metadata-count)
-      "Return the number of retained portable source metadata entries."
+      "Return the number of legacy host source metadata entries."
       #((parameters)
         (returns (type exact-non-negative-integer)
          (description
-          ("The process-global count of retained portable source"
-            "metadata entries.")))
+          ("The number of unique identities in the process-global"
+            "compatibility table.")))
         (effects state-read))
       consent-source-metadata-entry-count)
 
@@ -177,13 +424,20 @@
     (define-record-type <consent-number>
       ;; VALUE is an owned integer, rational pair, binary64 tuple, special tag,
       ;; or pair of canonical real components.
-      (make-consent-number lexeme exactness radix kind value)
+      (make-consent-number-record
+       lexeme exactness radix kind value source-metadata)
       consent-number?
       (lexeme consent-number-lexeme)
       (exactness consent-number-exactness)
       (radix consent-number-radix)
       (kind consent-number-kind)
-      (value consent-number-value-field))
+      (value consent-number-value-field)
+      (source-metadata consent-number-source-metadata
+                       set-consent-number-source-metadata!))
+
+    (define (make-consent-number lexeme exactness radix kind value)
+      "Construct a canonical number with no current source metadata."
+      (make-consent-number-record lexeme exactness radix kind value #f))
 
     ;; One fixed profile backs the portable runtime. White-box tests
     ;; instantiate
@@ -255,19 +509,43 @@
     ;; Portable record metadata belongs to Consent Scheme, not the host record
     ;; system, so evaluator-created records remain printable datums.
     (define-record-type <consent-record-type>
-      (consent-make-record-type name fields)
+      (make-consent-record-type-record name fields source-metadata)
       consent-record-type?
       (name consent-record-type-name)
-      (fields consent-record-type-fields))
+      (fields consent-record-type-fields)
+      (source-metadata consent-record-type-source-metadata
+                       set-consent-record-type-source-metadata!))
+
+    (define (consent-make-record-type name fields)
+      "Construct a portable record type with no current source metadata."
+      #((parameters
+         (name (type symbol) (description "Record type name."))
+         (fields (type list) (description "Ordered field names.")))
+        (returns (type record-type)
+         (description "A fresh portable record type."))
+        (effects allocation))
+      (make-consent-record-type-record name fields #f))
 
     ;; Portable record instances pair Consent Scheme record metadata with field
     ;; storage that the evaluator owns and may mutate through generated
     ;; setters.
     (define-record-type <consent-record>
-      (consent-make-record type fields)
+      (make-consent-record-record type fields source-metadata)
       consent-record?
       (type consent-record-type)
-      (fields consent-record-fields))
+      (fields consent-record-fields)
+      (source-metadata consent-record-source-metadata
+                       set-consent-record-source-metadata!))
+
+    (define (consent-make-record type fields)
+      "Construct a portable record with no current source metadata."
+      #((parameters
+         (type (type record-type) (description "Record type descriptor."))
+         (fields (type vector) (description "Owned field storage.")))
+        (returns (type record)
+         (description "A fresh portable record instance."))
+        (effects allocation))
+      (make-consent-record-record type fields #f))
 
     ;; Datum-label records hold placeholders while resolving shared and
     ;; circular
@@ -369,46 +647,137 @@ r"
             (consent-number-value value)
             value)))
 
-    (define (source-line-starts characters)
-      "Return zero-based line starts for a string or character vector."
-      (let* ((characters
-              (if (string? characters)
-                  (list->vector (string->list characters))
-                  characters))
-             (length (vector-length characters)))
-        (let loop ((index 0) (starts '(0)))
-          (if (= index length)
-              (list->vector (reverse starts))
-              (loop (+ index 1)
-                    (if (and (char=? (vector-ref characters index) #\newline)
-                             (< (+ index 1) length))
-                        (cons (+ index 1) starts)
-                        starts))))))
+    (define (source-location-index characters)
+      "Return line starts and one zero-based line index per source offset."
+      "The offset vector includes the end position. A final newline retains"
+      "the historical end-column convention because no datum starts after it."
+      (let* ((length (vector-length characters))
+             (offset-lines (make-vector (+ length 1) 0)))
+        (let loop ((offset 0) (line 0) (starts '(0)))
+          (vector-set! offset-lines offset line)
+          (if (= offset length)
+              (vector (list->vector (reverse starts)) offset-lines)
+              (let ((next (+ offset 1)))
+                (if (and (char=? (vector-ref characters offset) #\newline)
+                         (< next length))
+                    (loop next (+ line 1) (cons next starts))
+                    (loop next line starts)))))))
 
-    (define (reader-from-source source options)
-      "Create a reader state object from SOURCE and per-run option overrides."
+    (define (source-location-line-column line-starts offset-lines offset)
+      "Return one-based (LINE . COLUMN) through the direct offset index."
+      (let* ((line (vector-ref offset-lines offset))
+             (line-start (vector-ref line-starts line)))
+        (cons (+ line 1) (+ (- offset line-start) 1))))
+
+    (define (consent-make-reader-source source)
+      "Return one immutable lexical snapshot of string SOURCE for reuse."
+      #((parameters
+         (source (type string)
+          (description "Source text to decode and index once.")))
+        (returns (type reader-source)
+         (description
+          ("Prepared input accepted by complete and incremental reader"
+            "entry points.")))
+        (effects allocation error))
       (if (not (string? source))
-          (error "consent reader source must be a string" source)
-          (let* ((source-metadata
+          (error "consent-make-reader-source expected a string" source))
+      (let* ((characters-list (string->list source))
+             (text (list->string characters-list))
+             (characters (list->vector characters-list))
+             (locations (source-location-index characters)))
+        (make-consent-reader-source-record
+         text
+         characters
+         (vector-ref locations 0)
+         (vector-ref locations 1))))
+
+    (define (consent-reader-source-location-probe-count source offset)
+      "Return the fixed offset-index probe count for SOURCE at OFFSET."
+      #((parameters
+         (source (type reader-source)
+          (description "Prepared source whose location index is probed."))
+         (offset (type exact-non-negative-integer)
+          (description "Offset from zero through the source length.")))
+        (returns (type exact-positive-integer)
+         (description "One after exercising the actual location index."))
+        (effects allocation error))
+      (set! offset (canonical-component offset))
+      (if (not (consent-reader-source? source))
+          (error
+           "consent-reader-source-location-probe-count: expected reader source"
+           source))
+      (let ((length
+             (vector-length (prepared-reader-source-characters source))))
+        (if (or (not (integer? offset)) (< offset 0) (> offset length))
+            (error
+             "consent-reader-source-location-probe-count: invalid offset"
+             offset))
+        ;; Exercise the same real lookup as source-note; this diagnostic must
+        ;; not merely report the documented constant without probing the index.
+        (source-location-line-column
+         (prepared-reader-source-line-starts source)
+         (prepared-reader-source-offset-lines source)
+         offset)
+        1))
+
+    (define (reader-from-source source options . maybe-construction)
+      "Create a reader over SOURCE with optional owned construction callbacks."
+      (if (not (or (string? source) (consent-reader-source? source)))
+          (error "consent reader source must be a string or snapshot" source)
+          (let* ((prepared
+                  (and (consent-reader-source? source) source))
+                 (source-text
+                  (if prepared
+                      (prepared-reader-source-text prepared)
+                      source))
+                 (source-metadata
                   (option-ref options 'source-metadata #t))
-                 (characters (list->vector (string->list source))))
+                 (source-metadata-sink
+                  (option-ref options 'source-metadata-sink #f))
+                 (construction
+                  (if (null? maybe-construction)
+                      #f
+                      (car maybe-construction)))
+                 (owned? (if construction #t #f))
+                 (construction-make
+                  (and construction (vector-ref construction 0)))
+                 (construction-fill
+                  (and construction (vector-ref construction 1)))
+                 (construction-fixup
+                  (and construction (vector-ref construction 2)))
+                 ;; Direct owned reads attach provenance to object fields.
+                 ;; Context sinks and identity tables remain legacy syntax
+                 ;; machinery and must not observe unpublished owned shells.
+                 (active-source-metadata-sink
+                  (and (not owned?) source-metadata-sink))
+                 (characters
+                  (if prepared
+                      (prepared-reader-source-characters prepared)
+                      (list->vector (string->list source-text))))
+                 (locations
+                  (and (or source-metadata
+                           (option-ref options 'recovery #f))
+                       (if prepared
+                           (vector
+                            (prepared-reader-source-line-starts prepared)
+                            (prepared-reader-source-offset-lines prepared))
+                           (source-location-index characters)))))
             ;; Keep cursor access independent of the host's string indexing
             ;; representation.  Some R7RS systems use variable-width UTF-8
             ;; strings, turning repeated indexed access into a large-source
             ;; performance cliff.
-            (make-reader source
+            (make-reader source-text
                          characters
                          0
                          (vector-length characters)
-                         (if source-metadata
-                             (source-line-starts characters)
-                             #f)
+                         (and locations (vector-ref locations 0))
+                         (and locations (vector-ref locations 1))
                          #f
                          (option-ref options
                                      'symbol-table
                                      consent-default-symbol-table)
                          0
-                         '()
+                         (make-reader-label-table)
                          (option-count options 'max-depth
                                        consent-default-maximum-depth)
                          (option-count options 'max-list-length
@@ -429,6 +798,16 @@ r"
                              (option-ref options 'source-id #f)
                              #f)
                          source-metadata
+                         (and source-metadata
+                              (not owned?)
+                              (if active-source-metadata-sink
+                                  (consent-make-identity-map)
+                                  (ensure-consent-source-metadata!)))
+                         active-source-metadata-sink
+                         0
+                         construction-make
+                         construction-fill
+                         construction-fixup
                          (option-ref options 'recovery #f)
                          '()))))
 
@@ -443,67 +822,70 @@ r"
       "Build one Scheme-readable source metadata field."
       (list name value))
 
-    (define (line-starts-line-column starts offset)
-      "Return one-based (LINE . COLUMN) from STARTS at OFFSET."
-      (let ((count (vector-length starts)))
-        (let loop ((low 0) (high (- count 1)) (best 0))
-          (if (> low high)
-              (let ((line-start (vector-ref starts best)))
-                (cons (+ best 1)
-                      (+ (- offset line-start) 1)))
-              (let* ((middle (quotient (+ low high) 2))
-                     (line-start (vector-ref starts middle)))
-                (if (<= line-start offset)
-                    (loop (+ middle 1) high middle)
-                    (loop low (- middle 1) best)))))))
-
     (define (reader-line-column reader offset)
       "Return one-based (LINE . COLUMN) in READER at OFFSET."
-      (line-starts-line-column (reader-line-starts reader) offset))
+      (source-location-line-column
+       (reader-line-starts reader) (reader-offset-lines reader) offset))
+
+    ;; Compact source notes cross only the private reader/runtime boundary. No
+    ;; field mutators or accessors are exported, so callers can retain and move
+    ;; one immutable note without exposing its backing representation.
+    (define-record-type <source-note>
+      (make-source-note-record source-id line column offset span)
+      source-note?
+      (source-id source-note-source-id)
+      (line source-note-line)
+      (column source-note-column)
+      (offset source-note-offset)
+      (span source-note-span))
 
     (define (source-note reader start end)
       "Return compact source metadata for READER between START and END."
       (let ((line-column (reader-line-column reader start)))
-        (vector 'source-note
-                (reader-source-id reader)
-                (car line-column)
-                (cdr line-column)
-                start
-                (max 0 (- end start)))))
+        (make-source-note-record
+         (reader-source-id reader)
+         (car line-column)
+         (cdr line-column)
+         start
+         (max 0 (- end start)))))
 
-    (define (source-note? datum)
-      "Report whether DATUM is compact source metadata."
-      (and (vector? datum)
-           (= (vector-length datum) 6)
-           (eq? (vector-ref datum 0) 'source-note)))
-
-    (define (source-metadata->record metadata)
+    (define (consent-source-metadata->record metadata)
       "Return Scheme-readable source metadata for METADATA."
+      "Compact reader notes remain opaque runtime data until this observable"
+      "boundary materializes their public source record."
+      #((parameters
+         (metadata
+          . ("Opaque compact source metadata or an already materialized"
+             "metadata value.")))
+        (returns (type source-metadata)
+         (description "Scheme-readable source metadata."))
+        (effects allocation))
       (if (source-note? metadata)
           (list 'source
                 (source-field 'origin 'source)
-                (source-field 'source-id (vector-ref metadata 1))
+                (source-field 'source-id
+                              (source-note-source-id metadata))
                 (source-field 'line
                               (consent-make-canonical-integer
-                               (vector-ref metadata 2)))
+                               (source-note-line metadata)))
                 (source-field 'column
                               (consent-make-canonical-integer
-                               (vector-ref metadata 3)))
+                               (source-note-column metadata)))
                 (source-field 'offset
                               (consent-make-canonical-integer
-                               (vector-ref metadata 4)))
+                               (source-note-offset metadata)))
                 (source-field 'span
                               (consent-make-canonical-integer
-                               (vector-ref metadata 5)))
+                               (source-note-span metadata)))
                 (source-field 'phase 'read))
           metadata))
 
     (define (source-attachable? datum)
       "Report whether DATUM has stable identity for source metadata."
-      (or (pair? datum)
-          (vector? datum)
-          (string? datum)
-          (bytevector? datum)
+      (or (reader-pair? datum)
+          (reader-vector? datum)
+          (reader-string? datum)
+          (reader-bytevector? datum)
           (consent-number? datum)
           ;; Owned symbols are represented by records, but retain symbol
           ;; semantics here: identifiers are atomic datums and must not consume
@@ -511,6 +893,75 @@ r"
           (and (consent-record? datum)
                (not (consent-symbol? datum)))
           (consent-record-type? datum)))
+
+    ;; A private sentinel distinguishes a missing identity-map entry from any
+    ;; valid truthy metadata value.
+    (define source-metadata-absent (vector 'source-metadata-absent))
+
+    (define (direct-source-metadata-owner? datum)
+      "Report whether DATUM owns one current source metadata slot."
+      (or (consent-datum-object? datum)
+          (consent-number? datum)
+          (consent-record? datum)
+          (consent-record-type? datum)))
+
+    (define (direct-source-metadata datum)
+      "Return DATUM's current directly owned source metadata."
+      (cond
+       ((consent-datum-object? datum)
+        (consent-datum-object-source-metadata datum))
+       ((consent-number? datum) (consent-number-source-metadata datum))
+       ((consent-record? datum) (consent-record-source-metadata datum))
+       ((consent-record-type? datum)
+        (consent-record-type-source-metadata datum))
+       (else #f)))
+
+    (define (direct-source-metadata-set! datum metadata)
+      "Replace DATUM's current directly owned source METADATA."
+      (cond
+       ((consent-datum-object? datum)
+        (consent-datum-object-source-metadata-set! datum metadata))
+       ((consent-number? datum)
+        (set-consent-number-source-metadata! datum metadata))
+       ((consent-record? datum)
+        (set-consent-record-source-metadata! datum metadata))
+       ((consent-record-type? datum)
+        (set-consent-record-type-source-metadata! datum metadata))
+       (else
+        (error "datum has no directly owned source metadata slot" datum))))
+
+    (define (datum-source-metadata-entry-in table datum)
+      "Return DATUM's raw metadata or the private absence sentinel."
+      (if (direct-source-metadata-owner? datum)
+          (or (direct-source-metadata datum) source-metadata-absent)
+          (if table
+              (consent-identity-map-ref
+               table datum source-metadata-absent)
+              source-metadata-absent)))
+
+    (define (datum-source-metadata-in table datum)
+      "Return DATUM's current raw source metadata from its owner or TABLE."
+      (let ((metadata (datum-source-metadata-entry-in table datum)))
+        (if (eq? metadata source-metadata-absent) #f metadata)))
+
+    (define (datum-source-metadata-set-in! table datum metadata)
+      "Replace DATUM's current source METADATA in its owner or TABLE."
+      (if (direct-source-metadata-owner? datum)
+          (direct-source-metadata-set! datum metadata)
+          (if table
+              (consent-identity-map-set! table datum metadata)
+              (error "source metadata table required" datum))))
+
+    (define (consent-datum-source-metadata datum)
+      "Return raw source metadata attached to DATUM, or #f when absent."
+      "This internal runtime boundary does not materialize compact reader"
+      "notes; callers must treat the result as opaque and immutable."
+      #((parameters
+         (datum . "Datum whose opaque current source metadata is requested."))
+        (returns (type (or source-metadata boolean))
+         (description "Opaque current source metadata, or #f."))
+        (effects state-read))
+      (datum-source-metadata-in consent-source-metadata datum))
 
     (define (consent-datum-source-set! datum source . maybe-limit)
       "Attach SOURCE metadata to DATUM when DATUM has stable identity."
@@ -522,8 +973,8 @@ r"
           (description
             ("Source metadata to attach, or #f to attach nothing.")))
          (maybe-limit (type list)
-          (description
-           ("Optional maximum retained source metadata entries allowed"
+         (description
+           ("Optional maximum source metadata attachments allowed"
              "before this attachment fails closed."))))
         (returns
          . ("DATUM, after attaching SOURCE when DATUM is"
@@ -531,21 +982,115 @@ r"
             "would exceed its resource limit."))
         (effects state-read state-write error))
       (if (and source (source-attachable? datum))
-          (let ((limit
-                 (if (null? maybe-limit)
-                     consent-default-maximum-source-metadata
-                     (car maybe-limit))))
-            (if (>= consent-source-metadata-entry-count limit)
+          (let* ((limit
+                  (if (null? maybe-limit)
+                      consent-default-maximum-source-metadata
+                      (car maybe-limit)))
+                 (direct? (direct-source-metadata-owner? datum))
+                 (table
+                  (if direct?
+                      #f
+                      (ensure-consent-source-metadata!)))
+                 (old
+                  (datum-source-metadata-entry-in
+                   table datum))
+                 (new? (eq? old source-metadata-absent)))
+            (if (and new?
+                     (if direct?
+                         (<= limit 0)
+                         (>= consent-source-metadata-entry-count limit)))
                 (error
                  "consent datum limit error: source metadata count exceeds \
 maximum source metadata"
-                 consent-source-metadata-entry-count
+                 (if direct? 0 consent-source-metadata-entry-count)
                  limit))
-            (set! consent-source-metadata
-                  (cons (cons datum source)
-                        consent-source-metadata))
-            (set! consent-source-metadata-entry-count
-                  (+ consent-source-metadata-entry-count 1))))
+            (datum-source-metadata-set-in!
+             table datum source)
+            (if (and new? (not direct?))
+                (set! consent-source-metadata-entry-count
+                      (+ consent-source-metadata-entry-count 1)))))
+      datum)
+
+    (define (reader-datum-source-set-fresh! reader datum source)
+      "Attach SOURCE to a freshly parsed DATUM without an existence lookup."
+      "The ordinary token, list, vector, string, and abbreviation parsers each"
+      "publish a new identity exactly once. Datum-label syntax uses the checked"
+      "replacement path below because its outer occurrence can reuse an"
+      "identity already annotated by the labelled subdatum."
+      (if (and source (source-attachable? datum))
+          (let* ((count (reader-source-metadata-count reader))
+                 (limit (reader-maximum-source-metadata reader))
+                 (table (reader-source-metadata-table reader))
+                 (sink (reader-source-metadata-sink reader))
+                 (direct? (direct-source-metadata-owner? datum))
+                 (global? (and (not direct?)
+                               consent-source-metadata
+                               (eq? table consent-source-metadata))))
+            (if (and (reader-owned-construction? reader) (not direct?))
+                (error
+                 "owned reader produced a host compound provenance owner"
+                 datum))
+            (if (>= count limit)
+                (error
+                 "consent datum limit error: source metadata count exceeds \
+maximum source metadata"
+                 count
+                 limit))
+            (if (and global?
+                     (>= consent-source-metadata-entry-count
+                         consent-default-maximum-source-metadata))
+                (error
+                 "consent datum limit error: global source metadata count \
+exceeds maximum source metadata"
+                 consent-source-metadata-entry-count
+                 consent-default-maximum-source-metadata))
+            (datum-source-metadata-set-in! table datum source)
+            (if sink (sink datum source))
+            (set-reader-source-metadata-count! reader (+ count 1))
+            (if global?
+                (set! consent-source-metadata-entry-count
+                      (+ consent-source-metadata-entry-count 1)))))
+      datum)
+
+    (define (reader-datum-source-set! reader datum source)
+      "Attach or replace SOURCE in DATUM's reader-local metadata owner."
+      (if (and source (source-attachable? datum))
+          (let* ((count (reader-source-metadata-count reader))
+                 (limit (reader-maximum-source-metadata reader))
+                 (table (reader-source-metadata-table reader))
+                 (sink (reader-source-metadata-sink reader))
+                 (direct? (direct-source-metadata-owner? datum))
+                 (old (datum-source-metadata-entry-in table datum))
+                 (new? (eq? old source-metadata-absent))
+                 (global? (and (not direct?)
+                               consent-source-metadata
+                               (eq? table consent-source-metadata))))
+            (if (and (reader-owned-construction? reader) (not direct?))
+                (error
+                 "owned reader produced a host compound provenance owner"
+                 datum))
+            (if (and new? (>= count limit))
+                (error
+                 "consent datum limit error: source metadata count exceeds \
+maximum source metadata"
+                 count
+                 limit))
+            (if (and new?
+                     global?
+                     (>= consent-source-metadata-entry-count
+                         consent-default-maximum-source-metadata))
+                (error
+                 "consent datum limit error: global source metadata count \
+exceeds maximum source metadata"
+                 consent-source-metadata-entry-count
+                 consent-default-maximum-source-metadata))
+            (datum-source-metadata-set-in! table datum source)
+            (if sink (sink datum source))
+            (if new?
+                (set-reader-source-metadata-count! reader (+ count 1)))
+            (if (and new? global?)
+                (set! consent-source-metadata-entry-count
+                      (+ consent-source-metadata-entry-count 1)))))
       datum)
 
     (define (consent-datum-source datum)
@@ -556,14 +1101,9 @@ maximum source metadata"
          (description
           ("A source-metadata record built from DATUM's attached"
             "metadata, or #f when none is attached.")))
-        (effects state-read))
-      (let ((cell (assq datum consent-source-metadata)))
-        (if cell (source-metadata->record (cdr cell)) #f)))
-
-    (define (datum-source-metadata datum)
-      "Return raw source metadata attached to DATUM, or #f when absent."
-      (let ((cell (assq datum consent-source-metadata)))
-        (if cell (cdr cell) #f)))
+        (effects allocation state-read))
+      (let ((metadata (consent-datum-source-metadata datum)))
+        (if metadata (consent-source-metadata->record metadata) #f)))
 
     (define (consent-copy-datum-source! target source . maybe-overwrite)
       "Copy source metadata from SOURCE to TARGET, preserving existing metadat\
@@ -580,12 +1120,12 @@ a"
          . ("TARGET, with SOURCE's metadata attached when SOURCE has"
             "metadata and overwrite is requested or TARGET had none."))
         (effects state-write))
-      (let ((metadata (datum-source-metadata source))
+      (let ((metadata (consent-datum-source-metadata source))
             (overwrite? (and (not (null? maybe-overwrite))
                              (car maybe-overwrite))))
         (if (and metadata
                  (or overwrite?
-                     (not (datum-source-metadata target))))
+                     (not (consent-datum-source-metadata target))))
             (consent-datum-source-set! target metadata))
         target))
 
@@ -782,27 +1322,38 @@ et."
     (define (skip-intertoken-space! reader depth)
       "Skip whitespace, comments, directives, and datum comments between \
 datums."
-      (let loop ()
+      ;; COMMENT-DEPTH is the explicit continuation for nested `#;' prefixes.
+      ;; It both removes host-stack dependence and charges the nesting against
+      ;; the ordinary datum-depth budget before any ignored datum is read.
+      (let loop ((comment-depth depth))
         (cond
          ((whitespace? (peek reader))
           (advance! reader)
-          (loop))
+          (loop comment-depth))
          ((and (peek reader) (char=? (peek reader) #\;))
           (skip-line-comment! reader)
-          (loop))
+          (loop comment-depth))
          ((starts-with? reader "#|")
           (skip-nested-comment! reader)
-          (loop))
+          (loop comment-depth))
          ((starts-with? reader "#!")
           (skip-directive! reader)
-          (loop))
+          (loop comment-depth))
          ((starts-with? reader "#;")
           (advance! reader 2)
-          ;; A datum comment consumes a full datum, including nested comments
-          ;; and directives, so keep using the active reader state.
-          (skip-intertoken-space! reader depth)
-          (read-datum reader depth)
-          (loop))
+          (check-depth reader (+ comment-depth 1))
+          (loop (+ comment-depth 1)))
+         ((> comment-depth depth)
+          ;; Ignored syntax must not escape through a provenance sink or the
+          ;; legacy process table. The reader is abandoned if parsing raises,
+          ;; so restoration is only needed after a successful ignored datum.
+          (let ((source-metadata? (reader-source-metadata reader)))
+            (if source-metadata?
+                (set-reader-source-metadata! reader #f))
+            (read-datum reader comment-depth)
+            (if source-metadata?
+                (set-reader-source-metadata! reader source-metadata?))
+            (loop (- comment-depth 1))))
          (else
           #t))))
 
@@ -1748,7 +2299,20 @@ er record."
            ((char=? (peek reader) #\")
             (advance! reader)
             (pop-pending! reader)
-            (list->string (reverse result)))
+            (if (reader-owned-construction? reader)
+                (let ((string
+                       (reader-make-owned-shell reader 'string size)))
+                  ;; RESULT is reverse source order. Fill from the final slot
+                  ;; backward without allocating a second character list or a
+                  ;; host string that could become an identity-map key.
+                  (let fill ((rest result) (index (- size 1)))
+                    (if (null? rest)
+                        string
+                        (begin
+                          (reader-fill-owned-slot!
+                           reader string index (car rest))
+                          (fill (cdr rest) (- index 1))))))
+                (list->string (reverse result))))
            ((char=? (peek reader) #\\)
             (advance! reader)
             (let ((escaped (peek reader)))
@@ -1950,7 +2514,7 @@ literal."
       (advance! reader)
       (push-pending! reader 'list)
       (let ((head '())
-            (tail '())
+            (tail #f)
             (count 0))
         (define (append! datum)
           (set! count (+ count 1))
@@ -1958,13 +2522,21 @@ literal."
               (limit-error reader
                            "list length exceeds maximum list length"
                            (reader-maximum-list-length reader)))
-          (let ((cell (cons datum '())))
-            (if (null? tail)
+          (let ((cell
+                 (if (reader-owned-construction? reader)
+                     (let ((shell
+                            (reader-make-owned-shell reader 'pair 2)))
+                       (reader-fill-owned-slot! reader shell 0 datum)
+                       shell)
+                     (cons datum '()))))
+            (if (not tail)
                 (begin
                   (set! head cell)
                   (set! tail cell))
                 (begin
-                  (set-cdr! tail cell)
+                  (if (reader-owned-construction? reader)
+                      (reader-fill-owned-slot! reader tail 1 cell)
+                      (set-cdr! tail cell))
                   (set! tail cell)))))
         (let loop ()
           (skip-intertoken-space! reader depth)
@@ -1974,6 +2546,8 @@ literal."
            ((char=? (peek reader) #\))
             (advance! reader)
             (pop-pending! reader)
+            (if (and tail (reader-owned-construction? reader))
+                (reader-fill-owned-slot! reader tail 1 '()))
             (note-node! reader)
             head)
            (else
@@ -1986,10 +2560,13 @@ literal."
                          (advance! reader)
                          (delimiter? (peek reader))))
                   (begin
-                    (if (null? tail)
+                    (if (not tail)
                         (reader-error reader "dot before list element"))
                     (skip-intertoken-space! reader depth)
-                    (set-cdr! tail (read-datum reader (+ depth 1)))
+                    (let ((datum (read-datum reader (+ depth 1))))
+                      (if (reader-owned-construction? reader)
+                          (reader-fill-owned-slot! reader tail 1 datum)
+                          (set-cdr! tail datum)))
                     (skip-intertoken-space! reader depth)
                     (if (not (and (peek reader)
                                   (char=? (peek reader) #\))))
@@ -2017,7 +2594,9 @@ dotted tail"))
          ((char=? (peek reader) close-char)
           (advance! reader)
           (pop-pending! reader)
-          (reverse items))
+          ;; Return reverse source order and the already-known count. Owned
+          ;; callers fill exact-size shells backward without another list copy.
+          (cons items count))
          ((char=? (peek reader) #\.)
           (reader-error reader "dot is not allowed in sequence" kind))
          (else
@@ -2058,31 +2637,58 @@ dotted tail"))
     (define (read-vector reader depth)
       "Read an R7RS vector literal."
       (advance! reader 2)
-      (let ((items (read-vector-elements
-                    reader
-                    depth
-                    "vector"
-                    #\)
-                    (reader-maximum-vector-length reader))))
+      (let* ((sequence
+              (read-vector-elements
+               reader
+               depth
+               "vector"
+               #\)
+               (reader-maximum-vector-length reader)))
+             (items (car sequence))
+             (count (cdr sequence)))
         (note-node! reader)
-        (list->vector items)))
+        (if (reader-owned-construction? reader)
+            (let ((vector
+                   (reader-make-owned-shell reader 'vector count)))
+              (let fill ((rest items) (index (- count 1)))
+                (if (null? rest)
+                    vector
+                    (begin
+                      (reader-fill-owned-slot!
+                       reader vector index (car rest))
+                      (fill (cdr rest) (- index 1))))))
+            (list->vector (reverse items)))))
 
     (define (read-bytevector-literal reader depth)
       "Read an R7RS bytevector literal and validate byte elements."
       (advance! reader 4)
-      (let ((items (read-vector-elements
-                    reader
-                    depth
-                    "bytevector"
-                    #\)
-                    (reader-maximum-bytevector-length reader))))
-        (let loop ((rest items) (bytes '()))
+      (let* ((sequence
+              (read-vector-elements
+               reader
+               depth
+               "bytevector"
+               #\)
+               (reader-maximum-bytevector-length reader)))
+             (items (car sequence))
+             (count (cdr sequence))
+             (bytevector
+              (and (reader-owned-construction? reader)
+                   (reader-make-owned-shell reader 'bytevector count))))
+        (let loop ((rest items) (index (- count 1)) (bytes '()))
           (cond
            ((null? rest)
             (note-node! reader)
-            (list->bytevector (reverse bytes)))
+            (if bytevector
+                bytevector
+                (list->bytevector bytes)))
            ((exact-byte? (car rest))
-            (loop (cdr rest) (cons (exact-integer-value (car rest)) bytes)))
+            (let ((byte (exact-integer-value (car rest))))
+              (if bytevector
+                  (reader-fill-owned-slot!
+                   reader bytevector index byte))
+              (loop (cdr rest)
+                    (- index 1)
+                    (if bytevector bytes (cons byte bytes)))))
            (else
             (reader-error reader
                           "bytevector element is not an exact byte"
@@ -2090,18 +2696,23 @@ dotted tail"))
 
     (define (quote-datum reader name datum)
       "Build the canonical abbreviated quote form for NAME and DATUM."
-      (list (reader-intern-symbol reader name) datum))
+      (let ((symbol (reader-intern-symbol reader name)))
+        (if (reader-owned-construction? reader)
+            (let ((head (reader-make-owned-shell reader 'pair 2))
+                  (tail (reader-make-owned-shell reader 'pair 2)))
+              (reader-fill-owned-slot! reader head 0 symbol)
+              (reader-fill-owned-slot! reader head 1 tail)
+              (reader-fill-owned-slot! reader tail 0 datum)
+              (reader-fill-owned-slot! reader tail 1 '())
+              head)
+            (list symbol datum))))
 
     (define (reader-label-cell reader id)
       "Find an existing datum-label cell for ID in the reader state."
-      (let loop ((rest (reader-datum-labels reader)))
-        (cond
-         ((null? rest) #f)
-         ((string=? (caar rest) id) (car rest))
-         (else (loop (cdr rest))))))
+      (reader-label-table-ref (reader-datum-labels reader) id))
 
-    (define (read-datum-label reader depth)
-      "Read and resolve shared datum label definitions and references."
+    (define (read-datum-label-token! reader)
+      "Consume one label token and return its ID and marker."
       (advance! reader)
       (let ((start (reader-position reader)))
         (let digit-loop ()
@@ -2112,36 +2723,76 @@ dotted tail"))
                   (digit-loop)))))
         (if (= start (reader-position reader))
             (reader-error reader "datum label requires digits"))
-        (let* ((id (reader-substring reader
-                                     start
-                                     (reader-position reader)))
-               (marker (peek reader)))
-          (cond
-           ((and marker (char=? marker #\=))
-            (advance! reader)
-            (if (reader-label-cell reader id)
-                (reader-error reader "duplicate datum label" id))
-            (let ((label (make-datum-label id #f #f)))
-              (set-reader-datum-labels!
-               reader
-               (cons (cons id label) (reader-datum-labels reader)))
-              (let ((datum (read-datum reader depth)))
-                (if (eq? datum label)
-                    (reader-error
-                     reader
-                     "datum label cannot reference itself directly"
-                     id))
-                (set-datum-label-value! label datum)
-                (set-datum-label-filled! label #t)
-                datum)))
-           ((and marker (char=? marker #\#))
-            (advance! reader)
-            (let ((cell (reader-label-cell reader id)))
-              (if (not cell)
-                  (reader-error reader "undefined datum label" id))
-              (cdr cell)))
-           (else
-            (reader-error reader "datum label must end with = or #"))))))
+        (let ((id (reader-substring reader
+                                    start
+                                    (reader-position reader)))
+              (marker (peek reader)))
+          (if (not (and marker
+                        (or (char=? marker #\=)
+                            (char=? marker #\#))))
+              (reader-error reader "datum label must end with = or #"))
+          (advance! reader)
+          (cons id marker))))
+
+    (define (reader-label-reference reader token)
+      "Return the label placeholder referenced by TOKEN."
+      (let ((cell (reader-label-cell reader (car token))))
+        (if (not cell)
+            (reader-error reader "undefined datum label" (car token)))
+        (cdr cell)))
+
+    (define (reader-fill-datum-labels! reader labels datum)
+      "Resolve pending definition LABELS to DATUM and return DATUM."
+      (let loop ((rest labels))
+        (if (null? rest)
+            datum
+            (let ((label (car rest)))
+              (if (eq? datum label)
+                  (reader-error
+                   reader
+                   "datum label cannot reference itself directly"
+                   (datum-label-id label)))
+              (set-datum-label-value! label datum)
+              (set-datum-label-filled! label #t)
+              (loop (cdr rest))))))
+
+    (define (read-datum-label reader depth)
+      "Read and resolve shared datum label definitions and references."
+      (let ((first (read-datum-label-token! reader)))
+        (if (char=? (cdr first) #\#)
+            (reader-label-reference reader first)
+            ;; Consecutive definitions are same-depth syntax. Keep their
+            ;; continuations explicitly so a long alias chain neither grows
+            ;; the host stack nor postpones its total-node budget charge.
+            (let loop ((token first) (pending '()) (first? #t))
+              (let ((id (car token)))
+                (if (reader-label-cell reader id)
+                    (reader-error reader "duplicate datum label" id))
+                (let ((label (make-datum-label id #f #f)))
+                  (reader-label-table-set!
+                   (reader-datum-labels reader) id (cons id label))
+                  (if (not first?) (note-node! reader))
+                  (let ((next-pending (cons label pending)))
+                    (skip-intertoken-space! reader depth)
+                    (if (let ((char (peek reader 1)))
+                          (and (peek reader)
+                               (char=? (peek reader) #\#)
+                               char
+                               (char>=? char #\0)
+                               (char<=? char #\9)))
+                        (let ((next (read-datum-label-token! reader)))
+                          (if (char=? (cdr next) #\=)
+                              (loop next next-pending #f)
+                              (begin
+                                (note-node! reader)
+                                (reader-fill-datum-labels!
+                                 reader
+                                 next-pending
+                                 (reader-label-reference reader next)))))
+                        (reader-fill-datum-labels!
+                         reader
+                         next-pending
+                         (read-datum reader depth))))))))))
 
     (define (read-dispatch reader depth)
       "Read a datum introduced by # dispatch syntax."
@@ -2157,34 +2808,116 @@ dotted tail"))
 
     (define (resolve-datum-labels datum reader)
       "Replace datum-label placeholders with their resolved shared values."
-      (let resolve ((value datum) (seen '()))
-        (cond
-         ((datum-label? value)
-          (if (not (datum-label-filled? value))
-              (reader-error reader "undefined datum label"
-                            (datum-label-id value)))
-          (resolve (datum-label-value value) seen))
-         ((pair? value)
-          (if (memq value seen)
-              value
-              (begin
-                (set-car! value (resolve (car value) (cons value seen)))
-                (set-cdr! value (resolve (cdr value) (cons value seen)))
-                value)))
-         ((vector? value)
-          (if (memq value seen)
-              value
-              (let loop ((index 0))
-                (if (= index (vector-length value))
-                    value
-                    (begin
-                      (vector-set!
-                       value
-                       index
-                       (resolve (vector-ref value index)
-                                (cons value seen)))
-                      (loop (+ index 1)))))))
-         (else value))))
+      (let ((label-count (vector-ref (reader-datum-labels reader) 0)))
+        ;; Without labels the parser graph is already final and remains a
+        ;; scalar/allocation-free fast path. Labelled owned syntax uses the
+        ;; object's intrusive map header; legacy private host syntax retains
+        ;; the correctness-only host identity adapter.
+        (if (= label-count 0)
+            datum
+            (let ((root (vector datum))
+                  (seen (make-reader-identity-map)))
+                (define (resolved-target value)
+                  "Resolve one label chain with bounded path compression."
+                  (let ((cursor value) (steps 0) (path '()))
+                    (do ()
+                        ((not (datum-label? cursor))
+                         (do ((rest path (cdr rest)))
+                             ((null? rest))
+                           (set-datum-label-value! (car rest) cursor))
+                         cursor)
+                      (if (not (datum-label-filled? cursor))
+                          (reader-error reader
+                                        "undefined datum label"
+                                        (datum-label-id cursor)))
+                      ;; A chain can visit each reader-local label once.
+                      ;; Reaching another label after that proves a pure
+                      ;; placeholder cycle such as #0=#0#, which has no
+                      ;; compound shell capable of closing the graph.
+                      (if (>= steps label-count)
+                          (reader-error reader
+                                        "cyclic datum label alias"
+                                        (datum-label-id cursor)))
+                      (let ((next (datum-label-value cursor)))
+                        (set! path (cons cursor path))
+                        (set! steps (+ steps 1))
+                        (set! cursor next)))))
+
+                (define (store! parent slot source value)
+                  "Replace label SOURCE in PARENT's SLOT with VALUE."
+                  ;; Non-placeholder edges already hold VALUE and must not
+                  ;; consume their shell's one permitted fixup.
+                  (if (not (eq? source value))
+                      (cond
+                       ((not parent) (vector-set! root 0 value))
+                       ((consent-datum-pair? parent)
+                        (reader-fixup-owned-slot!
+                         reader parent (if (eq? slot 'car) 0 1) value))
+                       ((pair? parent)
+                        (if (eq? slot 'car)
+                            (set-car! parent value)
+                            (set-cdr! parent value)))
+                       ((consent-datum-vector? parent)
+                        (reader-fixup-owned-slot!
+                         reader parent slot value))
+                       (else (vector-set! parent slot value)))))
+
+                ;; Each action is #(source parent slot). Register a compound
+                ;; before scheduling its edges so cycles and shared targets
+                ;; never re-enter the traversal.
+                (dynamic-wind
+                 (lambda () #t)
+                 (lambda ()
+                   (let walk ((work (list (vector datum #f 0))))
+                     (if (null? work)
+                         (vector-ref root 0)
+                         (let* ((action (car work))
+                                (source (vector-ref action 0))
+                                (value (resolved-target source))
+                                (parent (vector-ref action 1))
+                                (slot (vector-ref action 2))
+                                (rest (cdr work)))
+                           (store! parent slot source value)
+                           (cond
+                            ((reader-pair? value)
+                             (if (reader-identity-map-ref seen value #f)
+                                 (walk rest)
+                                 (begin
+                                   (reader-identity-map-set! seen value #t)
+                                   (walk
+                                    (cons
+                                     (vector
+                                      (reader-car value) value 'car)
+                                     (cons
+                                      (vector
+                                       (reader-cdr value) value 'cdr)
+                                      rest))))))
+                            ((reader-vector? value)
+                             (if (reader-identity-map-ref seen value #f)
+                                 (walk rest)
+                                 (begin
+                                   (reader-identity-map-set! seen value #t)
+                                   ;; Schedule the highest slot first. Besides
+                                   ;; being semantically neutral, this
+                                   ;; exercises complete backward label-alias
+                                   ;; chains before earlier slots compress.
+                                   (let push
+                                       ((index 0)
+                                        (next rest))
+                                     (if (= index
+                                            (reader-vector-length value))
+                                         (walk next)
+                                         (push
+                                          (+ index 1)
+                                          (cons
+                                           (vector
+                                            (reader-vector-ref value index)
+                                            value
+                                            index)
+                                           next)))))))
+                            (else (walk rest)))))))
+                 (lambda ()
+                   (reader-identity-map-release! seen)))))))
 
 
     (define (read-datum reader depth)
@@ -2193,8 +2926,15 @@ dotted tail"))
       (skip-intertoken-space! reader depth)
       (if (eof? reader)
           (reader-incomplete reader "unexpected end of input"))
-      (let ((start (reader-position reader))
-            (char (peek reader)))
+      (let* ((start (reader-position reader))
+             (char (peek reader))
+             (datum-label-syntax?
+              (and
+               (char=? char #\#)
+               (let ((next (peek reader 1)))
+                 (and next
+                      (char>=? next #\0)
+                      (char<=? next #\9))))))
         (let ((datum
                (cond
                 ((char=? char #\() (read-list reader (+ depth 1)))
@@ -2250,21 +2990,74 @@ dotted tail"))
                  (let ((datum (classify-token reader (read-token reader))))
                    (note-node! reader)
                    datum)))))
-          (if (reader-source-metadata reader)
-              (consent-datum-source-set!
+          (if (and (reader-source-metadata reader)
+                   (source-attachable? datum))
+              ((if datum-label-syntax?
+                   reader-datum-source-set!
+                   reader-datum-source-set-fresh!)
+               reader
                datum
-               (source-note reader start (reader-position reader))
-               (reader-maximum-source-metadata reader))
+               (source-note reader start (reader-position reader)))
               datum))))
 
     (define (options-from-rest maybe-options)
       "Normalize optional argument lists to an options association list."
       (if (null? maybe-options) '() (car maybe-options)))
 
+    (define (reader-parse-one-with-state
+             source options . maybe-construction)
+      "Parse one complete datum and return it with its reader state."
+      (let ((reader
+             (if (null? maybe-construction)
+                 (reader-from-source source options)
+                 (reader-from-source
+                  source options (car maybe-construction)))))
+        (set-reader-datum-labels! reader (make-reader-label-table))
+        (let ((datum (resolve-datum-labels (read-datum reader 0)
+                                           reader)))
+          (skip-intertoken-space! reader 0)
+          (if (not (eof? reader))
+              (reader-error reader "unexpected trailing input"))
+          (values datum reader))))
+
+    (define (reader-parse-one source options . maybe-construction)
+      "Parse one complete datum with optional owned construction callbacks."
+      (call-with-values
+       (lambda ()
+         (if (null? maybe-construction)
+             (reader-parse-one-with-state source options)
+             (reader-parse-one-with-state
+              source options (car maybe-construction))))
+       (lambda (datum reader) datum)))
+
+    (define (reader-private-host-tree? reader)
+      "Report whether READER produced an unlabelled private host tree."
+      "Owned construction, recovery, active metadata sinks, and datum-label"
+      "syntax retain the general graph validator even for an acyclic result."
+      (and (not (reader-owned-construction? reader))
+           (not (reader-recovery reader))
+           (not (and (reader-source-metadata reader)
+                     (reader-source-metadata-sink reader)))
+           (= (vector-ref (reader-datum-labels reader) 0) 0)))
+
+    (define (reader-validate-parsed-datum datum reader options)
+      "Validate DATUM through READER's proven representation boundary."
+      (if (reader-private-host-tree? reader)
+          (validate-parser-host-tree datum options)
+          (consent-validate-datum datum options))
+      datum)
+
+    (define (reader-read-one source options)
+      "Read one validated private host-syntax datum."
+      (call-with-values
+       (lambda () (reader-parse-one-with-state source options))
+       (lambda (datum reader)
+         (reader-validate-parsed-datum datum reader options))))
+
     (define (consent-read source . maybe-options)
-      "Read one datum from SOURCE, enforce complete input consumption, and"
-      "validate the resulting host data against Consent Scheme resource \
-limits."
+      "Read one private syntax datum from SOURCE and require complete input."
+      "Compound results use host-native bootstrap syntax; Scheme-visible"
+      "values must enter through `consent-read-datum'."
       #((parameters
          (source (type (or string port))
           (description
@@ -2273,23 +3066,49 @@ limits."
           (description
            ("Optional reader options alist supplying budget overrides."))))
         (returns
-         . ("The single datum read from SOURCE after confirming no"
-            "trailing input remains."))
+         . ("The single private syntax datum read from SOURCE after"
+            "confirming no trailing input remains."))
         (effects error))
+      (reader-read-one
+       source
+       (options-from-rest maybe-options)))
+
+    (define (consent-read-datum heap source . maybe-options)
+      "Read one datum from SOURCE into the explicit owned HEAP."
+      "Compound syntax is allocated directly in HEAP. Datum-label fixups run"
+      "inside the private construction scope; validation follows publication."
+      #((parameters
+         (heap (type datum-heap)
+          (description "Heap that owns the returned compound graph."))
+         (source (type (or string reader-source))
+          (description "Source string or reusable prepared snapshot."))
+         (maybe-options (type list)
+          (description
+           ("Optional reader options alist supplying budget overrides."))))
+        (returns
+         . ("The parsed value with every compound allocated in HEAP;"
+            "sharing and cycles are preserved."))
+        (effects allocation state-read state-write error))
+      (if (not (consent-datum-heap? heap))
+          (error "consent-read-datum expected a datum heap" heap))
       (let* ((options (options-from-rest maybe-options))
-             (reader (reader-from-source source options)))
-        (set-reader-datum-labels! reader '())
-        (let ((datum (resolve-datum-labels (read-datum reader 0)
-                                           reader)))
-          (skip-intertoken-space! reader 0)
-          (if (not (eof? reader))
-              (reader-error reader "unexpected trailing input"))
-          (consent-validate-datum datum options)
-          datum)))
+             (datum
+              (consent-call-with-datum-construction
+               heap
+               (lambda (make-shell fill-slot! fixup-slot!)
+                 (reader-parse-one
+                  source
+                  options
+                  (vector make-shell fill-slot! fixup-slot!))))))
+        ;; Construction closes before validation, so bytevectors and every
+        ;; other owned compound expose only their final public representation.
+        (consent-validate-datum datum options)
+        datum))
 
     (define (consent-read-all source . maybe-options)
-      "Read a source body into datums for program/library evaluation.  Datum"
-      "labels are scoped per datum, matching R7RS external representations."
+      "Read a source body into private syntax for program/library evaluation."
+      "Compound results remain host-native bootstrap syntax. Datum labels are"
+      "scoped per datum, matching R7RS external representations."
       #((parameters
          (source (type (or string port))
           (description
@@ -2299,36 +3118,109 @@ limits."
            ("Optional reader options alist supplying budget overrides."))))
         (returns (type list)
          (description
-          ("A list of every datum read from SOURCE, in source order,"
-            "each validated against the resource budgets.")))
+          ("A private host list of syntax datums read from SOURCE in"
+            "source order and validated against the resource budgets.")))
         (effects error))
       (let* ((options (options-from-rest maybe-options))
              (reader (reader-from-source source options)))
-        (let loop ((datums '()))
+        (let loop ((datums '()) (host-trees '()))
           (skip-intertoken-space! reader 0)
           (if (eof? reader)
-              (let ((result (reverse datums)))
-                (let validate-loop ((rest result))
+              (let ((result (reverse datums))
+                    (tree-flags (reverse host-trees)))
+                ;; Preserve the existing parse-before-validation ordering:
+                ;; later lexical errors still precede earlier datum limits.
+                (let validate-loop ((rest result) (flags tree-flags))
                   (if (null? rest)
                       result
                       (begin
-                        (consent-validate-datum (car rest) options)
-                        (validate-loop (cdr rest))))))
+                        ((if (car flags)
+                             validate-parser-host-tree
+                             consent-validate-datum)
+                         (car rest) options)
+                        (validate-loop (cdr rest) (cdr flags))))))
               (begin
-                (set-reader-datum-labels! reader '())
-                (loop (cons (resolve-datum-labels
-                             (read-datum reader 0)
-                             reader)
-                            datums)))))))
+                (set-reader-datum-labels! reader (make-reader-label-table))
+                (let ((datum
+                       (resolve-datum-labels
+                        (read-datum reader 0)
+                        reader)))
+                  (loop (cons datum datums)
+                        (cons (reader-private-host-tree? reader)
+                              host-trees))))))))
+
+    (define (checked-reader-position source position)
+      "Return validated POSITION for incremental SOURCE input."
+      (set! position (canonical-component position))
+      (if (not (or (string? source) (consent-reader-source? source)))
+          (error "consent reader source must be a string or snapshot" source))
+      (let ((length
+             (if (consent-reader-source? source)
+                 (vector-length
+                  (prepared-reader-source-characters source))
+                 (string-length source))))
+        (if (or (not (integer? position))
+                (< position 0)
+                (> position length))
+          (error "consent reader position out of range" position))
+        position))
+
+    (define (reader-parse-from-string-at-with-state
+             source position options . maybe-construction)
+      "Parse at POSITION and return its adapter result with reader state."
+      (let ((reader
+             (if (null? maybe-construction)
+                 (reader-from-source source options)
+                 (reader-from-source
+                  source options (car maybe-construction)))))
+        (set-reader-position! reader position)
+        (skip-intertoken-space! reader 0)
+        (if (eof? reader)
+            (values
+             (cons consent-read-eof (reader-position reader))
+             reader)
+            (begin
+              (set-reader-datum-labels! reader (make-reader-label-table))
+              (let ((datum (resolve-datum-labels
+                            (read-datum reader 0)
+                            reader)))
+                (values
+                 (cons datum (reader-position reader))
+                 reader))))))
+
+    (define (reader-parse-from-string-at
+             source position options . maybe-construction)
+      "Parse at POSITION with optional owned construction callbacks."
+      (call-with-values
+       (lambda ()
+         (if (null? maybe-construction)
+             (reader-parse-from-string-at-with-state
+              source position options)
+             (reader-parse-from-string-at-with-state
+              source position options (car maybe-construction))))
+       (lambda (result reader) result)))
+
+    (define (reader-read-from-string-at source position options)
+      "Read one validated private host-syntax datum at POSITION."
+      (call-with-values
+       (lambda ()
+         (reader-parse-from-string-at-with-state
+          source position options))
+       (lambda (result reader)
+         (if (not (consent-read-eof? (car result)))
+             (reader-validate-parsed-datum
+              (car result) reader options))
+         result)))
 
     (define (consent-read-from-string-at source position . maybe-options)
-      "Incremental read entry point for ports and REPL-like \
-callers; the cdr of"
-      "the result is the next source offset no matter which datum was returned\
-."
+      "Read one private syntax datum incrementally from SOURCE at POSITION."
+      "Prepare repeated SOURCE reads with `consent-make-reader-source' so"
+      "character decoding and line indexing occur once rather than per form."
+      "A raw string retains stateless one-shot compatibility semantics."
+      "The result's host-native adapter cdr is the next source offset."
       #((parameters
-         (source (type string)
-          (description "Source string to read one datum from."))
+         (source (type (or string reader-source))
+          (description "Source string or reusable prepared snapshot."))
          (position (type exact-non-negative-integer)
           (description
            ("Nonnegative offset within SOURCE at which to begin"
@@ -2338,29 +3230,53 @@ callers; the cdr of"
             ("Optional reader options alist supplying budget overrides."))))
         (returns (type pair)
          (description
-          ("A pair whose car is the read datum (or the end-of-file"
-            "object) and whose cdr is the next source offset.")))
+          ("A private adapter pair whose car is the syntax datum or EOF"
+            "sentinel and whose cdr is the next source offset.")))
         (effects error))
-      (set! position (canonical-component position))
-      (if (not (string? source))
-          (error "consent reader source must be a string" source))
-      (if (or (not (integer? position))
-              (< position 0)
-              (> position (string-length source)))
-          (error "consent reader position out of range" position))
+      (reader-read-from-string-at
+       source
+       (checked-reader-position source position)
+       (options-from-rest maybe-options)))
+
+    (define (consent-read-datum-from-string-at
+             heap source position . maybe-options)
+      "Read one datum incrementally into HEAP from SOURCE at POSITION."
+      "The outer `(datum . position)' pair remains a private host adapter;"
+      "its datum's compounds are allocated directly in HEAP."
+      "Prepare repeated SOURCE reads with `consent-make-reader-source'."
+      "A raw string retains stateless one-shot compatibility semantics."
+      #((parameters
+         (heap (type datum-heap)
+          (description "Heap that owns the returned compound graph."))
+         (source (type (or string reader-source))
+          (description "Source string or reusable prepared snapshot."))
+         (position (type exact-non-negative-integer)
+          (description "Offset within SOURCE at which reading begins."))
+         (maybe-options (type list)
+          (description
+           ("Optional reader options alist supplying budget overrides."))))
+        (returns (type pair)
+         (description
+          ("A private adapter pair whose car is an owned datum or EOF"
+            "sentinel and whose cdr is the next source offset.")))
+        (effects allocation state-read state-write error))
+      (if (not (consent-datum-heap? heap))
+          (error
+           "consent-read-datum-from-string-at expected a datum heap"
+           heap))
       (let* ((options (options-from-rest maybe-options))
-             (reader (reader-from-source source options)))
-        (set-reader-position! reader position)
-        (skip-intertoken-space! reader 0)
-        (if (eof? reader)
-            (cons consent-read-eof (reader-position reader))
-            (begin
-              (set-reader-datum-labels! reader '())
-              (let ((datum (resolve-datum-labels
-                            (read-datum reader 0)
-                            reader)))
-                (consent-validate-datum datum options)
-                (cons datum (reader-position reader)))))))
+             (result
+              (consent-call-with-datum-construction
+               heap
+               (lambda (make-shell fill-slot! fixup-slot!)
+                 (reader-parse-from-string-at
+                  source
+                  (checked-reader-position source position)
+                  options
+                  (vector make-shell fill-slot! fixup-slot!))))))
+        (if (not (consent-read-eof? (car result)))
+            (consent-validate-datum (car result) options))
+        result))
 
     ;;;; Reader recovery: errors as data, resynchronization, and spans.
 
@@ -2425,11 +3341,11 @@ o"
              ": "
              (join (map render-irritant irritants) " ")))))
 
-    (define (recovery-range line-starts start end)
-      "Build a diagnostic-range datum spanning START..END using LINE-STARTS. "
+    (define (recovery-range reader start end)
+      "Build a diagnostic-range datum spanning START..END through READER."
       "The shape matches `(agent diagnostics)` `make-diagnostic-range`."
-      (let ((start-position (line-starts-line-column line-starts start))
-            (end-position (line-starts-line-column line-starts end)))
+      (let ((start-position (reader-line-column reader start))
+            (end-position (reader-line-column reader end)))
         (list 'diagnostic-range
               (list 'start (consent-make-canonical-integer start))
               (list 'end (consent-make-canonical-integer end))
@@ -2497,8 +3413,7 @@ t"
           (lambda ()
             (cons 'value (thunk)))))))
 
-    (define (build-failure-step reader resync line-starts source-id start
-      condition)
+    (define (build-failure-step reader resync source-id start condition)
       "Build the <consent-recovery-step> for a reader failure anchored at"
       "START.  Incomplete input rewinds to START and carries the open-construc\
 t"
@@ -2508,7 +3423,7 @@ t"
             (reason (condition-reason condition)))
         (if (eq? kind 'incomplete)
             (let* ((end (reader-length reader))
-                   (range (recovery-range line-starts start end))
+                   (range (recovery-range reader start end))
                    (text (reader-substring reader start end))
                    (diagnostic
                     (recovery-diagnostic source-id 'incomplete reason range))
@@ -2519,7 +3434,7 @@ t"
             (let* ((proposed (resync (reader-source reader) start))
                    (next (min (reader-length reader)
                               (max proposed (+ start 1))))
-                   (range (recovery-range line-starts start next))
+                   (range (recovery-range reader start next))
                    (text (reader-substring reader start next))
                    (diagnostic
                     (recovery-diagnostic source-id 'invalid reason range))
@@ -2527,7 +3442,7 @@ t"
               (set-reader-position! reader next)
               (make-recovery-step 'invalid #f diagnostic span next #f)))))
 
-    (define (recover-step! reader resync line-starts source-id options)
+    (define (recover-step! reader resync source-id options)
       "Read one form in recovery mode and return a <consent-recovery-step>. "
       "Leading trivia is skipped first so a malformed region is anchored at th\
 e"
@@ -2544,8 +3459,8 @@ s"
                (lambda () (skip-intertoken-space! reader 0)))))
         (cond
          ((eq? (car skip-outcome) 'condition)
-          (build-failure-step reader resync line-starts source-id
-                              pre (cdr skip-outcome)))
+          (build-failure-step
+           reader resync source-id pre (cdr skip-outcome)))
          ((eof? reader)
           (make-recovery-step 'eof #f #f #f (reader-position reader) #f))
          (else
@@ -2554,7 +3469,9 @@ s"
                   (guard-reader-failure
                    reader
                    (lambda ()
-                     (set-reader-datum-labels! reader '())
+                     (set-reader-datum-labels!
+                      reader
+                      (make-reader-label-table))
                      (let ((datum (resolve-datum-labels
                                    (read-datum reader 0)
                                    reader)))
@@ -2563,8 +3480,8 @@ s"
             (if (eq? (car read-outcome) 'value)
                 (make-recovery-step 'datum (cdr read-outcome) #f #f
                                     (reader-position reader) #f)
-                (build-failure-step reader resync line-starts source-id
-                                    start (cdr read-outcome))))))))
+                (build-failure-step
+                 reader resync source-id start (cdr read-outcome))))))))
 
     (define (recovery-reader source options)
       "Create a recovery-mode reader over SOURCE, forcing the recovery flag on\
@@ -2597,11 +3514,9 @@ s"
       (let* ((options (options-from-rest maybe-options))
              (resync (option-ref options 'resync consent-resync-to-next-form))
              (source-id (option-ref options 'source-id #f))
-             (line-starts (source-line-starts source))
              (reader (recovery-reader source options)))
         (let loop ((datums '()) (diagnostics '()) (spans '()))
-          (let* ((step (recover-step! reader resync line-starts
-                                      source-id options))
+          (let* ((step (recover-step! reader resync source-id options))
                  (status (consent-recovery-step-status step)))
             (cond
              ((eq? status 'eof)
@@ -2663,10 +3578,29 @@ n"
       (let* ((options (options-from-rest maybe-options))
              (resync (option-ref options 'resync consent-resync-to-next-form))
              (source-id (option-ref options 'source-id #f))
-             (line-starts (source-line-starts source))
              (reader (recovery-reader source options)))
         (set-reader-position! reader position)
-        (recover-step! reader resync line-starts source-id options)))
+        (recover-step! reader resync source-id options)))
+
+    ;; Internal verification only: focused reader tests may supply a mutable
+    ;; one-slot vector under this option to count general validation's exact
+    ;; host identity-map make/ref/set calls. It is not a supported reader API.
+    (define validation-identity-map-counter-option
+      '%reader-validation-identity-map-operation-counter)
+
+    (define (validation-identity-map-counter options)
+      "Return and reset OPTIONS' private identity-map operation counter."
+      (let ((counter
+             (option-ref
+              options validation-identity-map-counter-option #f)))
+        (if (and counter
+                 (not (and (vector? counter)
+                           (= (vector-length counter) 1))))
+            (error
+             "reader validation identity-map counter must be one-slot vector"
+             counter))
+        (if counter (vector-set! counter 0 0))
+        counter))
 
     (define (validation-note-node! validation)
       "Charge one validation node against the post-read total-node budget."
@@ -2680,112 +3614,548 @@ n"
 nodes"
                  (validation-maximum-total-nodes validation))))
 
-    (define (validate-datum datum options validation depth seen)
-      "Datum validation protects the evaluator from host-constructed values"
-      "that bypassed lexical reader checks, including cycles and oversized"
-      "objects."
-      (if (> depth
+    (define (validate-parser-host-tree datum options)
+      "Validate one parser-produced unlabelled private host tree."
+      "The parser proves acyclicity and exclusive compound identity when its"
+      "datum-label table is empty. Walk that tree once without allocating an"
+      "identity map; pair cdr edges retain zero depth and one list-length"
+      "scope while car and vector edges increase depth."
+      (validation-identity-map-counter options)
+      (let ((maximum-depth
              (option-count options 'max-depth
-                         consent-default-maximum-depth))
-          (error "consent datum limit error: datum depth exceeds maximum depth\
-"
-                 depth))
-      (cond
-       ((or (boolean? datum)
-            (reader-datum-symbol? datum)
-            (consent-character? datum)
-            (consent-number? datum))
-        (validation-note-node! validation))
-       ((string? datum)
-        (if (> (string-length datum)
-               (option-count options 'max-string-size
-                           consent-default-maximum-string-size))
-            (error
-              "consent datum limit error: string size exceeds maximum string s\
-ize"
-                   (option-count options 'max-string-size
-                               consent-default-maximum-string-size)))
-        (validation-note-node! validation))
-       ((bytevector? datum)
-        (if (> (bytevector-length datum)
-               (option-count options 'max-bytevector-length
+                           consent-default-maximum-depth))
+            (maximum-list-length
+             (option-count options 'max-list-length
+                           consent-default-maximum-list-length))
+            (maximum-vector-length
+             (option-count options 'max-vector-length
+                           consent-default-maximum-vector-length))
+            (maximum-bytevector-length
+             (option-count options 'max-bytevector-length
                            consent-default-maximum-bytevector-length))
-            (error
-              "consent datum limit error: bytevector length exceeds maximum by\
-tevector length"
-                   (option-count options 'max-bytevector-length
-                               consent-default-maximum-bytevector-length)))
-        (let loop ((index 0))
-          (if (< index (bytevector-length datum))
-              (begin
-                (if (not (let ((byte (bytevector-u8-ref datum index)))
-                           (and (integer? byte) (<= 0 byte) (<= byte 255))))
-                    (error
-                      "consent reader error: bytevector contains invalid byte"
-                           (bytevector-u8-ref datum index)))
-                (loop (+ index 1)))))
-        (validation-note-node! validation))
-       ((null? datum)
-        (validation-note-node! validation))
-       ((pair? datum)
-        (if (memq datum seen)
-            #t
-            (let loop ((cursor datum)
-                       (count 0)
-                       (next-seen seen))
-              (cond
-               ((memq cursor next-seen) #t)
-               ((pair? cursor)
-                (let ((next-count (+ count 1)))
-                  (if (> next-count
-                         (option-count options 'max-list-length
-                                     consent-default-maximum-list-length))
+            (maximum-string-size
+             (option-count options 'max-string-size
+                           consent-default-maximum-string-size))
+            (validation
+             (make-validation
+              0
+              (option-count options 'max-total-nodes
+                            consent-default-maximum-total-nodes))))
+
+        (define (depth-check! depth)
+          "Reject DEPTH above this host-tree validation's cached ceiling."
+          (if (> depth maximum-depth)
+              (error
+               "consent datum limit error: datum depth exceeds maximum depth"
+               depth)))
+
+        (define (list-limit-error)
+          "Raise this host-tree validation's list-length error."
+          (error
+           "consent datum limit error: list length exceeds maximum list length"
+           maximum-list-length))
+
+        (define (push-vector-elements value depth rest)
+          "Prepend VALUE's host-vector element jobs in source order."
+          (let push ((index (- (vector-length value) 1))
+                     (next rest))
+            (if (< index 0)
+                next
+                (push
+                 (- index 1)
+                 (cons
+                  (vector 'datum
+                          (vector-ref value index)
+                          (+ depth 1)
+                          0)
+                  next)))))
+
+        ;; Jobs carry KIND, VALUE, DEPTH, and the pair count already consumed
+        ;; by one active cdr spine. This is an explicit stack, so deeply nested
+        ;; parser trees cannot consume the host control stack.
+        (let walk ((work (list (vector 'datum datum 0 0))))
+          (if (not (null? work))
+              (let* ((job (car work))
+                     (kind (vector-ref job 0))
+                     (value (vector-ref job 1))
+                     (depth (vector-ref job 2))
+                     (list-length (vector-ref job 3))
+                     (rest (cdr work)))
+                (depth-check! depth)
+                (if (eq? kind 'pair-tail)
+                    (cond
+                     ((pair? value)
+                      (let ((next-length (+ list-length 1)))
+                        (validation-note-node! validation)
+                        (if (> next-length maximum-list-length)
+                            (list-limit-error))
+                        (walk
+                         (cons
+                          (vector 'datum (car value) (+ depth 1) 0)
+                          (cons
+                           (vector 'pair-tail
+                                   (cdr value)
+                                   depth
+                                   next-length)
+                           rest)))))
+                     ((null? value) (walk rest))
+                     (else
+                      (walk
+                       (cons (vector 'datum value depth 0) rest))))
+                    (cond
+                     ((or (boolean? value)
+                          (reader-datum-symbol? value)
+                          (consent-character? value)
+                          (consent-number? value))
+                      (validation-note-node! validation)
+                      (walk rest))
+                     ((string? value)
+                      (if (> (string-length value) maximum-string-size)
+                          (error
+                           "consent datum limit error: string size exceeds \
+maximum string size"
+                           maximum-string-size))
+                      (validation-note-node! validation)
+                      (walk rest))
+                     ((bytevector? value)
+                      (if (> (bytevector-length value)
+                             maximum-bytevector-length)
+                          (error
+                           "consent datum limit error: bytevector length \
+exceeds maximum bytevector length"
+                           maximum-bytevector-length))
+                      (let check ((index 0))
+                        (if (< index (bytevector-length value))
+                            (let ((byte (bytevector-u8-ref value index)))
+                              (if (not (and (integer? byte)
+                                            (<= 0 byte)
+                                            (<= byte 255)))
+                                  (error
+                                   "consent reader error: bytevector contains \
+invalid byte"
+                                   byte))
+                              (check (+ index 1)))))
+                      (validation-note-node! validation)
+                      (walk rest))
+                     ((null? value)
+                      (validation-note-node! validation)
+                      (walk rest))
+                     ((pair? value)
+                      (validation-note-node! validation)
+                      (if (> 1 maximum-list-length)
+                          (list-limit-error))
+                      (walk
+                       (cons
+                        (vector 'datum (car value) (+ depth 1) 0)
+                        (cons
+                         (vector 'pair-tail (cdr value) depth 1)
+                         rest))))
+                     ((vector? value)
+                      (validation-note-node! validation)
+                      (if (> (vector-length value) maximum-vector-length)
+                          (error
+                           "consent datum limit error: vector length exceeds \
+maximum vector length"
+                           maximum-vector-length))
+                      (walk
+                       (push-vector-elements value depth rest)))
+                     (else
                       (error
-                        "consent datum limit error: list length exceeds maximu\
-m list length"
-                             (option-count options 'max-list-length
-                                         consent-default-maximum-list-length)))
-                  (validation-note-node! validation)
-                  (validate-datum (car cursor)
-                                  options
-                                  validation
-                                  (+ depth 1)
-                                  (cons cursor next-seen))
-                  (loop (cdr cursor)
-                        next-count
-                        (cons cursor next-seen))))
-               ((null? cursor) #t)
-               (else
-                (validate-datum cursor
-                                options
-                                validation
-                                (+ depth 1)
-                                next-seen))))))
-       ((vector? datum)
-        (if (memq datum seen)
-            #t
-            (begin
-              (if (> (vector-length datum)
-                     (option-count options 'max-vector-length
-                                 consent-default-maximum-vector-length))
-                  (error
-                    "consent datum limit error: vector length exceeds maximum \
-vector length"
-                         (option-count options 'max-vector-length
-                                     consent-default-maximum-vector-length)))
-              (validation-note-node! validation)
-              (let loop ((index 0))
-                (if (< index (vector-length datum))
+                       "consent reader error: datum contains unsupported object"
+                       value))))))))
+      datum)
+
+    (define (validate-datum datum options validation)
+      "Validate one mixed datum graph with a global visited set and worklist."
+      "Shared compounds are traversed and charged once. Pair-spine spans are"
+      "memoized separately so every list entry still enforces its full length"
+      "without rewalking a shared tail. Graph depth is the minimum weighted"
+      "distance from the root: pair cdr edges cost zero; pair car and vector"
+      "element edges cost one. This makes shared-DAG validation independent"
+      "of edge order while the parser separately enforces source nesting."
+      (let ((maximum-depth
+             (option-count options 'max-depth
+                           consent-default-maximum-depth))
+            (maximum-list-length
+             (option-count options 'max-list-length
+                           consent-default-maximum-list-length))
+            (maximum-vector-length
+             (option-count options 'max-vector-length
+                           consent-default-maximum-vector-length))
+            (maximum-bytevector-length
+             (option-count options 'max-bytevector-length
+                           consent-default-maximum-bytevector-length))
+            (maximum-string-size
+             (option-count options 'max-string-size
+                           consent-default-maximum-string-size))
+            (nodes (make-reader-identity-map))
+            (node-absent (vector 'validation-node-absent))
+            (operation-counter
+             (validation-identity-map-counter options)))
+
+        (define (count-host-identity-operation!)
+          "Charge one exact host identity-map call to the private counter."
+          ;; The ordinary path retains the branch-free hybrid adapter. Only a
+          ;; focused verification run substitutes counted operations selected
+          ;; once here; the supported path pays no per-operation probe.
+          (vector-set!
+           operation-counter
+           0
+           (+ (vector-ref operation-counter 0) 1)))
+
+        (define (counted-identity-map-ref map key default)
+          "Return KEY from MAP while counting exact host adapter calls."
+          (let ((table
+                 (vector-ref
+                  map (if (consent-datum-object? key) 0 1))))
+            (if (not table)
+                default
+                (if (consent-datum-object? key)
+                    (consent-datum-object-map-ref table key default)
                     (begin
-                      (validate-datum (vector-ref datum index)
-                                      options
-                                      validation
+                      (count-host-identity-operation!)
+                      (consent-identity-map-ref table key default))))))
+
+        (define (counted-identity-map-set! map key value)
+          "Set KEY in MAP while counting exact host adapter calls."
+          (let* ((owned? (consent-datum-object? key))
+                 (index (if owned? 0 1))
+                 (table (vector-ref map index)))
+            (if (not table)
+                (begin
+                  (if owned?
+                      #t
+                      (count-host-identity-operation!))
+                  (set! table
+                        (if owned?
+                            (consent-make-datum-object-map)
+                            (consent-make-identity-map)))
+                  (vector-set! map index table)))
+            (if owned?
+                (consent-datum-object-map-set! table key value)
+                (begin
+                  (count-host-identity-operation!)
+                  (consent-identity-map-set! table key value))))
+          value)
+
+        (define validation-identity-map-ref
+          (if operation-counter
+              counted-identity-map-ref
+              reader-identity-map-ref))
+
+        (define validation-identity-map-set!
+          (if operation-counter
+              counted-identity-map-set!
+              reader-identity-map-set!))
+
+        (define (validation-node-state value create?)
+          "Return VALUE's composite validation state, optionally creating it."
+          "One entry keeps every validation fact under one owned traversal"
+          "token: #(seen? minimum-depth list-span list-position)."
+          (let ((state
+                 (validation-identity-map-ref
+                  nodes value node-absent)))
+            (if (and create? (eq? state node-absent))
+                (let ((created (vector #f #f #f #f)))
+                  (validation-identity-map-set! nodes value created)
+                  created)
+                state)))
+
+        (define (validation-state-ref value slot default)
+          "Return VALUE's validation SLOT, or DEFAULT when absent."
+          (let ((state (validation-node-state value #f)))
+            (if (eq? state node-absent)
+                default
+                (or (vector-ref state slot) default))))
+
+        (define (validation-state-set! value slot datum)
+          "Store DATUM in VALUE's composite validation SLOT."
+          (vector-set! (validation-node-state value #t) slot datum)
+          datum)
+
+        (define (depth-check! depth)
+          "Reject DEPTH above this validation run's cached ceiling."
+          (if (> depth maximum-depth)
+              (error
+               "consent datum limit error: datum depth exceeds maximum depth"
+               depth)))
+
+        (define (list-limit-error)
+          "Raise this validation run's list-length error."
+          (error
+           "consent datum limit error: list length exceeds maximum list length"
+           maximum-list-length))
+
+        (define (memoize-list-path! start path length base cycle-start)
+          "Memoize every pair in reversed PATH and return its head span."
+          (let finish ((rest path))
+            (if (not (null? rest))
+                (let* ((entry (car rest))
+                       (node (vector-ref entry 0))
+                       (index (vector-ref entry 1))
+                       (span
+                        (if cycle-start
+                            (if (>= index cycle-start)
+                                (- length cycle-start)
+                                (- length index))
+                            (+ base (- length index)))))
+                  (validation-state-set! node 2 span)
+                  (validation-state-set! node 3 #f)
+                  (finish (cdr rest)))))
+          (validation-state-ref start 2 #f))
+
+        (define (list-span start)
+          "Return START's unique pair-spine span in expected linear total time."
+          (let ((known (validation-state-ref start 2 #f)))
+            (if known
+                known
+                (let walk ((cursor start) (path '()) (length 0))
+                  (if (> length maximum-list-length)
+                      (list-limit-error))
+                  (cond
+                   ((not (reader-pair? cursor))
+                    (memoize-list-path! start path length 0 #f))
+                   ((validation-state-ref cursor 2 #f)
+                    => (lambda (base)
+                         (memoize-list-path!
+                          start path length base #f)))
+                   ((validation-state-ref cursor 3 #f)
+                    => (lambda (position)
+                         (memoize-list-path!
+                          start path length 0 (- position 1))))
+                   (else
+                    (validation-state-set! cursor 3 (+ length 1))
+                    (walk (reader-cdr cursor)
+                          (cons (vector cursor length) path)
+                          (+ length 1))))))))
+
+        (define (validation-identity-node? value)
+          "Report whether VALUE has graph identity relevant to validation."
+          (or (reader-pair? value)
+              (reader-vector? value)
+              (reader-string? value)
+              (reader-bytevector? value)))
+
+        (define (minimum-depth value proposed)
+          "Return VALUE's minimum graph depth, or PROPOSED for an atom."
+          (if (validation-identity-node? value)
+              (validation-state-ref value 1 proposed)
+              proposed))
+
+        (define (compute-minimum-depths! root)
+          "Index minimum 0/1-weighted depths for ROOT's identity graph."
+          ;; FRONT is consumed directly. BACK is stored in reverse insertion
+          ;; order and reversed only when FRONT empties, yielding an amortized
+          ;; constant-time deque for the zero-one shortest-path traversal.
+          (let ((queue (vector '() '())))
+            (define (push-front! job)
+              (vector-set! queue 0 (cons job (vector-ref queue 0))))
+
+            (define (push-back! job)
+              (vector-set! queue 1 (cons job (vector-ref queue 1))))
+
+            (define (pop-front!)
+              (if (null? (vector-ref queue 0))
+                  (begin
+                    (vector-set! queue 0 (reverse (vector-ref queue 1)))
+                    (vector-set! queue 1 '())))
+              (let ((front (vector-ref queue 0)))
+                (if (null? front)
+                    #f
+                    (begin
+                      (vector-set! queue 0 (cdr front))
+                      (car front)))))
+
+            (define (relax! value depth front?)
+              (if (validation-identity-node? value)
+                  (begin
+                    (let ((old
+                           (validation-state-ref value 1 #f)))
+                      (if (or (not old) (< depth old))
+                          (begin
+                            ;; First discovery is also the compound's single
+                            ;; total-node charge, so an undersized budget stops
+                            ;; the depth prepass before it can scan the graph.
+                            (if (not old)
+                                (validation-note-node! validation))
+                            (validation-state-set! value 1 depth)
+                            ((if front? push-front! push-back!)
+                             (vector value depth))))))))
+
+            (relax! root 0 #t)
+            (let drain ()
+              (let ((job (pop-front!)))
+                (if job
+                    (begin
+                      (let ((value (vector-ref job 0))
+                            (depth (vector-ref job 1)))
+                        ;; Ignore a queued distance superseded by a shorter
+                        ;; zero-edge path before this action reached the front.
+                        (if (= depth
+                               (validation-state-ref value 1 depth))
+                            (cond
+                             ((reader-pair? value)
+                              (if (> (list-span value)
+                                     maximum-list-length)
+                                  (list-limit-error))
+                              (relax! (reader-car value)
                                       (+ depth 1)
-                                      (cons datum seen))
-                      (loop (+ index 1))))))))
-       (else
-        (error "consent reader error: datum contains unsupported object"
-               datum))))
+                                      #f)
+                              (relax! (reader-cdr value) depth #t))
+                             ((reader-vector? value)
+                              (if (> (reader-vector-length value)
+                                     maximum-vector-length)
+                                  (error
+                                   "consent datum limit error: vector length \
+exceeds maximum vector length"
+                                   maximum-vector-length))
+                              (let schedule ((index 0))
+                                (if (< index
+                                       (reader-vector-length value))
+                                    (begin
+                                      (relax!
+                                       (reader-vector-ref value index)
+                                       (+ depth 1)
+                                       #f)
+                                      (schedule (+ index 1))))))))
+                      (drain))))))))
+
+        (define (first-visit? value)
+          "Mark VALUE visited and report whether it was previously absent."
+          (if (validation-state-ref value 0 #f)
+              #f
+              (begin
+                (validation-state-set! value 0 #t)
+                #t)))
+
+        (define (push-vector-elements value depth rest)
+          "Prepend VALUE's element jobs in index order to REST."
+          (let push ((index (- (reader-vector-length value) 1))
+                     (next rest))
+            (if (< index 0)
+                next
+                (push
+                 (- index 1)
+                 (cons
+                  (vector 'datum
+                          (reader-vector-ref value index)
+                          (+ depth 1))
+                  next)))))
+
+        ;; A datum job starts a new list-length scope. A pair-tail job follows
+        ;; one already-checked cdr spine without charging its null terminator.
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+          (compute-minimum-depths! datum)
+          (let walk ((work (list (vector 'datum datum 0))))
+            (if (not (null? work))
+                (let* ((job (car work))
+                     (kind (vector-ref job 0))
+                     (value (vector-ref job 1))
+                     (depth
+                      (minimum-depth value (vector-ref job 2)))
+                     (rest (cdr work)))
+                (depth-check! depth)
+                (if (eq? kind 'pair-tail)
+                    (cond
+                     ((reader-pair? value)
+                      (if (first-visit? value)
+                          (begin
+                            (walk
+                             (cons
+                              (vector 'datum
+                                      (reader-car value)
+                                      (+ depth 1))
+                              (cons
+                               (vector 'pair-tail
+                                       (reader-cdr value)
+                                       depth)
+                               rest))))
+                          (walk rest)))
+                     ((null? value) (walk rest))
+                     (else
+                      (walk
+                       (cons (vector 'datum value depth) rest))))
+                    (cond
+                     ((or (boolean? value)
+                          (reader-datum-symbol? value)
+                          (consent-character? value)
+                          (consent-number? value))
+                      (validation-note-node! validation)
+                      (walk rest))
+                     ((reader-string? value)
+                      (if (> (reader-string-length value)
+                             maximum-string-size)
+                          (error
+                           "consent datum limit error: string size exceeds \
+maximum string size"
+                           maximum-string-size))
+                      (if (first-visit? value)
+                          #t)
+                      (walk rest))
+                     ((reader-bytevector? value)
+                      (if (> (reader-bytevector-length value)
+                             maximum-bytevector-length)
+                          (error
+                           "consent datum limit error: bytevector length \
+exceeds maximum bytevector length"
+                           maximum-bytevector-length))
+                      (if (first-visit? value)
+                          (begin
+                            (let check ((index 0))
+                              (if (< index
+                                     (reader-bytevector-length value))
+                                  (let ((byte
+                                         (reader-bytevector-u8-ref
+                                          value index)))
+                                    (if (not (and (integer? byte)
+                                                  (<= 0 byte)
+                                                  (<= byte 255)))
+                                        (error
+                                         "consent reader error: bytevector \
+contains invalid byte"
+                                         byte))
+                                    (check (+ index 1)))))
+                            #t))
+                      (walk rest))
+                     ((null? value)
+                      (validation-note-node! validation)
+                      (walk rest))
+                     ((reader-pair? value)
+                      (if (> (list-span value) maximum-list-length)
+                          (list-limit-error))
+                      (if (first-visit? value)
+                          (begin
+                            (walk
+                             (cons
+                              (vector 'datum
+                                      (reader-car value)
+                                      (+ depth 1))
+                              (cons
+                               (vector 'pair-tail
+                                       (reader-cdr value)
+                                       depth)
+                               rest))))
+                          (walk rest)))
+                     ((reader-vector? value)
+                      (if (> (reader-vector-length value)
+                             maximum-vector-length)
+                          (error
+                           "consent datum limit error: vector length exceeds \
+maximum vector length"
+                           maximum-vector-length))
+                      (if (first-visit? value)
+                          (begin
+                            (walk
+                             (push-vector-elements value depth rest)))
+                          (walk rest)))
+                     (else
+                      (error
+                       "consent reader error: datum contains unsupported object"
+                       value))))))))
+         (lambda ()
+           (reader-identity-map-release! nodes)))))
 
     (define (consent-validate-datum datum . maybe-options)
       "Public validation returns DATUM unchanged so callers can place it inlin\
@@ -2807,29 +4177,27 @@ e"
                0
                (option-count options 'max-total-nodes
                            consent-default-maximum-total-nodes))))
-        (validate-datum datum options validation 0 '())
+        (validate-datum datum options validation)
         datum))
 
     (define (escape-text text vertical-symbol?)
       "Escape TEXT for a string or, when requested, a vertical symbol."
-      (let loop ((index 0) (parts '()))
-        (if (= index (string-length text))
-            (apply string-append (reverse parts))
-            (let ((char (string-ref text index)))
-              (loop
-               (+ index 1)
-               (cons
-                (cond
-                 ((char=? char (integer->char 7)) "\\a")
-                 ((char=? char (integer->char 8)) "\\b")
-                 ((char=? char #\tab) "\\t")
-                 ((char=? char #\newline) "\\n")
-                 ((char=? char #\return) "\\r")
-                 ((char=? char #\") "\\\"")
-                 ((char=? char #\\) "\\\\")
-                 ((and vertical-symbol? (char=? char #\|)) "\\|")
-                 (else (string char)))
-                parts))))))
+      (let ((output (open-output-string)))
+        (string-for-each
+         (lambda (char)
+           (cond
+            ((char=? char (integer->char 7)) (display "\\a" output))
+            ((char=? char (integer->char 8)) (display "\\b" output))
+            ((char=? char #\tab) (display "\\t" output))
+            ((char=? char #\newline) (display "\\n" output))
+            ((char=? char #\return) (display "\\r" output))
+            ((char=? char #\") (display "\\\"" output))
+            ((char=? char #\\) (display "\\\\" output))
+            ((and vertical-symbol? (char=? char #\|))
+             (display "\\|" output))
+            (else (write-char char output))))
+         text)
+        (get-output-string output)))
 
     (define (escape-string text)
       "Escape string TEXT for stable external rendering."
@@ -2874,32 +4242,18 @@ e"
 
     (define (join strings separator)
       "Join string fragments with SEPARATOR for writer output."
-      (cond
-       ((null? strings) "")
-       ((null? (cdr strings)) (car strings))
-       (else
-        (let loop ((rest (cdr strings))
-                   (result (car strings)))
+      (let ((output (open-output-string)))
+        (let loop ((rest strings) (first? #t))
           (if (null? rest)
-              result
-              (loop (cdr rest)
-                    (string-append result separator (car rest))))))))
+              (get-output-string output)
+              (begin
+                (if (not first?) (display separator output))
+                (display (car rest) output)
+                (loop (cdr rest) #f))))))
 
     (define (writer-compound? datum)
       "Report whether DATUM can participate in shared or circular structure."
-      (or (pair? datum) (vector? datum)))
-
-    (define (alist-ref-eq key alist default)
-      "Return the eq?-keyed association value or DEFAULT when absent."
-      (let ((cell (assq key alist)))
-        (if cell (cdr cell) default)))
-
-    (define (remove-assq key alist)
-      "Remove the first eq?-keyed association from an alist."
-      (cond
-       ((null? alist) '())
-       ((eq? key (caar alist)) (cdr alist))
-       (else (cons (car alist) (remove-assq key (cdr alist))))))
+      (or (reader-pair? datum) (reader-vector? datum)))
 
     (define (consent-datum->external datum . maybe-options)
       "Render Consent Scheme datums with stable external syntax, including"
@@ -2922,193 +4276,328 @@ e"
                               (null? (cdr maybe-options)))
                           #f
                           (cadr maybe-options)))
-            (counts '())
-            (states '())
-            (cyclic '())
-            (labels '())
-            (emitted '())
-            (next-label 0))
+            (nodes (make-reader-identity-map))
+            (node-absent (vector 'writer-node-absent))
+            (cyclic-found? #f)
+            (next-label 0)
+            (parts '()))
+
+        (define (emit! text)
+          "Append TEXT to the reverse writer fragment accumulator."
+          (set! parts (cons text parts)))
+
+        (define (writer-node-state value create?)
+          "Return VALUE's composite writer state, optionally creating it."
+          "One entry carries every canonical-writer fact under one owned map"
+          "token: #(count state cyclic? parent depth cycle-skip label"
+          "emitted?)."
+          (let ((state
+                 (reader-identity-map-ref nodes value node-absent)))
+            (if (and create? (eq? state node-absent))
+                (let ((created (vector 0 #f #f #f -1 #f #f #f)))
+                  (reader-identity-map-set! nodes value created)
+                  created)
+                state)))
+
+        (define (writer-state-ref value slot default)
+          "Return VALUE's writer SLOT, or DEFAULT when no state exists."
+          (let ((state (writer-node-state value #f)))
+            (if (eq? state node-absent)
+                default
+                (vector-ref state slot))))
+
+        (define (writer-state-set! value slot datum)
+          "Store DATUM in VALUE's composite writer SLOT."
+          (vector-set! (writer-node-state value #t) slot datum)
+          datum)
 
         (define (set-count! value count)
-          (set! counts (cons (cons value count)
-                             (remove-assq value counts))))
+          (writer-state-set! value 0 count))
 
         (define (set-state! value state)
-          (set! states (cons (cons value state)
-                             (remove-assq value states))))
+          (writer-state-set! value 1 state))
 
         (define (mark-cyclic! value)
-          (if (not (memq value cyclic))
-              (set! cyclic (cons value cyclic))))
+          (set! cyclic-found? #t)
+          (writer-state-set! value 2 #t))
 
-        (define (mark-cycle! target stack)
-          (let loop ((rest stack))
-            (if (not (null? rest))
+        (define (next-unmarked-cycle-node value)
+          "Return VALUE's nearest unmarked ancestor with path compression."
+          (let find ((value value) (path '()))
+            (if (or (not value)
+                    (not (writer-state-ref value 2 #f)))
                 (begin
-                  (mark-cyclic! (car rest))
-                  (if (not (eq? (car rest) target))
-                      (loop (cdr rest)))))))
+                  (let compress ((rest path))
+                    (if (not (null? rest))
+                        (begin
+                          (writer-state-set! (car rest) 5 value)
+                          (compress (cdr rest)))))
+                  value)
+                (find
+                 (writer-state-ref value 5 #f)
+                 (cons value path)))))
 
-        (define (scan value stack)
-          (if (writer-compound? value)
-              (begin
-                (set-count! value (+ (alist-ref-eq value counts 0) 1))
-                (let ((state (alist-ref-eq value states #f)))
+        (define (mark-cycle-path! source target)
+          "Mark the DFS ancestor path from SOURCE through TARGET cyclic."
+          (let ((target-depth
+                 (writer-state-ref target 4 -1)))
+            (let loop ((value (next-unmarked-cycle-node source)))
+              (if (and value
+                       (>= (writer-state-ref value 4 -1)
+                           target-depth))
+                  (begin
+                    (mark-cyclic! value)
+                    (writer-state-set!
+                     value 5 (writer-state-ref value 3 #f))
+                    (loop (next-unmarked-cycle-node value)))))))
+
+        (define (scan root)
+          "Count and classify ROOT's graph with an explicit DFS worklist."
+          (let loop ((work (list (vector root #f #f))))
+            (if (not (null? work))
+                (let* ((action (car work))
+                       (value (vector-ref action 0))
+                       (leaving? (vector-ref action 1))
+                       (parent (vector-ref action 2))
+                       (rest (cdr work)))
                   (cond
-                   ((eq? state 'visiting)
-                    (mark-cycle! value stack))
-                   ((eq? state 'done)
-                    #t)
+                   (leaving?
+                    (set-state! value 'done)
+                    (loop rest))
+                   ((not (writer-compound? value)) (loop rest))
                    (else
-                    (set-state! value 'visiting)
-                    (cond
-                     ((pair? value)
-                      (scan (car value) (cons value stack))
-                      (scan (cdr value) (cons value stack)))
-                     ((vector? value)
-                      (let loop ((index 0))
-                        (if (< index (vector-length value))
-                            (begin
-                              (scan (vector-ref value index)
-                                    (cons value stack))
-                              (loop (+ index 1)))))))
-                    (set-state! value 'done)))))))
+                    (set-count!
+                     value
+                     (+ (writer-state-ref value 0 0) 1))
+                    (let ((state
+                           (writer-state-ref value 1 #f)))
+                      (cond
+                       ((eq? state 'visiting)
+                        (mark-cycle-path! parent value)
+                        (loop rest))
+                       ((eq? state 'done) (loop rest))
+                       (else
+                        (set-state! value 'visiting)
+                        (writer-state-set! value 3 parent)
+                        (writer-state-set!
+                         value
+                         4
+                         (if parent
+                             (+ (writer-state-ref parent 4 -1) 1)
+                             0))
+                        (if (reader-pair? value)
+                            (loop
+                             (cons
+                              (vector (reader-car value) #f value)
+                              (cons
+                               (vector (reader-cdr value) #f value)
+                               (cons (vector value #t #f) rest))))
+                            (let push
+                                ((index
+                                  (- (reader-vector-length value) 1))
+                                 (next (cons (vector value #t #f) rest)))
+                              (if (< index 0)
+                                  (loop next)
+                                  (push
+                                   (- index 1)
+                                   (cons
+                                    (vector
+                                     (reader-vector-ref value index) #f value)
+                                    next))))))))))))))
 
         (define (label-needed? value)
           (and (writer-compound? value)
                (cond
                 ((eq? mode 'shared)
-                 (> (alist-ref-eq value counts 0) 1))
+                 (> (writer-state-ref value 0 0) 1))
                 ((eq? mode 'write)
-                 (memq value cyclic))
+                 (writer-state-ref value 2 #f))
                 (else #f))))
 
-        (define (label-reference-ready? value)
-          (and (label-needed? value)
-               (assq value labels)
-               (memq value emitted)))
-
         (define (label-for value)
-          (let ((cell (assq value labels)))
-            (if cell
-                (cdr cell)
+          (let ((label (writer-state-ref value 6 #f)))
+            (if label
+                label
                 (let ((label next-label))
                   (set! next-label (+ next-label 1))
-                  (set! labels (cons (cons value label) labels))
+                  (writer-state-set! value 6 label)
                   label))))
+
+        (define (labelled-tail-boundary? value)
+          "Report whether VALUE must start a labelled dotted cdr tail."
+          (and (label-needed? value)
+               (or (writer-state-ref value 7 #f)
+                   (> (writer-state-ref value 0 0) 1))))
 
         (define (record-name->external name)
           (cond
            ((reader-datum-symbol? name) (reader-datum-symbol-name name))
-           ((string? name) name)
+           ((reader-string? name) (reader-string->host name))
            (else (error "consent reader error: invalid record name"
                         name))))
 
-        (define (render value)
-          (if (label-needed? value)
-              (let ((label (label-for value)))
-                (if (memq value emitted)
-                    (string-append
-                     "#"
-                     (consent-integer->radix-string label 10)
-                     "#")
-                    (begin
-                      (set! emitted (cons value emitted))
-                      (string-append
-                       "#"
-                       (consent-integer->radix-string label 10)
-                       "="
-                       (render-body value)))))
-              (render-body value)))
+        (define (render root)
+          "Render ROOT with an explicit action stack."
+          (let loop ((actions (list (vector 'render root))))
+            (if (not (null? actions))
+                (let* ((action (car actions))
+                       (kind (vector-ref action 0))
+                       (rest (cdr actions)))
+                  (case kind
+                    ((text)
+                     (emit! (vector-ref action 1))
+                     (loop rest))
+                    ((render)
+                     (let ((value (vector-ref action 1)))
+                       (if (label-needed? value)
+                           (let ((label (label-for value)))
+                             (emit! "#")
+                             (emit!
+                              (consent-integer->radix-string label 10))
+                             (if (writer-state-ref value 7 #f)
+                                 (begin
+                                   (emit! "#")
+                                   (loop rest))
+                                 (begin
+                                   (writer-state-set! value 7 #t)
+                                   (emit! "=")
+                                   (loop
+                                    (cons (vector 'body value) rest)))))
+                           (loop (cons (vector 'body value) rest)))))
+                    ((body)
+                     (let ((value (vector-ref action 1)))
+                       (cond
+                        ((boolean? value)
+                         (emit! (if value "#t" "#f"))
+                         (loop rest))
+                        ((null? value)
+                         (emit! "()")
+                         (loop rest))
+                        ((reader-datum-symbol? value)
+                         (emit!
+                          (if display?
+                              (reader-datum-symbol-name value)
+                              (write-symbol-name
+                               (reader-datum-symbol-name value))))
+                         (loop rest))
+                        ((consent-character? value)
+                         (emit!
+                          (if display?
+                              (string
+                               (consent-character->host-character value))
+                              (write-character-datum value)))
+                         (loop rest))
+                        ((or (consent-number? value) (number? value))
+                         (emit! (consent-number->external value))
+                         (loop rest))
+                        ((reader-string? value)
+                         (let ((text (reader-string->host value)))
+                           (if display?
+                               (emit! text)
+                               (begin
+                                 (emit! "\"")
+                                 (emit! (escape-string text))
+                                 (emit! "\""))))
+                         (loop rest))
+                        ((reader-bytevector? value)
+                         (emit! "#u8(")
+                         (loop (cons (vector 'bytevector value 0) rest)))
+                        ((reader-pair? value)
+                         (emit! "(")
+                         (loop (cons (vector 'list value #t) rest)))
+                        ((reader-vector? value)
+                         (emit! "#(")
+                         (loop (cons (vector 'vector value 0) rest)))
+                        ((consent-record? value)
+                         (emit! "#<record ")
+                         (emit!
+                          (record-name->external
+                           (consent-record-type-name
+                            (consent-record-type value))))
+                         (emit! ">")
+                         (loop rest))
+                        ((consent-record-type? value)
+                         (emit! "#<record-type ")
+                         (emit!
+                          (record-name->external
+                           (consent-record-type-name value)))
+                         (emit! ">")
+                         (loop rest))
+                        (else
+                         (error
+                          "consent reader error: cannot write unsupported datum"
+                          value)))))
+                    ((list)
+                     (let ((cursor (vector-ref action 1))
+                           (first? (vector-ref action 2)))
+                       (cond
+                        ((and (reader-pair? cursor)
+                              (not (and (not first?)
+                                        (labelled-tail-boundary? cursor))))
+                         (if (not first?) (emit! " "))
+                         (loop
+                          (cons
+                           (vector 'render (reader-car cursor))
+                           (cons
+                            (vector 'list (reader-cdr cursor) #f)
+                            rest))))
+                        ((null? cursor)
+                         (emit! ")")
+                         (loop rest))
+                        (else
+                         (emit! (if first? ". " " . "))
+                         (loop
+                          (cons
+                           (vector 'render cursor)
+                           (cons (vector 'text ")") rest)))))))
+                    ((vector)
+                     (let ((value (vector-ref action 1))
+                           (index (vector-ref action 2)))
+                       (if (= index (reader-vector-length value))
+                           (begin
+                             (emit! ")")
+                             (loop rest))
+                           (begin
+                             (if (> index 0) (emit! " "))
+                             (loop
+                              (cons
+                               (vector
+                                'render
+                                (reader-vector-ref value index))
+                               (cons
+                                (vector 'vector value (+ index 1))
+                                rest)))))))
+                    ((bytevector)
+                     (let ((value (vector-ref action 1))
+                           (index (vector-ref action 2)))
+                       (if (= index (reader-bytevector-length value))
+                           (begin
+                             (emit! ")")
+                             (loop rest))
+                           (begin
+                             (if (> index 0) (emit! " "))
+                             (emit!
+                              (consent-integer->radix-string
+                               (reader-bytevector-u8-ref value index)
+                               10))
+                             (loop
+                              (cons
+                               (vector 'bytevector value (+ index 1))
+                               rest)))))))))))
 
-        (define (render-list value)
-          (let loop ((cursor value)
-                     (parts '())
-                     (first? #t))
-            (if (and (pair? cursor)
-                     (not (and (not first?)
-                               (label-reference-ready? cursor))))
-                (loop (cdr cursor)
-                      (cons (render (car cursor)) parts)
-                      #f)
-                (let ((body (join (reverse parts) " ")))
-                  (string-append
-                   "("
-                   body
-                   (cond
-                    ((and (pair? cursor)
-                          (label-reference-ready? cursor))
-                     (string-append
-                      (if (null? parts) ". " " . ")
-                      (render cursor)))
-                    ((null? cursor) "")
-                    (else
-                     (string-append
-                      (if (null? parts) ". " " . ")
-                      (render cursor))))
-                   ")")))))
-
-        (define (render-vector value)
-          (let loop ((index 0) (parts '()))
-            (if (= index (vector-length value))
-                (string-append "#(" (join (reverse parts) " ") ")")
-                (loop (+ index 1)
-                      (cons (render (vector-ref value index)) parts)))))
-
-        (define (render-bytevector value)
-          (let loop ((index 0) (parts '()))
-            (if (= index (bytevector-length value))
-                (string-append "#u8(" (join (reverse parts) " ") ")")
-                (loop (+ index 1)
-                      (cons (consent-integer->radix-string
-                             (bytevector-u8-ref value index)
-                             10)
-                            parts)))))
-
-        (define (render-body value)
-          (cond
-           ((boolean? value) (if value "#t" "#f"))
-           ((null? value) "()")
-           ((reader-datum-symbol? value)
-            (if display?
-                (reader-datum-symbol-name value)
-                (write-symbol-name (reader-datum-symbol-name value))))
-           ((consent-character? value)
-            (if display?
-                (string (consent-character->host-character value))
-                (write-character-datum value)))
-           ((or (consent-number? value) (number? value))
-            (consent-number->external value))
-           ((string? value)
-            (if display?
-                value
-                (string-append "\"" (escape-string value) "\"")))
-           ((bytevector? value) (render-bytevector value))
-           ((pair? value) (render-list value))
-           ((vector? value) (render-vector value))
-           ((consent-record? value)
-            (string-append
-             "#<record "
-             (record-name->external
-              (consent-record-type-name
-               (consent-record-type value)))
-             ">"))
-           ((consent-record-type? value)
-            (string-append
-             "#<record-type "
-             (record-name->external
-              (consent-record-type-name value))
-             ">"))
-           (else
-            (error "consent reader error: cannot write unsupported datum"
-                   value))))
-
-        (scan datum '())
-        (if (and (eq? mode 'simple) (not (null? cyclic)))
-            (error
-              "consent reader error: write-simple cannot render circular datum\
-"))
-        (render datum)))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (scan datum)
+           (if (and (eq? mode 'simple) cyclic-found?)
+               (error
+                (string-append
+                 "consent reader error: write-simple cannot render "
+                 "circular datum")))
+           (render datum)
+           (join (reverse parts) ""))
+         (lambda ()
+           (reader-identity-map-release! nodes)))))
 
     (define (consent--render-limit-ref limits key)
       "Return the host-integer ceiling for KEY in the LIMITS alist, or #f when\
@@ -3123,9 +4612,21 @@ ers"
       "`consent-number-value' so the host comparisons do not compare an intege\
 r"
       "against a record and raise."
-      (let ((entry (and (pair? limits) (assq key limits))))
+      (let ((entry
+             (let loop ((rest limits))
+               (cond
+                ((null? rest) #f)
+                ((not (reader-pair? rest)) #f)
+                (else
+                 (let ((candidate (reader-car rest)))
+                   (if (and (reader-pair? candidate)
+                            (consent-host-symbol-eq?
+                             key
+                             (reader-car candidate)))
+                       candidate
+                       (loop (reader-cdr rest)))))))))
         (and entry
-             (let ((value (cdr entry)))
+             (let ((value (reader-cdr entry)))
                (if (consent-number? value)
                    (consent-number-value value)
                    value)))))
@@ -3178,7 +4679,7 @@ n"
             (parts '())
             (used 0)
             (overflow #f)
-            (ancestors '()))
+            (ancestors (make-reader-identity-map)))
 
         (define (raw-emit! text)
           "Append TEXT to the output accumulator and charge its length against\
@@ -3216,99 +4717,183 @@ k"
                      value))
                  (value
                   (if (and size-limit
-                           (string? value)
-                           (> (string-length value) (- size-limit used)))
-                      (substring value 0 (max 0 (- size-limit used)))
+                           (reader-string? value)
+                           (> (reader-string-length value)
+                              (- size-limit used)))
+                      (reader-string-prefix->host
+                       value
+                       (max 0 (- size-limit used)))
                       value)))
             (consent-datum->external value mode displayp)))
 
-        (define (render value depth)
-          "Render VALUE at nesting DEPTH, dispatching compounds to their"
-          "bounded renderers and atoms to `atom-text'; a no-op once overflow"
-          "is set so the walk unwinds in bounded time."
-          (cond
-           (overflow #t)
-           ((pair? value) (render-pair value depth))
-           ((vector? value) (render-vector value depth))
-           ((bytevector? value) (render-bytevector value depth))
-           (else (emit! (atom-text value)))))
+        (define (finish-pair! frame)
+          "Close and clear one active pair-spine FRAME."
+          (emit! ")")
+          (reader-identity-map-clear! ancestors (vector-ref frame 0)))
 
-        (define (render-pair value depth)
-          "Render pair VALUE at nesting DEPTH, breaking a cycle back to an"
-          "ancestor or an over-deep nesting with the marker, and eliding the"
-          "spine past LENGTH-LIMIT with a trailing marker."
-          (cond
-           ((memq value ancestors) (emit! marker))
-           ((and depth-limit (>= depth depth-limit)) (emit! marker))
-           (else
-            (let ((saved ancestors))
-              (emit! "(")
-              (let loop ((cursor value) (count 0) (first #t))
-                (cond
-                 (overflow #t)
-                 ((not (pair? cursor))
-                  (if (not (null? cursor))
-                      (begin (emit! " . ") (render cursor (+ depth 1))))
-                  (emit! ")"))
-                 ((memq cursor ancestors)
-                  (emit! " . ") (emit! marker) (emit! ")"))
-                 ((and length-limit (>= count length-limit))
-                  (emit! " ") (emit! marker) (emit! ")"))
-                 (else
-                  (if (not first) (emit! " "))
-                  (set! ancestors (cons cursor ancestors))
-                  (render (car cursor) (+ depth 1))
-                  (loop (cdr cursor) (+ count 1) #f))))
-              (set! ancestors saved)))))
+        (define (render root)
+          "Render ROOT under LIMITS with an explicit action stack."
+          (let loop ((actions (list (vector 'render root 0))))
+            (if (and (not overflow) (not (null? actions)))
+                (let* ((action (car actions))
+                       (kind (vector-ref action 0))
+                       (rest (cdr actions)))
+                  (case kind
+                    ((render)
+                     (let ((value (vector-ref action 1))
+                           (depth (vector-ref action 2)))
+                       (cond
+                        ((reader-pair? value)
+                         (cond
+                          ((reader-identity-map-ref ancestors value #f)
+                           (emit! marker)
+                           (loop rest))
+                          ((and depth-limit (>= depth depth-limit))
+                           (emit! marker)
+                           (loop rest))
+                          (else
+                           (emit! "(")
+                           (loop
+                            (cons
+                             (vector
+                              'pair value depth 0 #t (vector '()))
+                             rest)))))
+                        ((reader-vector? value)
+                         (cond
+                          ((reader-identity-map-ref ancestors value #f)
+                           (emit! marker)
+                           (loop rest))
+                          ((and depth-limit (>= depth depth-limit))
+                           (emit! marker)
+                           (loop rest))
+                          (else
+                           (reader-identity-map-set! ancestors value #t)
+                           (emit! "#(")
+                           (loop
+                            (cons (vector 'vector value depth 0 #t)
+                                  rest)))))
+                        ((reader-bytevector? value)
+                         (if (and depth-limit (>= depth depth-limit))
+                             (begin
+                               (emit! marker)
+                               (loop rest))
+                             (begin
+                               (emit! "#u8(")
+                               (loop
+                                (cons
+                                 (vector 'bytevector value 0 #t)
+                                 rest)))))
+                        (else
+                         (emit! (atom-text value))
+                         (loop rest)))))
+                    ((pair)
+                     (let ((cursor (vector-ref action 1))
+                           (depth (vector-ref action 2))
+                           (count (vector-ref action 3))
+                           (first? (vector-ref action 4))
+                           (frame (vector-ref action 5)))
+                       (cond
+                        ((not (reader-pair? cursor))
+                         (if (null? cursor)
+                             (begin
+                               (finish-pair! frame)
+                               (loop rest))
+                             (begin
+                               (emit! " . ")
+                               (loop
+                                (cons
+                                 (vector 'render cursor (+ depth 1))
+                                 (cons
+                                  (vector 'finish-pair frame)
+                                  rest))))))
+                        (else
+                         (cond
+                          ((reader-identity-map-ref ancestors cursor #f)
+                           (emit! " . ")
+                           (emit! marker)
+                           (finish-pair! frame)
+                           (loop rest))
+                          ((and length-limit (>= count length-limit))
+                           (emit! " ")
+                           (emit! marker)
+                           (finish-pair! frame)
+                           (loop rest))
+                          (else
+                           (if (not first?) (emit! " "))
+                           (reader-identity-map-set! ancestors cursor #t)
+                           (vector-set!
+                            frame 0 (cons cursor (vector-ref frame 0)))
+                           (loop
+                            (cons
+                             (vector 'render
+                                     (reader-car cursor)
+                                     (+ depth 1))
+                             (cons
+                              (vector 'pair
+                                      (reader-cdr cursor)
+                                      depth
+                                      (+ count 1)
+                                      #f
+                                      frame)
+                              rest)))))))))
+                    ((finish-pair)
+                     (finish-pair! (vector-ref action 1))
+                     (loop rest))
+                    ((vector)
+                     (let ((value (vector-ref action 1))
+                           (depth (vector-ref action 2))
+                           (index (vector-ref action 3))
+                           (first? (vector-ref action 4)))
+                       (cond
+                        ((>= index (reader-vector-length value))
+                         (emit! ")")
+                         (reader-identity-map-set! ancestors value #f)
+                         (loop rest))
+                        ((and length-limit (>= index length-limit))
+                         (if (not first?) (emit! " "))
+                         (emit! marker)
+                         (emit! ")")
+                         (reader-identity-map-set! ancestors value #f)
+                         (loop rest))
+                        (else
+                         (if (not first?) (emit! " "))
+                         (loop
+                          (cons
+                           (vector 'render
+                                   (reader-vector-ref value index)
+                                   (+ depth 1))
+                           (cons
+                            (vector 'vector
+                                    value depth (+ index 1) #f)
+                            rest)))))))
+                    ((bytevector)
+                     (let ((value (vector-ref action 1))
+                           (index (vector-ref action 2))
+                           (first? (vector-ref action 3)))
+                       (cond
+                        ((>= index (reader-bytevector-length value))
+                         (emit! ")")
+                         (loop rest))
+                        ((and length-limit (>= index length-limit))
+                         (if (not first?) (emit! " "))
+                         (emit! marker)
+                         (emit! ")")
+                         (loop rest))
+                        (else
+                         (if (not first?) (emit! " "))
+                         (emit!
+                          (consent-integer->radix-string
+                           (reader-bytevector-u8-ref value index)
+                           10))
+                         (loop
+                          (cons
+                           (vector 'bytevector value (+ index 1) #f)
+                           rest)))))))))))
 
-        (define (render-vector value depth)
-          "Render vector VALUE at nesting DEPTH, breaking a self-reference or"
-          "an over-deep nesting with the marker, and eliding elements past"
-          "LENGTH-LIMIT with a trailing marker."
-          (cond
-           ((memq value ancestors) (emit! marker))
-           ((and depth-limit (>= depth depth-limit)) (emit! marker))
-           (else
-            (let ((saved ancestors)
-                  (size (vector-length value)))
-              (set! ancestors (cons value ancestors))
-              (emit! "#(")
-              (let loop ((index 0) (first #t))
-                (cond
-                 (overflow #t)
-                 ((>= index size) #t)
-                 ((and length-limit (>= index length-limit))
-                  (if (not first) (emit! " ")) (emit! marker))
-                 (else
-                  (if (not first) (emit! " "))
-                  (render (vector-ref value index) (+ depth 1))
-                  (loop (+ index 1) #f))))
-              (emit! ")")
-              (set! ancestors saved)))))
-
-        (define (render-bytevector value depth)
-          "Render bytevector VALUE at nesting DEPTH (over-deep nesting renders\
-"
-          "as the marker), eliding bytes past LENGTH-LIMIT with a trailing"
-          "marker; bytevectors hold no compounds, so no cycle check is needed.\
-"
-          (cond
-           ((and depth-limit (>= depth depth-limit)) (emit! marker))
-           (else
-            (let ((size (bytevector-length value)))
-              (emit! "#u8(")
-              (let loop ((index 0) (first #t))
-                (cond
-                 (overflow #t)
-                 ((>= index size) #t)
-                 ((and length-limit (>= index length-limit))
-                  (if (not first) (emit! " ")) (emit! marker))
-                 (else
-                  (if (not first) (emit! " "))
-                  (emit! (consent-integer->radix-string
-                          (bytevector-u8-ref value index) 10))
-                  (loop (+ index 1) #f))))
-              (emit! ")")))))
-
-        (render datum 0)
-        (apply string-append (reverse parts))))))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (render datum)
+           (join (reverse parts) ""))
+         (lambda ()
+           (reader-identity-map-release! ancestors)))))))

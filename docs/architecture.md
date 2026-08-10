@@ -310,6 +310,98 @@ host-symbol representation or conversion participates. Foreign symbols exist
 only at actual FFI or bootstrap edges and are interned into the active Consent
 table before entering language-visible data.
 
+#### Portable compound datum ownership
+
+Language-visible pairs (except the empty list), strings, vectors, and
+bytevectors are opaque objects owned by `(consent datum)`. Each evaluation
+context carries an explicit datum heap beside its symbol table. Scheme-visible
+objects have stable
+heap-local identity, kind, allocation generation, owner, revision, mutability,
+traversal metadata, and source provenance. Pair, string, vector, and bytevector
+mutation crosses one heap-owned observer gateway instead of calling a host
+container mutator directly.
+Mutable lexical cells use private heap slots and the same observer so later
+checkpoint work can distinguish binding writes from compound-data writes.
+
+The portable owner uses host vectors for pair/vector slots and indexed string
+characters, plus host bytevectors for bytes. Those containers are unreachable
+from Scheme code; a host string is converted once at the adapter boundary, so
+owned string access never inherits variable-width host indexing.
+Heap-taking reader entry points and standard `read` allocate compound syntax
+directly in the active heap through a one-shot shell/fill capability. Datum
+labels fix those shells in the same scope; publication verifies every slot,
+then graph validation runs on the final objects. Fresh reader objects therefore
+remain at revision zero and never cross the mutation observer. Provenance is
+written directly to each owned object's current slot. No host compound graph or
+host identity map exists on this canonical path. These slots follow object
+reachability and do not pretend to be a decrementable persistent context count;
+only host keys actually retained by a context side table consume that count.
+Legacy `consent-read`,
+`consent-read-all`, recovery, macro, and library syntax remains private
+host-native bootstrap state. Repeated incremental callers prepare one immutable
+reader source containing the decoded characters and line index. Consent input
+ports cache that snapshot until their source changes, so N small reads do not
+preprocess the N-form source N times. A raw string argument remains a stateless,
+one-shot compatibility input, not the repeated-read performance interface.
+Other value boundaries, including quote, quasiquote, callbacks, and native
+results, import complete graphs before Scheme code observes them. The empty
+list remains a unique immutable sentinel.
+
+Graph import and export allocate shells before following edges and memoize by
+source identity. This preserves arbitrary pair/vector cycles and all shared
+compound references. Compound `eq?` and `eqv?` use owned identity, structural
+`equal?` computes graph congruence with union-find, and writers count
+pair/vector nodes by owned identity.
+
+Borrowed-host graph projection is call-scoped. Each outer native transition
+creates a fresh graph bridge containing only that call's arguments, results,
+and conditions. One outer transition preserves aliases and copies mutations
+back before the scope becomes unreachable. Raw host mirrors and callback shims
+may not escape or become a second retained heap. Core owner bindings preserve
+designated values. For every other binding, authorization happens during the
+single graph walk and rejects before conversion would allocate an unclassified
+mirror or callback shim; opaque private records remain unchanged leaves.
+Callbacks and re-entrant native calls remain available for scalars, but
+combining either with a mutable compound borrow fails closed: discovering
+arbitrary host writes at every nested transition would require repeated
+full-graph scans. Higher-order or retaining libraries resolve their canonical
+portable source realization. A future direct-owned compiled ABI, barriered
+mutators, or explicit global-handle model belongs to #120 and #662.
+
+`(consent identity-map)` keeps foreign graph memo tables and bridge identity
+indexes private. An owned object supplies one private intrusive map header, so
+each call-scoped owned lookup takes one header probe and release restores any
+outer traversal. Gambit uses its native identity table for foreign host objects;
+other configured performance hosts use SRFI 69 identity hashing. A plain
+R7RS-small identity-alist fallback preserves semantics for legacy private reader
+syntax and other compatibility paths only; it is not part of the owned heap
+asymptotic contract. Canonical heap-taking reads never call that adapter.
+Borrowed native transitions fail closed when their required hash-backed adapter
+is unavailable; the portable source realization remains available.
+
+The compound boundary has an explicit complexity contract. Allocation,
+identity lookup, access, and mutation are amortized constant time. Owned graph
+copy and export visit each node and edge once; foreign-host import has the same
+bound on a hash-backed adapter. Direct owned reading is linear in source plus
+the published graph and allocates exactly one heap object per compound datum;
+datum-label bookkeeping uses one-header owned maps. Prepared incremental reads
+reuse lexical preprocessing, making a sequence linear in the source plus its
+published graphs. A native transition is independent of the
+heap's age and all earlier transitions; reconciliation may scan only the graph
+borrowed by the active call. Discovering arbitrary writes to uninstrumented
+host containers requires one active-graph scan at outer return. Native lowering
+with write barriers may later replace it with changed-object work, but no
+ordinary call may scan historical mirrors or repeatedly rescan one borrow for
+nested transitions. Owned writer bookkeeping uses the same call-scoped
+one-header marks and assembles output fragments once, so its work follows the
+visited graph and emitted text.
+
+The complete representation and boundary contract is recorded in
+[Portable Compound Datum Heap Design](portable-compound-datum-heap-design.md).
+The heap exposes the metadata and mutation seam needed by #721, but its current
+private storage mutates in place. It does not yet claim branch-local
+copy-on-write or complete session-fork mutation isolation.
+
 #### Portable character ownership
 
 Language-visible characters are Consent-owned Unicode scalar values. Reader,
@@ -425,7 +517,15 @@ The reader and datum validator turn source text into Consent Scheme datums. This
 pass owns lexical grammar, datum labels, abbreviation syntax, numeric and
 character external representations, and depth, node, and string-size limits. It
 does not resolve identifiers, run macros, import libraries, or perform host
-effects.
+effects. Source parsing enforces lexical nesting depth. Ordinary
+parser-produced, unlabelled private syntax is an acyclic host tree and uses one
+iterative validation pass without an identity map. Labelled syntax, recovery,
+active metadata sinks, owned datums, and arbitrary public validation retain
+the general graph path. That path uses each compound's order-independent
+minimum weighted distance from the root: a pair cdr edge stays at the current
+list depth, while a pair car or vector-element edge adds one. Shared aliases
+therefore cannot make the same graph pass or fail merely because sibling edges
+were visited in another order.
 
 The program and library-shape pass checks that datums form legal program or
 `define-library` units. It separates import declarations, export declarations,
@@ -1059,6 +1159,7 @@ Likely portable R7RS modules:
 - `scheme/consent/runtime.sld`
 - `scheme/consent/base.sld`
 - `scheme/consent/datum.sld`
+- `scheme/consent/identity-map.sld`
 - `scheme/consent/frontend.sld`
 - `scheme/consent/library.sld`
 - `scheme/consent/macro.sld`

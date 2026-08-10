@@ -195,6 +195,14 @@ jobs:
           "${gambit_prefix}/bin/gsi" -:r7rs -e \
             '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
+      - name: Verify owned reader avoids host identity maps
+        if: >-2
+          ${{ matrix.combo.source_metadata == 'on' &&
+          matrix.combo.docstring_retention == 'full' }}
+        env:
+          CONSENT_PORTABLE_HOST: gambit
+        run: make test-portable-owned-reader-no-host-identity
+
       - name: Verify exhaustive Unicode semantics
         if: >-2
           ${{ (github.event_name == 'schedule' || github.event_name ==
@@ -971,6 +979,13 @@ jobs:
         with:
           packages: emacs-nox guile-3.0 make
 
+      - name: Verify owned reader avoids host identity maps
+        if: >-2
+          ${{ matrix.case.group == 'evaluator' &&
+          matrix.case.source_metadata == 'on' &&
+          matrix.case.docstring_retention == 'full' }}
+        run: make test-portable-owned-reader-no-host-identity
+
       - name: Run Guile Scheme-native shard
         if: ${{ !matrix.case.aggregate }}
         shell: bash
@@ -1154,6 +1169,15 @@ jobs:
               guile --no-auto-compile --r7rs -c "$scheme_smoke"
               ;;
           esac
+
+      - name: Verify owned reader avoids host identity maps
+        if: >-2
+          ${{ matrix.host.host == 'racket' &&
+          matrix.source_metadata == 'on' &&
+          matrix.docstring_retention == 'full' }}
+        env:
+          CONSENT_PORTABLE_HOST: racket
+        run: make test-portable-owned-reader-no-host-identity
 
       - name: Run balanced portable R7RS host shard set
         if: matrix.host.group_set != 'single'

@@ -223,11 +223,12 @@ e.")))
       (compiler-record-field plan 'units '()))
 
     (define (consent-compiler-plan-native-libraries plan)
-      "Return PLAN root libraries registered as native implementations."
+      "Return PLAN's allowlist of native implementations."
       #((parameters
          (plan (type list) (description "Compiler-plan record.")))
         (returns (type list)
-         (description "Canonical native-registration library names."))
+         (description
+          "Canonical names safe for interpreted native registration."))
         (effects pure))
       (compiler-record-field plan 'native-libraries '()))
 
