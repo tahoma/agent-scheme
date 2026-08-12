@@ -9,6 +9,7 @@ host=${CONSENT_PORTABLE_HOST:-racket}
 target_root=$(mktemp -d "${TMPDIR:-/tmp}/consent-owned-reader.XXXXXX")
 reader_program=tests/scheme/consent-reader-owned-no-host-identity-test.scm
 datum_program=tests/scheme/consent-datum-test.scm
+datum_nohash_program=tests/scheme/consent-datum-nohash-test.scm
 datum_selector='(name native-no-bridge-result-import-'
 datum_selector+='charges-only-fresh-compounds)'
 datum_selector_args="(\"--select\" \"$datum_selector\")"
@@ -34,4 +35,11 @@ CONSENT_PORTABLE_HOST=$host \
 CONSENT_PORTABLE_PROGRAM=$datum_program \
 CONSENT_TEST_TARGET_ROOT=$target_root \
 TESTING_RUNNER_ARGUMENTS=$datum_selector_args \
+  "$root/tools/run-portable-tests.sh"
+
+# Ordinary and counted imports, hybrid exports, shared cycles, and cross-heap
+# owned graphs pin the fixed compatibility envelope without timing assertions.
+CONSENT_PORTABLE_HOST=$host \
+CONSENT_PORTABLE_PROGRAM=$datum_nohash_program \
+CONSENT_TEST_TARGET_ROOT=$target_root \
   "$root/tools/run-portable-tests.sh"

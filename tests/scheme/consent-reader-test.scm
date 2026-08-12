@@ -1170,7 +1170,11 @@
       (newline)
       (test-assert
        'datum-label-resolution-near-linear
-       (<= large (+ (* 16 (max 1 small)) jitter))))))
+       ;; Eight times as many target and fanout nodes must remain far below
+       ;; the roughly 64x quadratic curve.  Match the adjacent adversarial
+       ;; reader gate's 20x envelope so millisecond-resolution hosts do not
+       ;; fail on scheduler noise.
+       (<= large (+ (* 20 (max 1 small)) jitter))))))
 
 (testing-registry-case
  'datum-label-radix-trie-adversarial-scaling

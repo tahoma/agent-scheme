@@ -25,7 +25,6 @@
         (api-version (compat 0))
         (source-version unknown)
         (realization portable-source)
-        (primitive-overlay-library (consent identity-map primitive))
         (exports
          (consent-library-manifest
           consent-library-manifest-ref))
@@ -115,6 +114,7 @@
         (api-version internal)
         (source-version unknown)
         (realization portable-source)
+        (primitive-overlay-library (consent identity-map primitive))
         (exports
          (consent-identity-map-fast-backend?
           consent-make-identity-map
@@ -1659,6 +1659,7 @@
           consent-host-symbol-assoc))
         (dependencies
          ((library (scheme base))
+          (library (consent identity-map))
           (library (consent symbol))))
         (provenance
          ((origin repo)

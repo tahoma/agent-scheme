@@ -2861,6 +2861,9 @@ tuple."
         (if (not (host-conversion-compound? datum))
             (convert-leaf datum)
             (let ((nodes-by-source #f)
+                  (host-fast?
+                   (consent-identity-map-fast-backend?))
+                  (host-count 0)
                   (all-nodes '())
                   (locally-changed '()))
               (define (conversion-node-ref source)
@@ -2873,6 +2876,13 @@ tuple."
                  (consent-identity-map-ref nodes-by-source source #f)))
               (define (make-conversion-node source)
                 "Create and memoize one host compound conversion node."
+                (if (and (not host-fast?)
+                         (>= host-count
+                             runtime-host-identity-compatibility-limit))
+                    (error
+                     "host datum conversion requires fast identity maps"
+                     source))
+                (set! host-count (+ host-count 1))
                 (if (not nodes-by-source)
                     (set! nodes-by-source (consent-make-identity-map)))
                 (let* ((pair-kind? (pair? source))
@@ -3664,9 +3674,15 @@ tuple."
         (effects state-read))
       (vector-ref (context-source-copies context) 0))
 
+    (define runtime-host-identity-compatibility-limit 64)
+
+    (define runtime-identity-map-absent
+      (vector 'runtime-identity-map-absent))
+
     (define (make-runtime-identity-map)
-      "Return an empty lazy owned/host hybrid runtime identity map."
-      (vector #f #f))
+      "Return an empty bounded-fallback hybrid runtime identity map."
+      (vector
+       #f #f (consent-identity-map-fast-backend?) 0))
 
     (define (runtime-identity-map-ref map key default)
       "Return identity KEY's value in MAP, or DEFAULT."
@@ -3682,6 +3698,11 @@ tuple."
       "Associate identity KEY with VALUE in MAP and return VALUE."
       (let* ((owned? (consent-datum-object? key))
              (index (if owned? 0 1))
+             (existing
+              (if owned?
+                  runtime-identity-map-absent
+                  (runtime-identity-map-ref
+                   map key runtime-identity-map-absent)))
              (backend
               (or
                (vector-ref map index)
@@ -3691,6 +3712,18 @@ tuple."
                           (consent-make-identity-map))))
                  (vector-set! map index created)
                  created))))
+        (if (and
+             (not owned?)
+             (eq? existing runtime-identity-map-absent))
+            (begin
+              (if (and
+                   (not (vector-ref map 2))
+                   (>= (vector-ref map 3)
+                       runtime-host-identity-compatibility-limit))
+                  (error
+                   "runtime foreign graph requires fast identity maps"
+                   key))
+              (vector-set! map 3 (+ (vector-ref map 3) 1))))
         (if owned?
             (consent-datum-object-map-set! backend key value)
             (consent-identity-map-set! backend key value)))
@@ -3703,8 +3736,8 @@ tuple."
       map)
 
     (define (make-context-source-copy-map)
-      "Return a lazy box for the host-only source-copy identity map."
-      (vector #f))
+      "Return a bounded-fallback box for host source-copy identities."
+      (vector #f (consent-identity-map-fast-backend?) 0))
 
     (define (context-source-copy-direct-owner? value)
       "Report whether VALUE owns its current provenance slot directly."
@@ -3732,6 +3765,19 @@ tuple."
                      (let ((created (consent-make-identity-map)))
                        (vector-set! map 0 created)
                        created))))
+            (if (eq?
+                 (consent-identity-map-ref
+                  backend key runtime-identity-map-absent)
+                 runtime-identity-map-absent)
+                (begin
+                  (if (and
+                       (not (vector-ref map 1))
+                       (>= (vector-ref map 2)
+                           runtime-host-identity-compatibility-limit))
+                      (error
+                       "source metadata graph requires fast identity maps"
+                       key))
+                  (vector-set! map 2 (+ (vector-ref map 2) 1))))
             (consent-identity-map-set! backend key value))))
 
     (define (context-source-copy-source-ref context value)

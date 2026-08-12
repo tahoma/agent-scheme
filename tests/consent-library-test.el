@@ -1152,6 +1152,11 @@
           "                     (error\n"
           "                      \"session descriptor identity drift\"))\n"
           "                 (loop (- remaining 1))))))))))\n"
+          "(define (shared-host-number-key-probe repetitions width)\n"
+          "  (let* ((number (expt 2 (* 8 width)))\n"
+          "         (root (make-vector repetitions number))\n"
+          "         (key (memory-prepare-index-key 'project root)))\n"
+          "    (vector-length key)))\n"
           )))
     (cl-labels
         ((measure-probes (probes nohash?)
@@ -1196,14 +1201,18 @@
                 (nth metric ll)))))
       (let* ((fast
               (measure-probes
-               '("shared-tag-append-probe" "high-indegree-key-probe")
+               '("shared-tag-append-probe"
+                 "high-indegree-key-probe"
+                 "shared-host-number-key-probe")
                nil))
              (fast-append (nth 0 fast))
              (high-indegree (nth 1 fast))
+             (host-number (nth 2 fast))
              (nohash-append
               (car
                (measure-probes '("shared-tag-append-probe") t))))
-        (dolist (corners (list fast-append nohash-append high-indegree))
+        (dolist (corners
+                 (list fast-append nohash-append high-indegree host-number))
           (dolist (corner corners)
             (should (stringp (car corner))))
           (ert-info ((format "memory key work corners: %S" corners))
