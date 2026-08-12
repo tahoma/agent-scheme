@@ -1,10 +1,10 @@
 # Release Notes
 
-This file is the historical record of completed Consent Scheme roadmap chunks,
-migrated out of the living roadmap issue
-[#53](https://github.com/tahoma/consent/issues/53). The living roadmap keeps
-only the current and future chunks; once every issue in a chunk has shipped, the
-chunk is moved here.
+This file is the historical record of completed Consent Scheme roadmap chunks
+and of detailed roadmap text archived from closed entries in an active chunk.
+The living roadmap issue
+[#53](https://github.com/tahoma/consent/issues/53) keeps the current and future
+order. Once every issue in a chunk has shipped, the whole chunk is moved here.
 
 ## Versioning
 
@@ -22,13 +22,14 @@ one-based position within the chunk.
   ordinals are the versions actually committed to `version.sld`, not a renumber, so
   historical gaps in the committed sequence are preserved.
 
-**Migration trigger (going forward).** A chunk lives in #53 only until every one
-of its issues has shipped. As a standing invariant, whenever you advance any
-issue, check whether an earlier chunk is now fully shipped yet still listed in
-#53; if so, migrate it here in the same change rather than deferring it to a
-later edge. Do not split a chunk mid-flight — a chunk with any still-open issue
-keeps all of its issues, and their `<major>.<minor>.<ordinal>` positions, in
-#53 until the whole chunk has shipped.
+**Migration trigger (going forward).** A chunk lives in #53 only until every
+one of its issues has shipped. As a standing invariant, whenever you advance
+any issue, check whether an earlier chunk is now fully shipped yet still listed
+in #53; if so, migrate it here in the same change rather than deferring it to a
+later edge. Do not split a chunk mid-flight: a chunk with any still-open issue
+keeps every issue and `<major>.<minor>.<ordinal>` position in #53. Closed
+entries may be compacted there to linked titles after their detailed roadmap
+rationale has been archived in this file.
 
 ---
 
@@ -280,3 +281,239 @@ Ordinals follow this chunk's final positions in #53.
 - 0.17.37 — #398 add the REPL agent-harness quick-start guide
 - 0.17.38 — #676 record project credits and normalize attribution
 - 0.17.39 — #688 fix non-ASCII model prompt transport and REPL diagnostics
+
+## 0.18 Active Chunk — Completed Entries
+
+Chunk 0.18 remains active in
+[#53](https://github.com/tahoma/consent/issues/53). Closed entries stay in their
+original numbered roadmap positions as linked titles so later version ordinals
+do not move. Their detailed scheduling rationale is archived here until the
+whole chunk ships and its remaining entries can be migrated together.
+
+- 0.18.1 — #627 add R7RS-large references and docket labels
+  Roadmap rationale: opening documentation/taxonomy slice for the
+  SRFI/R7RS-large chunk; creates a dedicated R7RS-large reference section
+  seeded by johnwcowan/r7rs-work and CommitteeBDockets.md, documents optional
+  `docket:*` labels, and applies Committee B docket labels to matching
+  SRFI/R7RS-large issues before package/library resolution and bundle vendoring
+  begin; link-only, no vendoring/copying
+- 0.18.2 — #692 Fix REPL agent quickstart scheme-scripter failure path
+  Roadmap rationale: documentation/tutorial repair immediately after the
+  R7RS-large taxonomyslice; requires the local-model quickstart to make the
+  `scheme-scripter` role produce executable R7RS Scheme, gate reviewer and
+  memory prompts on evaluated facts, and provide paste-ready provider
+  registrations for the small, recommended, and large local model profiles
+- 0.18.3 — #698 Improve first-session REPL chrome ergonomics
+  Roadmap rationale: first-session terminal REPL cleanup immediately after the
+  quickstart repair; makes blank ready-prompt input redraw a same-ordinal ready
+  prompt for `comment` and `classic` instead of leaving the next datum
+  promptless, and updates the quickstart to introduce the default chrome before
+  quiet alternatives
+- 0.18.4 — #701 Preserve model transport failure details
+  Roadmap rationale: provider transport diagnostics after the chrome cleanup
+  and before the generated-source loop; preserves redacted process, network,
+  HTTP, timeout, stream, and decoding cause detail instead of collapsing
+  OpenAI-compatible/local model failures to `no process detail`; blocks
+  [#700](/tahoma/consent/issues/700)
+- 0.18.5 — #703 Quick-start planner step times out at 30s despite
+  (timeout-seconds 300)
+  Roadmap rationale: live local-model tutorial failure investigation
+  immediately after the transport-diagnostics slice; reproduces the documented
+  `consent --repl` local-Ollama planner timeout mismatch, fixes the timeout
+  plumbing and default REPL failure-path fidelity, and keeps the quick-start
+  from remaining a known first-step failure
+- 0.18.6 — #606 Lower typed metadata into boundary contracts
+  Roadmap rationale: boundary contract slice after the quick-start repair and
+  before generated-source loop consumers; lowers the shipped typed metadata
+  vocabulary into optional boundary contract checks for public library edges
+  and capability-facing calls, keeps ordinary runtime use default-off or
+  advisory unless explicitly enabled, and preserves Scheme-readable
+  failure/audit datums plus portable/Emacs parity; depends on
+  [#604](/tahoma/consent/issues/604) and relates to shipped tool-spec and
+  capability-signature consumers [#531](/tahoma/consent/issues/531) and
+  [#562](/tahoma/consent/issues/562)
+- 0.18.7 — #705 Add Mermaid runtime architecture diagrams to docs
+  Roadmap rationale: documentation/architecture transfer slice after boundary
+  contract lowering and before generated-source loop consumers; adds
+  Mermaid-primary diagrams for the portable Scheme runtime core, Emacs Lisp
+  twin, evaluation pipeline, library resolution, host/capability boundary,
+  value representation, REPL/session lifecycle, macro expansion, bootstrap
+  hooks, and parity/test matrix, and records whether static renderings are
+  committed or deferred
+- 0.18.8 — #700 Add first-class generated-source loop library
+  Roadmap rationale: tutorial and agentic coding-loop runtime after the
+  quick-start repair slice; normalizes generated source candidates, rejects
+  ambiguous/prose output, captures read/eval/contract diagnostics in a sandbox,
+  supports bounded repair retries, and applies accepted candidates to the live
+  session only after explicit success; blocked by
+  [#698](/tahoma/consent/issues/698), [#701](/tahoma/consent/issues/701), and
+  [#703](/tahoma/consent/issues/703)
+- 0.18.9 — #483 Document and enforce the public vs internal library surface
+  Roadmap rationale: pulled forward before package/library resolution; marks
+  the three de-facto tiers indistinguishable to an importer today — public
+  `(agent ...)`/`(scheme ...)`, internal evaluator passes, and internal model
+  libraries — and records/enforces the boundary before the resolver can make
+  evaluator internalsde-facto API; blocks [#709](/tahoma/consent/issues/709),
+  [#484](/tahoma/consent/issues/484), [#682](/tahoma/consent/issues/682),
+  [#681](/tahoma/consent/issues/681), and [#50](/tahoma/consent/issues/50)
+- 0.18.10 — #709 Quick-start generated-source gate imports unavailable (consent
+  eval) in CLI REPL
+  Roadmap rationale: quick-start import-boundary repair after public/internal
+  library surface; resolves whether the documented generated-source tutorial
+  should import `(consent eval)` or use a supported public sandbox wrapper
+  before agent-domainlayering and resolver expansion freeze the user import
+  surface; follows [#483](/tahoma/consent/issues/483) and the generated-source
+  loop [#700](/tahoma/consent/issues/700)
+- 0.18.11 — #711 REPL chrome: comment-only ready input should reprompt before
+  the next form
+  Roadmap rationale: comment-only ready-prompt repair after the quick-start
+  generated-source import repair; extends the #698 blank-ready-prompt invariant
+  to R7RS line-comment atmosphere so default/comment and classic chrome do not
+  leave the next formvisually promptless; follows
+  [#709](/tahoma/consent/issues/709)
+- 0.18.12 — #713 REPL imports do not persist reflection library registry state
+  Roadmap rationale: reflection tutorial import-registry repair after the
+  comment-only ready-prompt slice; makes incremental REPL submissions preserve
+  imported-library registry state so `current-imports` and `library-bindings`
+  agree with the imported `(agent reflect)` surface, and adds deterministic
+  tutorial-level REPLtests for the actual user context; follows
+  [#711](/tahoma/consent/issues/711)
+- 0.18.13 — #484 Make agent-domain library layering consistent (model vs API;
+  stop overloading the consent namespace)
+  Roadmap rationale: follows [#483](/tahoma/consent/issues/483),
+  [#709](/tahoma/consent/issues/709), [#711](/tahoma/consent/issues/711), and
+  [#713](/tahoma/consent/issues/713), and lands before manifest-schema,
+  primitive-library registration, and package/library resolution; resolves the
+  fused-vs-split agent-library inconsistency and gives the model layer one rule
+  before resolver registries, importability checks, and later single-sourcing
+  consume those names; blocks [#682](/tahoma/consent/issues/682),
+  [#681](/tahoma/consent/issues/681), and [#50](/tahoma/consent/issues/50)
+- 0.18.14 — #682 Define shared manifest schema and load-light aggregation
+  contract
+  Roadmap rationale: follows [#483](/tahoma/consent/issues/483) and
+  [#484](/tahoma/consent/issues/484); defines the shared Scheme-readable
+  manifest vocabulary, canonical-vs-derived metadata boundary, provider/adapter
+  ownership rules, and load-light aggregation contract before provider-owned
+  primitive registration, library resolution, and the later realization matrix
+  consume manifest records; blocks [#681](/tahoma/consent/issues/681),
+  [#50](/tahoma/consent/issues/50), and [#486](/tahoma/consent/issues/486)
+- 0.18.15 — #722 Keep CI compiled binary caches branch-local or non-runnable
+  Roadmap rationale: compiled-shard cache correctness after shared manifest
+  schema and before provider-owned primitive registration/resolver work;
+  ensures cross-ref fallback caches cannot supply the runnable product binary
+  under test without current-checkout revalidation, while preserving safe
+  intermediate build-tree warming
+- 0.18.16 — #681 Split provider-owned primitive library registration from
+  resolver
+  Roadmap rationale: follows [#483](/tahoma/consent/issues/483),
+  [#484](/tahoma/consent/issues/484), and [#682](/tahoma/consent/issues/682);
+  defines the provider-owned primitive-library declaration/registration
+  boundary before package/library resolution consumes it, so the resolver no
+  longer hard-codes every agent/domain primitive surface; blocks
+  [#50](/tahoma/consent/issues/50)
+- 0.18.17 — #50 add package and library resolution
+  Roadmap rationale: defines SRFI import naming, gates the later
+  content-addressed exchange [#386](/tahoma/consent/issues/386), and consumes
+  shared manifest rules from [#682](/tahoma/consent/issues/682) plus
+  provider-owned primitive-library registration from
+  [#681](/tahoma/consent/issues/681) instead of owning domain primitive specs
+  itself
+- 0.18.18 — #54 vendor prioritized portable SRFI bundle
+  Roadmap rationale: bundle-level contract and vendor manifest; promoted ahead
+  of the long-tail SRFI pool per the graph invariant
+- 0.18.19 — #163 add SRFI 261 portable SRFI library references
+  Roadmap rationale: naming contract
+- 0.18.20 — #162 add SRFI 97 SRFI library import aliases
+  Roadmap rationale: `(srfi N)` import aliases
+- 0.18.21 — #165 add SRFI 0 cond-expand compatibility
+  Roadmap rationale: runtime version `0.18.21`
+- 0.18.22 — #187 add SRFI 64 test suites
+  Roadmap rationale: testing shelf; scheduled early so `stdlib` work can run
+  against a standard test-suite library
+- 0.18.23 — #195 stdlib: add SRFI 27 random bits
+  Roadmap rationale: testing/property shelf; promoted before SRFI 194 because
+  [#196](/tahoma/consent/issues/196) depends on it
+- 0.18.24 — #196 stdlib: add SRFI 194 random data generators
+  Roadmap rationale: testing/property shelf; pulled forward so SRFI 252 has its
+  random-data substrate; follows SRFI 27 [#195](/tahoma/consent/issues/195)
+- 0.18.25 — #197 stdlib: add SRFI 252 property testing
+  Roadmap rationale: testing/property shelf; follows SRFI 64
+  [#187](/tahoma/consent/issues/187), generators
+  [#183](/tahoma/consent/issues/183), and random data generators
+  [#196](/tahoma/consent/issues/196)
+- 0.18.26 — #735 stdlib: add SRFI 42 eager comprehensions
+  Roadmap rationale: testing shelf substrate for SRFI 78; scheduled immediately
+  before SRFI 78 because [#648](/tahoma/consent/issues/648) depends on SRFI 42
+  eager comprehensions for its `check-ec` surface
+- 0.18.27 — #648 stdlib: add SRFI 78 lightweight testing
+  Roadmap rationale: testing shelf; lightweight test surface after SRFI 42 so
+  `check-ec` can consume the eager-comprehension substrate before the wider
+  Red/Tangerine shelves
+- 0.18.28 — #870 test(stdlib): harden (stdlib testing) coverage
+  Roadmap rationale: coverage-hardening slice after the portable
+  testing-library shelf and before the portable-first harness correction;
+  adapts the officialSRFI 64 meta-test suite, adds Consent-specific regressions
+  for local patches, verifies specifier semantics, result properties, runner
+  state, failure reporting, and compiled/self-hosted smoke coverage, and
+  updates manifest test status before #659 depends on SRFI 64 as
+  infrastructure; blocked by [#187](/tahoma/consent/issues/187); blocks
+  [#659](/tahoma/consent/issues/659)
+- 0.18.29 — #871 stdlib: convert SRFI reference documents to Markdown
+  Roadmap rationale: reference-corpus tooling slice after the portable
+  testing-library shelf and `(stdlib testing)` coverage hardening; generates
+  readable Markdown renderings of local SRFI reference snapshots, preserves or
+  records upstream HTML provenance, records both source HTML and generated
+  Markdown SHA-256 hashes, keeps per-file upstream SPDX/license notices, and
+  commits reusable conversion tooling under `tools/` for future SRFI intake
+- 0.18.30 — #659 test(portable): make Scheme test coverage first-class
+  Roadmap rationale: testing harness correction after the portable
+  testing-library shelf, `(stdlib testing)` coverage hardening, and SRFI
+  reference Markdown conversion; establishes portable Scheme tests as the
+  canonical home for host-neutral semantics, migrates SRFI 180 reference-corpus
+  coverage including `y_foundationdb_status.json` into the portable path, and
+  leaves Emacs ERT asrunner/adapter coverage unless a test is genuinely
+  host-specific; blocked by [#614](/tahoma/consent/issues/614),
+  [#870](/tahoma/consent/issues/870), [#187](/tahoma/consent/issues/187),
+  [#195](/tahoma/consent/issues/195), [#196](/tahoma/consent/issues/196),
+  [#197](/tahoma/consent/issues/197), and [#648](/tahoma/consent/issues/648)
+- 0.18.31 — #883 test(portable): migrate legacy Scheme assertion loops to
+  native testing facilities
+  Roadmap rationale: portable test-infrastructure completion immediately after
+  #659; migrates the remaining ad hoc failure counters and assertion loops onto
+  the shared `(testing harness)` and `(testing registry)` facilities so the
+  developer-facing runner has one result, selection, reporting, and failure
+  model; follows [#659](/tahoma/consent/issues/659)
+- 0.18.32 — #901 runtime: make current ports dynamically bindable in self-host
+  evaluation
+  Roadmap rationale: compiled-self-host conformance repair after the
+  legacy-suite migration; makes current input, output, and error ports
+  parameter-compatible dynamic state so SRFI 78 output-capture cases pass under
+  both compiled runners; related to [#371](/tahoma/consent/issues/371) and
+  [#490](/tahoma/consent/issues/490); follows
+  [#659](/tahoma/consent/issues/659)
+- 0.18.33 — #346 Own portable symbol identity and interning
+  Roadmap rationale: compiled-self-host conformance repair for
+  syntax-introduced identifiers, macro literals, quote/quasiquote symbols, and
+  same-name symbol identity; follows shipped core-data and multi-host bootstrap
+  work
+- 0.18.34 — #350 Define self-hostable portable numeric backend
+  Roadmap rationale: compiled-self-host conformance repair for the inexact
+  special-value fixture and the owned exact/inexact representation needed by
+  later Tangerine andcompiled-runtime work; follows shipped numeric-tower,
+  inexact-ownership, and multi-host bootstrap work
+- 0.18.35 — #349 Own portable character model and Unicode semantics
+  Roadmap rationale: owned-value prerequisite for metacircular self-host
+  validation; followsshipped core-data, multi-host bootstrap, and
+  character-externalization work
+- 0.18.36 — #962 style: enforce narrow-width readability for source and
+  conformance cases
+  Roadmap rationale: repository-wide readability correction after the
+  character-model slice exposes the fixture problem; replaces opaque
+  string-only fixtureprograms and expectations with structured or file-backed
+  forms, remediates existing first-party code, adopts a 79-column limit, and
+  adds format-aware required CI enforcement before more conformance cases
+  accumulate
+- 0.18.37 — #727 Own Unicode character data for portable runtime and compiler
+  Roadmap rationale: generated-data dependency after the character-model and
+  readability boundaries; prevents compiled/self-hosted code from baking in
+  host Unicode tables
