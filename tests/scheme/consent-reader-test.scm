@@ -690,6 +690,75 @@
  'inexact-rational '(portable core)
 (check-external 'inexact-rational "#i3/2" "1.5"))
 
+(testing-registry-case
+ 'canonical-number-representation-snapshot
+ '(portable core numeric performance)
+(let* ((decimal-zero
+        (consent-number-representation-snapshot (consent-read "0.0")))
+       (second-decimal-zero
+        (consent-number-representation-snapshot (consent-read "-0.0")))
+       (exact-complex
+        (consent-make-canonical-complex
+         (consent-make-canonical-integer 1 'exact 10)
+         (consent-make-canonical-integer 2 'exact 10)))
+       (left-inexact-complex
+        (consent-make-canonical-complex
+         (consent-make-canonical-integer 1 'inexact 10)
+         (consent-make-canonical-integer 2 'exact 10)))
+       (right-inexact-complex
+        (consent-make-canonical-complex
+         (consent-make-canonical-integer 1 'exact 10)
+         (consent-make-canonical-integer 2 'inexact 10))))
+  (test-equal
+   'number-snapshot-ignores-source-radix
+   "LIe+2a"
+   (consent-number-representation-snapshot (consent-read "#x2a")))
+  (test-equal
+   'number-snapshot-rejects-host-number-with-false
+   #f
+   (consent-number-representation-snapshot 42))
+  (test-equal
+   'number-snapshot-rejects-nonnumeric-with-false
+   #f
+   (consent-number-representation-snapshot 'not-a-number))
+  (test-equal
+   'number-snapshot-ignores-source-lexeme
+   (consent-number-representation-snapshot (consent-read "42"))
+   (consent-number-representation-snapshot (consent-read "+042")))
+  (test-equal
+   'number-snapshot-rational-length-delimiters
+   "LRe2:+32:+2"
+   (consent-number-representation-snapshot (consent-read "6/4")))
+  (test-equal
+   'number-snapshot-complex-length-delimiters
+   "LCe4:Ie+14:Ie+2"
+   (consent-number-representation-snapshot exact-complex))
+  (test-equal
+   'number-snapshot-canonical-signed-zero
+   decimal-zero
+   second-decimal-zero)
+  (test-equal
+   'number-snapshot-canonical-nan
+   (consent-number-representation-snapshot (consent-read "+nan.0"))
+   (consent-number-representation-snapshot
+    (consent-make-canonical-infnan "+nan.0")))
+  (test-assert
+   'number-snapshot-infinity-sign
+   (not
+    (string=?
+     (consent-number-representation-snapshot (consent-read "+inf.0"))
+     (consent-number-representation-snapshot (consent-read "-inf.0")))))
+  (test-assert
+   'number-snapshot-preserves-component-exactness
+   (not
+    (string=?
+     (consent-number-representation-snapshot left-inexact-complex)
+     (consent-number-representation-snapshot right-inexact-complex))))
+  (string-set! decimal-zero 0 #\X)
+  (test-assert
+   'number-snapshot-is-fresh
+   (not (char=? (string-ref second-decimal-zero 0) #\X)))))
+
 ;; Numeric-prefix and component forms selected from the R7RS lexical grammar.
 (define numeric-reader-valid-cases
   '((binary-prefix "#b101010" "42")

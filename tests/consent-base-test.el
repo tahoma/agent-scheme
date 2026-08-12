@@ -13,6 +13,7 @@
 (require 'cl-lib)
 (require 'seq)
 (require 'consent-eval)
+(require 'consent-library)
 
 (defun consent-base-test--external (source &optional options)
   "Evaluate SOURCE and return its stable external value representation."
@@ -615,6 +616,252 @@
                   (nan? +nan.0)
                   (= +nan.0 +nan.0))")
           "(#t #f #t #t #t #f)")))
+
+(ert-deftest consent-base-test-number-snapshot-exact-complex-owner-prefix ()
+  "Write exact complex snapshots once with only one root owner prefix."
+  (let* ((number
+          (consent--make-canonical-complex
+           (consent--make-number "+0001" 'exact 16 'integer 1)
+           (consent--make-number "0002" 'exact 8 'integer 2)))
+         (context (consent--new-eval-context nil))
+         (original-allocate
+          (symbol-function 'consent--number-snapshot-allocate-result))
+         (allocation-count 0)
+         local
+         outer)
+    (cl-letf
+        (((symbol-function 'consent--number-snapshot-allocate-result)
+          (lambda (length)
+            (cl-incf allocation-count)
+            (funcall original-allocate length))))
+      (setq local (consent--number-representation-snapshot number))
+      (should (= allocation-count 1))
+      (setq outer
+            (consent--primitive-consent-number-representation-snapshot-outer
+             (list number) context)))
+    (should (= allocation-count 2))
+    (should (equal local "LCe4:Ie+14:Ie+2"))
+    (should (equal outer "OCe4:Ie+14:Ie+2"))
+    (should (= (cl-count ?L local) 1))
+    (should-not (cl-find ?O local))
+    (should (= (cl-count ?O outer) 1))
+    (should-not (cl-find ?L outer))
+    (let ((nested
+           (consent--make-canonical-complex
+            (consent--make-canonical-complex
+             (consent--make-canonical-integer 1)
+             (consent--make-canonical-integer 0))
+            (consent--make-canonical-integer 0))))
+      (should
+       (equal (consent--number-representation-snapshot nested)
+              "LCe13:Ce4:Ie+13:Ie03:Ie0")))))
+
+(ert-deftest consent-base-test-number-representation-equality-is-stable ()
+  "Ignore signed zero, NaN spelling, and complex spelling metadata."
+  (let* ((positive-zero
+          (consent--make-number "0.0" 'inexact 10 'decimal 0.0))
+         (negative-zero
+          (consent--make-number "-0.0" 'inexact 16 'decimal -0.0))
+         (left-nan
+          (consent--make-number "+nan.0" 'inexact 10 'infnan '+nan.0))
+         (right-nan
+          (consent--make-number "nan-source" 'inexact 2 'infnan '+nan.0))
+         (left-complex
+          (consent--make-number
+           "1+2i" 'exact 10 'complex
+           (cons (consent--make-number "1" 'exact 10 'integer 1)
+                 (consent--make-number "2" 'exact 10 'integer 2))))
+         (right-complex
+          (consent--make-number
+           "#x1+2i" 'exact 16 'complex
+           (cons (consent--make-number "+01" 'exact 16 'integer 1)
+                 (consent--make-number "0002" 'exact 8 'integer 2)))))
+    (dolist (pair
+             (list (list positive-zero negative-zero)
+                   (list left-nan right-nan)
+                   (list left-complex right-complex)))
+      (let ((left (car pair))
+            (right (cadr pair)))
+        (should-not (eq left right))
+        (should
+         (eq (consent--primitive-eqv? (list left right) nil)
+             consent-true))
+        (should
+         (eq (consent--primitive-equal? (list left right) nil)
+             consent-true))
+        (should
+         (equal (consent--number-representation-snapshot left)
+                (consent--number-representation-snapshot right)))))
+    (should
+     (equal (consent--number-representation-snapshot positive-zero)
+            "LDif+043200000000000000"))
+    (should
+     (equal (consent--number-representation-snapshot left-nan)
+            "LSi2"))))
+
+(ert-deftest consent-base-test-number-snapshot-work-scales-linearly ()
+  "Use one result allocation and one plan/write visit per numeric node."
+  (cl-labels
+      ((deep-number
+        (depth)
+        (let ((number (consent--make-canonical-integer 1))
+              (zero (consent--make-canonical-integer 0)))
+          (dotimes (_ depth number)
+            (setq number
+                  (consent--make-canonical-complex number zero)))))
+       (profile
+        (number)
+        (let ((plan-count 0)
+              (write-count 0)
+              (allocation-count 0)
+              (original-plan
+               (symbol-function 'consent--number-snapshot-plan))
+              (original-write
+               (symbol-function 'consent--number-snapshot-write-plan))
+              (original-allocate
+               (symbol-function
+                'consent--number-snapshot-allocate-result)))
+          (cl-letf
+              (((symbol-function 'consent--number-snapshot-plan)
+                (lambda (value)
+                  (cl-incf plan-count)
+                  (funcall original-plan value)))
+               ((symbol-function 'consent--number-snapshot-write-plan)
+                (lambda (target index plan)
+                  (cl-incf write-count)
+                  (funcall original-write target index plan)))
+               ((symbol-function
+                 'consent--number-snapshot-allocate-result)
+                (lambda (length)
+                  (cl-incf allocation-count)
+                  (funcall original-allocate length))))
+            (let ((snapshot
+                   (consent--number-representation-snapshot number)))
+              (list snapshot plan-count write-count allocation-count))))))
+    (let* ((small-depth 32)
+           (large-depth 128)
+           (small (profile (deep-number small-depth)))
+           (large (profile (deep-number large-depth)))
+           (integer (profile
+                     (consent--make-canonical-integer (ash 1 32768)))))
+      (should (= (nth 1 small) (1+ (* 2 small-depth))))
+      (should (= (nth 2 small) (nth 1 small)))
+      (should (= (nth 3 small) 1))
+      (should (= (nth 1 large) (1+ (* 2 large-depth))))
+      (should (= (nth 2 large) (nth 1 large)))
+      (should (= (nth 3 large) 1))
+      (should (> (length (car large)) (length (car small))))
+      (should (= (nth 1 integer) 1))
+      (should (= (nth 2 integer) 1))
+      (should (= (nth 3 integer) 1))
+      (should (= (length (car integer)) 8197))
+      (should
+       (equal (car integer)
+              (concat "LIe+1" (make-string 8192 ?0)))))))
+
+(ert-deftest consent-base-test-identity-map-fast-backend-is-scheme-boolean ()
+  "Return Scheme booleans and preserve identity-keyed overlay semantics."
+  (let* ((result
+          (consent--primitive-consent-identity-map-fast-backend? nil nil))
+         (map (consent--primitive-consent-make-identity-map nil nil))
+         (left (list 'equal))
+         (right (list 'equal)))
+    (should (consent-boolean-p result))
+    (should (eq result consent-true))
+    (should
+     (eq
+      (consent--primitive-consent-identity-map-set!
+       (list map left 'found) nil)
+      'found))
+    (should
+     (eq
+      (consent--primitive-consent-identity-map-ref
+       (list map left 'missing) nil)
+      'found))
+    (should
+     (eq
+      (consent--primitive-consent-identity-map-ref
+       (list map right 'missing) nil)
+      'missing)))
+  (should
+   (equal
+    (consent-base-test--external
+     "(import (scheme base) (consent identity-map))
+      (define table (consent-make-identity-map))
+      (define left (list 'equal))
+      (define right (list 'equal))
+      (consent-identity-map-set! table left 'found)
+      (list (consent-identity-map-fast-backend?)
+            (consent-identity-map-ref table left 'missing)
+            (consent-identity-map-ref table right 'missing))"
+     '(:internal-libraries-allowed t))
+    "(#t found missing)"))
+  (let ((error
+         (should-error
+          (consent-base-test--external
+           "(import (consent identity-map))
+            (consent-identity-map-fast-backend?)")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote
+       "internal library import requires internal-libraries-allowed")
+      (error-message-string error)))))
+
+(ert-deftest consent-base-test-outer-representation-kind-overlay ()
+  "Classify seven outer kinds and private data with a nine-marker vector."
+  (let* ((markers
+          (vconcat
+           (mapcar (lambda (index) (list 'marker index))
+                   (number-sequence 0 8))))
+         (values
+          (list (cons 'left 'right)
+                (vector 'element)
+                "string"
+                (consent--make-bytevector (vector 1 2))
+                (consent--make-character 65)
+                (consent--make-symbol "symbol")
+                (consent--make-canonical-integer 1)
+                (make-hash-table :test #'eq))))
+    (cl-loop for value in values
+             for index from 0
+             do
+             (should
+              (eq
+               (consent--primitive-consent-outer-representation-kind
+                (list value markers) nil)
+               (aref markers index))))
+    (should-not
+     (memq (aref markers 8)
+           (mapcar
+            (lambda (value)
+              (consent--primitive-consent-outer-representation-kind
+               (list value markers) nil))
+            values)))
+    (should
+     (eq
+      (consent--primitive-consent-outer-representation-kind
+       (list 'guest-symbol markers) nil)
+      (aref markers 5)))
+    (should
+     (eq
+      (consent--primitive-consent-outer-representation-kind
+       (list 42 markers) nil)
+      (aref markers 6)))
+    (should-error
+     (consent--primitive-consent-outer-representation-kind
+      (list 'value (make-vector 8 'marker)) nil)))
+  (let* ((entry
+          (consent--library-collection-manifest-entry
+           "(consent reader primitive)"))
+         (export
+          (seq-find
+           (lambda (candidate)
+             (equal (plist-get candidate :name)
+                    "consent-outer-representation-kind"))
+           (plist-get entry :primitive-exports))))
+    (should export)
+    (should (equal (plist-get export :effects) '(pure)))))
 
 (ert-deftest consent-base-test-inexact-transcendentals ()
   "Evaluate representative real-valued `(scheme inexact)' procedures."

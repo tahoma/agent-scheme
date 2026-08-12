@@ -26,6 +26,15 @@
   "Report whether owned integers LEFT and RIGHT are equal."
   (= (numeric backend 'integer-compare left right) 0))
 
+(define (power-of-two-snapshot limb-bits bit-count)
+  "Snapshot 2^BIT-COUNT under the LIMB-BITS backend."
+  (let* ((backend (consent-make-numeric-backend limb-bits))
+         (one (integer backend "1")))
+    (numeric
+     backend
+     'integer-representation-snapshot
+     (numeric backend 'integer-shift-left one bit-count))))
+
 (define (low-bits-mask bit-count)
   "Return an exact host integer whose low BIT-COUNT bits are one."
   (let loop ((mask 0) (remaining bit-count))
@@ -1139,5 +1148,88 @@
    'binary64-results-independent-of-62-bit-profile
    signature-14
    signature-62)))
+
+(testing-registry-case
+ 'numeric-representation-snapshots '(portable runtime numeric performance)
+(let* ((backend consent-default-numeric-backend)
+       (zero (integer backend "0"))
+       (one (integer backend "1"))
+       (negative-one (integer backend "-1"))
+       (zero-snapshot
+        (numeric backend 'integer-representation-snapshot zero))
+       (one-snapshot
+        (numeric backend 'integer-representation-snapshot one))
+       (second-one-snapshot
+        (numeric backend 'integer-representation-snapshot one))
+       (snapshot-14 (power-of-two-snapshot 14 4096))
+       (snapshot-30 (power-of-two-snapshot 30 4096))
+       (snapshot-62 (power-of-two-snapshot 62 4096))
+       (large-snapshot (power-of-two-snapshot 30 32768))
+       (binary-zero (numeric backend 'binary64-zero))
+       (binary-negative-zero
+        (numeric backend 'binary64-import-host -0.0))
+       (binary-one (numeric backend 'binary64-parse "1.0"))
+       (positive-infinity
+        (numeric backend 'binary64-special 'infinity 1))
+       (negative-infinity
+        (numeric backend 'binary64-special 'infinity -1))
+       (nan (numeric backend 'binary64-special 'nan 1)))
+  (test-equal 'integer-snapshot-zero "0" zero-snapshot)
+  (test-equal 'integer-snapshot-positive "+1" one-snapshot)
+  (test-equal
+   'integer-snapshot-negative
+   "-1"
+   (numeric backend 'integer-representation-snapshot negative-one))
+  (string-set! one-snapshot 1 #\f)
+  (test-equal
+   'integer-snapshot-is-fresh
+   "+1"
+   second-one-snapshot)
+  (test-assert
+   'integer-snapshot-profile-14
+   (string=? snapshot-14 snapshot-30))
+  (test-assert
+   'integer-snapshot-profile-62
+   (string=? snapshot-14 snapshot-62))
+  ;; Hex output grows directly with the represented bit count.  These exact
+  ;; lengths exercise thousands of limbs without timing-sensitive assertions.
+  (test-equal 'integer-snapshot-4096-bit-length
+              1026
+              (string-length snapshot-30))
+  (test-equal 'integer-snapshot-32768-bit-length
+              8194
+              (string-length large-snapshot))
+  (test-equal 'integer-snapshot-large-leading-sign
+              #\+
+              (string-ref large-snapshot 0))
+  (test-equal 'integer-snapshot-large-leading-digit
+              #\1
+              (string-ref large-snapshot 1))
+  (test-equal 'binary64-snapshot-fixed-width
+              20
+              (string-length
+               (numeric
+                backend 'binary64-representation-snapshot binary-one)))
+  (test-equal
+   'binary64-snapshot-canonical-zero
+   (numeric backend
+            'binary64-representation-snapshot binary-zero)
+   (numeric backend
+            'binary64-representation-snapshot binary-negative-zero))
+  (test-assert
+   'binary64-snapshot-infinity-sign
+   (not
+    (string=?
+     (numeric backend
+              'binary64-representation-snapshot positive-infinity)
+     (numeric backend
+              'binary64-representation-snapshot negative-infinity))))
+  (test-assert
+   'binary64-snapshot-nan-class
+   (not
+    (string=?
+     (numeric backend 'binary64-representation-snapshot nan)
+     (numeric backend
+              'binary64-representation-snapshot positive-infinity))))))
 
 (testing-runner-main "Consent owned numeric backend" (command-line))

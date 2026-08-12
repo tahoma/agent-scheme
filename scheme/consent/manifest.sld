@@ -1678,6 +1678,7 @@
         (api-version internal)
         (source-version unknown)
         (realization portable-source)
+        (primitive-overlay-library (consent reader primitive))
         (exports
          (consent-read
           consent-read-datum
@@ -1721,6 +1722,8 @@
           consent-number-value
           consent-number-owned-value
           consent-number-representation-snapshot
+          consent-number-representation-snapshot-outer
+          consent-outer-representation-kind
           consent-make-canonical-integer
           consent-make-canonical-decimal
           consent-make-canonical-rational
@@ -1753,6 +1756,40 @@
           (library (consent numeric))
           (library (consent symbol))
           (library (consent symbol-boundary))))
+        (provenance ((origin repo)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind primitive-library)
+        (name (consent reader primitive))
+        (owner consent-core)
+        (provider host-adapter)
+        (visibility internal-runtime)
+        (layer primitive)
+        (source-kind primitive-library)
+        (source (implementation-id consent-reader))
+        (implementation-resolver
+         (module consent-base)
+         (procedure consent-standard-primitive-implementation))
+        (api-version internal)
+        (source-version runtime)
+        (realization host-primitive)
+        (exports
+         (consent-number-representation-snapshot-outer
+          consent-outer-representation-kind))
+        (primitive-exports
+         ((name consent-number-representation-snapshot-outer)
+          (primitive primitive-consent-number-representation-snapshot-outer)
+          (arity 1 1)
+          (effects (allocation))
+          (capabilities ()))
+         ((name consent-outer-representation-kind)
+          (primitive primitive-consent-outer-representation-kind)
+          (arity 2 2)
+          (effects (pure))
+          (capabilities ())))
+        (dependencies ())
         (provenance ((origin repo)))
         (status internal)
         (canonical #t))

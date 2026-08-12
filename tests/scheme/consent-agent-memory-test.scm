@@ -8,6 +8,13 @@
 
 (import (scheme base)
         (agent memory)
+        (only (agent memory-key)
+              call-with-memory-index-key-session
+              memory-index-key-bounded-comparison?
+              memory-index-key?
+              memory-index-key<?
+              memory-index-key=?
+              memory-prepare-index-key)
         (scheme process-context)
         (testing registry)
         (testing runner)
@@ -225,6 +232,122 @@
                   (string-append result block)
                   result)))))
 
+;; Return a pair whose cdr is itself and whose car is VALUE.
+(define (self-cdr-pair value)
+  (let ((pair (cons value #f)))
+    (set-cdr! pair pair)
+    pair))
+
+;; Return a two-node cdr cycle whose cars are VALUE.
+(define (two-period-cdr-pair value)
+  (let ((first (cons value #f))
+        (second (cons value #f)))
+    (set-cdr! first second)
+    (set-cdr! second first)
+    first))
+
+;; Return a one-node vector cycle.
+(define (self-vector-cycle)
+  (let ((value (vector #f)))
+    (vector-set! value 0 value)
+    value))
+
+;; Return a two-node vector cycle.
+(define (two-period-vector-cycle)
+  (let ((first (vector #f))
+        (second (vector #f)))
+    (vector-set! first 0 second)
+    (vector-set! second 0 first)
+    first))
+
+;; Return FIELD's mutable pair in RECORD, or #f.
+(define (record-field-pair record name)
+  (find
+   (lambda (field)
+     (and (pair? field) (eq? (car field) name)))
+   (cdr record)))
+
+;; Replace RECORD field NAME's value in place.
+(define (record-field-set! record name value)
+  (let ((field (record-field-pair record name)))
+    (if (not field)
+        (error "missing memory record field" name))
+    (set-car! (cdr field) value)))
+
+;; Return a vector key whose last leaf distinguishes neighboring keys.
+(define (late-leaf-key length leaf)
+  (let ((value (make-vector length 0)))
+    (if (> length 0)
+        (vector-set! value (- length 1) leaf))
+    value))
+
+;; Reference finite-graph bisimulation used only by the bounded oracle below.
+(define (reference-regular-tree-equal? left right)
+  (let loop ((pending (list (cons left right))) (seen '()))
+    (if (null? pending)
+        #t
+        (let* ((comparison (car pending))
+               (first (car comparison))
+               (second (cdr comparison))
+               (known?
+                (let find-seen ((rest seen))
+                  (and
+                   (pair? rest)
+                   (or
+                    (and (eq? first (car (car rest)))
+                         (eq? second (cdr (car rest))))
+                    (find-seen (cdr rest)))))))
+          (cond
+           (known? (loop (cdr pending) seen))
+           ((and (pair? first) (pair? second))
+            (loop
+             (cons (cons (car first) (car second))
+                   (cons (cons (cdr first) (cdr second))
+                         (cdr pending)))
+             (cons comparison seen)))
+           ((and (vector? first)
+                 (vector? second)
+                 (= (vector-length first) (vector-length second)))
+            (let push ((index 0) (next (cdr pending)))
+              (if (= index (vector-length first))
+                  (loop next (cons comparison seen))
+                  (push
+                   (+ index 1)
+                   (cons
+                    (cons (vector-ref first index)
+                          (vector-ref second index))
+                    next)))))
+           ((or (pair? first)
+                (pair? second)
+                (vector? first)
+                (vector? second))
+            #f)
+           ((equal? first second)
+            (loop (cdr pending) seen))
+           (else #f))))))
+
+;; Return one two-pair graph encoded by four base-four edge selectors.
+(define (pair-graph-from-code code)
+  (let ((first (cons #f #f))
+        (second (cons #f #f)))
+    (define (choice digit)
+      (cond
+       ((= digit 0) 0)
+       ((= digit 1) 1)
+       ((= digit 2) first)
+       (else second)))
+    (let* ((first-car (modulo code 4))
+           (rest-one (quotient code 4))
+           (first-cdr (modulo rest-one 4))
+           (rest-two (quotient rest-one 4))
+           (second-car (modulo rest-two 4))
+           (second-cdr (modulo (quotient rest-two 4) 4)))
+      (set-car! first (choice first-car))
+      (set-cdr! first (choice first-cdr))
+      (set-car! second (choice second-car))
+      (set-cdr! second (choice second-cdr))
+      first)))
+
 ;;;; Memory classes and append-only update/delete projection
 
 (testing-registry-case
@@ -438,7 +561,7 @@
                 #f)))))
 
 (testing-registry-case
- 'non-symbol-access-fallback '(portable agent)
+ 'non-symbol-access-ordered-index '(portable agent)
 (let* ((store (consent-make-memory-store))
        (project-id (list 'compound 'access 'id))
        (session-id (list 'compound 'access 'id))
@@ -446,26 +569,26 @@
         (memory-store-put! store
                            'project
                            project-id
-                           '((tags (fallback))
+                           '((tags (ordered))
                              (value "Project compound id."))))
        (session
         (memory-store-put! store
                            'session
                            session-id
-                           '((tags (fallback))
+                           '((tags (ordered))
                              (value "Session compound id.")))))
   (memory-store-access! store
                         (list 'compound 'access 'id)
                         'session
-                        'session-fallback)
+                        'session-ordered-index)
   (memory-store-access! store
                         (list 'compound 'access 'id)
                         'project
-                        'project-fallback-1)
+                        'project-ordered-index-1)
   (memory-store-access! store
                         (list 'compound 'access 'id)
                         'project
-                        'project-fallback-2)
+                        'project-ordered-index-2)
   (let* ((selection
           (memory-store-select
            store
@@ -485,13 +608,13 @@
           (memory-record-field-value project-candidate 'subscores '()))
          (session-subscores
           (memory-record-field-value session-candidate 'subscores '())))
-    (test-equal 'non-symbol-access-fallback
+    (test-equal 'non-symbol-access-ordered-index
                1/2
                (memory-record-field-value project-subscores 'recency #f))
-    (test-equal 'non-symbol-access-fallback-scope
+    (test-equal 'non-symbol-access-ordered-index-scope
                1/8
                (memory-record-field-value session-subscores 'recency #f))
-    (test-equal 'non-symbol-access-fallback-equal-id
+    (test-equal 'non-symbol-access-ordered-index-equal-id
                project-id
                (memory-record-id
                 (car (memory-selection-records selection)))))))
@@ -586,14 +709,14 @@
 ;;;; Constant-auxiliary text matching and normalized multi-term relevance
 
 (testing-registry-case
- 'two-way-exhaustive-binary-search '(portable agent)
+ 'linear-substring-exhaustive-binary-search '(portable agent)
 (let ((samples (binary-strings-through 4)))
   ;; Q and Z occur nowhere in the canonical record wrapper below.  For every
   ;; nonempty binary needle, searching the record therefore has exactly the
   ;; same answer as searching its raw binary payload; the empty needle matches
   ;; both by definition.
   (test-assert
-   'two-way-exhaustive-binary-search
+   'linear-substring-exhaustive-binary-search
    (let haystacks ((rest samples))
      (if (null? rest)
          #t
@@ -603,7 +726,7 @@
             store
             'project
             'fact
-            (list (list 'tags '(two-way-differential))
+            (list (list 'tags '(substring-differential))
                   (list 'value haystack)))
            (let queries ((remaining-needles samples))
              (cond
@@ -647,9 +770,34 @@
   (test-equal 'long-search-tail-match
              1
              (length (memory-store-find store 'project near-match)))
-  (test-equal 'two-way-empty-needle
+  (test-equal 'substring-empty-needle
              2
              (length (memory-store-find store 'project "")))))
+
+(testing-registry-case
+ 'variable-width-string-search '(portable agent)
+(let* ((store (consent-make-memory-store))
+       (wide-tail (make-string 16384 #\λ))
+       (value
+        (string-append
+         "variable-width-head-" wide-tail "-variable-width-tail")))
+  (memory-store-add!
+   store
+   'project
+   'fact
+   (list (list 'tags '(variable-width-search))
+         (list 'value value)))
+  (test-equal 'variable-width-head-match
+              1
+              (length
+               (memory-store-find store 'project "variable-width-head")))
+  (test-equal 'variable-width-tail-match
+              1
+              (length
+               (memory-store-find store 'project "variable-width-tail")))
+  (test-equal 'variable-width-near-miss
+              '()
+              (memory-store-find store 'project "λQ"))))
 
 (testing-registry-case
  'multi-term-relevance-count '(portable agent)
@@ -1143,9 +1291,9 @@
 (testing-registry-case
  'selection-duplicate-id-ordinal-identity '(portable agent)
 (let* ((store (consent-make-memory-store))
-       (high (shared-id-record 'high-key "high" 10 1))
-       (low (shared-id-record 'low-key "low" 1 2))
-       (middle (shared-id-record 'middle-key "middle" 5 3)))
+       (high (shared-id-record 'high-key "high" 10 100))
+       (low (shared-id-record 'low-key "low" 1 50))
+       (middle (shared-id-record 'middle-key "middle" 5 1)))
   (memory-store-replace-records! store (list middle low high))
   (let* ((selection
           (memory-store-select
@@ -1189,7 +1337,84 @@
                    (memory-record-field-value candidate 'record #f)
                    'value
                    #f))
-                (memory-selection-candidates selection))))))
+                (memory-selection-candidates selection)))
+    (test-equal 'recent-order-uses-stream-position-not-timestamp
+                '("middle" "low" "high")
+                (map
+                 (lambda (record)
+                   (memory-record-field-value record 'value #f))
+                 (memory-store-recent store 'project 3))))
+  (memory-store-access! store 'duplicate-id 'project 'duplicate-access)
+  (let ((access-selection
+         (memory-store-select
+          store
+          '()
+          '(retrieval-policy
+            (weights ((recency 1) (importance 0) (relevance 0)))
+            (cutoff 0)
+            (limit 3))
+          '(retrieval-context
+            (scope project)
+            (trust local)
+            (allowed-scopes (project))
+            (logical-clock 101)))))
+    (test-equal 'duplicate-id-access-updates-every-live-candidate
+                '(1 1 1)
+                (map
+                 (lambda (candidate)
+                   (memory-record-field-value
+                    (memory-record-field-value candidate 'subscores '())
+                    'recency
+                    #f))
+                 (memory-selection-candidates access-selection)))
+    (test-equal 'duplicate-id-access-keeps-stream-tie-order
+                '("middle" "low" "high")
+                (map
+                 (lambda (record)
+                   (memory-record-field-value record 'value #f))
+                 (memory-selection-records access-selection))))))
+
+(testing-registry-case
+ 'replace-access-before-live-record '(portable agent)
+(let* ((source (consent-make-memory-store))
+       (live
+        (memory-store-put!
+         source 'project 'future-id '((value "future live"))))
+       (access
+        (memory-store-access!
+         source 'future-id 'project 'future-access))
+       (rebuilt (consent-make-memory-store)))
+  (record-field-set! live 'created-at 1)
+  (record-field-set! live 'updated-at 1)
+  (record-field-set! access 'created-at 99)
+  (record-field-set! access 'updated-at 99)
+  ;; RECORDS are newest first, so replay observes ACCESS before LIVE even
+  ;; though their public timestamps deliberately disagree with stream order.
+  (memory-store-replace-records! rebuilt (list live access))
+  (let* ((selection
+          (memory-store-select
+           rebuilt
+           '()
+           '(retrieval-policy
+             (weights ((recency 1) (importance 0) (relevance 0)))
+             (cutoff 0)
+             (limit 1))
+           '(retrieval-context
+             (scope project)
+             (trust local)
+             (allowed-scopes (project))
+             (logical-clock 100))))
+         (candidate (candidate-for-id selection 'future-id))
+         (subscores
+          (memory-record-field-value candidate 'subscores '())))
+    (test-equal 'replace-access-before-live-record
+                1/2
+                (memory-record-field-value subscores 'recency #f))
+    (test-assert 'replace-access-before-live-preserves-record-identity
+                 (eq? live (car (memory-selection-records selection))))
+    (test-equal 'replace-live-order-ignores-public-timestamps
+                (list live)
+                (memory-store-recent rebuilt 'project 1)))))
 
 ;;;; Scope datums and record replacement round-trip canonical memory
 
@@ -1300,6 +1525,20 @@
   (test-equal 'replace-records-preserves-canonical-stream
              records
              (memory-store-records rebuilt))
+  (test-error
+   'replace-records-invalid-rebuild-rolls-back
+   ((lambda ()
+      (memory-store-replace-records!
+       rebuilt (cons '(malformed-memory-record) records)))))
+  (test-equal 'replace-records-rollback-preserves-canonical-stream
+              records
+              (memory-store-records rebuilt))
+  (test-equal 'replace-records-rollback-preserves-live-index
+              "new alpha"
+              (memory-record-field-value
+               (memory-store-ref rebuilt 'project 'alpha)
+               'value
+               #f))
   (test-equal 'replace-records-preserves-deleted-record-result
              (memory-record-id doomed)
              (memory-record-id deleted))
@@ -1315,7 +1554,78 @@
                (member-equal? alpha-old records))))
 
 (testing-registry-case
- 'non-symbol-store-key-fallback '(portable agent)
+ 'memory-field-spines-fail-closed '(portable agent memory safety)
+(let* ((store (consent-make-memory-store))
+       (stable
+        (memory-store-put!
+         store 'project 'stable '((value "stable value"))))
+       (before (memory-store-records store))
+       (cyclic-payload (list '(value "cyclic payload")))
+       (improper-payload (cons '(value "improper payload") 'tail))
+       (cyclic-record (map (lambda (field) field) stable))
+       (cyclic-tail
+        (let loop ((rest cyclic-record))
+          (if (pair? (cdr rest)) (loop (cdr rest)) rest)))
+       (improper-record
+        (cons 'memory
+              (cons '(id improper-record)
+                    (cons '(scope project) 'tail)))))
+  (set-cdr! cyclic-payload cyclic-payload)
+  (set-cdr! cyclic-tail (cdr cyclic-record))
+  (test-error
+   'put-rejects-cyclic-field-spine
+   ((lambda ()
+      (memory-store-put! store 'project 'cyclic cyclic-payload))))
+  (test-error
+   'add-rejects-improper-field-spine
+   ((lambda ()
+      (memory-store-add! store 'project 'fact improper-payload))))
+  (test-error
+   'reflect-rejects-cyclic-field-spine
+   ((lambda ()
+      (memory-store-reflect!
+       store 'project 'reflection cyclic-payload '() 'receipt 'loop))))
+  (test-error
+   'replace-rejects-cyclic-record-spine
+   ((lambda ()
+      (memory-store-replace-records! store (list cyclic-record)))))
+  (test-error
+   'replace-rejects-improper-record-spine
+   ((lambda ()
+      (memory-store-replace-records! store (list improper-record)))))
+  (test-assert 'field-spine-rejections-preserve-state-root
+               (eq? before (memory-store-records store)))
+  (test-assert 'field-spine-rejections-preserve-live-index
+               (eq? stable (memory-store-ref store 'project 'stable)))))
+
+(testing-registry-case
+ 'mutated-live-field-spine-fails-closed '(portable agent memory safety)
+(let* ((store (consent-make-memory-store))
+       (record
+        (memory-store-put!
+         store 'project 'mutated-cycle '((value "before cycle"))))
+       (tail
+        (let loop ((rest record))
+          (if (pair? (cdr rest)) (loop (cdr rest)) rest))))
+  (set-cdr! tail (cdr record))
+  (test-error
+   'record-field-read-rejects-mutated-cycle
+   ((lambda () (memory-record-field-value record 'value #f))))
+  (test-error
+   'selection-rejects-mutated-live-cycle
+   ((lambda ()
+      (memory-store-select
+       store
+       'mutated-cycle
+       '(retrieval-policy (cutoff 0) (limit 1))
+       '(retrieval-context
+         (scope project)
+         (trust local)
+         (allowed-scopes (project))
+         (logical-clock 1))))))))
+
+(testing-registry-case
+ 'non-symbol-store-key-ordered-index '(portable agent)
 (let* ((store (consent-make-memory-store))
        (first-key (list 'compound (list 'memory 'key)))
        (second-key (list 'compound (list 'memory 'key)))
@@ -1340,7 +1650,7 @@
        (deleted (memory-store-delete! store 'project delete-key)))
   (test-assert 'non-symbol-store-keys-use-exact-equal-semantics
                (equal? first-key lookup-key))
-  (test-equal 'non-symbol-store-key-uses-equal-fallback
+  (test-equal 'non-symbol-store-key-uses-canonical-index
              "second compound value"
              (memory-record-field-value looked-up 'value #f))
   (test-equal 'non-symbol-store-key-update-keeps-first-id
@@ -1355,7 +1665,7 @@
               store
               'project
               (list 'compound (list 'memory 'key))))
-  (test-equal 'non-symbol-store-fallback-does-not-disturb-symbol-index
+  (test-equal 'non-symbol-store-index-does-not-disturb-symbol-neighbor
              (memory-record-id symbol-record)
              (memory-record-id
               (memory-store-ref store 'project 'symbol-neighbor)))))
@@ -1424,6 +1734,86 @@
   (test-assert
    'select-preserves-canonical-record-identity
    (eq? record (car (memory-selection-records selection))))))
+
+(testing-registry-case
+ 'record-identity-fields-use-append-snapshot
+ '(portable agent memory mutation)
+(let* ((store (consent-make-memory-store))
+       (record
+        (memory-store-put!
+         store
+         'project
+         'snapshot-key
+         '((tags (snapshot-tag)) (value "snapshot identity"))))
+       (original-id (memory-record-id record)))
+  (record-field-set! record 'scope 'session)
+  (record-field-set! record 'id 'mutated-id)
+  (record-field-set! record 'kind 'mutated-kind)
+  (record-field-set! record 'tags '(mutated-tag))
+  (memory-store-access! store original-id 'project 'snapshot-access)
+  (let* ((recent (memory-store-recent store 'project 10))
+         (tagged (memory-store-by-tag store 'project 'snapshot-tag))
+         (selection
+          (memory-store-select
+           store
+           '(snapshot-key snapshot-tag datum)
+           '(retrieval-policy
+             (weights ((recency 0) (importance 0) (relevance 1)))
+             (cutoff 0)
+             (limit 1))
+           '(retrieval-context
+             (scope project)
+             (trust local)
+             (allowed-scopes (project))
+             (logical-clock 2))))
+         (candidate (candidate-for-value selection "snapshot identity"))
+         (subscores
+          (memory-record-field-value candidate 'subscores '())))
+    (test-equal 'mutated-scope-keeps-append-time-projection
+                (list record)
+                recent)
+    (test-equal 'mutated-tags-keep-append-time-projection
+                (list record)
+                tagged)
+    (test-equal 'mutated-key-kind-tags-use-detached-relevance
+                3
+                (memory-record-field-value subscores 'relevance #f)))
+  (memory-store-replace-records! store (memory-store-records store))
+  (test-equal 'replace-accepts-mutated-scope-and-tags
+              (list record)
+              (memory-store-by-tag store 'session 'mutated-tag))
+  (test-equal 'replace-removes-old-scope-projection
+              '()
+              (memory-store-recent store 'project 10))))
+
+(testing-registry-case
+ 'mutated-sensitive-content-fails-closed '(portable agent memory security)
+(let* ((store (consent-make-memory-store))
+       (record
+        (memory-store-put!
+         store
+         'project
+         'mutable-security
+         '((tags (mutable-security)) (value "initially public")))))
+  (record-field-set!
+   record 'value '(note (redaction (kind secret))))
+  (let* ((selection
+          (memory-store-select
+           store
+           '(mutable-security)
+           '(retrieval-policy (cutoff 0) (limit 1))
+           '(retrieval-context
+             (scope project)
+             (trust remote)
+             (allowed-scopes (project))
+             (logical-clock 1))))
+         (candidate (candidate-for-id selection (memory-record-id record))))
+    (test-equal 'mutated-sensitive-content-fails-closed
+                '()
+                (memory-selection-records selection))
+    (test-equal 'mutated-sensitive-candidate-is-filtered
+                'redaction-or-local-only
+                (memory-record-field-value candidate 'reason #f)))))
 
 (testing-registry-case
  'text-query-uses-canonical-datum-spelling
@@ -1549,6 +1939,12 @@
                   '(sensitive)
                   '(retrieval-policy (limit one))
                   '(retrieval-context (scope project))))))
+  (test-error 'negative-selection-limit ((lambda ()
+                 (memory-store-select
+                  store
+                  '(sensitive)
+                  '(retrieval-policy (limit -1))
+                  '(retrieval-context (scope project))))))
   (test-error 'invalid-selection-cutoff ((lambda ()
                  (memory-store-select
                   store
@@ -1643,5 +2039,510 @@
   (test-equal 'lower-trust-keeps-only-clean-graph-records
              2
              (length (memory-selection-records selection)))))
+
+;;;; Exact arbitrary-key quotient ordering and persistent lifecycle
+
+(testing-registry-case
+ 'arbitrary-key-quotient-order '(portable agent memory performance)
+(let* ((pair-one (self-cdr-pair 'x))
+       (pair-two (two-period-cdr-pair 'x))
+       (vector-one (self-vector-cycle))
+       (vector-two (two-period-vector-cycle))
+       (shared-leaf (cons 'leaf 'tail))
+       (shared-dag (vector shared-leaf shared-leaf))
+       (duplicate-tree
+        (vector (cons 'leaf 'tail) (cons 'leaf 'tail)))
+       (late-left (late-leaf-key 1024 0))
+       (late-right (late-leaf-key 1024 1))
+       (pair-one-key (memory-prepare-index-key 'project pair-one))
+       (pair-two-key (memory-prepare-index-key 'project pair-two))
+       (vector-one-key (memory-prepare-index-key 'project vector-one))
+       (vector-two-key (memory-prepare-index-key 'project vector-two))
+       (dag-key (memory-prepare-index-key 'project shared-dag))
+       (tree-key (memory-prepare-index-key 'project duplicate-tree))
+       (late-left-key (memory-prepare-index-key 'project late-left))
+       (late-right-key (memory-prepare-index-key 'project late-right)))
+  (test-assert 'different-period-pair-cycles-are-equal
+               (memory-index-key=? pair-one-key pair-two-key))
+  (test-assert 'different-period-vector-cycles-are-equal
+               (memory-index-key=? vector-one-key vector-two-key))
+  (test-assert 'shared-dag-equals-duplicate-tree
+               (memory-index-key=? dag-key tree-key))
+  (test-assert 'unequal-late-leaf-stays-distinct
+               (not (memory-index-key=? late-left-key late-right-key)))
+  (let ((a0 (cons #f #f))
+        (a1 (cons #f #f))
+        (a2 (cons #f #f))
+        (b0 (cons #f #f))
+        (b2 (cons #f #f))
+        (c0 (cons #f #f))
+        (c1 (cons #f #f)))
+    (set-car! a0 a0)
+    (set-cdr! a0 a1)
+    (set-car! a1 a1)
+    (set-cdr! a1 a2)
+    (set-car! a2 a1)
+    (set-cdr! a2 1)
+    (set-car! b0 b2)
+    (set-cdr! b0 0)
+    (set-car! b2 b0)
+    (set-cdr! b2 b2)
+    (set-car! c0 c1)
+    (set-cdr! c0 c0)
+    (set-car! c1 c1)
+    (set-cdr! c1 1)
+    (let* ((a (memory-prepare-index-key 'project a0))
+           (b (memory-prepare-index-key 'project b0))
+           (c (memory-prepare-index-key 'project c0))
+           (keys (list a b c)))
+      (test-assert
+       'quotient-comparator-irreflexive
+       (let loop ((rest keys))
+         (or
+          (null? rest)
+          (and
+           (not (memory-index-key<? (car rest) (car rest)))
+           (loop (cdr rest))))))
+      (test-assert
+       'quotient-comparator-asymmetric
+       (let outer ((left keys))
+         (or
+          (null? left)
+          (and
+           (let inner ((right keys))
+             (or
+              (null? right)
+              (and
+               (not
+                (and
+                 (memory-index-key<? (car left) (car right))
+                 (memory-index-key<? (car right) (car left))))
+               (inner (cdr right)))))
+           (outer (cdr left))))))
+      (test-assert
+       'quotient-comparator-transitive-dfs-counterexample
+       (let first ((xs keys))
+         (or
+          (null? xs)
+          (and
+           (let second ((ys keys))
+             (or
+              (null? ys)
+              (and
+               (let third ((zs keys))
+                 (or
+                  (null? zs)
+                  (and
+                   (or
+                    (not
+                     (and
+                      (memory-index-key<? (car xs) (car ys))
+                      (memory-index-key<? (car ys) (car zs))))
+                    (memory-index-key<? (car xs) (car zs)))
+                   (third (cdr zs)))))
+               (second (cdr ys)))))
+           (first (cdr xs))))))))))
+
+(testing-registry-case
+ 'cyclic-key-store-query-lifecycle '(portable agent memory)
+(let* ((store (consent-make-memory-store))
+       (a (self-cdr-pair 1))
+       (same-a (two-period-cdr-pair 1))
+       (c0 (cons #f #f))
+       (c1 (cons #f #f)))
+  (set-car! c0 c1)
+  (set-cdr! c0 0)
+  (set-car! c1 c0)
+  (set-cdr! c1 c1)
+  (memory-store-put!
+   store 'project c0 '((tags (separator)) (value "separator")))
+  (let* ((first
+          (memory-store-put!
+           store
+           'project
+           a
+           (list (list 'tags (list same-a))
+                 '(value "cyclic first"))))
+         (found (memory-store-ref store 'project same-a))
+         (updated
+          (memory-store-put!
+           store
+           'project
+           same-a
+           (list (list 'tags (list a))
+                 '(value "cyclic updated"))))
+         (tagged (memory-store-by-tag store 'project same-a))
+         (whole (memory-store-find store 'project updated))
+         (selection
+          (memory-store-select
+           store
+           (list a 'datum)
+           '(retrieval-policy
+             (weights ((recency 0) (importance 0) (relevance 1)))
+             (cutoff 0)
+             (limit 1))
+           '(retrieval-context
+             (scope project)
+             (trust local)
+             (allowed-scopes (project))
+             (logical-clock 3))))
+         (candidate (candidate-for-value selection "cyclic updated"))
+         (subscores
+          (memory-record-field-value candidate 'subscores '())))
+    (test-assert 'cyclic-clone-lookup-crosses-separator
+                 (eq? first found))
+    (test-assert 'cyclic-update-reuses-first-id
+                 (eq? a (memory-record-id updated)))
+    (test-equal 'cyclic-tag-projection
+                (list updated)
+                tagged)
+    (test-equal 'nontext-whole-record-find
+                (list updated)
+                whole)
+    (test-equal 'cyclic-key-and-kind-term-relevance
+                2
+                (memory-record-field-value subscores 'relevance #f))
+    (memory-store-access! store same-a 'project 'cyclic-access)
+    (test-assert 'cyclic-access-target-is-queryable
+                 (pair? (memory-store-select
+                         store
+                         (list same-a)
+                         '(retrieval-policy (cutoff 0) (limit 1))
+                         '(retrieval-context
+                           (scope project)
+                           (trust local)
+                           (allowed-scopes (project))
+                           (logical-clock 4)))))
+    (test-assert 'cyclic-delete-returns-current
+                 (eq? updated
+                      (memory-store-delete! store 'project same-a)))
+    (test-equal 'cyclic-tombstone-removes-live-key
+                #f
+                (memory-store-ref store 'project a)))))
+
+(testing-registry-case
+ 'bounded-general-key-equivalence-oracle '(portable agent memory)
+(let* ((codes '(0 1 2 3 5 10 17 34 51 68 85 102 153 170 204 255))
+       (graphs (map pair-graph-from-code codes))
+       (keys
+        (map
+         (lambda (graph)
+           (memory-prepare-index-key 'project graph))
+         graphs)))
+  (test-assert
+   'bounded-general-key-equivalence-oracle
+   (let outer ((left-graphs graphs) (left-keys keys))
+     (or
+      (null? left-graphs)
+      (and
+       (let inner ((right-graphs graphs) (right-keys keys))
+         (or
+          (null? right-graphs)
+          (and
+           (eqv?
+            (reference-regular-tree-equal?
+             (car left-graphs) (car right-graphs))
+            (memory-index-key=? (car left-keys) (car right-keys)))
+           (inner (cdr right-graphs) (cdr right-keys)))))
+       (outer (cdr left-graphs) (cdr left-keys))))))))
+
+(testing-registry-case
+ 'compound-key-alias-snapshots '(portable agent memory mutation)
+(let ((exercise
+       (lambda (name key old-clone mutate! new-clone)
+         (let* ((store (consent-make-memory-store))
+                (record
+                 (memory-store-put!
+                  store
+                  'project
+                  key
+                  (list '(tags (alias)) (list 'value name)))))
+           (mutate!)
+           (let ((old-result
+                  (memory-store-ref store 'project old-clone))
+                 (new-result
+                  (memory-store-ref store 'project new-clone)))
+             (memory-store-replace-records!
+              store (memory-store-records store))
+             (list
+              (eq? record old-result)
+              new-result
+              (memory-record-field-value
+               (memory-store-ref store 'project new-clone)
+               'value
+               #f)))))))
+  (let* ((pair-key (cons 'a 'b))
+         (vector-key (vector 'a 'b))
+         (string-key (string-copy "ab"))
+         (bytevector-key (bytevector 1 2))
+         (results
+          (list
+           (exercise
+            'pair
+            pair-key
+            (cons 'a 'b)
+            (lambda () (set-car! pair-key 'z))
+            (cons 'z 'b))
+           (exercise
+            'vector
+            vector-key
+            (vector 'a 'b)
+            (lambda () (vector-set! vector-key 0 'z))
+            (vector 'z 'b))
+           (exercise
+            'string
+            string-key
+            (string-copy "ab")
+            (lambda () (string-set! string-key 0 #\z))
+            (string-copy "zb"))
+           (exercise
+            'bytevector
+            bytevector-key
+            (bytevector 1 2)
+            (lambda () (bytevector-u8-set! bytevector-key 0 9))
+            (bytevector 9 2)))))
+    (test-equal
+     'compound-alias-append-and-replace-semantics
+     '((#t #f pair)
+       (#t #f vector)
+       (#t #f string)
+       (#t #f bytevector))
+     results))))
+
+(testing-registry-case
+ 'shared-general-key-session-scale '(portable agent memory performance)
+(let* ((size (if memory-scale-host-run? 256 1024))
+       (shared (late-leaf-key size 7))
+       (large-symbol
+        (string->symbol (repeat-fragment "shared-symbol-" size)))
+       (large-number (expt 2 (* 8 size)))
+       (session-result
+        (call-with-memory-index-key-session
+         (lambda (prepare)
+           (let* ((first (prepare 'project shared))
+                  (other-scope (prepare 'session shared))
+                  (symbol-key (prepare 'project large-symbol))
+                  (number-key (prepare 'project large-number)))
+             (let loop ((remaining size) (all-shared? #t))
+               (if (= remaining 0)
+                   (list
+                    all-shared?
+                    (eq? (vector-ref first 2)
+                         (vector-ref other-scope 2))
+                    (eq? symbol-key (prepare 'project large-symbol))
+                    (eq? number-key (prepare 'project large-number)))
+                   (loop
+                    (- remaining 1)
+                    (and all-shared?
+                         (eq? first (prepare 'project shared)))))))))))
+  (test-equal 'shared-root-session-interns-one-full-descriptor
+              '(#t #t #t #t)
+              session-result)
+  (let ((sizes (if memory-scale-host-run?
+                   '(16 64 256)
+                   '(64 256 1024))))
+    (test-assert
+     'general-key-64-256-1024-scale
+     (let loop ((rest sizes))
+       (or
+        (null? rest)
+        (let* ((length (car rest))
+               (left (late-leaf-key length 0))
+               (right (late-leaf-key length 1))
+               (left-key
+                (memory-prepare-index-key 'project left))
+               (right-key
+                (memory-prepare-index-key 'project right)))
+          (and
+           (not (memory-index-key=? left-key right-key))
+           (or (memory-index-key<? left-key right-key)
+               (memory-index-key<? right-key left-key))
+           (loop (cdr rest))))))))))
+
+(testing-registry-case
+ 'memory-key-session-dynamic-extent '(portable agent memory safety)
+(let ((escaped #f)
+      (continuation #f)
+      (exception-observed? #f)
+      (first-continuation-return? #t)
+      (reentry-result #f))
+  (call-with-memory-index-key-session
+   (lambda (prepare)
+     (set! escaped prepare)
+     (prepare 'project '(escaped preparer))))
+  (test-error
+   'memory-key-session-rejects-escaped-preparer
+   ((lambda () (escaped 'project '(after exit)))))
+  (guard
+   (condition
+    (else (set! exception-observed? #t)))
+   (call-with-memory-index-key-session
+    (lambda (prepare)
+      (prepare 'project (late-leaf-key 32 1))
+      (error "session release probe"))))
+  (test-assert 'memory-key-session-releases-after-exception
+               exception-observed?)
+  (test-assert
+   'memory-key-session-next-call-survives-exception
+   (memory-index-key=?
+    (memory-prepare-index-key 'project '(next session))
+    (call-with-memory-index-key-session
+     (lambda (prepare) (prepare 'project '(next session))))))
+  (set!
+   reentry-result
+   (guard
+    (condition (else 'blocked))
+    (let ((value
+           (call-with-memory-index-key-session
+            (lambda (prepare)
+              (call/cc
+               (lambda (return)
+                 (set! continuation return)
+                 (prepare 'project '(continuation session))))))))
+      (if first-continuation-return?
+          (begin
+            (set! first-continuation-return? #f)
+            (continuation 'reentered))
+          value))))
+  (test-equal
+   'memory-key-session-rejects-continuation-reentry
+   'blocked
+   reentry-result)))
+
+(testing-registry-case
+ 'shared-general-tag-append-session '(portable agent memory performance)
+(let* ((size (if memory-scale-host-run? 64 256))
+       (shared (late-leaf-key size 13))
+       (tags
+        (let loop ((remaining size) (result '()))
+          (if (= remaining 0)
+              result
+              (loop (- remaining 1) (cons shared result)))))
+       (store (consent-make-memory-store))
+       (record
+        (memory-store-put!
+         store
+         'project
+         'shared-tag-record
+         (list (list 'tags tags) '(value "shared tag payload")))))
+  (test-assert 'shared-general-tag-append-preserves-record
+               (eq? record
+                    (car (memory-store-by-tag store 'project shared))))
+  (test-equal 'shared-general-tag-append-preserves-occurrences
+              size
+              (length (memory-record-field-value record 'tags '())))))
+
+(testing-registry-case
+ 'shared-general-query-term-scale '(portable agent memory performance)
+(let* ((size (if memory-scale-host-run? 64 256))
+       (term (late-leaf-key size 9))
+       (terms
+        (let loop ((remaining size) (result '()))
+          (if (= remaining 0)
+              result
+              (loop (- remaining 1) (cons term result)))))
+       (store (consent-make-memory-store))
+       (record
+        (memory-store-put!
+         store 'project term '((value "shared query term"))))
+       (selection
+        (memory-store-select
+         store
+         terms
+         (list
+          'retrieval-policy
+          '(weights ((recency 0) (importance 0) (relevance 1)))
+          '(cutoff 0)
+          '(limit 1))
+         '(retrieval-context
+           (scope project)
+           (trust local)
+           (allowed-scopes (project))
+           (logical-clock 1))))
+       (candidate (candidate-for-id selection (memory-record-id record)))
+       (subscores
+        (memory-record-field-value candidate 'subscores '())))
+  (test-equal 'shared-general-query-term-validates-once-per-identity
+              size
+              (memory-record-field-value subscores 'relevance #f))))
+
+(testing-registry-case
+ 'bounded-fast-list-and-total-key-validation '(portable agent memory)
+(let* ((small
+        (memory-prepare-index-key 'project '(agent helper 1)))
+       (large-count-datum
+        (let loop ((remaining 17) (result '()))
+          (if (= remaining 0)
+              result
+              (loop (- remaining 1) (cons 'part result)))))
+       (large-count
+        (memory-prepare-index-key 'project large-count-datum))
+       (large-token
+        (memory-prepare-index-key
+         'project
+         (list
+          (string->symbol (repeat-fragment "long-token" 20)))))
+       (malformed
+        (vector (vector-ref small 0)
+                (vector-ref small 1)
+                (vector "not-a-list-tag" "payload"))))
+  (test-assert 'small-list-keeps-bounded-comparison-path
+               (memory-index-key-bounded-comparison? small))
+  (test-assert 'large-list-count-routes-to-general-normalizer
+               (not (memory-index-key-bounded-comparison? large-count)))
+  (test-assert 'large-list-token-routes-to-general-normalizer
+               (not (memory-index-key-bounded-comparison? large-token)))
+  (test-equal 'malformed-list-tag-predicate-is-total
+              #f
+              (memory-index-key? malformed))))
+
+(testing-registry-case
+ 'cross-scope-record-flags-and-allowed-scope-validation
+ '(portable agent memory)
+(let* ((store (consent-make-memory-store))
+       (session-record
+        (memory-store-put!
+         store 'session 'session-key '((value "session"))))
+       (project-record
+        (memory-store-put!
+         store 'project 'project-key '((value "project"))))
+       (cyclic-scopes (cons 'project '())))
+  (set-cdr! cyclic-scopes cyclic-scopes)
+  (test-equal 'nontext-record-find-keeps-global-scope-alignment
+              (list project-record)
+              (memory-store-find store 'project project-record))
+  (test-equal 'nontext-record-find-aligns-second-scope
+              (list session-record)
+              (memory-store-find store 'session session-record))
+  (test-error
+   'selection-rejects-improper-allowed-scopes
+   ((lambda ()
+      (memory-store-select
+       store
+       'project-key
+       '(retrieval-policy (cutoff 0))
+       '(retrieval-context
+         (scope project)
+         (allowed-scopes (project . session)))))))
+  (test-error
+   'selection-rejects-cyclic-allowed-scopes
+   ((lambda ()
+      (memory-store-select
+       store
+       'project-key
+       '(retrieval-policy (cutoff 0))
+       (list 'retrieval-context
+             '(scope project)
+             (list 'allowed-scopes cyclic-scopes))))))
+  (test-error
+   'selection-rejects-unknown-allowed-scope
+   ((lambda ()
+      (memory-store-select
+       store
+       'project-key
+       '(retrieval-policy (cutoff 0))
+       '(retrieval-context
+         (scope project)
+         (allowed-scopes (project workspace)))))))))
 
 (testing-runner-main "Consent Agent Memory portable tests" (command-line))
