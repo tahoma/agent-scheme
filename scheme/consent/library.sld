@@ -3206,10 +3206,9 @@ ntry"
                        (source-library-datum-label-syntax? source))))
                 (if (and uncached-shared-datum?
                          (not (consent-identity-map-fast-backend?)))
-                    ;; The compatibility identity map is intentionally an
-                    ;; association list. Reparse rare labelled sources into the
-                    ;; caller's context instead of turning graph realization
-                    ;; quadratic on a host without identity hashing.
+                    ;; Reparse rare labelled sources into the caller's context
+                    ;; instead of exhausting the fixed compatibility identity
+                    ;; envelope on a host without identity hashing.
                     (consent-read-all source (context-reader-options context))
                     (let* ((forms
                             (if cached

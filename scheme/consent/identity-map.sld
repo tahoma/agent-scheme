@@ -4,10 +4,11 @@
 ;;;
 ;;; Gambit uses its native identity table; other configured hosts use SRFI 69
 ;;; identity hashing. A plain R7RS host without either accelerator retains
-;;; reference semantics through an identity association list. The fallback is
-;;; compatibility-only: code on an ultra-critical path must bypass this adapter
-;;; with owned-object state or require the hash-backed backend rather than infer
-;;; a performance guarantee from the shared interface.
+;;; reference semantics through a fixed-envelope identity association list. The
+;;; fallback admits at most 64 distinct identities, keeping every map operation
+;;; bounded while preserving compatibility for small calls. Code that needs an
+;;; unbounded identity domain must use owned-object state or require the
+;;; hash-backed backend.
 
 (define-library (consent identity-map)
   (export consent-identity-map-fast-backend?
@@ -70,15 +71,20 @@
         value)))
    (else
     (begin
+      ;; Bound the alist itself, not only selected callers. This makes the
+      ;; adapter's nohash complexity contract apply to every current and future
+      ;; internal consumer.
+      (define consent-identity-map-compatibility-limit 64)
+
       (define (consent-identity-map-fast-backend?)
         "Return #f for the compatibility-only identity-alist adapter."
-        "Compatibility maps reserve slot zero for a tag and slot one for the"
-        "identity association list."
+        "Compatibility maps reserve slots for a tag, association list, and"
+        "bounded distinct-identity count."
         #f)
 
       (define (consent-make-identity-map)
         "Return a mutable compatibility map keyed by object identity."
-        (vector 'consent-identity-map '()))
+        (vector 'consent-identity-map '() 0))
 
       (define (consent-identity-map-ref map key default)
         "Return KEY's value in MAP, or DEFAULT when KEY is absent."
@@ -93,8 +99,14 @@
         (let loop ((rest (vector-ref map 1)))
           (cond
            ((null? rest)
+            (if (>= (vector-ref map 2)
+                    consent-identity-map-compatibility-limit)
+                (error
+                 "identity map compatibility limit requires fast backend"
+                 consent-identity-map-compatibility-limit))
             (vector-set!
-             map 1 (cons (cons key value) (vector-ref map 1))))
+             map 1 (cons (cons key value) (vector-ref map 1)))
+            (vector-set! map 2 (+ (vector-ref map 2) 1)))
            ((eq? key (car (car rest)))
             (set-cdr! (car rest) value))
            (else (loop (cdr rest)))))

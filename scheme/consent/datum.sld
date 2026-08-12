@@ -1396,6 +1396,11 @@
       "Record host VALUE's graph COPY in mutable registry SEEN."
       (consent-identity-map-set! seen value copy))
 
+    ;; The identity adapter's plain-R7RS fallback is a linear association
+    ;; list.  Compatibility calls may still process small foreign graphs, but
+    ;; an exact fixed ceiling prevents lookup work from becoming quadratic.
+    (define datum-host-identity-compatibility-limit 64)
+
     (define (datum-import-graph
              heap value leaf copy-source reuse leaf-valid?)
       "Import and optionally count one compound graph iteratively."
@@ -1405,6 +1410,8 @@
              (and leaf-valid?
                   (vector 'consent-datum-import-count-only)))
             (host-seen #f)
+            (host-fast? (consent-identity-map-fast-backend?))
+            (host-count 0)
             (owned-seen #f)
             (node-count 0)
             (invalid-leaf? #f)
@@ -1428,10 +1435,25 @@
               (consent-identity-map-ref host-seen item absent-token)
               absent-token))
         (define (import-host-set! item copy)
-          "Memoize host ITEM as COPY, allocating the map on first use."
+          "Memoize already-reserved host ITEM as COPY."
           (if (not host-seen)
               (set! host-seen (consent-make-identity-map)))
+          (if (eq? (import-host-ref item) absent-token)
+              (begin
+                (if (and (not host-fast?)
+                         (>= host-count
+                             datum-host-identity-compatibility-limit))
+                    (error
+                     "consent-datum-import: foreign graph requires fast \
+identity maps"
+                     item))
+                (set! host-count (+ host-count 1))))
           (host-seen-set! host-seen item copy))
+        (define (reserve-import-host! item)
+          "Reserve one distinct host ITEM before callback or allocation."
+          (if (eq? (import-host-ref item) absent-token)
+              (import-host-set!
+               item (vector 'consent-datum-import-reserved))))
         (define (import-owned-ref item)
           "Return ITEM's cross-heap copy, or the private absent token."
           (if owned-seen
@@ -1660,10 +1682,13 @@
                     (start-host-copy! source destination slot #f))
                    ((not (eq? prior absent-token))
                     (deliver! destination slot prior))
-                   ((accept-host-reuse! source destination slot))
                    (else
-                    (start-host-copy!
-                     source destination slot count-source?))))
+                    (reserve-import-host! source)
+                    (if (not
+                         (accept-host-reuse!
+                          source destination slot))
+                        (start-host-copy!
+                         source destination slot count-source?)))))
                 (begin
                   (if count-source? (note-leaf! source))
                   (deliver!
@@ -1870,7 +1895,9 @@
                  (car (cddr rest))))
             (absent-token (vector 'consent-datum-export-absent))
             (owned-seen #f)
-            (host-seen #f))
+            (host-seen #f)
+            (host-fast? (consent-identity-map-fast-backend?))
+            (host-count 0))
         (define (export-owned-ref item)
           "Return owned ITEM's host copy, or the private absent token."
           (if owned-seen
@@ -1889,10 +1916,25 @@
                host-seen item absent-token)
               absent-token))
         (define (export-host-set! item copy)
-          "Memoize host ITEM as COPY, allocating the map on first use."
+          "Memoize already-reserved host ITEM as COPY."
           (if (not host-seen)
               (set! host-seen (consent-make-identity-map)))
+          (if (eq? (export-host-ref item) absent-token)
+              (begin
+                (if (and (not host-fast?)
+                         (>= host-count
+                             datum-host-identity-compatibility-limit))
+                    (error
+                     "consent-datum-export: foreign graph requires fast \
+identity maps"
+                     item))
+                (set! host-count (+ host-count 1))))
           (consent-identity-map-set! host-seen item copy))
+        (define (reserve-export-host! item)
+          "Reserve one distinct host ITEM before callback or allocation."
+          (if (eq? (export-host-ref item) absent-token)
+              (export-host-set!
+               item (vector 'consent-datum-export-reserved))))
         ;; Visit jobs use #(0 source destination slot).  Non-negative slots
         ;; address vectors; -1 and -2 address a host pair's car and cdr.
         ;; Finish jobs use #(1 source copy 0).  The explicit stack preserves
@@ -2022,9 +2064,10 @@
                   (cond
                    ((not (eq? prior absent-token))
                     (deliver! destination slot prior))
-                   ((accept-reuse! source destination slot))
                    (else
-                    (start-host-copy! source destination slot)))))
+                    (reserve-export-host! source)
+                    (if (not (accept-reuse! source destination slot))
+                        (start-host-copy! source destination slot))))))
              (else
               (deliver! destination slot (leaf source)))))
           (push-visit! value root 0)

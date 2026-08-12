@@ -7998,7 +7998,7 @@ only")
              (list raised?
                    (reverse store-writes)
                    (consent-value->external state))
-             '(#t ((vector-set! 0))
+             '(#t ((vector-set! 1))
                "((alpha) alpha #f m-2)"))
             (filter-framework-writes
              (cdr rest)
@@ -9654,6 +9654,46 @@ te-pulls'."
 
 ;; Graph projection and result rendering index identity by the current graph,
 ;; preserving sharing without rescanning an ever-growing ancestor list.
+(testing-registry-case
+ 'symbol-boundary-cyclic-graph-equality
+ '(portable core datum graph performance)
+(let* ((left (vector #f))
+       (right (vector #f))
+       (right-tail (vector #f))
+       (unequal (vector #f 'different))
+       (owned
+        (consent-intern-symbol
+         (consent-make-symbol-table) "shared-name")))
+  (define (make-vector-cycle length)
+    "Return a one-slot vector cycle containing LENGTH distinct vectors."
+    (let ((root (vector #f)))
+      (let loop ((remaining (- length 1)) (cursor root))
+        (if (= remaining 0)
+            (vector-set! cursor 0 root)
+            (let ((next (vector #f)))
+              (vector-set! cursor 0 next)
+              (loop (- remaining 1) next))))
+      root))
+  (vector-set! left 0 left)
+  (vector-set! right 0 right-tail)
+  (vector-set! right-tail 0 right)
+  (vector-set! unequal 0 unequal)
+  (test-assert 'symbol-boundary-equal-different-cycle-periods
+               (consent-host-symbol-equal? left right))
+  (test-assert 'symbol-boundary-detects-late-vector-mismatch
+               (not (consent-host-symbol-equal? left unequal)))
+  (test-assert
+   'symbol-boundary-equal-coprime-cycle-periods
+   (consent-host-symbol-equal?
+    (make-vector-cycle 17) (make-vector-cycle 19)))
+  (test-assert
+   'symbol-boundary-equal-mixed-symbol-cycle
+   (let ((first (cons owned '()))
+         (second (cons 'shared-name '())))
+     (set-cdr! first first)
+     (set-cdr! second second)
+     (consent-host-symbol-equal? first second)))))
+
 (testing-registry-case
  'result-and-syntax-graph-indexing
  '(portable core datum graph performance)

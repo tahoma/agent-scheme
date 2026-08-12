@@ -18,6 +18,7 @@
                   (equal? host-equal?)
                   (symbol? host-symbol?)
                   (symbol->string host-symbol->string))
+          (consent identity-map)
           (consent symbol))
   (begin
     ;; Private evaluator metadata is still represented by host symbols while a
@@ -87,29 +88,88 @@
          (right (type any) (description "Second value to compare.")))
         (returns (type boolean) (description "Whether values are equal."))
         (effects allocation))
-      (let compare ((left left) (right right) (seen '()))
-        (cond
-         ((consent-host-symbol-eqv? left right) #t)
-         ((and (pair? left) (pair? right))
-          (let ((prior
-                 (let loop ((rest seen))
-                   (and (pair? rest)
-                        (or (and (host-eq? left (caar rest))
-                                 (host-eq? right (cdar rest)))
-                            (loop (cdr rest)))))))
-            (or prior
-                (let ((seen (cons (cons left right) seen)))
-                  (and (compare (car left) (car right) seen)
-                       (compare (cdr left) (cdr right) seen))))))
-         ((and (vector? left) (vector? right))
-          (and (= (vector-length left) (vector-length right))
-               (let loop ((index 0))
-                 (or (= index (vector-length left))
-                     (and (compare (vector-ref left index)
-                                   (vector-ref right index)
-                                   seen)
-                          (loop (+ index 1)))))))
-         (else (host-equal? left right)))))
+      ;; Union-find records compound congruence classes. Each successful union
+      ;; schedules that constructor's edges once, so equal cycles with different
+      ;; periods do not produce a product traversal. Hash-backed adapters make
+      ;; the iterative walk expected O(V+E); the plain-R7RS adapter has a fixed
+      ;; compatibility envelope.
+      (let ((absent (vector 'symbol-equal-absent))
+            (nodes (consent-make-identity-map))
+            (pending (list (cons left right))))
+        (define (value-node value)
+          "Return VALUE's existing or fresh union-find node."
+          (let ((known (consent-identity-map-ref nodes value absent)))
+            (if (host-eq? known absent)
+                (let ((node (vector #f 0)))
+                  (vector-set! node 0 node)
+                  (consent-identity-map-set! nodes value node)
+                  node)
+                known)))
+        (define (node-root node)
+          "Return NODE's root with iterative path compression."
+          (let climb ((cursor node))
+            (let ((parent (vector-ref cursor 0)))
+              (if (host-eq? cursor parent)
+                  (begin
+                    (let compress ((path node))
+                      (let ((next (vector-ref path 0)))
+                        (if (not (host-eq? path cursor))
+                            (begin
+                              (vector-set! path 0 cursor)
+                              (compress next)))))
+                    cursor)
+                  (climb parent)))))
+        (define (seen-or-mark! first second)
+          "Report one congruence class, or union two compound classes."
+          (let* ((first-root (node-root (value-node first)))
+                 (second-root (node-root (value-node second))))
+            (if (host-eq? first-root second-root)
+                #t
+                (let ((first-rank (vector-ref first-root 1))
+                      (second-rank (vector-ref second-root 1)))
+                  (cond
+                   ((< first-rank second-rank)
+                    (vector-set! first-root 0 second-root))
+                   ((> first-rank second-rank)
+                    (vector-set! second-root 0 first-root))
+                   (else
+                    (vector-set! second-root 0 first-root)
+                    (vector-set! first-root 1 (+ first-rank 1))))
+                  #f))))
+        (define (push! first second)
+          (set! pending (cons (cons first second) pending)))
+        (let loop ()
+          (if (null? pending)
+              #t
+              (let* ((comparison (car pending))
+                     (first (car comparison))
+                     (second (cdr comparison)))
+                (set! pending (cdr pending))
+                (cond
+                 ((consent-host-symbol-eqv? first second) (loop))
+                 ((and (pair? first) (pair? second))
+                  (if (not (seen-or-mark! first second))
+                      (begin
+                        (push! (cdr first) (cdr second))
+                        (push! (car first) (car second))))
+                  (loop))
+                 ((or (pair? first) (pair? second)) #f)
+                 ((and (vector? first) (vector? second))
+                  (let ((length (vector-length first)))
+                    (if (not (= length (vector-length second)))
+                        #f
+                        (begin
+                          (if (not (seen-or-mark! first second))
+                              (let push-slots ((index (- length 1)))
+                                (if (>= index 0)
+                                    (begin
+                                      (push! (vector-ref first index)
+                                             (vector-ref second index))
+                                      (push-slots (- index 1))))))
+                          (loop)))))
+                 ((or (vector? first) (vector? second)) #f)
+                 ((host-equal? first second) (loop))
+                 (else #f)))))))
 
     (define (consent-host-symbol-memq value values)
       "Return VALUES' tail whose head is bootstrap-EQ? to VALUE."
