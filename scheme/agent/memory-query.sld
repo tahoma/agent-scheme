@@ -31,7 +31,8 @@
           (only (data avl-tree)
                 make-avl-tree
                 avl-tree-ref
-                avl-tree-set)
+                avl-tree-set
+                avl-tree-fold)
           (only (stdlib list) filter take))
   (begin
     ;; Query views are immutable and call-local.  Their records remain owned by
@@ -386,8 +387,149 @@
                          (vector-ref fallback (- candidate 1))))
                        (else
                         (set! matched 0)))))
-                  haystack)
+                 haystack)
                  #f))))))
+
+    ;; Select relevance uses one Aho-Corasick-style automaton for every
+    ;; distinct textual term.  Direct transitions and completed fallback
+    ;; transitions are persistent character AVL trees, so a failure map is
+    ;; shared rather than copied into every state.  Terminal outputs remain
+    ;; direct-only; output links and generation stamps prevent inherited
+    ;; matches from producing quadratic storage or repeated reporting.
+    (define (make-memory-relevance-text-node)
+      (vector (make-avl-tree char<?) #f #f '() #f 0))
+
+    (define (relevance-text-node-direct node)
+      (vector-ref node 0))
+
+    (define (set-relevance-text-node-direct! node transitions)
+      (vector-set! node 0 transitions))
+
+    (define (relevance-text-node-goto node)
+      (vector-ref node 1))
+
+    (define (set-relevance-text-node-goto! node transitions)
+      (vector-set! node 1 transitions))
+
+    (define (relevance-text-node-failure node)
+      (vector-ref node 2))
+
+    (define (set-relevance-text-node-failure! node failure)
+      (vector-set! node 2 failure))
+
+    (define (relevance-text-node-outputs node)
+      (vector-ref node 3))
+
+    (define (set-relevance-text-node-outputs! node outputs)
+      (vector-set! node 3 outputs))
+
+    (define (relevance-text-node-output-link node)
+      (vector-ref node 4))
+
+    (define (set-relevance-text-node-output-link! node output-link)
+      (vector-set! node 4 output-link))
+
+    (define (relevance-text-node-generation node)
+      (vector-ref node 5))
+
+    (define (set-relevance-text-node-generation! node generation)
+      (vector-set! node 5 generation))
+
+    (define (relevance-text-add-pattern! root text group)
+      "Add TEXT's direct terminal GROUP to trie ROOT."
+      (let ((state root))
+        (string-for-each
+         (lambda (character)
+           (let* ((direct (relevance-text-node-direct state))
+                  (next
+                   (avl-tree-ref direct character (lambda () #f))))
+             (if next
+                 (set! state next)
+                 (let ((created (make-memory-relevance-text-node)))
+                   (set-relevance-text-node-direct!
+                    state
+                    (avl-tree-set direct character created))
+                   (set! state created)))))
+         text)
+        (set-relevance-text-node-outputs!
+         state
+         (cons group (relevance-text-node-outputs state)))))
+
+    (define (relevance-text-completed-goto direct inherited)
+      "Overlay DIRECT transitions on INHERITED persistent transitions."
+      (avl-tree-fold
+       (lambda (character next result)
+         (avl-tree-set result character next))
+       inherited
+       direct))
+
+    (define (complete-memory-relevance-text-automaton! root)
+      "Install failure, output, and completed-goto links below ROOT."
+      (let ((front '()) (back '()))
+        (define (enqueue! node)
+          (set! back (cons node back)))
+        (define (dequeue!)
+          (if (null? front)
+              (begin
+                (set! front (reverse back))
+                (set! back '())))
+          (if (null? front)
+              #f
+              (let ((node (car front)))
+                (set! front (cdr front))
+                node)))
+        (set-relevance-text-node-failure! root root)
+        (set-relevance-text-node-goto!
+         root
+         (relevance-text-node-direct root))
+        (avl-tree-fold
+         (lambda (character child ignored)
+           (set-relevance-text-node-failure! child root)
+           (set-relevance-text-node-output-link!
+            child
+            (and
+             (not (null? (relevance-text-node-outputs root)))
+             root))
+           (enqueue! child)
+           ignored)
+         #f
+         (relevance-text-node-direct root))
+        (let loop ((state (dequeue!)))
+          (if state
+              (let* ((failure (relevance-text-node-failure state))
+                     (inherited
+                      (relevance-text-node-goto failure)))
+                (set-relevance-text-node-goto!
+                 state
+                 (relevance-text-completed-goto
+                  (relevance-text-node-direct state)
+                  inherited))
+                (avl-tree-fold
+                 (lambda (character child ignored)
+                   (let ((child-failure
+                          (avl-tree-ref
+                           inherited character (lambda () root))))
+                     (set-relevance-text-node-failure!
+                      child child-failure)
+                     (set-relevance-text-node-output-link!
+                      child
+                      (if (null?
+                           (relevance-text-node-outputs child-failure))
+                          (relevance-text-node-output-link child-failure)
+                          child-failure))
+                     (enqueue! child)
+                     ignored))
+                 #f
+                 (relevance-text-node-direct state))
+                (loop (dequeue!)))))
+        root))
+
+    (define (relevance-text-next root state character)
+      "Return STATE's completed transition for CHARACTER."
+      (avl-tree-ref
+       (relevance-text-node-goto state)
+       character
+       (lambda () root)))
 
     (define (memory-query-entries store)
       "Return validated current-live entries in source ordinal order."
@@ -753,10 +895,10 @@
 
     (define-record-type <memory-relevance-index>
       (make-memory-relevance-index
-       indexes patterns multiplicities marks count generation)
+       indexes text-root multiplicities marks count generation)
       memory-relevance-index?
       (indexes relevance-indexes)
-      (patterns relevance-patterns)
+      (text-root relevance-text-root)
       (multiplicities relevance-multiplicities)
       (marks relevance-marks)
       (count relevance-count)
@@ -865,14 +1007,22 @@
              (term-groups
               (make-avl-tree (make-relevance-term-order key<?)))
              (indexes (make-relevance-key-indexes fast? key<?))
-             (patterns (make-vector count #f))
+             (text-root (make-memory-relevance-text-node))
              (multiplicities (make-vector count 0))
              (marks (make-vector count 0))
-             (group-count 0))
+             (group-count 0)
+             (has-text? #f))
         (let term-loop ((occurrence-index 0))
           (if (= occurrence-index count)
               (make-memory-relevance-index
-               indexes patterns multiplicities marks group-count 0)
+               indexes
+               (and
+                has-text?
+                (complete-memory-relevance-text-automaton! text-root))
+               multiplicities
+               marks
+               group-count
+               0)
               (let* ((projection
                       (vector-ref projections occurrence-index))
                      (cached
@@ -902,12 +1052,12 @@
                                            (avl-tree-set
                                             term-groups normalized new))
                                      (vector-set!
-                                      patterns
-                                      identifier
-                                      (and
-                                       text
-                                       (prepare-memory-substring-pattern
-                                        text)))
+                                      marks identifier 0)
+                                     (if text
+                                         (begin
+                                           (set! has-text? #t)
+                                           (relevance-text-add-pattern!
+                                            text-root text identifier)))
                                      (let key-loop ((scope-index 0))
                                        (if (< scope-index
                                               (vector-length keys))
@@ -1014,28 +1164,54 @@
         (let ((key-score
                (mark-sidecar-relevance! terms sidecar generation))
               (marks (relevance-marks terms))
-              (patterns (relevance-patterns terms))
+              (text-root (relevance-text-root terms))
               (multiplicities (relevance-multiplicities terms))
               (count (relevance-count terms)))
-          (let loop ((index 0) (score key-score) (record-text #f))
-            (if (= index count)
-                score
-                (let ((pattern (vector-ref patterns index)))
-                  (cond
-                   ((= (vector-ref marks index) generation)
-                    (loop (+ index 1) score record-text))
-                   (pattern
-                    (let ((text (if record-text
-                                    record-text
-                                    (record-search-text record))))
+          (define (mark-group! group)
+            (if (= (vector-ref marks group) generation)
+                0
+                (begin
+                  (vector-set! marks group generation)
+                  (vector-ref multiplicities group))))
+          (define (drain-terminal-chain state)
+            (let loop
+                ((terminal
+                  (if (null? (relevance-text-node-outputs state))
+                      (relevance-text-node-output-link state)
+                      state))
+                 (score 0))
+              (cond
+               ((not terminal) score)
+               ((= (relevance-text-node-generation terminal) generation)
+                score)
+               (else
+                (set-relevance-text-node-generation!
+                 terminal generation)
+                (let outputs
+                    ((rest (relevance-text-node-outputs terminal))
+                     (next-score score))
+                  (if (null? rest)
                       (loop
-                       (+ index 1)
-                       (if (prepared-memory-substring-occurs? pattern text)
-                           (+ score (vector-ref multiplicities index))
-                           score)
-                       text)))
-                   (else
-                    (loop (+ index 1) score record-text)))))))))
+                       (relevance-text-node-output-link terminal)
+                       next-score)
+                      (outputs
+                       (cdr rest)
+                       (+ next-score (mark-group! (car rest))))))))))
+          (if (or (not text-root) (= count 0))
+              key-score
+              (let ((state text-root)
+                    (score
+                     (+ key-score
+                        (drain-terminal-chain text-root))))
+                (string-for-each
+                 (lambda (character)
+                   (set! state
+                         (relevance-text-next
+                          text-root state character))
+                   (set! score
+                         (+ score (drain-terminal-chain state))))
+                 (record-search-text record))
+                score)))))
 
     (define (candidate-field candidate name)
       "Return CANDIDATE field NAME."

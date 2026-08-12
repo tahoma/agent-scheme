@@ -706,7 +706,7 @@
              'scope-mismatch
              (memory-record-field-value session-candidate 'reason #f))))
 
-;;;; Constant-auxiliary text matching and normalized multi-term relevance
+;;;; Linear prepared text matching and normalized multi-term relevance
 
 (testing-registry-case
  'linear-substring-exhaustive-binary-search '(portable agent)
@@ -844,6 +844,49 @@
   (test-equal 'multi-term-nonmatching-record-score
              0
              (memory-record-field-value other-subscores 'relevance #f))))
+
+(testing-registry-case
+ 'multi-pattern-overlap-relevance '(portable agent)
+(let* ((store (consent-make-memory-store))
+       (first
+        (memory-store-add! store
+                           'project
+                           'fact
+                           '((tags (overlap-first))
+                             (value "ushers"))))
+       (second
+        (memory-store-add! store
+                           'project
+                           'fact
+                           '((tags (overlap-second))
+                             (value "ushers"))))
+       (selection
+        (memory-store-select
+         store
+         '("he" "she" "hers" "his" "she" "")
+         '(retrieval-policy
+           (weights ((recency 0) (importance 0) (relevance 1)))
+           (cutoff 0)
+           (limit 2))
+         '(retrieval-context
+           (scope project)
+           (trust local)
+           (allowed-scopes (project))
+           (logical-clock 2))))
+       (first-candidate
+        (candidate-for-id selection (memory-record-id first)))
+       (second-candidate
+        (candidate-for-id selection (memory-record-id second))))
+  ;; "she" reaches "he" through a failure/output link, "hers" overlaps it,
+  ;; the duplicate "she" retains multiplicity, and the empty term matches.
+  (test-equal
+   'multi-pattern-overlap-first-score
+   5
+   (memory-record-field-value first-candidate 'score #f))
+  (test-equal
+   'multi-pattern-overlap-second-generation
+   5
+   (memory-record-field-value second-candidate 'score #f))))
 
 ;;;; Live projection applies to every store read surface
 
