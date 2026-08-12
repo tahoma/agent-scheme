@@ -470,7 +470,8 @@
           (error "consent-number-owned-value expected a canonical number"
                  datum)))
 
-    (define snapshot-decimal-digits "0123456789")
+;; Decimal digit alphabet used by canonical numeric snapshots.
+(define snapshot-decimal-digits "0123456789")
 
     (define (canonical-number-exactness-character exactness)
       "Return the stable representation character for canonical EXACTNESS."

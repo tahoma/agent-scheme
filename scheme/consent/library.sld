@@ -763,7 +763,7 @@
              (library-symbol-eq? (consent-number-exactness value) 'exact)
              (>= (consent-number-value value) 0))
         (consent-number-value value))
-       (else
+         (else
         (eval-error
          (string-append description
                         " must be an exact non-negative integer")
@@ -4504,6 +4504,71 @@ host"
     (define native-preserved-owner-libraries
       '((consent datum)))
 
+    ;; The datum owner normally receives its heap and object records verbatim,
+    ;; but explicit host adapters, indexes, lengths, and callback slots cross a
+    ;; different part of the same binding.  Each list below names the policy
+    ;; for successive arguments; omitted bindings remain wholly preserved.
+    (define native-owner-argument-policies
+      '((((consent datum)
+          (consent-datum-heap-mutation-hook-set! preserve callback)
+          (call-with-consent-datum-object-map callback)
+          (consent-call-with-datum-construction preserve callback)
+          (consent-datum-string-from-host preserve convert)
+          (consent-datum-make-string preserve convert convert)
+          (consent-datum-string-copy-range
+           preserve preserve convert convert)
+          (consent-datum-string-ref-host preserve convert)
+          (consent-datum-string-set-host!
+           preserve preserve convert convert)
+          (consent-datum-vector-from-host preserve convert)
+          (consent-datum-vector-from-host-elements preserve convert)
+          (consent-datum-make-vector preserve convert preserve)
+          (consent-datum-vector-ref preserve convert)
+          (consent-datum-vector-set! preserve preserve convert preserve)
+          (consent-datum-bytevector-from-host preserve convert)
+          (consent-datum-make-bytevector preserve convert convert)
+          (consent-datum-bytevector-u8-ref preserve convert)
+          (consent-datum-bytevector-u8-set!
+           preserve preserve convert convert)
+          (consent-datum-import
+           preserve preserve callback callback callback)
+          (consent-datum-import-with-node-count
+           preserve preserve callback callback)
+          (consent-datum-export preserve callback callback callback)))))
+
+    ;; Owner results retain heap/object identity unless a binding explicitly
+    ;; publishes a Scheme scalar or host graph.  Counted import is mixed: its
+    ;; root and invalid leaf retain identity while count/status are converted.
+    (define native-owner-result-policies
+      '((((consent datum)
+          (consent-datum-heap? consent)
+          (consent-datum-heap-id consent)
+          (consent-datum-heap-generation consent)
+          (consent-datum-object? consent)
+          (consent-datum-object-kind consent)
+          (consent-datum-object-heap-id consent)
+          (consent-datum-object-id consent)
+          (consent-datum-object-generation consent)
+          (consent-datum-object-revision consent)
+          (consent-datum-object-mutable? consent)
+          (consent-datum-object-map-probe-count consent)
+          (consent-datum-same? consent)
+          (consent-datum-pair? consent)
+          (consent-datum-string? consent)
+          (consent-datum-string->host consent)
+          (consent-datum-string-length consent)
+          (consent-datum-string-ref-host consent)
+          (consent-datum-vector? consent)
+          (consent-datum-vector->host consent)
+          (consent-datum-vector-length consent)
+          (consent-datum-bytevector? consent)
+          (consent-datum-bytevector->host consent)
+          (consent-datum-bytevector-length consent)
+          (consent-datum-bytevector-u8-ref consent)
+          (consent-datum-import-with-node-count
+           preserve consent consent preserve)
+          (consent-datum-export consent)))))
+
     ;; Some internal-library exports operate on reader-owned Consent datums
     ;; whose
     ;; identity must survive the native call boundary intact: source-metadata
@@ -4543,6 +4608,23 @@ host"
           consent-call-native-library
           consent-apply-callable))
         (((consent runtime)
+          make-consent-error-object
+          identifier?
+          identifier-name
+          consent-unspecified?
+          consent-eof-object?
+          consent-port?
+          consent-port-medium
+          consent-port-open?
+          environment-specifier?
+          consent-primitive-procedure?
+          primitive-procedure-name
+          consent-parameter?
+          consent-procedure?
+          continuation?
+          consent-error-object?
+          consent-error-object-message
+          consent-error-object-irritants
           primitive-procedure-documentation
           set-primitive-procedure-documentation!))
         (((consent macro) consent-syntax-source))
@@ -4568,12 +4650,19 @@ host"
           consent-number-radix
           consent-number-kind
           consent-number-value
+          consent-number-representation-snapshot
+          consent-number-representation-snapshot-outer
+          consent-outer-representation-kind
           consent-number-zero?
           consent-number-negative?
           consent-number-abs
           consent-number->external
           consent-character?
-          consent-character-code))))
+          consent-character-code
+          consent-record-type?
+          consent-record-type-name
+          consent-record?
+          consent-record-type))))
 
     ;; Representation APIs return identity-bearing values whose exact symbol
     ;; table or container provenance is part of their contract. The general
@@ -4869,6 +4958,79 @@ host"
             (native-binding-policy-member?
              native-core-compound-borrow-bindings library-key name)))))))
 
+    (define (native-owner-argument-policy-list library-key name)
+      "Return positional owner policies for NAME, or #f when uniform."
+      (let library-loop ((libraries native-owner-argument-policies))
+        (if (null? libraries)
+            #f
+            (let ((entry (car libraries)))
+              (if (library-datum-equal? (caar entry) library-key)
+                  (let binding-loop ((bindings (cdar entry)))
+                    (cond
+                     ((null? bindings) #f)
+                     ((library-symbol-eq? (caar bindings) name)
+                      (cdar bindings))
+                     (else (binding-loop (cdr bindings)))))
+                  (library-loop (cdr libraries)))))))
+
+    (define (native-owner-result-policy-list library-key name)
+      "Return positional owner result policies for NAME, or #f."
+      (let library-loop ((libraries native-owner-result-policies))
+        (if (null? libraries)
+            #f
+            (let ((entry (car libraries)))
+              (if (library-datum-equal? (caar entry) library-key)
+                  (let binding-loop ((bindings (cdar entry)))
+                    (cond
+                     ((null? bindings) #f)
+                     ((library-symbol-eq? (caar bindings) name)
+                      (cdar bindings))
+                     (else (binding-loop (cdr bindings)))))
+                  (library-loop (cdr libraries)))))))
+
+    (define (native-binding-argument/explicit-policy
+             policy library-key name argument context)
+      "Bridge ARGUMENT according to explicit positional POLICY."
+      (cond
+       ((library-symbol-eq? policy 'preserve) argument)
+       ((and (library-symbol-eq? policy 'callback)
+             (native-interpreted-callable? argument))
+        (native-callback-shim argument context #t))
+       (else
+        (native-argument-value-with-policy
+         argument
+         context
+         ;; A positional `convert' slot explicitly names a host adapter input;
+         ;; its compound value may therefore use this call-scoped bridge.
+         #t))))
+
+    (define (native-binding-arguments library-key name arguments context)
+      "Bridge ARGUMENTS, honoring positional datum-owner policies."
+      (let ((policies
+             (native-owner-argument-policy-list library-key name)))
+        (if (not policies)
+            (map
+             (lambda (argument)
+               (native-binding-argument
+                library-key name argument context))
+             arguments)
+            (let loop ((rest arguments)
+                       (remaining policies)
+                       (result '()))
+              (if (null? rest)
+                  (reverse result)
+                  (let ((policy
+                         (if (null? remaining)
+                             'preserve
+                             (car remaining))))
+                    (loop
+                     (cdr rest)
+                     (if (null? remaining) '() (cdr remaining))
+                     (cons
+                      (native-binding-argument/explicit-policy
+                       policy library-key name (car rest) context)
+                      result))))))))
+
     (define (native-binding-result library-key name value)
       "Bridge native VALUE back for NAME in LIBRARY-KEY."
       (let ((policy (native-binding-result-policy library-key name)))
@@ -4881,22 +5043,46 @@ host"
     (define (native-binding-results
              library-key name bridge results)
       "Bridge one native binding's RESULTS through its per-call BRIDGE."
-      (let ((policy (native-binding-result-policy library-key name)))
-        (cond
-         ((library-symbol-eq? policy 'consent)
-          (native-converted-results-value
-           (native-bridge-native-values->owned bridge results)))
-         (else
-          ;; Preserved and explicitly host-facing results do not enter the
-          ;; owned heap, but mutations to converted arguments still do.
-          (native-bridge-native-values->owned bridge '())
-          (native-converted-results-value
-           (map
-            (lambda (value)
-              (if (library-symbol-eq? policy 'preserve)
-                  value
-                  (native-callback-result value #t)))
-            results))))))
+      (let ((owner-policies
+             (native-owner-result-policy-list library-key name))
+            (policy (native-binding-result-policy library-key name)))
+        (if owner-policies
+            (let loop ((rest results)
+                       (remaining owner-policies)
+                       (converted '()))
+              (if (null? rest)
+                  (begin
+                    (native-bridge-native-values->owned bridge '())
+                    (native-converted-results-value (reverse converted)))
+                  (let ((item-policy
+                         (if (null? remaining)
+                             'preserve
+                             (car remaining))))
+                    (loop
+                     (cdr rest)
+                     (if (null? remaining) '() (cdr remaining))
+                     (cons
+                      (if (library-symbol-eq? item-policy 'preserve)
+                          (car rest)
+                          (car
+                           (native-bridge-native-values->owned
+                            bridge (list (car rest)))))
+                      converted)))))
+            (cond
+             ((library-symbol-eq? policy 'consent)
+              (native-converted-results-value
+               (native-bridge-native-values->owned bridge results)))
+             (else
+              ;; Preserved and explicitly host-facing results do not enter the
+              ;; owned heap, but mutations to converted arguments still do.
+              (native-bridge-native-values->owned bridge '())
+              (native-converted-results-value
+               (map
+                (lambda (value)
+                  (if (library-symbol-eq? policy 'preserve)
+                      value
+                      (native-callback-result value #t)))
+                results)))))))
 
     (define (consent-apply-callable value arguments)
       "Apply callable VALUE to ARGUMENTS across the native import boundary."
@@ -5294,13 +5480,8 @@ required")))
               context
               (lambda (bridge)
                 (apply value
-                       (map (lambda (argument)
-                              (native-binding-argument
-                               library-key
-                               name
-                               argument
-                               context))
-                            arguments)))
+                       (native-binding-arguments
+                        library-key name arguments context)))
               (lambda (bridge results)
                 (native-binding-results
                  library-key name bridge results))))

@@ -47,43 +47,55 @@
       (key=? store-key=?)
       (valid-key? store-valid-key?))
 
-    (define (memory-key-sidecar-live-key sidecar)
+(define (memory-key-sidecar-live-key sidecar)
+  "Return SIDECAR's detached live-key descriptor."
       (vector-ref sidecar 0))
 
-    (define (memory-key-sidecar-id-key sidecar)
+(define (memory-key-sidecar-id-key sidecar)
+  "Return SIDECAR's detached id descriptor."
       (vector-ref sidecar 1))
 
-    (define (memory-key-sidecar-access-target-key sidecar)
+(define (memory-key-sidecar-access-target-key sidecar)
+  "Return SIDECAR's detached access-target descriptor."
       (vector-ref sidecar 2))
 
-    (define (memory-key-sidecar-kind-key sidecar)
+(define (memory-key-sidecar-kind-key sidecar)
+  "Return SIDECAR's detached kind descriptor."
       (vector-ref sidecar 3))
 
-    (define (memory-key-sidecar-tag-keys sidecar)
+(define (memory-key-sidecar-tag-keys sidecar)
+  "Return SIDECAR's detached tag descriptor vector."
       (vector-ref sidecar 4))
 
-    (define (memory-key-sidecar-flags sidecar)
+(define (memory-key-sidecar-flags sidecar)
+  "Return SIDECAR's immutable classification flags."
       (vector-ref sidecar 5))
 
-    (define (memory-live-projection-sidecar projection)
+(define (memory-live-projection-sidecar projection)
+  "Return live PROJECTION's append-time sidecar."
       (vector-ref projection 0))
 
-    (define (memory-live-projection-access-sequence projection)
+(define (memory-live-projection-access-sequence projection)
+  "Return live PROJECTION's latest access sequence."
       (vector-ref projection 1))
 
-    (define memory-sidecar-redaction-flag 4)
+;; Bit marking source-classified restricted record content.
+(define memory-sidecar-redaction-flag 4)
 
-    (define (memory-key-sidecar-flag? sidecar flag)
+(define (memory-key-sidecar-flag? sidecar flag)
+  "Return #t when SIDECAR contains FLAG."
       (not (= (modulo (quotient
                        (memory-key-sidecar-flags sidecar)
                        flag)
                       2)
               0)))
 
-    (define (memory-key-sidecar-redaction? sidecar)
+(define (memory-key-sidecar-redaction? sidecar)
+  "Return #t when SIDECAR marks restricted content."
       (memory-key-sidecar-flag? sidecar memory-sidecar-redaction-flag))
 
-    (define (memory-key-vector? value scope valid-key?)
+(define (memory-key-vector? value scope valid-key?)
+  "Return #t when VALUE is a valid descriptor vector for SCOPE."
       (and
        (vector? value)
        (let loop ((index 0))
@@ -95,7 +107,8 @@
              (string=? scope (vector-ref key 0))
              (loop (+ index 1))))))))
 
-    (define (memory-key-sidecar? value valid-key?)
+(define (memory-key-sidecar? value valid-key?)
+  "Return #t when VALUE is a valid detached query sidecar."
       (and
        (vector? value)
        (= (vector-length value) 6)
@@ -396,43 +409,56 @@
     ;; shared rather than copied into every state.  Terminal outputs remain
     ;; direct-only; output links and generation stamps prevent inherited
     ;; matches from producing quadratic storage or repeated reporting.
-    (define (make-memory-relevance-text-node)
+(define (make-memory-relevance-text-node)
+  "Return one empty private multi-pattern automaton node."
       (vector (make-avl-tree char<?) #f #f '() #f 0))
 
-    (define (relevance-text-node-direct node)
+(define (relevance-text-node-direct node)
+  "Return NODE's direct character transitions."
       (vector-ref node 0))
 
-    (define (set-relevance-text-node-direct! node transitions)
+(define (set-relevance-text-node-direct! node transitions)
+  "Set NODE's direct character TRANSITIONS."
       (vector-set! node 0 transitions))
 
-    (define (relevance-text-node-goto node)
+(define (relevance-text-node-goto node)
+  "Return NODE's completed character transitions."
       (vector-ref node 1))
 
-    (define (set-relevance-text-node-goto! node transitions)
+(define (set-relevance-text-node-goto! node transitions)
+  "Set NODE's completed character TRANSITIONS."
       (vector-set! node 1 transitions))
 
-    (define (relevance-text-node-failure node)
+(define (relevance-text-node-failure node)
+  "Return NODE's failure transition."
       (vector-ref node 2))
 
-    (define (set-relevance-text-node-failure! node failure)
+(define (set-relevance-text-node-failure! node failure)
+  "Set NODE's FAILURE transition."
       (vector-set! node 2 failure))
 
-    (define (relevance-text-node-outputs node)
+(define (relevance-text-node-outputs node)
+  "Return NODE's direct terminal group identifiers."
       (vector-ref node 3))
 
-    (define (set-relevance-text-node-outputs! node outputs)
+(define (set-relevance-text-node-outputs! node outputs)
+  "Set NODE's direct terminal group OUTPUTS."
       (vector-set! node 3 outputs))
 
-    (define (relevance-text-node-output-link node)
+(define (relevance-text-node-output-link node)
+  "Return NODE's nearest terminal failure ancestor."
       (vector-ref node 4))
 
-    (define (set-relevance-text-node-output-link! node output-link)
+(define (set-relevance-text-node-output-link! node output-link)
+  "Set NODE's terminal failure OUTPUT-LINK."
       (vector-set! node 4 output-link))
 
-    (define (relevance-text-node-generation node)
+(define (relevance-text-node-generation node)
+  "Return NODE's most recent record-scan generation."
       (vector-ref node 5))
 
-    (define (set-relevance-text-node-generation! node generation)
+(define (set-relevance-text-node-generation! node generation)
+  "Set NODE's record-scan GENERATION."
       (vector-set! node 5 generation))
 
     (define (relevance-text-add-pattern! root text group)
@@ -893,7 +919,8 @@
                 (symbol->string (car scopes)))))
              (loop (+ index 1) (cdr scopes))))))))
 
-    (define-record-type <memory-relevance-index>
+;; Private grouped key and text indexes used by one select query.
+(define-record-type <memory-relevance-index>
       (make-memory-relevance-index
        indexes text-root multiplicities marks count generation)
       memory-relevance-index?

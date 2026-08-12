@@ -3674,9 +3674,11 @@ tuple."
         (effects state-read))
       (vector-ref (context-source-copies context) 0))
 
-    (define runtime-host-identity-compatibility-limit 64)
+;; Maximum foreign identities admitted without hash-backed identity maps.
+(define runtime-host-identity-compatibility-limit 64)
 
-    (define runtime-identity-map-absent
+;; Private sentinel distinguishing an absent identity-map association.
+(define runtime-identity-map-absent
       (vector 'runtime-identity-map-absent))
 
     (define (make-runtime-identity-map)

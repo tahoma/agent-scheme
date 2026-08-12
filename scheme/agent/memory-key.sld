@@ -57,7 +57,6 @@
               consent-identity-map-ref
               consent-identity-map-set!)
         (only (consent reader)
-              consent-number?
               consent-number-representation-snapshot
               consent-outer-representation-kind)
         (only (consent symbol)
@@ -79,9 +78,11 @@
   (data grow-vector-data set-grow-vector-data!))
 
 (define (make-grow-vector)
+  "Return an empty private growable vector."
   (make-grow-vector-record 0 (make-vector 16 #f)))
 
 (define (grow-vector-push! grow value)
+  "Append VALUE to GROW and return its assigned index."
   (let ((length (grow-vector-length grow))
         (data (grow-vector-data grow)))
     (if (= length (vector-length data))
@@ -98,12 +99,15 @@
     length))
 
 (define (grow-vector-set! grow index value)
+  "Set GROW's element at INDEX to VALUE."
   (vector-set! (grow-vector-data grow) index value))
 
 (define (grow-vector-ref grow index)
+  "Return GROW's element at INDEX."
   (vector-ref (grow-vector-data grow) index))
 
 (define (grow-vector->vector grow)
+  "Return GROW's populated prefix as a fixed vector."
   (let* ((length (grow-vector-length grow))
          (result (make-vector length #f))
          (data (grow-vector-data grow)))
@@ -114,6 +118,7 @@
             (copy (+ index 1)))))
     result))
 
+;; Private two-list FIFO queue used by iterative graph traversals.
 (define-record-type <queue>
   (make-queue-record front back)
   queue?
@@ -121,16 +126,20 @@
   (back queue-back set-queue-back!))
 
 (define (make-queue)
+  "Return an empty private FIFO queue."
   (make-queue-record '() '()))
 
 (define (queue-empty? queue)
+  "Return #t when QUEUE has no pending values."
   (and (null? (queue-front queue))
        (null? (queue-back queue))))
 
 (define (enqueue! queue value)
+  "Append VALUE to QUEUE."
   (set-queue-back! queue (cons value (queue-back queue))))
 
 (define (dequeue! queue)
+  "Remove and return QUEUE's oldest value."
   (if (null? (queue-front queue))
       (begin
         (set-queue-front! queue (reverse (queue-back queue)))
@@ -144,41 +153,74 @@
 ;; Labels are immutable-by-convention private vectors.  Pair/vector identity
 ;; never appears in a label.  Vector arity is represented by the fixed-rank
 ;; VECTOR-SLOT chain and VECTOR-END, not by an arbitrary transition alphabet.
+;; Numeric ranks for exact observable term-graph labels.
 (define label-null 0)
+;; Boolean label rank.
 (define label-boolean 1)
+;; Number label rank.
 (define label-number 2)
+;; Local-character label rank.
 (define label-local-character 3)
+;; Outer-character label rank.
 (define label-outer-character 4)
+;; Direct-host-character label rank.
 (define label-host-character 5)
+;; Local-symbol label rank.
 (define label-local-symbol 6)
+;; Outer-symbol label rank.
 (define label-outer-symbol 7)
+;; Direct-host-symbol label rank.
 (define label-host-symbol 8)
+;; Local-string label rank.
 (define label-local-string 9)
+;; Outer-string label rank.
 (define label-outer-string 10)
+;; Direct-host-string label rank.
 (define label-host-string 11)
+;; Local-bytevector label rank.
 (define label-local-bytevector 12)
+;; Outer-bytevector label rank.
 (define label-outer-bytevector 13)
+;; Direct-host-bytevector label rank.
 (define label-host-bytevector 14)
+;; Local-pair label rank.
 (define label-local-pair 15)
+;; Outer-pair label rank.
 (define label-outer-pair 16)
+;; Direct-host-pair label rank.
 (define label-host-pair 17)
+;; Local-vector-root label rank.
 (define label-local-vector-root 18)
+;; Outer-vector-root label rank.
 (define label-outer-vector-root 19)
+;; Direct-host-vector-root label rank.
 (define label-host-vector-root 20)
+;; Lowered vector-slot label rank.
 (define label-vector-slot 21)
+;; Lowered vector-end label rank.
 (define label-vector-end 22)
 
 ;; The overlay returns one of these exact objects and never allocates.  The
 ;; default direct-host implementation returns DIRECT-REPRESENTATION-MARKER.
+;; Distinct representation markers supplied to the owner overlay.
 (define outer-pair-marker (vector #f))
+;; Outer-vector marker.
 (define outer-vector-marker (vector #f))
+;; Outer-string marker.
 (define outer-string-marker (vector #f))
+;; Outer-bytevector marker.
 (define outer-bytevector-marker (vector #f))
+;; Outer-character marker.
 (define outer-character-marker (vector #f))
+;; Outer-symbol marker.
 (define outer-symbol-marker (vector #f))
+;; Outer-number marker.
 (define outer-number-marker (vector #f))
+;; Private duplicate-owner marker.
 (define private-representation-marker (vector #f))
+;; Direct-host representation marker.
 (define direct-representation-marker (vector #f))
+;; Ordered marker vector passed to the overlay primitive.
 (define outer-representation-markers
   (vector outer-pair-marker
           outer-vector-marker
@@ -191,10 +233,12 @@
           direct-representation-marker))
 
 (define (outer-representation-kind value)
+  "Return VALUE's owner-domain representation marker."
   (consent-outer-representation-kind
    value outer-representation-markers))
 
 (define (bytevector->private-vector value)
+  "Copy host bytevector VALUE into a private integer vector."
   (let* ((length (bytevector-length value))
          (copy (make-vector length 0)))
     (let loop ((index 0))
@@ -205,6 +249,7 @@
     copy))
 
 (define (owned-string->private-string value)
+  "Copy owned string VALUE into a private host string."
   (let* ((length (consent-datum-string-length value))
          (copy (make-string length #\space)))
     (let loop ((index 0))
@@ -217,6 +262,7 @@
     copy))
 
 (define (owned-bytevector->private-vector value)
+  "Copy owned bytevector VALUE into a private integer vector."
   (let* ((length (consent-datum-bytevector-length value))
          (copy (make-vector length 0)))
     (let loop ((index 0))
@@ -228,56 +274,86 @@
     copy))
 
 (define (memory-pair? value)
+  "Return #t when VALUE is an owned or host pair."
   (or (consent-datum-pair? value) (pair? value)))
 
 (define (memory-pair-car value)
-  (if (consent-datum-pair? value)
-      (consent-datum-car value)
-      (car value)))
+  "Return the car of owned or host pair VALUE."
+  (if (eq? (outer-representation-kind value) outer-pair-marker)
+      (car value)
+      (if (consent-datum-pair? value)
+          (consent-datum-car value)
+          (car value))))
 
 (define (memory-pair-cdr value)
-  (if (consent-datum-pair? value)
-      (consent-datum-cdr value)
-      (cdr value)))
+  "Return the cdr of owned or host pair VALUE."
+  (if (eq? (outer-representation-kind value) outer-pair-marker)
+      (cdr value)
+      (if (consent-datum-pair? value)
+          (consent-datum-cdr value)
+          (cdr value))))
 
 (define (memory-vector? value)
+  "Return #t when VALUE is an owned or host vector."
   (or (consent-datum-vector? value) (vector? value)))
 
 (define (memory-vector-length value)
-  (if (consent-datum-vector? value)
-      (consent-datum-vector-length value)
-      (vector-length value)))
+  "Return the length of owned or host vector VALUE."
+  (if (eq? (outer-representation-kind value) outer-vector-marker)
+      (vector-length value)
+      (if (consent-datum-vector? value)
+          (consent-datum-vector-length value)
+          (vector-length value))))
 
 (define (memory-vector-ref value index)
-  (if (consent-datum-vector? value)
-      (consent-datum-vector-ref value index)
-      (vector-ref value index)))
+  "Return owned or host vector VALUE's element at INDEX."
+  (if (eq? (outer-representation-kind value) outer-vector-marker)
+      (vector-ref value index)
+      (if (consent-datum-vector? value)
+          (consent-datum-vector-ref value index)
+          (vector-ref value index))))
 
+;; Numeric representation ranks distinguish canonical and host atoms.
 (define number-representation-owned 0)
+;; Direct-host numeric representation rank.
 (define number-representation-host 1)
 
 ;; Complete ordered-key kinds.  Distinct outer/direct fast kinds preserve the
 ;; same ownership distinction as the general quotient without paying the
 ;; quotient cost on ordinary public literals.
+;; Detached memory-key representation ranks.
 (define memory-key-outer-symbol-kind 0)
+;; Direct-host symbol key rank.
 (define memory-key-direct-symbol-kind 1)
+;; Shared empty-list key rank.
 (define memory-key-common-list-kind 2)
+;; Outer fast-list key rank.
 (define memory-key-outer-list-kind 3)
+;; Direct-host fast-list key rank.
 (define memory-key-direct-list-kind 4)
+;; Outer string key rank.
 (define memory-key-outer-string-kind 5)
+;; Direct-host string key rank.
 (define memory-key-direct-string-kind 6)
+;; General canonical quotient key rank.
 (define memory-key-general-kind 7)
+;; Fast-list symbol token rank.
 (define memory-list-symbol-part 0)
+;; Fast-list integer token rank.
 (define memory-list-integer-part 1)
 
 ;; Fast lists cover the small identifier tuples used by ordinary memory APIs.
 ;; Larger spines or scalar payloads route to identity-aware graph normalization
 ;; so this convenience path never duplicates unbounded content work.
+;; Maximum number of tokens admitted by the fast-list path.
 (define memory-fast-list-maximum-parts 16)
+;; Maximum characters in one fast-list token.
 (define memory-fast-list-maximum-token-size 128)
+;; Maximum aggregate characters in one fast-list payload.
 (define memory-fast-list-maximum-content-size 512)
 
 (define (owned-number-descriptor snapshot)
+  "Return an owned-number descriptor containing SNAPSHOT."
   (vector number-representation-owned
           snapshot))
 
@@ -292,6 +368,7 @@
            (string-copy text)))))
 
 (define (host-number-descriptor value)
+  "Return a detached exact descriptor for raw host number VALUE."
   (if (not (= value value))
       (error "memory key rejects a raw host NaN" value))
   (let* ((exactness (if (exact? value) 0 1))
@@ -328,6 +405,7 @@
              (loop next-slow next-fast)))))))
 
 (define (fast-list-token-within-bounds? count content-size token)
+  "Return #t when TOKEN fits the fast-list payload envelope."
   (let ((token-size (string-length token)))
     (and (< count memory-fast-list-maximum-parts)
          (<= token-size memory-fast-list-maximum-token-size)
@@ -363,22 +441,21 @@
                       (+ count 1)
                       (+ content-size (string-length name)))
                 #f)))
-         ((or (consent-number? (car parts))
-              (number? (car parts)))
+         (else
           (let* ((element (car parts))
                  (element-representation
                   (outer-representation-kind element))
                  (snapshot
-                  (and (or (consent-number? element)
-                           (eq? element-representation outer-number-marker))
-                       (consent-number-representation-snapshot element)))
+                  (consent-number-representation-snapshot element))
                  (canonical-nonnegative-integer?
                   (and snapshot
                        (>= (string-length snapshot) 4)
                        (char=? (string-ref snapshot 1) #\I)
                        (char=? (string-ref snapshot 2) #\e)
                        (not (char=? (string-ref snapshot 3) #\-)))))
-            (cond
+            (if (not (or snapshot (number? element)))
+                #f
+                (cond
              ((and canonical-nonnegative-integer?
                    (fast-list-token-within-bounds?
                     count content-size snapshot)
@@ -411,8 +488,7 @@
                      (+ count 1)
                      (+ content-size (string-length text)))
                     #f)))
-             (else #f))))
-         (else #f)))))
+                 (else #f)))))))))
 
 ;;;; Detached ordered-key validation and comparison.
 
@@ -423,6 +499,7 @@
    (else (error "invalid private memory-key token" token))))
 
 (define (flat-token<? left right)
+  "Return #t when private flat token LEFT orders before RIGHT."
   (let ((left-rank (flat-token-rank left))
         (right-rank (flat-token-rank right)))
     (cond
@@ -432,6 +509,7 @@
      (else (string<? left right)))))
 
 (define (flat-vector? value)
+  "Return #t when VALUE is a validated flat descriptor vector."
   (and
    (vector? value)
    (let loop ((index 0))
@@ -443,6 +521,7 @@
           (loop (+ index 1)))))))
 
 (define (flat-vector<? left right)
+  "Return #t when flat vector LEFT orders before RIGHT."
   (if (eq? left right)
       #f
       (let ((left-length (vector-length left))
@@ -460,6 +539,7 @@
            (else (loop (+ index 1))))))))
 
 (define (flat-vector=? left right)
+  "Return #t when flat vectors LEFT and RIGHT have equal tokens."
   (or
    (eq? left right)
    (let ((length (vector-length left)))
@@ -479,11 +559,13 @@
                (loop (+ index 1))))))))))
 
 (define (list-key-kind? kind)
+  "Return #t when KIND denotes a detached fast-list key."
   (or (= kind memory-key-common-list-kind)
       (= kind memory-key-outer-list-kind)
       (= kind memory-key-direct-list-kind)))
 
 (define (list-payload? value)
+  "Return #t when VALUE is a validated fast-list payload."
   (and
    (vector? value)
    (= (modulo (vector-length value) 2) 0)
@@ -500,6 +582,7 @@
           (loop (+ index 2)))))))
 
 (define (list-payload<? left right)
+  "Return #t when fast-list payload LEFT orders before RIGHT."
   (if (eq? left right)
       #f
       (let ((left-length (vector-length left))
@@ -519,6 +602,7 @@
            (else (loop (+ index 2))))))))
 
 (define (list-payload=? left right)
+  "Return #t when fast-list payloads LEFT and RIGHT are equal."
   (or
    (eq? left right)
    (let ((length (vector-length left)))
@@ -694,6 +778,7 @@
          (vector-ref key 2))))
 
 (define (number-descriptor<? left right)
+  "Return #t when detached number LEFT orders before RIGHT."
   (let ((left-representation (vector-ref left 0))
         (right-representation (vector-ref right 0)))
     (cond
@@ -716,55 +801,62 @@
        "persistent memory key rejects private or raw interpreted datum"
        value)))
 
-(define (atom-label value outer-kind persistent?)
-  (validate-persistent-representation! value outer-kind persistent?)
+(define (number-atom-label value)
+  "Return VALUE's detached numeric label, or #f for a nonnumber."
   (let ((number-snapshot
-         (and (or (consent-number? value)
-                  (eq? outer-kind outer-number-marker)
-                  (number? value))
-              (consent-number-representation-snapshot value))))
+         (consent-number-representation-snapshot value)))
     (cond
      (number-snapshot
       (vector label-number
               (owned-number-descriptor number-snapshot)))
      ((number? value)
       (vector label-number (host-number-descriptor value)))
+     (else #f))))
+
+(define (atom-label value outer-kind persistent?)
+  "Return VALUE's exact observable atom label."
+  (validate-persistent-representation! value outer-kind persistent?)
+  (let ((number-label (number-atom-label value)))
+    (cond
+     (number-label number-label)
      ((null? value) (vector label-null))
      ((boolean? value)
       (vector label-boolean (if value 1 0)))
-     ((consent-character? value)
-      (vector label-local-character (consent-character-code value)))
      ((eq? outer-kind outer-character-marker)
       (vector label-outer-character (char->integer value)))
+     ((consent-character? value)
+      (vector label-local-character (consent-character-code value)))
      ((char? value)
       (vector label-host-character (char->integer value)))
+     ((eq? outer-kind outer-symbol-marker)
+      (vector label-outer-symbol (string-copy (symbol->string value))))
      ((consent-symbol? value)
       (vector label-local-symbol
               (string-copy (consent-symbol-name value))))
-     ((eq? outer-kind outer-symbol-marker)
-      (vector label-outer-symbol (string-copy (symbol->string value))))
      ((symbol? value)
       (vector label-host-symbol (string-copy (symbol->string value))))
-     ((consent-datum-string? value)
-      (vector label-local-string (owned-string->private-string value)))
      ((eq? outer-kind outer-string-marker)
       (vector label-outer-string (string-copy value)))
+     ((consent-datum-string? value)
+      (vector label-local-string (owned-string->private-string value)))
      ((string? value)
       (vector label-host-string (string-copy value)))
-     ((consent-datum-bytevector? value)
-      (vector label-local-bytevector
-              (owned-bytevector->private-vector value)))
      ((eq? outer-kind outer-bytevector-marker)
       (vector label-outer-bytevector
               (bytevector->private-vector value)))
+     ((consent-datum-bytevector? value)
+      (vector label-local-bytevector
+              (owned-bytevector->private-vector value)))
      ((bytevector? value)
       (vector label-host-bytevector (bytevector->private-vector value)))
      (else (error "memory key contains a non-readable atom" value)))))
 
 (define (number-label? label)
+  "Return #t when LABEL describes a numeric atom."
   (= (vector-ref label 0) label-number))
 
 (define (integer-vector<? left right)
+  "Return #t when integer vector LEFT orders before RIGHT."
   (let ((left-length (vector-length left))
         (right-length (vector-length right)))
     (let loop ((index 0))
@@ -776,6 +868,7 @@
        (else (loop (+ index 1)))))))
 
 (define (label<? left right)
+  "Return #t when observable label LEFT orders before RIGHT."
   (let ((left-tag (vector-ref left 0))
         (right-tag (vector-ref right 0)))
     (cond
@@ -811,6 +904,7 @@
                         (vector-ref right 1))))))
 
 (define (label=? left right)
+  "Return #t when observable labels LEFT and RIGHT are equal."
   (and (not (label<? left right))
        (not (label<? right left))))
 
@@ -821,6 +915,7 @@
 ;; edge 0 to its element and edge 1 to the next slot/end.  Every other node has
 ;; fixed rank zero or two.
 (define (datum->term-graph root persistent?)
+  "Lower ROOT to a finite fixed-rank deterministic term graph."
   (let ((absent (vector 'absent))
         (owned-objects #f)
         (host-objects #f)
@@ -829,11 +924,13 @@
         (edge-1 (make-grow-vector))
         (pending '()))
     (define (add-node! label first second)
+      "Append one labelled graph node and return its dense identifier."
       (let ((id (grow-vector-push! labels label)))
         (grow-vector-push! edge-0 first)
         (grow-vector-push! edge-1 second)
         id))
     (define (object-ref value)
+      "Return VALUE's discovered graph node, or #f when absent."
       (if (consent-datum-object? value)
           (if owned-objects
               (consent-datum-object-map-ref owned-objects value absent)
@@ -857,6 +954,7 @@
                   (set! host-objects (consent-make-identity-map))))
             (consent-identity-map-set! host-objects value id))))
     (define (compound-id value label)
+      "Return the memoized or newly allocated node for compound VALUE."
       (let ((known (object-ref value)))
         (if (eq? known absent)
             (let ((id (add-node! label -1 -1)))
@@ -865,22 +963,23 @@
               id)
             known)))
     (define (intern! value)
+      "Intern VALUE as one graph node and return its dense identifier."
       (let ((outer-kind (outer-representation-kind value)))
         (validate-persistent-representation!
          value outer-kind persistent?)
         (cond
+         ((eq? outer-kind outer-pair-marker)
+          (compound-id value (vector label-outer-pair)))
+         ((eq? outer-kind outer-vector-marker)
+          (compound-id value (vector label-outer-vector-root)))
          ((consent-datum-pair? value)
           (compound-id value (vector label-local-pair)))
          ((consent-datum-vector? value)
           (compound-id value (vector label-local-vector-root)))
          (else
           (cond
-           ((eq? outer-kind outer-pair-marker)
-            (compound-id value (vector label-outer-pair)))
            ((pair? value)
             (compound-id value (vector label-host-pair)))
-           ((eq? outer-kind outer-vector-marker)
-            (compound-id value (vector label-outer-vector-root)))
            ((vector? value)
             (compound-id value (vector label-host-vector-root)))
            ((or (consent-symbol? value)
@@ -924,6 +1023,7 @@
                     id)
                   known))))))))
     (define (make-vector-chain! value)
+      "Lower vector VALUE to fixed-rank slot and end nodes."
       (let ((end (add-node! (vector label-vector-end) -1 -1)))
         (let loop ((index (- (memory-vector-length value) 1)) (next end))
           (if (< index 0)
@@ -936,18 +1036,17 @@
     (dynamic-wind
      (lambda () #t)
      (lambda ()
-       (let ((root-kind (outer-representation-kind root)))
-         (if (or (consent-number? root)
-                 (eq? root-kind outer-number-marker)
-                 (number? root))
+       (let* ((root-kind (outer-representation-kind root))
+              (root-number-label (number-atom-label root)))
+         (if root-number-label
              ;; A scalar root has no identity-bearing edge.  Snapshot it
              ;; directly so canonical numbers remain usable on no-hash hosts;
              ;; nested/shared numbers still take the guarded identity cache.
              (begin
                (validate-persistent-representation!
-                root root-kind persistent?)
+               root root-kind persistent?)
                (vector 0
-                       (vector (atom-label root root-kind persistent?))
+                       (vector root-number-label)
                        (vector -1)
                        (vector -1)))
              (let ((root-id (intern! root)))
@@ -990,6 +1089,7 @@
 
 ;; The result is #(state-block block-head block-size block-count).
 (define (minimize-term-graph graph)
+  "Return GRAPH's coarsest label-respecting stable partition."
   (let* ((labels (vector-ref graph 1))
          (edge-0 (vector-ref graph 2))
          (edge-1 (vector-ref graph 3))
@@ -1009,11 +1109,13 @@
          (block-count 0)
          (work (make-queue)))
     (define (enqueue-block! block)
+      "Enqueue BLOCK once as a pending partition splitter."
       (if (not (vector-ref block-pending? block))
           (begin
             (vector-set! block-pending? block #t)
             (enqueue! work block))))
     (define (link-state! state block)
+      "Insert STATE into BLOCK's intrusive member list."
       (let ((head (vector-ref block-head block)))
         (vector-set! state-block state block)
         (vector-set! state-prev state -1)
@@ -1023,6 +1125,7 @@
         (vector-set! block-size block
                      (+ 1 (vector-ref block-size block)))))
     (define (detach-state! state block)
+      "Remove STATE from BLOCK's intrusive member list."
       (let ((previous (vector-ref state-prev state))
             (next (vector-ref state-next state)))
         (if (>= previous 0)
@@ -1032,12 +1135,14 @@
         (vector-set! state-prev state -1)
         (vector-set! state-next state -1)))
     (define (set-list-block! head block)
+      "Assign every member beginning at HEAD to BLOCK."
       (let loop ((state head))
         (if (>= state 0)
             (begin
               (vector-set! state-block state block)
               (loop (vector-ref state-next state))))))
     (define (split-by-predecessors! predecessors)
+      "Refine touched blocks by PREDECESSORS using smaller-half scheduling."
       (set! generation (+ generation 1))
       (let collect ((rest predecessors) (touched '()))
         (if (null? rest)
@@ -1185,6 +1290,7 @@
          (output-id 0)
          (root-block (vector-ref state-block root)))
     (define (target-id state)
+      "Return STATE's canonical quotient identifier."
       (if (< state 0)
           -1
           (let* ((block (vector-ref state-block state))
@@ -1197,6 +1303,7 @@
                   assigned)
                 known))))
     (define (emit-number! number)
+      "Append NUMBER's flat descriptor tokens."
       (let ((representation (vector-ref number 0)))
         (grow-vector-push! descriptor representation)
         (if (= representation number-representation-owned)
@@ -1206,6 +1313,7 @@
               (grow-vector-push! descriptor (vector-ref number 2))
               (grow-vector-push! descriptor (vector-ref number 3))))))
     (define (emit-label! label)
+      "Append observable LABEL's flat descriptor tokens."
       (let ((tag (vector-ref label 0)))
         (grow-vector-push! descriptor tag)
         (cond
@@ -1256,6 +1364,7 @@
     (grow-vector->vector descriptor)))
 
 (define (normalize-general-key value persistent?)
+  "Return VALUE's canonical general-key quotient descriptor."
   (let* ((graph (datum->term-graph value persistent?))
          (partition (minimize-term-graph graph)))
     (canonical-quotient graph partition)))
@@ -1299,25 +1408,10 @@
 
 (define (key-root-cacheable? key representation)
   "Return #t when a session may memoize KEY by object identity."
-  (or (consent-datum-object? key)
-      (consent-number? key)
-      (eq? representation outer-number-marker)
-      (number? key)
-      (consent-symbol? key)
-      (eq? representation outer-symbol-marker)
-      (symbol? key)
-      (consent-datum-string? key)
-      (eq? representation outer-string-marker)
-      (string? key)
-      (consent-datum-bytevector? key)
-      (eq? representation outer-bytevector-marker)
-      (bytevector? key)
-      (consent-datum-pair? key)
-      (eq? representation outer-pair-marker)
-      (pair? key)
-      (consent-datum-vector? key)
-      (eq? representation outer-vector-marker)
-      (vector? key)))
+  ;; Cache insertion happens only after normalization accepts KEY. R7RS
+  ;; requires `eq?' to be false whenever `eqv?' is false, so identity caching
+  ;; cannot merge distinct accepted scalar representations.
+  #t)
 
 (define (call-with-memory-index-key-session procedure)
   "Call PROCEDURE with a dynamic-extent durable key-preparation procedure."
@@ -1331,19 +1425,23 @@
     (effects allocation error))
   (let ((active? #f)
         (completed? #f)
+        (reentered? #f)
         (absent (vector 'absent))
         (owned-cache #f)
         (host-cache #f)
         (host-cache-alist '())
         (host-cache-alist-size 0))
+    ;; Maximum compatibility identities retained by one key session.
     (define nohash-cache-maximum-size 64)
     (define (host-cache-alist-ref key)
+      "Return nohash KEY's cached entry, or ABSENT."
       (let loop ((rest host-cache-alist))
         (cond
          ((null? rest) absent)
          ((eq? key (car (car rest))) (cdr (car rest)))
          (else (loop (cdr rest))))))
     (define (cache-ref key)
+      "Return KEY's session entry, or ABSENT when unprepared."
       (if (consent-datum-object? key)
           (if owned-cache
               (consent-datum-object-map-ref owned-cache key absent)
@@ -1376,12 +1474,14 @@
                   (set! host-cache-alist-size
                         (+ host-cache-alist-size 1)))))))
     (define (entry-descriptor entry scope-name)
+      "Return ENTRY's descriptor for SCOPE-NAME, or #f."
       (let loop ((rest (vector-ref entry 1)))
         (cond
          ((null? rest) #f)
          ((string=? scope-name (car (car rest))) (cdr (car rest)))
          (else (loop (cdr rest))))))
     (define (prepare scope key)
+      "Return one session-interned descriptor for SCOPE and KEY."
       (if (not active?)
           (error "memory key session preparer escaped its dynamic extent"))
       (let* ((scope-representation (outer-representation-kind scope))
@@ -1425,15 +1525,23 @@
                 descriptor)))))
     (dynamic-wind
      (lambda ()
+       ;; Never raise from a dynamic-wind before thunk.  Hosts differ in how
+       ;; much surrounding dynamic state has been restored when it signals.
        (if completed?
-           (error "memory key session continuation cannot reenter"))
-       (set! active? #t))
-     (lambda () (procedure prepare))
+           (set! reentered? #t)
+           (set! active? #t)))
+     (lambda ()
+       (let ((result (procedure prepare)))
+         (if reentered?
+             (error "memory key session continuation cannot reenter")
+             result)))
      (lambda ()
        (set! active? #f)
-       (set! completed? #t)
-       (if owned-cache
-           (consent-datum-object-map-release! owned-cache))))))
+       (if (not completed?)
+           (begin
+             (set! completed? #t)
+             (if owned-cache
+                 (consent-datum-object-map-release! owned-cache))))))))
 
 (define (memory-prepare-index-key scope key)
   "Return one detached durable ordered key for SCOPE and KEY."
