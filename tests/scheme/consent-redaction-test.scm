@@ -95,13 +95,22 @@
  'redaction-string-kernel '(agent redaction security boundary)
  (consent-redaction-clear!)
  (let* ((long-prefix (make-string 4096 #\z))
+        (variable-width-prefix
+         (make-string 16384 (integer->char #x3bb)))
+        (huge-variable-width-tail
+         (make-string 1048576 (integer->char #x3bb)))
+        (early-secret-with-huge-tail
+         (string-append "sk-" huge-variable-width-tail))
         (positives
          (list
           "sk-"
           "prefix sk-x"
           "ghp_" "gho_x" "ghu_x" "ghs_x" "ghr_x"
           "xox" "AKIA" "PRIVATE KEY"
+          ;; Failed longer candidates retain overlapping live prefixes.
+          "ghsk-" "PRIVAKIA"
           (string-append long-prefix "sk-")
+          (string-append variable-width-prefix "PRIVATE KEY")
           (string-append "before"
                          (string (integer->char 0))
                          "PRIVATE KEY")))
@@ -109,7 +118,8 @@
          (list
           "" "s" "sk" "SK-" "Sk-" "ghp" "ghq_x" "Xox"
           "akia" "PRIVATE KE" "private key"
-          (string-append long-prefix "sk"))))
+          (string-append long-prefix "sk")
+          (string-append variable-width-prefix "PRIVATE KE"))))
    (test-equal
     "kernel recognizes every exact secret spelling"
     (make-list (length positives) #t)
@@ -118,6 +128,10 @@
     "kernel rejects partial and case-shifted near misses"
     (make-list (length negatives) #f)
     (map redaction-kernel:redaction-kernel-secret-string? negatives))
+   (test-assert
+    "kernel accepts an early marker before a huge variable-width tail"
+    (redaction-kernel:redaction-kernel-secret-string?
+     early-secret-with-huge-tail))
    (test-equal
     "pure kernel calls do not write the redaction log"
     '()

@@ -289,6 +289,33 @@
   (consent-value->external
    (consent-eval-source source nil options)))
 
+(defun consent-library-test--run-source-on
+    (source context environment options)
+  "Evaluate SOURCE on CONTEXT and ENVIRONMENT using reader OPTIONS."
+  (consent--trampoline
+   (consent--make-sequence
+    (consent-read-all
+     source
+     (consent--eval-context-reader-options context options))
+    t)
+   environment
+   context))
+
+(defun consent-library-test--measure-source-on
+    (source context environment options)
+  "Evaluate SOURCE and return its value, step delta, and callback delta."
+  (let ((steps-before (consent--eval-context-steps context))
+        (callbacks-before
+         (consent--eval-context-host-callbacks context)))
+    (let ((value
+           (consent-library-test--run-source-on
+            source context environment options)))
+      (list
+       (consent-value->external value)
+       (- (consent--eval-context-steps context) steps-before)
+       (- (consent--eval-context-host-callbacks context)
+          callbacks-before)))))
+
 (defun consent-library-test--audit-strings ()
   "Return recent audit entries as external Scheme-readable strings."
   (mapcar #'consent-result->external
@@ -782,6 +809,352 @@
      "(value \"source-backed memory\") (source ()) (confidence high) "
      "(importance 1) (created-at 1) (updated-at 1)) #f)"))))
 
+(ert-deftest consent-library-test-agent-memory-nohash-source-route ()
+  "Keep shallow source queries bounded without an identity hash backend."
+  (let ((environment (consent-make-base-environment))
+        (host-cycle (cons 'host-cycle nil)))
+    (setcdr host-cycle host-cycle)
+    (consent--environment-define environment "host-cycle" host-cycle)
+    (cl-letf
+        (((symbol-function
+           'consent--primitive-consent-identity-map-fast-backend?)
+          (lambda (_arguments _context) consent-false)))
+      (should
+       (equal
+        (consent-value->external
+         (consent-eval-source
+          "(import (scheme base) (agent memory))
+           (define store (consent-make-memory-store))
+           (memory-store-put!
+            store 'project 'alpha
+            '((tags (nohash common)) (value \"symbol value\")))
+           (memory-store-put!
+            store 'project \"beta\"
+            '((tags (nohash common)) (value \"string value\")))
+           (memory-store-put!
+            store 'project '(gamma 3)
+            '((tags (nohash common)) (value \"list value\")))
+           (memory-store-put!
+            store 'project 42
+            '((tags (nohash common)) (value \"number value\")))
+           (define host-cycle-rejection
+             (guard
+              (condition (else (error-object-message condition)))
+              (memory-store-put!
+               store 'project host-cycle
+               '((tags (general)) (value \"cycle value\")))
+              #f))
+           (define common-results
+             (list
+              (map
+               (lambda (key)
+                 (and (memory-store-ref store 'project key) #t))
+               (list 'alpha \"beta\" '(gamma 3) 42))
+              (length (memory-store-find store 'project \"value\"))
+              (length (memory-store-by-tag store 'project 'nohash))
+              (length (memory-store-recent store 'project 10))
+              (length
+               (memory-selection-records
+                (memory-store-select
+                 store
+                 '(nohash common)
+                 '(retrieval-policy
+                   (weights
+                    ((recency 0) (importance 0) (relevance 1)))
+                   (cutoff 0)
+                   (limit 3))
+                 '(retrieval-context
+                   (scope project)
+                   (trust local)
+                   (allowed-scopes (project))
+                   (logical-clock 4)))))))
+           (define large-a (make-string 129 #\\a))
+           (define large-b (make-string 129 #\\b))
+           (memory-store-put!
+            store 'project 'large-a-record
+            (list (list 'tags (list large-a)) '(value \"large a\")))
+           (memory-store-put!
+            store 'project 'large-b-record
+            (list (list 'tags (list large-b)) '(value \"large b\")))
+           (define comparison-rejection
+             (guard
+              (condition (else (error-object-message condition)))
+              (memory-store-by-tag store 'project large-a)
+              #f))
+           (memory-store-put!
+            store 'project large-a
+            '((tags (large-id)) (value \"large id\")))
+           (memory-store-access! store large-a 'project 'nohash)
+           (define access-rejection
+             (guard
+              (condition (else (error-object-message condition)))
+              (memory-store-select
+               store
+               'large-id
+               '(retrieval-policy (cutoff 0) (limit 1))
+               '(retrieval-context
+                 (scope project)
+                 (allowed-scopes (project))
+                 (logical-clock 8)))
+              #f))
+           (define cache-limit-tags
+             (let loop ((remaining 70) (result '()))
+               (if (= remaining 0)
+                   result
+                   (loop
+                    (- remaining 1)
+                    (cons
+                     (string-append
+                      \"unique-nohash-tag-\" (number->string remaining))
+                     result)))))
+           (define cache-limit-rejection
+             (guard
+              (condition (else (error-object-message condition)))
+              (memory-store-put!
+               store 'project 'cache-limit-record
+               (list (list 'tags cache-limit-tags)
+                     '(value \"cache limit\")))
+              #f))
+           (list common-results
+                 host-cycle-rejection
+                 comparison-rejection
+                 access-rejection
+                 cache-limit-rejection)"
+          environment
+          '(:max-steps 2000000
+            :max-value-nodes 500000
+            :max-host-callbacks 500000)))
+        (concat
+         "(((#t #t #t #t) 4 4 4 3) "
+         "\"memory key host compound requires fast identity map\" "
+         "\"unbounded memory key comparison requires fast identity map\" "
+         "\"unbounded access projection requires fast identity map\" "
+         "\"memory key session cache requires fast identity map\")")))
+      (should
+       (equal
+        (consent-library-test--external/options
+         "(import (scheme base) (agent memory) (consent reader))
+          (define store (consent-make-memory-store))
+          (define (rejection-message value)
+            (guard
+             (condition (else (error-object-message condition)))
+             (memory-store-put!
+              store 'project value
+              '((tags (private)) (value \"private value\")))
+             #f))
+          (list
+           (rejection-message (consent-read \"alpha\"))
+           (rejection-message (consent-read \"42\")))"
+         '(:internal-libraries-allowed t
+           :max-steps 1000000
+           :max-value-nodes 500000
+           :max-host-callbacks 100000))
+        (concat
+         "(\"persistent memory key rejects private or raw interpreted "
+         "datum\" \"persistent memory key rejects private or raw "
+         "interpreted datum\")"))))))
+
+(ert-deftest
+    consent-library-test-agent-memory-shared-query-terms-scale-additively ()
+  "Bound shared query-term preparation by term count plus key size."
+  (let* ((options '(:internal-libraries-allowed t
+                    :max-steps 12000000
+                    :max-value-nodes 2000000
+                    :max-host-callbacks 2000000))
+         (context (consent--new-eval-context options))
+         (environment (consent-make-base-environment))
+         (setup
+          (concat
+           "(import (scheme base) (agent memory))\n"
+           "(define (repeat-shared value count)\n"
+           "  (let loop ((remaining count) (result '()))\n"
+           "    (if (= remaining 0)\n"
+           "        result\n"
+           "        (loop (- remaining 1)\n"
+           "              (cons value result)))))\n"
+           "(define (shared-query-probe term-count key-size)\n"
+           "  (let* ((root (make-vector key-size 'shared-token))\n"
+           "         (terms (repeat-shared root term-count))\n"
+           "         (store (consent-make-memory-store)))\n"
+           "    (memory-store-put!\n"
+           "     store 'project 'probe\n"
+           "     (list (list 'tags (list root))\n"
+           "           '(value \"probe\")))\n"
+           "    (length\n"
+           "     (memory-selection-records\n"
+           "      (memory-store-select\n"
+           "       store terms\n"
+           "       '(retrieval-policy\n"
+           "         (weights\n"
+           "          ((recency 0) (importance 0) (relevance 1)))\n"
+           "         (cutoff 1)\n"
+           "         (limit 1))\n"
+           "       '(retrieval-context\n"
+           "         (scope project)\n"
+           "         (trust local)\n"
+           "         (allowed-scopes (project))\n"
+           "         (logical-clock 1)))))))\n")))
+    (setf (consent--eval-context-interaction-environment context)
+          environment)
+    (consent--ensure-base-syntax context environment)
+    (consent-library-test--run-source-on
+     setup context environment options)
+    ;; Prime any lazy source-library paths before taking ledger deltas.
+    (consent-library-test--run-source-on
+     "(shared-query-probe 1 1)" context environment options)
+    (let* ((ll
+            (consent-library-test--measure-source-on
+             "(shared-query-probe 1 8)" context environment options))
+           (nl
+            (consent-library-test--measure-source-on
+             "(shared-query-probe 4 8)" context environment options))
+           (lk
+            (consent-library-test--measure-source-on
+             "(shared-query-probe 1 16)" context environment options))
+           (nk
+            (consent-library-test--measure-source-on
+             "(shared-query-probe 4 16)" context environment options))
+           (corners (list ll nl lk nk)))
+      (dolist (corner corners)
+        (should (equal (car corner) "1")))
+      (cl-labels
+          ((mixed-difference (metric)
+             (+ (nth metric nk)
+                (- (nth metric nl))
+                (- (nth metric lk))
+                (nth metric ll))))
+        (ert-info ((format "shared query ledger LL/NL/LK/NK: %S" corners))
+          (should (<= (mixed-difference 1) 64))
+          (should (<= (mixed-difference 2) 16)))))))
+
+(ert-deftest
+    consent-library-test-agent-memory-key-work-scales-additively ()
+  "Bound shared append and high-indegree key work by physical graph size."
+  (let ((options '(:internal-libraries-allowed t
+                   :max-steps 12000000
+                   :max-value-nodes 2000000
+                   :max-host-callbacks 2000000))
+        (setup
+         (concat
+          "(import (scheme base)\n"
+          "        (agent memory)\n"
+          "        (agent memory-key))\n"
+          "(define (repeat-shared value count)\n"
+          "  (let loop ((remaining count) (result '()))\n"
+          "    (if (= remaining 0)\n"
+          "        result\n"
+          "        (loop (- remaining 1) (cons value result)))))\n"
+          "(define (shared-tag-append-probe tag-count tag-size)\n"
+          "  (let* ((tag (make-string tag-size #\\t))\n"
+          "         (tags (repeat-shared tag tag-count))\n"
+          "         (store (consent-make-memory-store))\n"
+          "         (record\n"
+          "          (memory-store-put!\n"
+          "           store 'project 'shared-tag\n"
+          "           (list (list 'tags tags) '(value \"shared\")))))\n"
+          "    (length (memory-record-field-value record 'tags '()))))\n"
+          "(define (high-indegree-key-probe repetitions width)\n"
+          "  (let* ((target (cons 'target '()))\n"
+          "         (root (make-vector width target)))\n"
+          "    (set-cdr! target target)\n"
+          "    (call-with-memory-index-key-session\n"
+          "     (lambda (prepare)\n"
+          "       (let ((first (prepare 'project root)))\n"
+          "         (let loop ((remaining repetitions))\n"
+          "           (if (= remaining 0)\n"
+          "               (vector-length first)\n"
+          "               (begin\n"
+          "                 (if (not (eq? first (prepare 'project root)))\n"
+          "                     (error\n"
+          "                      \"session descriptor identity drift\"))\n"
+          "                 (loop (- remaining 1))))))))))\n"
+          )))
+    (cl-labels
+        ((measure-probes (probes nohash?)
+           (let* ((context (consent--new-eval-context options))
+                  (environment (consent-make-base-environment))
+                  (measure
+                   (lambda (source)
+                     (consent-library-test--measure-source-on
+                      source context environment options)))
+                  (run
+                   (lambda ()
+                     (setf
+                      (consent--eval-context-interaction-environment context)
+                      environment)
+                     (consent--ensure-base-syntax context environment)
+                     (consent-library-test--run-source-on
+                      setup context environment options)
+                     (mapcar
+                      (lambda (probe)
+                        (funcall measure (format "(%s 1 1)" probe))
+                        (list
+                         (funcall measure (format "(%s 1 64)" probe))
+                         (funcall measure (format "(%s 8 64)" probe))
+                         (funcall measure (format "(%s 1 512)" probe))
+                         (funcall measure (format "(%s 8 512)" probe))))
+                      probes))))
+             (if nohash?
+                 (cl-letf
+                     (((symbol-function
+                        'consent--primitive-consent-identity-map-fast-backend?)
+                       (lambda (_arguments _context) consent-false)))
+                   (funcall run))
+               (funcall run))))
+         (mixed-difference (corners metric)
+           (let ((ll (nth 0 corners))
+                 (nl (nth 1 corners))
+                 (lk (nth 2 corners))
+                 (nk (nth 3 corners)))
+             (+ (nth metric nk)
+                (- (nth metric nl))
+                (- (nth metric lk))
+                (nth metric ll)))))
+      (let* ((fast
+              (measure-probes
+               '("shared-tag-append-probe" "high-indegree-key-probe")
+               nil))
+             (fast-append (nth 0 fast))
+             (high-indegree (nth 1 fast))
+             (nohash-append
+              (car
+               (measure-probes '("shared-tag-append-probe") t))))
+        (dolist (corners (list fast-append nohash-append high-indegree))
+          (dolist (corner corners)
+            (should (stringp (car corner))))
+          (ert-info ((format "memory key work corners: %S" corners))
+            (should (<= (abs (mixed-difference corners 1)) 128))
+            (should (<= (abs (mixed-difference corners 2)) 32))))
+        ;; Width grows eightfold.  A single-pass predecessor snapshot stays
+        ;; below a 12x ledger envelope; rebuilding an incoming list with
+        ;; append grows quadratically and exceeds it decisively.
+        (ert-info
+            ((format "high-indegree key corners: %S" high-indegree))
+          (should
+           (<= (nth 1 (nth 2 high-indegree))
+               (+ (* 12 (nth 1 (nth 0 high-indegree))) 128)))
+          (should
+           (<= (nth 2 (nth 2 high-indegree))
+               (+ (* 12 (nth 2 (nth 0 high-indegree))) 32))))))))
+
+(ert-deftest
+    consent-library-test-agent-memory-key-is-internal-source-backed ()
+  "Keep the memory-key kernel on its single portable source realization."
+  (let* ((key "(agent memory-key)")
+         (entry (consent--library-collection-manifest-entry key))
+         (source-file (consent-library-test--manifest-source-file key)))
+    (should entry)
+    (should (eq (plist-get entry :provider) 'repo-source))
+    (should (eq (plist-get entry :visibility) 'internal-runtime))
+    (should (eq (plist-get entry :source-kind) 'portable-source))
+    (should (eq (plist-get entry :realization) 'portable-source))
+    (should-not (plist-get entry :primitive-overlay-library))
+    (should-not (plist-get entry :primitive-exports))
+    (should source-file)
+    (should
+     (string-suffix-p "scheme/agent/memory-key.sld" source-file))
+    (should (file-readable-p source-file))))
+
 (ert-deftest
     consent-library-test-agent-memory-query-is-internal-source-backed ()
   "Keep the native memory query kernel internal and source-backed."
@@ -803,7 +1176,14 @@
     (should source-file)
     (should
      (string-suffix-p "scheme/agent/memory-query.sld" source-file))
-    (should (file-readable-p source-file))))
+    (should (file-readable-p source-file))
+    (with-temp-buffer
+      (insert-file-contents source-file)
+      (should-not (search-forward "(string-ref" nil t))
+      (goto-char (point-min))
+      (should (search-forward "memory-substring-fallback-table" nil t))
+      (goto-char (point-min))
+      (should (search-forward "string-for-each" nil t)))))
 
 (ert-deftest consent-library-test-agent-models-openai-is-source-backed ()
   "Load `(agent models openai)' from the shared portable source library."

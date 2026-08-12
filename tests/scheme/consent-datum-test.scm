@@ -5,6 +5,7 @@
 (import (scheme base)
         (scheme process-context)
         (prefix (agent context) native-context:)
+        (prefix (agent memory-key) native-memory-key:)
         (prefix (agent memory-query) native-memory-query:)
         (prefix (agent models openai-codec) native-openai-codec:)
         (prefix (agent redaction-kernel) native-redaction-kernel:)
@@ -14,6 +15,7 @@
         (only (consent character) consent-make-character)
         (consent datum)
         (only (consent identity-map)
+              consent-identity-map-fast-backend?
               consent-identity-map-ref
               consent-identity-map-set!)
         (only (consent interpreter)
@@ -23,9 +25,11 @@
         (only (consent library)
               consent-apply-callable
               consent-call-native-library
+              consent-native-argument-value
               consent-runtime-datum->native-datum
               resolve-library)
         (only (consent reader)
+              consent-datum->external
               consent-datum-source
               consent-datum-source-set!
               consent-make-record
@@ -45,6 +49,7 @@
               context-cell-set!
               context-datum-heap
               context-native-binding-cache
+              context-value-nodes
               environment-cell
               environment-define!
               environment-set!
@@ -191,6 +196,45 @@
    (cons 'memory-query-by-tag native-memory-query:memory-query-by-tag)
    (cons 'memory-query-recent native-memory-query:memory-query-recent)
    (cons 'memory-query-select native-memory-query:memory-query-select)))
+
+(define (native-memory-query-test-key scope key)
+  "Return one detached query key prepared outside the borrowed call."
+  (native-memory-key:memory-prepare-index-key scope key))
+
+(define (native-memory-query-test-sidecar
+         live-key id-key kind-key tag-keys flags)
+  "Return one valid detached six-slot live query SIDECAR fixture."
+  (vector live-key id-key #f kind-key (list->vector tag-keys) flags))
+
+(define (native-memory-query-test-live-projection sidecar access-sequence)
+  "Return SIDECAR with its detached current access sequence."
+  (vector sidecar access-sequence))
+
+(define (native-memory-query-test-term-projection term project-key)
+  "Return TERM's detached text and known per-scope key projections."
+  (vector
+   (cond
+    ((string? term) (string-copy term))
+    ((symbol? term) (string-copy (symbol->string term)))
+    (else #f))
+   (vector #f #f project-key)))
+
+(define (native-memory-query-test-select-projection query project-keys)
+  "Return QUERY with its detached relevance-term projection vector."
+  (let ((terms (if (list? query) query (list query))))
+    (vector
+     query
+     (list->vector
+      (map native-memory-query-test-term-projection terms project-keys)))))
+
+(define (native-memory-query-test-field datum name)
+  "Return NAME from host tagged record DATUM, or #f."
+  (let loop ((fields (cdr datum)))
+    (cond
+     ((null? fields) #f)
+     ((and (pair? (car fields)) (eq? (caar fields) name))
+      (cadr (car fields)))
+     (else (loop (cdr fields))))))
 
 (define (native-redaction-kernel-test-bindings)
   "Return the exact compiled redaction-kernel borrow inventory."
@@ -1533,7 +1577,10 @@
                 (consent-call-native-library
                  (lambda (value) (vector-ref value 0))
                  context
-                 vector)))))
+                 vector)))
+  (test-equal 'native-borrowed-results-charge-no-fresh-nodes
+              0
+              (context-value-nodes context))))
 
 (testing-registry-case
  'native-runtime-egress-is-stack-safe
@@ -1615,6 +1662,144 @@
                  (consent-host-symbol-eq?
                   'mixed-native-leaf
                   (vector-ref converted 1))))))
+
+(testing-registry-case
+ 'native-no-bridge-result-import-charges-only-fresh-compounds
+ '(portable runtime datum boundary callback budget)
+(let* ((context (new-eval-context '()))
+       (heap (context-datum-heap context))
+       (last-argument #f)
+       (callable
+        (make-primitive-procedure
+         'native-no-bridge-budget-callback
+         (lambda (arguments callback-context)
+           (set! last-argument (car arguments))
+           last-argument)
+         1
+         1))
+       (wrapper (consent-datum-make-vector heap 1 callable))
+       (already-owned (consent-datum-cons heap 'already-owned '()))
+       (previous-applier (consent-native-applier-ref)))
+  (dynamic-wind
+   (lambda ()
+     (consent-install-native-applier!
+      (lambda (procedure arguments callback-context)
+        ((primitive-procedure-function procedure)
+         arguments
+         callback-context))))
+   (lambda ()
+     ;; A standalone nested callback adapter has a context but no active
+     ;; borrowed-graph bridge, so its host compound argument takes the
+     ;; ordinary native-own-result import path.
+     (let* ((native-wrapper
+             (consent-native-argument-value wrapper context))
+            (shim (vector-ref native-wrapper 0))
+            (fast? (consent-identity-map-fast-backend?)))
+       (if fast?
+           (let* ((fresh-result (shim (cons 'fresh-callback '())))
+                  (after-pair (context-value-nodes context))
+                  (fresh-string (shim "fresh"))
+                  (after-string (context-value-nodes context))
+                  (fresh-bytes (shim (bytevector 1 2 3 4)))
+                  (after-bytes (context-value-nodes context)))
+             (test-assert 'native-no-bridge-fresh-result-is-host-pair
+                          (pair? fresh-result))
+             (test-equal 'native-no-bridge-fresh-result-node-charge
+                         1
+                         after-pair)
+             (test-equal 'native-no-bridge-fresh-string-result
+                         "fresh"
+                         fresh-string)
+             (test-equal 'native-no-bridge-fresh-string-node-charge
+                         6
+                         (- after-string after-pair))
+             (test-equal 'native-no-bridge-fresh-bytevector-result
+                         (bytevector 1 2 3 4)
+                         fresh-bytes)
+             (test-equal 'native-no-bridge-fresh-bytevector-node-charge
+                         5
+                         (- after-bytes after-string))
+             (shim already-owned)
+             (test-assert 'native-no-bridge-same-heap-result-is-reused
+                          (consent-datum-same?
+                           already-owned last-argument))
+             (shim 11)
+             (test-equal
+              'native-no-bridge-owned-and-scalar-results-uncharged
+              after-bytes
+              (context-value-nodes context)))
+           (let* ((owned-string
+                   (consent-datum-string-from-host heap "owned"))
+                  (owned-bytes
+                   (consent-datum-bytevector-from-host
+                    heap (bytevector 4 5)))
+                  (other-heap (consent-make-datum-heap))
+                  (cross-heap
+                   (consent-datum-cons other-heap 'cross 'heap))
+                  (large
+                   (make-alternating-host-chain 4096 'large-leaf))
+                  (shared-leaf (cons 'shared 'leaf))
+                  (shared (vector shared-leaf shared-leaf))
+                  (cycle (cons 'cycle '()))
+                  (rejection-message
+                   (lambda (value)
+                     (guard
+                      (condition
+                       (else
+                        (if (error-object? condition)
+                            (error-object-message condition)
+                            #f)))
+                       (shim value)
+                       #f))))
+             (set-cdr! cycle cycle)
+             (test-equal 'native-nohash-scalar-result 11 (shim 11))
+             (test-assert 'native-nohash-same-heap-pair-result
+                          (pair? (shim already-owned)))
+             (test-assert 'native-nohash-same-heap-pair-is-reused
+                          (consent-datum-same?
+                           already-owned last-argument))
+             (test-equal 'native-nohash-same-heap-string-result
+                         "owned"
+                         (shim owned-string))
+             (test-equal 'native-nohash-same-heap-bytevector-result
+                         (bytevector 4 5)
+                         (shim owned-bytes))
+             (test-equal 'native-nohash-supported-results-uncharged
+                         0
+                         (context-value-nodes context))
+             (test-equal 'native-nohash-rejects-host-pair
+                         "native-result-import-unavailable: fast identity \
+maps are required"
+                         (rejection-message (cons 'fresh 'pair)))
+             (test-equal 'native-nohash-rejects-host-string
+                         "native-result-import-unavailable: fast identity \
+maps are required"
+                         (rejection-message "fresh"))
+             (test-equal 'native-nohash-rejects-host-bytevector
+                         "native-result-import-unavailable: fast identity \
+maps are required"
+                         (rejection-message (bytevector 1 2)))
+             (test-equal 'native-nohash-rejects-large-host-graph
+                         "native-result-import-unavailable: fast identity \
+maps are required"
+                         (rejection-message large))
+             (test-equal 'native-nohash-rejects-shared-host-graph
+                         "native-result-import-unavailable: fast identity \
+maps are required"
+                         (rejection-message shared))
+             (test-equal 'native-nohash-rejects-cyclic-host-graph
+                         "native-result-import-unavailable: fast identity \
+maps are required"
+                         (rejection-message cycle))
+             (test-equal 'native-nohash-rejects-cross-heap-graph
+                         "native-result-import-unavailable: fast identity \
+maps are required"
+                         (rejection-message cross-heap))
+             (test-equal 'native-nohash-rejections-are-uncharged
+                         0
+                         (context-value-nodes context))))))
+   (lambda ()
+     (consent-install-native-applier! previous-applier)))))
 
 (testing-registry-case
  'native-egress-visits-shared-host-subgraph-once
@@ -1759,7 +1944,11 @@
   (test-assert 'native-result-cycle
                (consent-datum-same?
                 result
-                (consent-datum-cdr left)))))
+                (consent-datum-cdr left)))
+  ;; One fresh pair plus one two-slot vector: 1 + (1 + 2).
+  (test-equal 'native-result-shared-cycle-node-charge
+              4
+              (context-value-nodes context))))
 
 (testing-registry-case
  'native-known-mirror-result-reconciles-once
@@ -1790,7 +1979,12 @@
   (test-assert 'native-result-fresh-node-closes-known-cycle
                (consent-datum-same?
                 original
-                (consent-datum-cdr fresh)))))
+                (consent-datum-cdr fresh)))
+  ;; The borrowed original is uncharged. The one fresh pair and three-slot
+  ;; result vector cost 1 + (1 + 3), even though result and writeback alias it.
+  (test-equal 'native-result-and-writeback-charge-fresh-nodes-once
+              5
+              (context-value-nodes context))))
 
 (testing-registry-case
  'native-known-mirror-condition-reconciles-once
@@ -1822,7 +2016,36 @@
   (test-assert 'native-condition-fresh-node-closes-known-cycle
                (consent-datum-same?
                 original
-                (consent-datum-cdr fresh)))))
+                (consent-datum-cdr fresh)))
+  (test-equal 'native-condition-and-writeback-charge-fresh-nodes-once
+              5
+              (context-value-nodes context))))
+
+(testing-registry-case
+ 'native-result-budget-stops-after-transactional-writeback
+ '(portable runtime datum boundary mutation budget error-order)
+(let* ((context
+        (new-eval-context (list (cons 'max-value-nodes 0))))
+       (heap (context-datum-heap context))
+       (original (consent-datum-cons heap 'before 'tail))
+       (raised?
+        (guard (condition (else #t))
+          (consent-call-native-library
+           (lambda (mirror)
+             (let ((fresh (cons 'fresh '())))
+               (set-car! mirror fresh)
+               fresh))
+           context
+           original)
+          #f)))
+  (test-assert 'native-result-tight-budget-raises raised?)
+  (test-equal 'native-result-tight-budget-counts-fresh-once
+              1
+              (context-value-nodes context))
+  ;; The outer bridge publishes all host mutations before its aggregate
+  ;; value-node charge can stop, so reconciliation is never half-applied.
+  (test-assert 'native-result-writeback-precedes-budget-stop
+               (consent-datum-pair? (consent-datum-car original)))))
 
 (testing-registry-case
  'native-raised-argument-keeps-owned-identity
@@ -2669,28 +2892,465 @@
      (list (car error-datum) (car (reverse (cdr error-datum))))))))
 
 (testing-registry-case
+ 'native-openai-codec-rejects-borrowed-request-cycles
+ '(portable runtime datum boundary graph condition budget)
+(let* ((context
+          (new-eval-context
+           '((internal-libraries-allowed . #t)
+             (max-steps . 64))))
+         (heap (context-datum-heap context))
+         (recursive (make-vector 1 #f))
+         (tool
+          (list
+           'model-tool
+           '(name recursive-tool)
+           (list
+            'schema
+            (list
+             'openai-tool
+             '(type function)
+             (list
+              'function
+              '(name "recursive-tool")
+              (list 'parameters recursive))))))
+         (cyclic-tools (list tool)))
+    (vector-set! recursive 0 recursive)
+    (let* ((model-id (consent-datum-import heap "qwen3:0.6b"))
+           (prompt (consent-datum-import heap "prompt"))
+           (schema-options
+            (consent-datum-import heap (vector (list tool) #f)))
+           (schema-condition
+            (guard (raised (else raised))
+              (consent-call-native-library
+               native-openai-codec:model-openai-codec-request-json-projected
+               context
+               model-id
+               prompt
+               schema-options)
+              #f)))
+      (set-cdr! cyclic-tools cyclic-tools)
+      (let* ((tools-options
+              (consent-datum-import heap (vector cyclic-tools #f)))
+             (tools-condition
+              (guard (raised (else raised))
+                (consent-call-native-library
+                 native-openai-codec:model-openai-codec-request-json-projected
+                 context
+                 model-id
+                 prompt
+                 tools-options)
+                #f)))
+        (test-assert 'native-openai-codec-schema-cycle-rejected
+                     (consent-error-object? schema-condition))
+        (test-equal
+         'native-openai-codec-schema-cycle-message
+         "OpenAI tool schema must be acyclic"
+         (consent-error-object-message schema-condition))
+        (test-assert 'native-openai-codec-tools-cycle-rejected
+                     (consent-error-object? tools-condition))
+        (test-equal
+         'native-openai-codec-tools-cycle-message
+         "OpenAI tools must form a finite proper list"
+         (consent-error-object-message tools-condition))))))
+
+(testing-registry-case
+ 'native-memory-query-detached-projection-semantics
+ '(portable runtime datum boundary query identity mutation)
+(let* ((arbitrary-key (vector 'key-node 1))
+       (arbitrary-kind (vector 'kind-node 2))
+       (arbitrary-tag (vector 'tag-node 3))
+       (arbitrary-record
+        (list
+         'memory
+         (list 'id 'arbitrary-record)
+         (list 'scope 'project)
+         (list 'key arbitrary-key)
+         (list 'kind arbitrary-kind)
+         (list 'memory-class 'semantic)
+         (list 'tags (list arbitrary-tag))
+         (list 'value "exact accepted payload")
+         (list 'source '())
+         (list 'confidence 'high)
+         (list 'importance 1)
+         (list 'created-at 1)
+         (list 'updated-at 1)))
+       (symbol-record
+        '(memory
+          (id symbol-record)
+          (scope project)
+          (key symbol-key)
+          (kind symbol-kind)
+          (memory-class semantic)
+          (tags (symbol-tag))
+          (value "other payload")
+          (source ())
+          (confidence high)
+          (importance 1)
+          (created-at 2)
+          (updated-at 2)))
+       (arbitrary-live-key
+        (native-memory-query-test-key 'project arbitrary-key))
+       (arbitrary-id-key
+        (native-memory-query-test-key 'project 'arbitrary-record))
+       (arbitrary-kind-key
+        (native-memory-query-test-key 'project arbitrary-kind))
+       (arbitrary-tag-key
+        (native-memory-query-test-key 'project arbitrary-tag))
+       (symbol-live-key
+        (native-memory-query-test-key 'project 'symbol-key))
+       (symbol-id-key
+        (native-memory-query-test-key 'project 'symbol-record))
+       (symbol-kind-key
+        (native-memory-query-test-key 'project 'symbol-kind))
+       (symbol-tag-key
+        (native-memory-query-test-key 'project 'symbol-tag))
+       (arbitrary-sidecar
+        (native-memory-query-test-sidecar
+         arbitrary-live-key
+         arbitrary-id-key
+         arbitrary-kind-key
+         (list arbitrary-tag-key)
+         4))
+       (symbol-sidecar
+        (native-memory-query-test-sidecar
+         symbol-live-key
+         symbol-id-key
+         symbol-kind-key
+         (list symbol-tag-key)
+         0))
+       (records (list symbol-record arbitrary-record))
+       (live-projections
+        (list
+         (native-memory-query-test-live-projection symbol-sidecar 0)
+         (native-memory-query-test-live-projection arbitrary-sidecar 2)))
+       (query (list arbitrary-key arbitrary-kind arbitrary-tag))
+       (select-projection
+        (native-memory-query-test-select-projection
+         query
+         (list arbitrary-live-key arbitrary-kind-key arbitrary-tag-key)))
+       (policy
+        '(retrieval-policy
+          (weights ((recency 0) (importance 0) (relevance 1)))
+          (cutoff 0)
+          (limit 1)))
+       (local-context
+        '(retrieval-context
+          (scope project)
+          (allowed-scopes (project))
+          (trust local)
+          (logical-clock 2)))
+       (remote-context
+        '(retrieval-context
+          (scope project)
+          (allowed-scopes (project))
+          (trust remote)
+          (logical-clock 2))))
+  (define (candidate-for-id selection id)
+    "Return ID's candidate from SELECTION."
+    (let loop
+        ((rest (native-memory-query-test-field selection 'candidates)))
+      (cond
+       ((null? rest) #f)
+       ((eq? id (native-memory-query-test-field (car rest) 'id))
+        (car rest))
+       (else (loop (cdr rest))))))
+  ;; Mutating the borrowed identity fields after preparation must not alter
+  ;; query behavior; only detached append-time projections own these matches.
+  (vector-set! arbitrary-key 1 'mutated-key)
+  (vector-set! arbitrary-kind 1 'mutated-kind)
+  (vector-set! arbitrary-tag 1 'mutated-tag)
+  (let* ((text-result
+          (native-memory-query:memory-query-find
+           records
+           live-projections
+           'project
+           (vector "exact accepted payload" #f #f)))
+         (whole-result
+          (native-memory-query:memory-query-find
+           records live-projections 'project (vector #f #f '(#f #t))))
+         (key-result
+          (native-memory-query:memory-query-find
+           records
+           live-projections
+           'project
+           (vector "symbol-key" symbol-live-key #f)))
+         (kind-result
+          (native-memory-query:memory-query-find
+           records
+           live-projections
+           'project
+           (vector "symbol-kind" symbol-kind-key #f)))
+         (tag-result
+          (native-memory-query:memory-query-find
+           records
+           live-projections
+           'project
+           (vector "symbol-tag" symbol-tag-key #f)))
+         (by-tag-result
+          (native-memory-query:memory-query-by-tag
+           records live-projections 'project arbitrary-tag-key))
+         (recent-result
+          (native-memory-query:memory-query-recent
+           records live-projections 'project 2))
+         (local-selection
+          (native-memory-query:memory-query-select
+           records
+           live-projections
+           2
+           select-projection
+           policy
+           local-context))
+         (remote-selection
+          (native-memory-query:memory-query-select
+           records
+           live-projections
+           2
+           select-projection
+           policy
+           remote-context))
+         (local-candidate
+          (candidate-for-id local-selection 'arbitrary-record))
+         (remote-candidate
+          (candidate-for-id remote-selection 'arbitrary-record)))
+    (test-assert
+     'detached-find-text-preserves-exact-accepted-spelling
+     (eq? arbitrary-record (car text-result)))
+    (test-assert
+     'detached-find-whole-record-flags-preserve-nontext-equality
+     (eq? arbitrary-record (car whole-result)))
+    (test-assert
+     'detached-find-key-kind-and-tag-preserve-symbol-semantics
+     (and (eq? symbol-record (car key-result))
+          (eq? symbol-record (car kind-result))
+          (eq? symbol-record (car tag-result))))
+    (test-assert
+     'detached-by-tag-supports-arbitrary-datum-tags
+     (eq? arbitrary-record (car by-tag-result)))
+    (test-assert
+     'detached-recent-keeps-current-live-order-and-identities
+     (and (eq? symbol-record (car recent-result))
+          (eq? arbitrary-record (cadr recent-result))))
+    (test-assert
+     'detached-select-supports-arbitrary-key-kind-and-tag-terms
+     (and
+      (eq?
+       arbitrary-record
+       (car
+        (native-memory-query-test-field local-selection 'records)))
+      (= 3
+         (cadr
+          (assq
+           'relevance
+           (native-memory-query-test-field local-candidate 'subscores))))))
+    (test-equal
+     'detached-access-sequence-drives-recency
+     1
+     (cadr
+      (assq
+       'recency
+       (native-memory-query-test-field local-candidate 'subscores))))
+    (test-equal
+     'detached-redaction-flags-preserve-lower-trust-filtering
+     'redaction-or-local-only
+     (native-memory-query-test-field remote-candidate 'reason)))))
+
+(testing-registry-case
+ 'native-memory-query-rejects-malformed-detached-inputs
+ '(portable runtime datum boundary query validation)
+(let* ((record
+        '(memory
+          (id malformed-record)
+          (scope project)
+          (key malformed-record)
+          (kind datum)
+          (memory-class semantic)
+          (tags (malformed-query))
+          (value "malformed fixture")
+          (source ())
+          (confidence high)
+          (importance 1)
+          (created-at 1)
+          (updated-at 1)))
+       (live-key
+        (native-memory-query-test-key 'project 'malformed-record))
+       (kind-key (native-memory-query-test-key 'project 'datum))
+       (tag-key
+        (native-memory-query-test-key 'project 'malformed-query))
+       (sidecar
+        (native-memory-query-test-sidecar
+         live-key
+         live-key
+         kind-key
+         (list tag-key)
+         0))
+       (projection
+        (native-memory-query-test-live-projection sidecar 0))
+       (bad-flags-sidecar
+        (native-memory-query-test-sidecar
+         live-key
+         live-key
+         kind-key
+         (list tag-key)
+         8))
+       (bad-flags-projection
+        (native-memory-query-test-live-projection bad-flags-sidecar 0))
+       (bad-access-projection
+        (native-memory-query-test-live-projection sidecar -1))
+       (records (list record))
+       (cyclic-projections (list projection))
+       (cyclic-records (list record)))
+  (define (raises? thunk)
+    "Return #t when THUNK raises a condition."
+    (guard (condition (else #t))
+      (thunk)
+      #f))
+  (set-cdr! cyclic-projections cyclic-projections)
+  (set-cdr! cyclic-records cyclic-records)
+  (test-assert
+   'memory-query-rejects-misaligned-sidecars
+   (raises?
+    (lambda ()
+      (native-memory-query:memory-query-recent
+       records '() 'project 1))))
+  (test-assert
+   'memory-query-rejects-improper-and-cyclic-sidecar-lists
+   (and
+    (raises?
+     (lambda ()
+       (native-memory-query:memory-query-recent
+        records (cons projection 'tail) 'project 1)))
+    (raises?
+     (lambda ()
+       (native-memory-query:memory-query-recent
+        records cyclic-projections 'project 1)))))
+  (test-assert
+   'memory-query-rejects-cyclic-record-lists
+   (raises?
+    (lambda ()
+      (native-memory-query:memory-query-recent
+       cyclic-records (list projection) 'project 1))))
+  (test-assert
+   'memory-query-rejects-invalid-sidecar-flags-and-access
+   (and
+    (raises?
+     (lambda ()
+       (native-memory-query:memory-query-recent
+        records (list bad-flags-projection) 'project 1)))
+    (raises?
+     (lambda ()
+       (native-memory-query:memory-query-recent
+        records (list bad-access-projection) 'project 1)))))
+  (test-assert
+   'memory-query-rejects-malformed-find-and-tag-projections
+   (and
+    (raises?
+     (lambda ()
+       (native-memory-query:memory-query-find
+        records (list projection) 'project (vector #f #f '(#t #f)))))
+    (raises?
+     (lambda ()
+       (native-memory-query:memory-query-by-tag
+        records
+        (list projection)
+        'project
+        (native-memory-query-test-key 'session 'malformed-query))))))
+  (test-assert
+   'memory-query-rejects-malformed-select-term-projections
+   (and
+    (raises?
+     (lambda ()
+       (native-memory-query:memory-query-select
+        records
+        (list projection)
+        1
+        (vector 'malformed-query (vector (vector #f (vector #f))))
+        '(retrieval-policy (cutoff 0) (limit 1))
+        '(retrieval-context
+          (scope project)
+          (allowed-scopes (project))
+          (logical-clock 1)))))
+    (raises?
+     (lambda ()
+       (native-memory-query:memory-query-select
+        records
+        (list projection)
+        "not-a-clock"
+        (native-memory-query-test-select-projection
+         'malformed-query (list live-key kind-key tag-key))
+        '(retrieval-policy (cutoff 0) (limit 1))
+        '(retrieval-context
+          (scope project)
+          (allowed-scopes (project))
+          (logical-clock 1)))))))))
+
+(testing-registry-case
  'native-memory-query-callback-and-reentry-fail-closed
  '(portable runtime datum boundary callback reentry)
 (let ((previous-applier (consent-native-applier-ref)))
-  (define (callback-probe name argument-tail)
+  (define (callback-probe name)
     "Probe one memory-query NAME with a compound-active callback."
     (let ((callback-called? #f)
           (native-called? #f))
-      (consent-register-native-library!
-       '(agent memory-query)
-       (native-memory-query-bindings-with
-        name
-        (lambda native-arguments
-          (set! native-called? #t)
-          ((car (car (reverse native-arguments)))))))
       (let* ((context
               (new-eval-context
                '((internal-libraries-allowed . #t))))
+             (heap (context-datum-heap context))
+             (record-datum
+              '(memory
+                (id callback-record)
+                (scope project)
+                (key callback-record)
+                (kind datum)
+                (memory-class semantic)
+                (tags (callback-query))
+                (value "callback payload")
+                (source ())
+                (confidence high)
+                (importance 1)
+                (created-at 1)
+                (updated-at 1)))
+             (live-key
+              (native-memory-query-test-key 'project 'callback-record))
+             (kind-key
+              (native-memory-query-test-key 'project 'datum))
+             (tag-key
+              (native-memory-query-test-key 'project 'callback-query))
+             (sidecar
+              (native-memory-query-test-sidecar
+               live-key
+               live-key
+               kind-key
+               (list tag-key)
+               0))
              (records
-              (consent-datum-cons
-               (context-datum-heap context)
-               'record
-               '()))
+              (consent-datum-import heap (list record-datum)))
+             (live-projections
+              (consent-datum-import
+               heap
+               (list
+                (native-memory-query-test-live-projection sidecar 0))))
+             (find-projection
+              (consent-datum-import
+               heap
+               (vector "callback payload" #f #f)))
+             (tag-projection (consent-datum-import heap tag-key))
+             (select-projection
+              (consent-datum-import
+               heap
+               (native-memory-query-test-select-projection
+                'callback-query
+                (list tag-key))))
+             (policy
+              (consent-datum-import
+               heap
+               '(retrieval-policy (cutoff 0) (limit 1))))
+             (request-context
+              (consent-datum-import
+               heap
+               '(retrieval-context
+                 (scope project)
+                 (allowed-scopes (project))
+                 (logical-clock 1))))
              (callback
               (make-primitive-procedure
                'memory-query-test-callback
@@ -2699,11 +3359,35 @@
                  #t)
                0
                0))
+             (arguments
+              (cond
+               ((consent-host-symbol-eq? name 'memory-query-find)
+                (list records live-projections 'project find-projection))
+               ((consent-host-symbol-eq? name 'memory-query-by-tag)
+                (list records live-projections 'project tag-projection))
+               ((consent-host-symbol-eq? name 'memory-query-recent)
+                (list records live-projections 'project 1))
+               (else
+                (list
+                 records
+                 live-projections
+                 1
+                 select-projection
+                 policy
+                 request-context))))
              (library
-              (resolve-library
-               '(agent memory-query)
-               context
-               (consent-make-empty-environment)))
+              (begin
+                (consent-register-native-library!
+                 '(agent memory-query)
+                 (native-memory-query-bindings-with
+                  name
+                  (lambda native-arguments
+                    (set! native-called? #t)
+                    (consent-apply-callable callback '()))))
+                (resolve-library
+                 '(agent memory-query)
+                 context
+                 (consent-make-empty-environment))))
              (callable
               (cell-value (test-library-binding-cell library name)))
              (condition
@@ -2717,10 +3401,7 @@
                (lambda ()
                  (guard (raised (else raised))
                    ((primitive-procedure-function callable)
-                    (append
-                     (list records)
-                     argument-tail
-                     (list (list callback)))
+                    arguments
                     context)))
                (lambda ()
                  (consent-install-native-applier! previous-applier)))))
@@ -2734,10 +3415,10 @@
      (else #f)))
   (let* ((probes
           (list
-           (callback-probe 'memory-query-find '(project))
-           (callback-probe 'memory-query-by-tag '(project))
-           (callback-probe 'memory-query-recent '(project))
-           (callback-probe 'memory-query-select '(0 query policy))))
+           (callback-probe 'memory-query-find)
+           (callback-probe 'memory-query-by-tag)
+           (callback-probe 'memory-query-recent)
+           (callback-probe 'memory-query-select)))
          (conditions (map (lambda (probe) (list-ref probe 2)) probes)))
     (test-equal
      'all-memory-query-native-bindings-entered
@@ -2769,23 +3450,50 @@
           (new-eval-context
            '((internal-libraries-allowed . #t))))
          (heap (context-datum-heap context))
+         (record-datum
+          '(memory
+            (id identity-record)
+            (scope project)
+            (key identity-record)
+            (kind datum)
+            (memory-class semantic)
+            (tags (identity-query))
+            (value "identity payload")
+            (source ())
+            (confidence high)
+            (importance 1)
+            (created-at 1)
+            (updated-at 1)))
+         (live-key
+          (native-memory-query-test-key 'project 'identity-record))
+         (kind-key (native-memory-query-test-key 'project 'datum))
+         (tag-key
+          (native-memory-query-test-key 'project 'identity-query))
+         (sidecar
+          (native-memory-query-test-sidecar
+           live-key
+           live-key
+           kind-key
+           (list tag-key)
+           0))
          (records
+          (consent-datum-import heap (list record-datum)))
+         (live-projections
           (consent-datum-import
            heap
-           '((memory
-              (id identity-record)
-              (scope project)
-              (key identity-record)
-              (kind datum)
-              (memory-class semantic)
-              (tags (identity-query))
-              (value "identity payload")
-              (source ())
-              (confidence high)
-              (importance 1)
-              (created-at 1)
-              (updated-at 1)))))
-         (query (consent-datum-import heap '(identity-query)))
+           (list (native-memory-query-test-live-projection sidecar 0))))
+         (find-projection
+          (consent-datum-import
+           heap
+           (vector "identity payload" #f #f)))
+         (tag-projection (consent-datum-import heap tag-key))
+         (select-projection
+          (consent-datum-import
+           heap
+           (native-memory-query-test-select-projection
+            '(identity-query)
+            (list tag-key))))
+         (query (consent-datum-vector-ref select-projection 0))
          (policy
           (consent-datum-import
            heap
@@ -2828,26 +3536,51 @@
        arguments
        context))
     (let* ((record (runtime-car records))
+           (prepared-projection (runtime-car live-projections))
+           (prepared-sidecar
+            (consent-datum-vector-ref prepared-projection 0))
            (records-revision (consent-datum-object-revision records))
            (record-revision (consent-datum-object-revision record))
+           (projections-revision
+            (consent-datum-object-revision live-projections))
+           (projection-revision
+            (consent-datum-object-revision prepared-projection))
+           (sidecar-revision
+            (consent-datum-object-revision prepared-sidecar))
            (records-snapshot
             (consent-runtime-datum->native-datum records))
+           (prepared-snapshot
+            (consent-runtime-datum->native-datum live-projections))
+           (projection-revisions
+            (map
+             consent-datum-object-revision
+             (list find-projection tag-projection select-projection)))
+           (projection-snapshots
+            (map
+             consent-runtime-datum->native-datum
+             (list find-projection tag-projection select-projection)))
            (found
             (call-query
              'memory-query-find
-             (list records 'project "identity payload")))
+             (list records live-projections 'project find-projection)))
            (tagged
             (call-query
              'memory-query-by-tag
-             (list records 'project 'identity-query)))
+             (list records live-projections 'project tag-projection)))
            (recent
             (call-query
              'memory-query-recent
-             (list records 'project 1)))
+             (list records live-projections 'project 1)))
            (selection
             (call-query
              'memory-query-select
-             (list records 1 query policy request-context))))
+             (list
+              records
+              live-projections
+              1
+              select-projection
+              policy
+              request-context))))
       (test-assert
        'memory-query-results-reuse-canonical-record
        (and
@@ -2866,12 +3599,33 @@
          request-context
          (runtime-field selection 'context))))
       (test-equal
-       'memory-query-leaves-source-record-graph-unchanged
-       (list records-revision record-revision records-snapshot)
+       'memory-query-leaves-source-record-and-sidecar-graphs-unchanged
+       (list
+        records-revision
+        record-revision
+        projections-revision
+        projection-revision
+        sidecar-revision
+        records-snapshot
+        prepared-snapshot)
        (list
         (consent-datum-object-revision records)
         (consent-datum-object-revision record)
-        (consent-runtime-datum->native-datum records)))))))
+        (consent-datum-object-revision live-projections)
+        (consent-datum-object-revision prepared-projection)
+        (consent-datum-object-revision prepared-sidecar)
+        (consent-runtime-datum->native-datum records)
+        (consent-runtime-datum->native-datum live-projections)))
+      (test-equal
+       'memory-query-leaves-source-projection-graphs-unchanged
+       (list projection-revisions projection-snapshots)
+       (list
+        (map
+         consent-datum-object-revision
+         (list find-projection tag-projection select-projection))
+        (map
+         consent-runtime-datum->native-datum
+         (list find-projection tag-projection select-projection))))))))
 
 (testing-registry-case
  'native-binding-cache-owned-by-evaluation-context

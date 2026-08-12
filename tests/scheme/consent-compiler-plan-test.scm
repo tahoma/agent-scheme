@@ -222,6 +222,11 @@
    (and (member '(agent memory-query) roots)
         (member '(agent memory-query) native-libraries)))
   (test-assert
+   'memory-key-is-source-only-compiled-dependency
+   (and (member '(agent memory-key) names)
+        (not (member '(agent memory-key) roots))
+        (not (member '(agent memory-key) native-libraries))))
+  (test-assert
    'memory-facade-is-source-root-not-native
    (and (member '(agent memory) roots)
         (not (member '(agent memory) native-libraries))))
@@ -257,6 +262,10 @@
     '(agent models openai-codec)
     '(agent models openai)))
   (test-equal
+   'memory-key-uses-canonical-portable-source
+   "agent/memory-key.sld"
+   (consent-compiler-unit-source (unit-ref '(agent memory-key))))
+  (test-equal
    'memory-query-uses-canonical-portable-source
    "agent/memory-query.sld"
    (consent-compiler-unit-source (unit-ref '(agent memory-query))))
@@ -264,6 +273,9 @@
    'memory-facade-uses-canonical-portable-source
    "agent/memory.sld"
    (consent-compiler-unit-source (unit-ref '(agent memory))))
+  (test-assert
+   'memory-key-precedes-query
+   (ordered-before? '(agent memory-key) '(agent memory-query)))
   (test-assert
    'memory-query-precedes-facade
    (ordered-before? '(agent memory-query) '(agent memory)))

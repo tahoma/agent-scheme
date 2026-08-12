@@ -13,6 +13,11 @@
               model-openai-request-json
               model-openai-parse-response
               model-openai-compatible-http-completion-result)
+        (prefix
+         (only (agent models openai-codec)
+               model-openai-codec-provider-error-projected
+               model-openai-codec-request-json-projected)
+         openai-codec:)
         (only (stdlib json)
               json-null?
               json-read
@@ -25,6 +30,15 @@
 (define (check-value name actual expected)
   "Compare ACTUAL and EXPECTED as the named SRFI 64 assertion."
   (test-equal name expected actual))
+
+(define (raised-error-message thunk)
+  "Return THUNK's error message, or #f when it does not raise an error."
+  (guard (condition
+          (else
+           (and (error-object? condition)
+                (error-object-message condition))))
+    (thunk)
+    #f))
 
 (define (json-ref object name)
   "Return NAME from decoded JSON OBJECT, or #f."
@@ -205,6 +219,31 @@
                    (description "Repeat count.")))))
          (required ("text" "count")))))))))
 
+(define (request-json-with-parameters parameters)
+  "Return request JSON for one tool whose parameters are PARAMETERS."
+  (let ((tool
+         (list
+          'model-tool
+          '(name projection-test)
+          (list
+           'schema
+           (list
+            'openai-tool
+            '(type function)
+            (list
+             'function
+             '(name "projection-test")
+             (list 'parameters parameters)))))))
+    (model-openai-request-json
+     "qwen3:0.6b" "prompt" (list (list 'tools (list tool))))))
+
+(define (nested-schema-vector depth)
+  "Return DEPTH one-slot schema vectors ending in a leaf string."
+  (let loop ((remaining depth) (value "leaf"))
+    (if (= remaining 0)
+        value
+        (loop (- remaining 1) (vector value)))))
+
 (define (request-with-tool)
   "Return the decoded JSON request for a forced local-echo tool call."
   (json-read
@@ -319,7 +358,155 @@
                  (required . #("text" "count")))))))
    (tool_choice
     (type . "function")
-    (function (name . "local-echo"))))))
+   (function (name . "local-echo"))))))
+
+(testing-registry-case
+ 'model-openai-request-rejects-non-finite-tool-lists '(portable core)
+(let ((cyclic-tools (list local-echo-tool))
+      (improper-tools (cons local-echo-tool 'malformed-tail)))
+  (set-cdr! cyclic-tools cyclic-tools)
+  (check-value
+   'model-openai-request-rejects-cyclic-tools
+   (raised-error-message
+    (lambda ()
+      (model-openai-request-json
+       "qwen3:0.6b" "prompt" (list (list 'tools cyclic-tools)))))
+   "OpenAI tools must form a finite proper list")
+  (check-value
+   'model-openai-request-rejects-improper-tools
+   (raised-error-message
+    (lambda ()
+      (model-openai-request-json
+       "qwen3:0.6b" "prompt" (list (list 'tools improper-tools)))))
+   "OpenAI tools must form a finite proper list")))
+
+(testing-registry-case
+ 'model-openai-request-rejects-cyclic-nested-schema '(portable core)
+(let* ((parameters (list '(type "object")))
+       (tool
+        (list
+         'model-tool
+         '(name recursive-tool)
+         (list
+          'schema
+          (list
+           'openai-tool
+           '(type function)
+           (list
+            'function
+            '(name "recursive-tool")
+            (list 'parameters parameters)))))))
+  (set-cdr! parameters parameters)
+  (check-value
+   'model-openai-request-rejects-cyclic-schema-spine
+   (raised-error-message
+    (lambda ()
+      (model-openai-request-json
+       "qwen3:0.6b" "prompt" (list (list 'tools (list tool))))))
+   "OpenAI schema lists must be finite and proper")
+  (check-value
+   'model-openai-codec-rejects-cyclic-schema-spine
+   (raised-error-message
+    (lambda ()
+      (openai-codec:model-openai-codec-request-json-projected
+       "qwen3:0.6b" "prompt" (vector (list tool) #f))))
+   "OpenAI schema lists must be finite and proper")))
+
+(testing-registry-case
+ 'model-openai-request-rejects-cyclic-schema-vector '(portable core)
+(let* ((recursive (make-vector 1 #f))
+       (tool
+        (list
+         'model-tool
+         '(name recursive-tool)
+         (list
+          'schema
+          (list
+           'openai-tool
+           '(type function)
+           (list
+            'function
+            '(name "recursive-tool")
+            (list 'parameters recursive)))))))
+  (vector-set! recursive 0 recursive)
+  (check-value
+   'model-openai-request-rejects-cyclic-schema-vector
+   (raised-error-message
+    (lambda ()
+      (model-openai-request-json
+       "qwen3:0.6b" "prompt" (list (list 'tools (list tool))))))
+   "OpenAI tool schema must be acyclic")))
+
+(testing-registry-case
+ 'model-openai-request-schema-depth-scales-with-output '(portable core)
+(let* ((small
+        (request-json-with-parameters (nested-schema-vector 128)))
+       (medium
+        (request-json-with-parameters (nested-schema-vector 256)))
+       (large
+        (request-json-with-parameters (nested-schema-vector 512)))
+       (shared (vector "leaf"))
+       (shared-json
+        (request-json-with-parameters (vector shared shared))))
+  (check-value 'model-openai-request-depth-first-doubling
+               (list (- (string-length medium) (string-length small))
+                     (- (string-length large) (string-length medium)))
+               '(256 512))
+  (check-value 'model-openai-request-shared-dag-projects-each-occurrence
+               (string-contains? shared-json
+                                 "[[\"leaf\"],[\"leaf\"]]")
+               #t)))
+
+(testing-registry-case
+ 'model-openai-provider-error-projects-url-sequentially '(portable core)
+(let* ((lambda-character (integer->char #x3bb))
+       (origin-text
+        (string-append
+         "noise://" (string lambda-character) "://127.0.0.1"))
+       (project
+        (lambda (size)
+          (let* ((url
+                  (string-append
+                   origin-text
+                   "/"
+                   (make-string size lambda-character)))
+                 (projection
+                  (openai-codec:model-openai-codec-provider-error-projected
+                   '#(local-errors
+                      qwen-coder
+                      local
+                      openai-compatible-http
+                      7
+                      0
+                      240)
+                   'scheme-scripter
+                   url
+                   "safe"
+                   "safe"
+                   '()))
+                 (request
+                  (field-value (vector-ref projection 1) 'request)))
+            (list (field-value request 'endpoint-origin)
+                  (field-value request 'request-path)))))
+       (small (project 20000))
+       (medium (project 40000))
+       (large (project 80000))
+       (path (car (cdr large))))
+  (check-value 'model-openai-provider-url-last-scheme-marker
+               (map car (list small medium large))
+               (list origin-text origin-text origin-text))
+  (check-value 'model-openai-provider-url-doubling-path-counts
+               (map
+                (lambda (projection)
+                  (string-length (car (cdr projection))))
+                (list small medium large))
+               '(20001 40001 80001))
+  (check-value 'model-openai-provider-url-variable-width-path-prefix
+               (string-ref path 0)
+               #\/)
+  (check-value 'model-openai-provider-url-variable-width-path-tail
+               (string-ref path 80000)
+               lambda-character)))
 
 (testing-registry-case
  'model-openai-parse-message-head '(portable core)
