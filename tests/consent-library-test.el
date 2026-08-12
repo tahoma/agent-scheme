@@ -1028,6 +1028,90 @@
           (should (<= (mixed-difference 2) 16)))))))
 
 (ert-deftest
+    consent-library-test-agent-memory-text-terms-scale-additively ()
+  "Bound overlapping text relevance by terms plus record text."
+  (let* ((options '(:internal-libraries-allowed t
+                    :max-steps 12000000
+                    :max-value-nodes 2000000
+                    :max-host-callbacks 2000000))
+         (context (consent--new-eval-context options))
+         (environment (consent-make-base-environment))
+         (setup
+          (concat
+           "(import (scheme base) (agent memory))\n"
+           "(define (text-probe-terms count overlap?)\n"
+           "  (let loop ((index 1) (result '()))\n"
+           "    (if (> index count)\n"
+           "        (reverse result)\n"
+           "        (loop\n"
+           "         (+ index 1)\n"
+           "         (cons\n"
+           "          (if overlap?\n"
+           "              (make-string index #\\a)\n"
+           "              (string-append\n"
+           "               \"Q\" (number->string index) \"Z\"))\n"
+           "          result)))))\n"
+           "(define (text-relevance-probe term-count text-size overlap?)\n"
+           "  (let ((store (consent-make-memory-store)))\n"
+           "    (memory-store-put!\n"
+           "     store 'project 'text-probe\n"
+           "     (list '(tags (text-probe))\n"
+           "           (list 'value (make-string text-size #\\a))))\n"
+           "    (let* ((selection\n"
+           "            (memory-store-select\n"
+           "             store\n"
+           "             (text-probe-terms term-count overlap?)\n"
+           "             '(retrieval-policy\n"
+           "               (weights\n"
+           "                ((recency 0)\n"
+           "                 (importance 0)\n"
+           "                 (relevance 1)))\n"
+           "               (cutoff 0)\n"
+           "               (limit 1))\n"
+           "             '(retrieval-context\n"
+           "               (scope project)\n"
+           "               (trust local)\n"
+           "               (allowed-scopes (project))\n"
+           "               (logical-clock 1))))\n"
+           "           (candidate (car (memory-selection-candidates\n"
+           "                            selection))))\n"
+           "      (memory-record-field-value candidate 'score #f))))\n")))
+    (setf (consent--eval-context-interaction-environment context)
+          environment)
+    (consent--ensure-base-syntax context environment)
+    (consent-library-test--run-source-on
+     setup context environment options)
+    (consent-library-test--run-source-on
+     "(text-relevance-probe 1 1 #f)" context environment options)
+    (cl-labels
+        ((measure-corners (overlap)
+           (mapcar
+            (lambda (arguments)
+              (consent-library-test--measure-source-on
+               (format
+                "(text-relevance-probe %d %d %s)"
+                (nth 0 arguments)
+                (nth 1 arguments)
+                overlap)
+               context environment options))
+            '((2 32) (4 32) (2 64) (4 64))))
+         (mixed-difference (corners metric)
+           (let ((ll (nth 0 corners))
+                 (nl (nth 1 corners))
+                 (lk (nth 2 corners))
+                 (nk (nth 3 corners)))
+             (+ (nth metric nk)
+                (- (nth metric nl))
+                (- (nth metric lk))
+                (nth metric ll)))))
+      (dolist (corners (list (measure-corners "#t")))
+        (dolist (corner corners)
+          (should (stringp (car corner))))
+        (ert-info ((format "text relevance LL/NL/LK/NK: %S" corners))
+          (should (<= (abs (mixed-difference corners 1)) 512))
+          (should (<= (abs (mixed-difference corners 2)) 128)))))))
+
+(ert-deftest
     consent-library-test-agent-memory-key-work-scales-additively ()
   "Bound shared append and high-indegree key work by physical graph size."
   (let ((options '(:internal-libraries-allowed t
