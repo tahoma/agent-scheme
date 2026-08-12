@@ -67,6 +67,28 @@
         (testing runner)
         (stdlib testing))
 
+;; True when the evaluator exposes owned compound records through Scheme's
+;; ordinary pair/string/vector/bytevector predicates.
+(define datum-compiled-host-run?
+  (let ((value (get-environment-variable "TESTING_RUNNER_HOST_RUN")))
+    (and value (string=? value "1"))))
+
+;; Register a bridge test whose procedure arguments must be real host
+;; procedures.  Direct Scheme hosts provide those procedures; a compiled
+;; host-run interprets this test source, so its lambdas belong to the guest
+;; evaluator and cannot stand in for host callbacks.  The compiled lane still
+;; exercises registered native libraries through their actual native exports.
+(define-syntax datum-direct-host-case
+  (syntax-rules ()
+    ((_ name tags body ...)
+     (testing-registry-case
+      name tags
+      (if datum-compiled-host-run?
+          (begin
+            (test-skip 1)
+            (test-assert name #t))
+          (begin body ...))))))
+
 (define (make-alternating-host-chain depth leaf)
   "Return DEPTH host pair/vector nodes ending in LEAF."
   (let loop ((index 0) (result leaf))
@@ -269,13 +291,19 @@
               '(pair string vector bytevector)
               (map consent-datum-object-kind
                    (list pair string vector bytevector)))
-  (test-assert 'direct-host-containers-stay-private
-               (and (not (pair? pair))
-                    (not (string? string))
-                    (not (vector? vector))
-                    (not (bytevector? bytevector))))))
+  (if datum-compiled-host-run?
+      (test-assert 'compiled-language-predicates-see-owned-compounds
+                   (and (pair? pair)
+                        (string? string)
+                        (vector? vector)
+                        (bytevector? bytevector)))
+      (test-assert 'direct-host-containers-stay-private
+                   (and (not (pair? pair))
+                        (not (string? string))
+                        (not (vector? vector))
+                        (not (bytevector? bytevector)))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-long-multibyte-string-adapters
  '(portable runtime datum boundary mutation performance)
 (let* ((context (new-eval-context '()))
@@ -311,7 +339,7 @@
               #\ξ
               (consent-datum-string-ref-host owned last))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-string-range-copy
  '(portable runtime datum boundary mutation performance)
 (let* ((heap (consent-make-datum-heap))
@@ -386,7 +414,7 @@
   (test-assert 'owned-range-copy-source-and-manifest-export
                (memq 'consent-datum-string-copy-range exports))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-identity-and-mutation-gateway '(portable runtime datum mutation)
 (let* ((heap (consent-make-datum-heap))
        (events '())
@@ -416,7 +444,7 @@
                      pair
                      (consent-datum-cons heap 'after 'tail))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-trusted-pair-vector-and-string-access
  '(portable runtime datum mutation performance)
 (let* ((heap (consent-make-datum-heap))
@@ -619,7 +647,7 @@
       (not
        (memq 'consent-datum-internal-slot-set! internal-exports)))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-bytevector-mutation-order-and-abort
  '(portable runtime datum mutation performance)
 (let* ((heap (consent-make-datum-heap))
@@ -708,7 +736,7 @@
                   '(visited)
                   (consent-datum-object-traversal first))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-call-scoped-map-restoration
  '(portable runtime datum graph performance)
 (let* ((heap (consent-make-datum-heap))
@@ -777,7 +805,7 @@
    'closed-map-continuation-reentry-fails-closed
    (datum-map-continuation-reentry-condition object))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-call-scoped-map-fixed-probe-work
  '(portable runtime datum graph performance)
 (let* ((heap (consent-make-datum-heap))
@@ -851,7 +879,7 @@
                (consent-datum-object-map-probe-count
                 map (car rest)))))))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-lexical-cell-mutation-gateway '(portable runtime datum mutation)
 (let* ((context (new-eval-context '()))
        (heap (context-datum-heap context))
@@ -878,7 +906,7 @@
               '((#t cell binding-set! 0 before after))
               events)))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-cell-cache-coherence '(portable runtime datum mutation performance)
 (let* ((context (new-eval-context '()))
        (heap (context-datum-heap context))
@@ -1150,7 +1178,7 @@
            (and (pair? current)
                 (loop (- remaining 1) (cdr current)))))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-graph-copy-reuse-hooks
  '(portable runtime datum graph boundary performance)
 (let* ((heap (consent-make-datum-heap))
@@ -1227,7 +1255,7 @@
                 export-source-copies)
     (test-assert 'export-copy-source-runs-after-edges export-root-ready?))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-import-reuses-false-target
  '(portable runtime datum graph boundary performance)
 (let* ((heap (consent-make-datum-heap))
@@ -1275,7 +1303,7 @@
        (lambda (target source) target)
        #f))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-counted-import-host-cycle-and-invalid
  '(portable runtime datum graph boundary performance)
 (let* ((heap (consent-make-datum-heap))
@@ -1397,7 +1425,7 @@
        (memq
         'consent-datum-import-with-node-count internal-exports)))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-counted-import-scalar-false-sentinel
  '(portable runtime datum graph boundary performance)
 (let ((copy-calls 0))
@@ -1417,7 +1445,7 @@
       (list owned count invalid? invalid))))
   (test-equal 'counted-scalar-skips-copy-callback 0 copy-calls)))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-counted-import-defers-non-atomic-wrapper
  '(portable runtime datum graph boundary performance)
 (let* ((heap (consent-make-datum-heap))
@@ -1444,7 +1472,7 @@
       'counted-non-atomic-wrapper-is-first-invalid
       (eq? record invalid))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-counted-import-same-heap-cycle
  '(portable runtime datum graph boundary performance)
 (let* ((heap (consent-make-datum-heap))
@@ -1475,7 +1503,7 @@
       (list invalid? invalid))))
   (test-equal 'counted-same-heap-skips-copy-callbacks 0 copy-calls)))
 
-(testing-registry-case
+(datum-direct-host-case
  'owned-counted-import-cross-heap-cycle
  '(portable runtime datum graph boundary performance)
 (let* ((source-heap (consent-make-datum-heap))
@@ -1516,7 +1544,7 @@
    '(pair vector)
    (reverse copy-events))))
 
-(testing-registry-case
+(datum-direct-host-case
  'datum-scalar-path-skips-owned-allocation
  '(portable runtime datum boundary performance)
 (let* ((heap (consent-make-datum-heap))
@@ -1552,7 +1580,7 @@
    (+ (consent-datum-object-id before) 1)
    (consent-datum-object-id after))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-call-preserves-owned-identity '(portable runtime datum boundary)
 (let* ((context (new-eval-context '()))
        (heap (context-datum-heap context))
@@ -1608,7 +1636,7 @@
                 0
                 (- after before)))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-callback-egress-is-stack-safe
  '(portable runtime datum boundary callback graph performance)
 (let* ((depth 24000)
@@ -1663,7 +1691,7 @@
                   'mixed-native-leaf
                   (vector-ref converted 1))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-no-bridge-result-import-charges-only-fresh-compounds
  '(portable runtime datum boundary callback budget)
 (let* ((context (new-eval-context '()))
@@ -1835,7 +1863,7 @@ maps are required"
                   'shared-native-leaf
                   (alternating-host-chain-leaf depth first))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-bridge-unifies-mixed-cycle-without-retention
  '(portable runtime datum boundary graph performance)
 (let* ((context (new-eval-context '()))
@@ -1863,7 +1891,7 @@ maps are required"
                 0
                 (- after before)))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-scalar-calls-allocate-no-owned-graph
  '(portable runtime datum boundary performance)
 (let* ((context (new-eval-context '()))
@@ -1890,7 +1918,7 @@ maps are required"
    (+ before-id 1)
    (consent-datum-object-id after))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-call-writes-back-mutation '(portable runtime datum boundary mutation)
 (let* ((context (new-eval-context '()))
        (heap (context-datum-heap context))
@@ -1926,7 +1954,7 @@ maps are required"
               9
               (consent-datum-bytevector-u8-ref bytes 1))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-call-imports-shared-cycle '(portable runtime datum boundary graph)
 (let* ((context (new-eval-context '()))
        (result
@@ -1950,7 +1978,7 @@ maps are required"
               4
               (context-value-nodes context))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-known-mirror-result-reconciles-once
  '(portable runtime datum boundary graph mutation)
 (let* ((context (new-eval-context '()))
@@ -1986,7 +2014,7 @@ maps are required"
               5
               (context-value-nodes context))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-known-mirror-condition-reconciles-once
  '(portable runtime datum boundary condition graph mutation)
 (let* ((context (new-eval-context '()))
@@ -2021,7 +2049,7 @@ maps are required"
               5
               (context-value-nodes context))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-result-budget-stops-after-transactional-writeback
  '(portable runtime datum boundary mutation budget error-order)
 (let* ((context
@@ -2047,7 +2075,7 @@ maps are required"
   (test-assert 'native-result-writeback-precedes-budget-stop
                (consent-datum-pair? (consent-datum-car original)))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-raised-argument-keeps-owned-identity
  '(portable runtime datum boundary condition)
 (let* ((context (new-eval-context '()))
@@ -2062,7 +2090,7 @@ maps are required"
   (test-assert 'native-raised-argument-keeps-owned-identity
                (consent-datum-same? original condition))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-raised-fresh-cycle-is-owned
  '(portable runtime datum boundary condition graph)
 (let* ((context (new-eval-context '()))
@@ -2087,7 +2115,7 @@ maps are required"
                 condition
                 (consent-datum-cdr left)))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-error-object-becomes-portable-condition
  '(portable runtime datum boundary condition)
 (let* ((context (new-eval-context '()))
@@ -2125,7 +2153,7 @@ maps are required"
                  (eq? (vector-ref rendered 0)
                       (vector-ref rendered 1))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-many-callback-shims-keep-identity
  '(portable runtime datum boundary callback graph)
 (let* ((context (new-eval-context '()))
@@ -2191,7 +2219,7 @@ maps are required"
             (consent-datum-vector-ref origins (+ count index)))
        (loop (cdr rest) (+ index 1))))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-compound-callbacks-fail-closed
  '(portable runtime datum boundary callback condition)
 (let* ((context (new-eval-context '()))
@@ -2303,7 +2331,7 @@ maps are required"
    "native-compound-callback-unavailable: scalar values required"
    (consent-error-object-message result-condition))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-compound-reentry-fails-closed
  '(portable runtime datum boundary condition)
 (let* ((outer-context (new-eval-context '()))
@@ -2363,7 +2391,7 @@ maps are required"
    "native-compound-reentry-unavailable: scalar values required"
    (consent-error-object-message result-condition))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-outer-compound-mutation-remains-available
  '(portable runtime datum boundary mutation)
 (let* ((context (new-eval-context '()))
@@ -2383,22 +2411,24 @@ maps are required"
                 'after
                 (consent-datum-car original)))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-compound-borrow-inventories-match-bindings
  '(portable runtime datum boundary registry)
 (begin
-  (consent-register-native-library!
-   '(agent memory-query)
-   (native-memory-query-test-bindings))
-  (consent-register-native-library!
-   '(agent models openai-codec)
-   (native-openai-codec-test-bindings))
-  (consent-register-native-library!
-   '(agent redaction-kernel)
-   (native-redaction-kernel-test-bindings))
-  (consent-register-native-library!
-   '(agent task)
-   (list
+  (if (not datum-compiled-host-run?)
+      (begin
+        (consent-register-native-library!
+         '(agent memory-query)
+         (native-memory-query-test-bindings))
+        (consent-register-native-library!
+         '(agent models openai-codec)
+         (native-openai-codec-test-bindings))
+        (consent-register-native-library!
+         '(agent redaction-kernel)
+         (native-redaction-kernel-test-bindings))
+        (consent-register-native-library!
+         '(agent task)
+         (list
     (cons 'task-states native-task:task-states)
     (cons 'task-pause-states native-task:task-pause-states)
     (cons 'task-terminal-states native-task:task-terminal-states)
@@ -2432,11 +2462,11 @@ maps are required"
     (cons 'make-task-pause native-task:make-task-pause)
     (cons 'make-task-stop native-task:make-task-stop)
     (cons 'make-task-wait native-task:make-task-wait)
-    (cons 'make-task-failure native-task:make-task-failure)
-    (cons 'make-agent-completion native-task:make-agent-completion)))
-  (consent-register-native-library!
-   '(agent transcript)
-   (list
+          (cons 'make-task-failure native-task:make-task-failure)
+          (cons 'make-agent-completion native-task:make-agent-completion)))
+        (consent-register-native-library!
+         '(agent transcript)
+         (list
     (cons 'transcript-event-kinds
           native-transcript:transcript-event-kinds)
     (cons 'transcript-replay-modes
@@ -2463,18 +2493,18 @@ maps are required"
     (cons 'transcript-raw-view native-transcript:transcript-raw-view)
     (cons 'transcript-summary-view
           native-transcript:transcript-summary-view)
-    (cons 'transcript-rotate native-transcript:transcript-rotate)
-    (cons 'transcript-export native-transcript:transcript-export)))
-  (consent-register-native-library!
-   '(agent context)
-   (list
+          (cons 'transcript-rotate native-transcript:transcript-rotate)
+          (cons 'transcript-export native-transcript:transcript-export)))
+        (consent-register-native-library!
+         '(agent context)
+         (list
     (cons 'context-field native-context:context-field)
     (cons 'context-present? native-context:context-present?)
     (cons 'make-request-context native-context:make-request-context)
-    (cons 'make-conversation-summary
-          native-context:make-conversation-summary)
-    (cons 'make-focus-context native-context:make-focus-context)
-    (cons 'make-context-bundle native-context:make-context-bundle)))
+          (cons 'make-conversation-summary
+                native-context:make-conversation-summary)
+          (cons 'make-focus-context native-context:make-focus-context)
+          (cons 'make-context-bundle native-context:make-context-bundle)))))
   (let ((context
          (new-eval-context
           '((internal-libraries-allowed . #t))))
@@ -2516,7 +2546,7 @@ maps are required"
      'native-context-binding-inventory-valid
      (resolve-library '(agent context) context environment)))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-memory-query-borrow-inventory-fails-closed
  '(portable runtime datum boundary registry)
 (let* ((bindings (native-memory-query-test-bindings))
@@ -2563,7 +2593,7 @@ maps are required"
     (error-object-message extra-procedure-condition)
     (error-object-message extra-data-condition)))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-openai-codec-borrow-inventory-fails-closed
  '(portable runtime datum boundary registry)
 (let* ((bindings (native-openai-codec-test-bindings))
@@ -2613,7 +2643,7 @@ maps are required"
     (error-object-message extra-procedure-condition)
     (error-object-message extra-data-condition)))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-redaction-kernel-borrow-inventory-fails-closed
  '(portable runtime datum boundary registry)
 (let* ((bindings (native-redaction-kernel-test-bindings))
@@ -2664,7 +2694,7 @@ maps are required"
     (error-object-message extra-procedure-condition)
     (error-object-message extra-data-condition)))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-redaction-kernel-callback-and-reentry-fail-closed
  '(portable runtime datum boundary callback reentry)
 (let ((previous-applier (consent-native-applier-ref))
@@ -2784,7 +2814,7 @@ maps are required"
    '(agent redaction-kernel)
    (native-redaction-kernel-test-bindings))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-redaction-kernel-preserves-string-identity
  '(portable runtime datum boundary identity mutation)
 (begin
@@ -2825,7 +2855,7 @@ maps are required"
      "prefix ghp_x"
      (consent-runtime-datum->native-datum text)))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-openai-codec-owned-error-projection
  '(portable runtime datum boundary graph)
 (begin
@@ -2891,7 +2921,7 @@ maps are required"
      '(model-provider-error (phase http))
      (list (car error-datum) (car (reverse (cdr error-datum))))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-openai-codec-rejects-borrowed-request-cycles
  '(portable runtime datum boundary graph condition budget)
 (let* ((context
@@ -2932,7 +2962,7 @@ maps are required"
       (let* ((tools-options
               (consent-datum-import heap (vector cyclic-tools #f)))
              (tools-condition
-              (guard (raised (else raised))
+             (guard (raised (else raised))
                 (consent-call-native-library
                  native-openai-codec:model-openai-codec-request-json-projected
                  context
@@ -3283,7 +3313,7 @@ maps are required"
           (allowed-scopes (project))
           (logical-clock 1)))))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-memory-query-callback-and-reentry-fail-closed
  '(portable runtime datum boundary callback reentry)
 (let ((previous-applier (consent-native-applier-ref)))
@@ -3439,7 +3469,7 @@ maps are required"
    '(agent memory-query)
    (native-memory-query-test-bindings))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-memory-query-preserves-identities-without-mutation
  '(portable runtime datum boundary identity mutation)
 (begin
@@ -3627,11 +3657,12 @@ maps are required"
          consent-runtime-datum->native-datum
          (list find-projection tag-projection select-projection))))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-binding-cache-owned-by-evaluation-context
  '(portable runtime datum boundary registry performance)
 (begin
-  (register-native-symbol-test-library!)
+  (if (not datum-compiled-host-run?)
+      (register-native-symbol-test-library!))
   (let* ((untouched-context (new-eval-context '()))
          (context
           (new-eval-context
@@ -3705,11 +3736,12 @@ maps are required"
          (test-library-binding-cell
           later-library 'consent-default-symbol-table))))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-symbol-intern-copies-owned-name
  '(portable runtime datum boundary symbol)
 (begin
-  (register-native-symbol-test-library!)
+  (if (not datum-compiled-host-run?)
+      (register-native-symbol-test-library!))
   (test-assert
    'native-symbol-intern-copies-owned-name
    (consent-eval-source
@@ -3724,7 +3756,7 @@ maps are required"
     #f
     '((internal-libraries-allowed . #t))))))
 
-(testing-registry-case
+(datum-direct-host-case
  'native-core-borrow-policy-fails-closed
  '(portable runtime datum boundary registry)
 (let ((resolve-condition

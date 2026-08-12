@@ -921,7 +921,10 @@
                  access-rejection
                  cache-limit-rejection)"
           environment
-          '(:max-steps 2000000
+          ;; The complete forced-nohash matrix currently consumes about
+          ;; 2.16 million evaluator steps.  Keep bounded headroom without
+          ;; weakening the callback or value-node envelopes below.
+          '(:max-steps 2500000
             :max-value-nodes 500000
             :max-host-callbacks 500000)))
         (concat

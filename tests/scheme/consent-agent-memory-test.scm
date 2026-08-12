@@ -20,6 +20,7 @@
         (testing runner)
         (stdlib testing))
 
+;; True when the compiled host runner needs the bounded stress ladder.
 (define memory-scale-host-run?
   (let ((value (get-environment-variable "TESTING_RUNNER_HOST_RUN")))
     (and value (string=? value "1"))))
@@ -2431,22 +2432,31 @@
     (memory-prepare-index-key 'project '(next session))
     (call-with-memory-index-key-session
      (lambda (prepare) (prepare 'project '(next session))))))
-  (set!
-   reentry-result
-   (guard
-    (condition (else 'blocked))
-    (let ((value
-           (call-with-memory-index-key-session
-            (lambda (prepare)
-              (call/cc
-               (lambda (return)
-                 (set! continuation return)
-                 (prepare 'project '(continuation session))))))))
-      (if first-continuation-return?
-          (begin
-            (set! first-continuation-return? #f)
-            (continuation 'reentered))
-          value))))
+  ;; Invoking CONTINUATION resumes its complete captured continuation.  Escape
+  ;; through FINISH after the guard observes the rejected dynamic-wind reentry
+  ;; so the test does not replay the registry's own suite finalization.
+  (let ((saved-runner (test-runner-current)))
+    (set!
+     reentry-result
+     (call/cc
+      (lambda (finish)
+        (guard
+         (condition (else (finish 'blocked)))
+         (let ((value
+                (call-with-memory-index-key-session
+                 (lambda (prepare)
+                   (call/cc
+                    (lambda (return)
+                      (set! continuation return)
+                      (prepare 'project '(continuation session))))))))
+           (if first-continuation-return?
+               (begin
+                 (set! first-continuation-return? #f)
+                 (continuation 'reentered))
+               (finish value)))))))
+    ;; A rejected dynamic-wind before thunk may temporarily leave parameter
+    ;; guards unwound; restore the registry runner before recording the result.
+    (test-runner-current saved-runner))
   (test-equal
    'memory-key-session-rejects-continuation-reentry
    'blocked

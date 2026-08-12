@@ -149,8 +149,10 @@
     ;; tag-key-vector, and event/security flags.  Text is rendered read-only by
     ;; the native query kernel only when a textual query actually needs it.
     (define memory-sidecar-access-flag 1)
-    (define memory-sidecar-tombstone-flag 2)
-    (define memory-sidecar-redaction-flag 4)
+;; Bit marking an append-time tombstone event.
+(define memory-sidecar-tombstone-flag 2)
+;; Bit marking source-classified restricted record content.
+(define memory-sidecar-redaction-flag 4)
 
     (define (make-memory-key-sidecar
              record live-key id-key access-target-key kind-key tag-keys)
@@ -171,22 +173,28 @@
               memory-sidecar-redaction-flag
               0))))
 
-    (define (memory-key-sidecar-live-key sidecar)
+(define (memory-key-sidecar-live-key sidecar)
+  "Return SIDECAR's detached live-key descriptor."
       (vector-ref sidecar 0))
 
-    (define (memory-key-sidecar-id-key sidecar)
+(define (memory-key-sidecar-id-key sidecar)
+  "Return SIDECAR's detached id descriptor."
       (vector-ref sidecar 1))
 
-    (define (memory-key-sidecar-access-target-key sidecar)
+(define (memory-key-sidecar-access-target-key sidecar)
+  "Return SIDECAR's detached access-target descriptor."
       (vector-ref sidecar 2))
 
-    (define (memory-key-sidecar-kind-key sidecar)
+(define (memory-key-sidecar-kind-key sidecar)
+  "Return SIDECAR's detached kind descriptor."
       (vector-ref sidecar 3))
 
-    (define (memory-key-sidecar-tag-keys sidecar)
+(define (memory-key-sidecar-tag-keys sidecar)
+  "Return SIDECAR's detached tag descriptor vector."
       (vector-ref sidecar 4))
 
-    (define (memory-key-sidecar-flags sidecar)
+(define (memory-key-sidecar-flags sidecar)
+  "Return SIDECAR's immutable classification flags."
       (vector-ref sidecar 5))
 
     (define (prepare-memory-tag-keys prepare scope record)
@@ -518,18 +526,29 @@
     ;; record, canonical live key, lean sidecar, and private append ordinal.
     ;; Access maxima live separately by canonical id so duplicate ids share one
     ;; value without rewriting every live entry on each access event.
-    (define (make-memory-live-entry record live-key sidecar ordinal)
+(define (make-memory-live-entry record live-key sidecar ordinal)
+  "Return one current-live entry for RECORD at append ORDINAL."
       (vector record live-key sidecar ordinal))
 
-    (define (memory-live-entry-record entry) (vector-ref entry 0))
-    (define (memory-live-entry-key entry) (vector-ref entry 1))
-    (define (memory-live-entry-sidecar entry) (vector-ref entry 2))
-    (define (memory-live-entry-ordinal entry) (vector-ref entry 3))
+(define (memory-live-entry-record entry)
+  "Return live ENTRY's record."
+  (vector-ref entry 0))
+(define (memory-live-entry-key entry)
+  "Return live ENTRY's canonical key."
+  (vector-ref entry 1))
+(define (memory-live-entry-sidecar entry)
+  "Return live ENTRY's detached sidecar."
+  (vector-ref entry 2))
+(define (memory-live-entry-ordinal entry)
+  "Return live ENTRY's append ordinal."
+  (vector-ref entry 3))
 
-    (define (memory-live-entry-id-key entry)
+(define (memory-live-entry-id-key entry)
+  "Return live ENTRY's detached id descriptor."
       (memory-key-sidecar-id-key (memory-live-entry-sidecar entry)))
 
-    (define (memory-live-entry-scope entry)
+(define (memory-live-entry-scope entry)
+  "Return live ENTRY's canonical scope name."
       (let ((scope
              (vector-ref (memory-live-entry-key entry) 0)))
         (cond
