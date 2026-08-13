@@ -94,6 +94,98 @@
    portable-provider portable-model 'scheme-scripter
    "prompt text must not leak" options attempt))
 
+(define (expected-request-datum timeout detail-limit)
+  "Return the exact safe request metadata for transport error checks."
+  (list
+   'model-provider-request
+   (list 'role 'scheme-scripter)
+   (list 'provider 'local-errors)
+   (list 'model 'qwen-coder)
+   (list 'kind 'local)
+   (list 'transport 'openai-compatible-http)
+   (list 'endpoint-origin "http://127.0.0.1:11434")
+   (list 'request-path "/v1/chat/completions")
+   (list
+    'prompt
+    '(redaction
+      (kind prompt)
+      (source provider-request)
+      (replacement "[local-only]")
+      (policy local-only)))
+   (list 'timeout-seconds timeout)
+   (list 'max-transport-detail-bytes detail-limit)
+   (list 'retry-count 0)))
+
+(define (expected-provider-error timeout detail-limit reason extra-fields)
+  "Return the exact structured provider error for EXTRA-FIELDS."
+  (append
+   (list
+    'model-provider-error
+    (list 'request (expected-request-datum timeout detail-limit))
+    (list 'status 'unavailable)
+    (list 'provider 'local-errors)
+    (list 'model 'qwen-coder)
+    (list 'transport 'openai-compatible-http)
+    (list 'reason reason)
+    (list 'retry 'bounded-local-transport-retry)
+    (list 'task-state 'blocked))
+   extra-fields))
+
+(define (expected-provider-error-summary reason)
+  "Return the exact human-facing provider error summary for REASON."
+  (string-append
+   "local model transport failed for provider local-errors model "
+   "qwen-coder via openai-compatible-http: "
+   reason))
+
+(define (detail-budget-error options)
+  "Return the structured HTTP error produced with detail-limit OPTIONS."
+  (let ((body
+         (string-append
+          "{\"error\":\""
+          (make-string 400 #\a)
+          "\"}")))
+    (result-field
+     (completion-result
+      options
+      (lambda (url request-json timeout)
+        (retrieval-output body 503)))
+     'error
+     '())))
+
+(define (padding-fields count)
+  "Return COUNT irrelevant fields for large record traversal tests."
+  (let loop ((remaining count) (fields '()))
+    (if (= remaining 0)
+        fields
+        (loop (- remaining 1)
+              (cons (list 'unused remaining) fields)))))
+
+(define (cyclic-field-spine fields)
+  "Make and return a cycle through the last pair of FIELDS."
+  (let loop ((cursor fields))
+    (if (null? (cdr cursor))
+        (set-cdr! cursor fields)
+        (loop (cdr cursor))))
+  fields)
+
+(define (make-cyclic-provider)
+  "Return a provider whose public field spine contains a cycle."
+  (let ((fields
+         (list '(id local-errors)
+               '(kind local)
+               '(transport openai-compatible-http)
+               '(endpoint "http://127.0.0.1:11434/v1"))))
+    (cons 'model-provider (cyclic-field-spine fields))))
+
+(define (make-cyclic-model)
+  "Return a model whose public field spine contains a cycle."
+  (cons 'model (cyclic-field-spine (list '(id qwen-coder)))))
+
+(define (make-cyclic-options)
+  "Return completion options whose public field spine contains a cycle."
+  (cyclic-field-spine (list '(timeout-seconds 7) '(retry-count 1))))
+
 ;; Canonical tool schema used by request projection checks.
 (define local-echo-tool
   '(model-tool
@@ -258,6 +350,37 @@
                '((text "hello") (count 2)))))
 
 (testing-registry-case
+ 'model-openai-parse-duplicate-content-first '(portable core)
+(check-value
+ 'model-openai-parse-duplicate-content-first
+ (model-openai-parse-response
+  (string-append
+   "{\"choices\":[{\"message\":{"
+   "\"content\":\"first\",\"content\":\"second\"}}]}"))
+ "first"))
+
+(testing-registry-case
+ 'model-openai-parse-duplicate-tool-fields-first '(portable core)
+(let* ((response
+        (model-openai-parse-response
+         (string-append
+          "{\"choices\":[{\"message\":{\"tool_calls\":[{"
+          "\"id\":\"first\",\"id\":\"second\",\"function\":{"
+          "\"name\":\"one\",\"name\":\"two\","
+          "\"arguments\":\"{\\\"x\\\":1}\","
+          "\"arguments\":\"{\\\"x\\\":2}\"}}]}}]}")))
+       (call (car (field-value response 'tool-calls))))
+  (check-value 'model-openai-parse-duplicate-tool-id
+               (field-value call 'id)
+               "first")
+  (check-value 'model-openai-parse-duplicate-tool-name
+               (field-value call 'name)
+               'one)
+  (check-value 'model-openai-parse-duplicate-tool-arguments
+               (field-value call 'arguments)
+               '((x 1)))))
+
+(testing-registry-case
  'consent-json-nested-first '(portable core)
 (let ((out (open-output-string)))
   (json-write
@@ -309,17 +432,258 @@
                  (result-field result 'value #f) "ok"))))
 
 (testing-registry-case
- 'model-openai-http-error-status '(portable core)
-(let* ((result
+ 'model-openai-option-projection-precedence '(portable core)
+(let* ((request
+        (json-read
+         (open-input-string
+          (model-openai-request-json
+           "qwen3:0.6b"
+           "prompt"
+           '((tool_choice required)
+             (tool-choice auto)
+             (tool-choice none))))))
+       (valueless-request
+        (json-read
+         (open-input-string
+          (model-openai-request-json
+           "qwen3:0.6b"
+           "prompt"
+           '((tool_choice required)
+             (tool-choice)
+             (tool_choice none)
+             (tool-choice auto))))))
+       (suppressed-request
+        (json-read
+         (open-input-string
+          (model-openai-request-json
+           "qwen3:0.6b"
+           "prompt"
+           '((tool_choice required)
+             (tool-choice #f)
+             (tool_choice none)
+             (tool-choice auto))))))
+       (calls 0)
+       (timeouts '())
+       (result
+        (completion-result
+         '((timeout-seconds 7)
+           (timeout-seconds 99)
+           (retry-count 1)
+           (retry-count 3))
+         (lambda (url request-json timeout)
+           (set! calls (+ calls 1))
+           (set! timeouts (cons timeout timeouts))
+           (if (= calls 1)
+               (list 7 "" "connection refused")
+               (retrieval-output
+                "{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}"
+                200))))))
+  (check-value 'model-openai-option-projection-tool-choice
+               (json-ref request 'tool_choice)
+               "auto")
+  (check-value 'model-openai-option-valueless-primary-uses-first-alias
+               (json-ref valueless-request 'tool_choice)
+               "required")
+  (check-value 'model-openai-option-false-primary-suppresses-alias
+               (assq 'tool_choice suppressed-request)
+               #f)
+  (check-value 'model-openai-option-projection-retry-count calls 2)
+  (check-value 'model-openai-option-projection-timeout
+               (reverse timeouts)
+               '(7 7))
+  (check-value 'model-openai-option-projection-result
+               (result-field result 'value #f)
+               "ok")))
+
+(testing-registry-case
+ 'model-openai-request-non-pair-options '(portable core)
+(check-value
+ 'model-openai-request-non-pair-options
+ (model-openai-request-json "qwen3:0.6b" "prompt" #f)
+ (model-openai-request-json "qwen3:0.6b" "prompt" '())))
+
+(testing-registry-case
+ 'model-openai-large-provider-first-fields '(portable core)
+(let ((calls 0)
+      (seen-url #f))
+  (let* ((provider
+          (append
+           portable-provider
+           (padding-fields 1024)
+           '((kind remote)
+             (transport unsupported)
+             (endpoint "https://example.com/v1"))))
+         (result
+          (model-openai-compatible-http-completion-result
+           provider portable-model 'scheme-scripter "prompt" '()
+           (lambda (url request-json timeout)
+             (set! calls (+ calls 1))
+             (set! seen-url url)
+             (retrieval-output
+              "{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}"
+              200)))))
+    (check-value 'model-openai-large-provider-first-fields calls 1)
+    (check-value 'model-openai-large-provider-first-url
+                 seen-url
+                 "http://127.0.0.1:11434/v1/chat/completions")
+    (check-value 'model-openai-large-provider-first-value
+                 (result-field result 'value #f)
+                 "ok"))))
+
+(testing-registry-case
+ 'model-openai-provider-validates-improper-tail '(portable core)
+(let ((calls 0))
+  (let ((result
+         (model-openai-compatible-http-completion-result
+          '(model-provider
+            (id local-errors)
+            (kind local)
+            (transport openai-compatible-http)
+            (endpoint "http://127.0.0.1:11434/v1")
+            . malformed-tail)
+          portable-model
+          'scheme-scripter
+          "prompt"
+          '()
+          (lambda (url request-json timeout)
+            (set! calls (+ calls 1))
+            (retrieval-output
+             "{\"choices\":[{\"message\":{\"content\":\"wrong\"}}]}"
+             200)))))
+    (check-value 'model-openai-provider-validates-improper-tail calls 0)
+    (check-value 'model-openai-provider-improper-tail-status
+                 (result-field result 'status #f)
+                 'error))))
+
+(testing-registry-case
+ 'model-openai-provider-rejects-cyclic-spine '(portable core)
+(let ((calls 0))
+  (let ((result
+         (model-openai-compatible-http-completion-result
+          (make-cyclic-provider)
+          portable-model
+          'scheme-scripter
+          "prompt"
+          '()
+          (lambda (url request-json timeout)
+            (set! calls (+ calls 1))
+            (retrieval-output
+             "{\"choices\":[{\"message\":{\"content\":\"wrong\"}}]}"
+             200)))))
+    (check-value 'model-openai-provider-rejects-cyclic-spine calls 0)
+    (check-value 'model-openai-provider-cyclic-result-head
+                 (car result)
+                 'model-completion-result)
+    (check-value 'model-openai-provider-cyclic-status
+                 (result-field result 'status #f)
+                 'error))))
+
+(testing-registry-case
+ 'model-openai-model-and-options-reject-cyclic-spines '(portable core)
+(let ((calls 0))
+  (let ((model-result
+         (model-openai-compatible-http-completion-result
+          portable-provider
+          (make-cyclic-model)
+          'scheme-scripter
+          "prompt"
+          '()
+          (lambda (url request-json timeout)
+            (set! calls (+ calls 1))
+            (retrieval-output
+             "{\"choices\":[{\"message\":{\"content\":\"wrong\"}}]}"
+             200))))
+        (options-result
+         (completion-result
+          (make-cyclic-options)
+          (lambda (url request-json timeout)
+            (set! calls (+ calls 1))
+            (retrieval-output
+             "{\"choices\":[{\"message\":{\"content\":\"wrong\"}}]}"
+             200)))))
+    (check-value 'model-openai-model-options-cyclic-no-transport calls 0)
+    (check-value 'model-openai-model-cyclic-status
+                 (result-field model-result 'status #f)
+                 'error)
+    (check-value 'model-openai-options-cyclic-status
+                 (result-field options-result 'status #f)
+                 'error))))
+
+(testing-registry-case
+ 'model-openai-long-curl-metadata-scan '(portable core)
+(let* ((body "{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}")
+       (result
+        (completion-result
+         '()
+         (lambda (url request-json timeout)
+           (list 0
+                 (string-append body
+                                "__CONSENT_OPENAI_META__"
+                                (make-string 4096 #\x))
+                 "")))))
+  (check-value 'model-openai-long-curl-metadata-status
+               (result-field result 'status #f)
+               'ok)
+  (check-value 'model-openai-long-curl-metadata-value
+               (result-field result 'value #f)
+               "ok")))
+
+(testing-registry-case
+ 'model-openai-process-error-exact-projection '(portable core)
+(let* ((reason "curl exited 7: connection refused")
+       (result
         (completion-result
          '((timeout-seconds 7) (retry-count 0))
          (lambda (url request-json timeout)
-           (retrieval-output
-            "{\"error\":{\"message\":\"model still loading\"}}"
-            503))))
+           (list 7 "" "connection refused"))))
+       (expected-error
+        (expected-provider-error
+         7
+         240
+         reason
+         (list
+          (list 'phase 'process)
+          (list
+           'process
+           (list
+            'process-failure
+            (list 'exit-status 7)
+            (list 'detail reason)))))))
+  (check-value
+   'model-openai-process-error-field-order
+   (result-field result 'error #f)
+   expected-error)
+  (check-value
+   'model-openai-process-error-summary
+   (result-field result 'message #f)
+   (expected-provider-error-summary reason))))
+
+(testing-registry-case
+ 'model-openai-http-error-status '(portable core)
+(let* ((body "{\"error\":{\"message\":\"model still loading\"}}")
+       (reason (string-append "HTTP 503: " body))
+       (result
+        (completion-result
+         '((timeout-seconds 7) (retry-count 0))
+         (lambda (url request-json timeout)
+           (retrieval-output body 503))))
        (error-datum (result-field result 'error '()))
        (request (result-field error-datum 'request '()))
-       (http (result-field error-datum 'http '())))
+       (http (result-field error-datum 'http '()))
+       (expected-error
+        (expected-provider-error
+         7
+         240
+         reason
+         (list
+          (list 'phase 'http)
+          (list
+           'http
+           (list
+            'http-failure
+            (list 'status 503)
+            (list 'body-excerpt body)))
+          (list 'elapsed-ms 1)))))
   (check-value 'model-openai-http-error-status
                (result-field result 'status #f) 'error)
   (check-value 'model-openai-http-error-phase
@@ -328,7 +692,7 @@
                (result-field http 'status #f) 503)
   (check-value 'model-openai-http-error-excerpt
                (result-field http 'body-excerpt #f)
-               "{\"error\":{\"message\":\"model still loading\"}}")
+               body)
   (check-value 'model-openai-http-error-timeout
                (result-field request 'timeout-seconds #f) 7)
   (let ((out (open-output-string)))
@@ -336,7 +700,15 @@
     (check-value 'model-openai-http-error-prompt-redacted
                  (string-contains?
                   (get-output-string out) "prompt text must not leak")
-                 #f))))
+                 #f))
+  (check-value
+   'model-openai-http-error-field-order
+   error-datum
+   expected-error)
+  (check-value
+   'model-openai-http-error-summary
+   (result-field result 'message #f)
+   (expected-provider-error-summary reason))))
 
 (testing-registry-case
  'model-openai-detail-budget-status '(portable core)
@@ -360,20 +732,79 @@
                (string-contains? excerpt "tail-marker") #t)))
 
 (testing-registry-case
+ 'model-openai-inexact-detail-budgets-use-default '(portable core)
+(let* ((primary-error
+        (detail-budget-error
+         '((max-transport-detail-bytes 320.0)
+           (max_transport_detail_bytes 320))))
+       (primary-request (result-field primary-error 'request '()))
+       (primary-http (result-field primary-error 'http '()))
+       (alias-error
+        (detail-budget-error
+         '((max_transport_detail_bytes 320.0))))
+       (alias-request (result-field alias-error 'request '()))
+       (alias-http (result-field alias-error 'http '())))
+  (check-value 'model-openai-inexact-primary-detail-budget
+               (result-field
+                primary-request
+                'max-transport-detail-bytes
+                #f)
+               240)
+  (check-value 'model-openai-inexact-primary-detail-excerpt
+               (string-length
+                (result-field primary-http 'body-excerpt ""))
+               240)
+  (check-value 'model-openai-inexact-alias-detail-budget
+               (result-field
+                alias-request
+                'max-transport-detail-bytes
+                #f)
+               240)
+  (check-value 'model-openai-inexact-alias-detail-excerpt
+               (string-length
+                (result-field alias-http 'body-excerpt ""))
+               240)))
+
+(testing-registry-case
  'model-openai-decode-error-status '(portable core)
 (let* ((body "{\"choices\":[{\"message\":{\"content\":42}}]}")
+       (detail "OpenAI-compatible response did not contain text")
+       (reason (string-append "response decode failed: " detail))
        (result
         (completion-result
          '()
          (lambda (url request-json timeout)
            (retrieval-output body 200))))
        (error-datum (result-field result 'error '()))
-       (decode (result-field error-datum 'decode '())))
+       (decode (result-field error-datum 'decode '()))
+       (expected-error
+        (expected-provider-error
+         30
+         240
+         reason
+         (list
+          (list 'phase 'decode)
+          (list
+           'decode
+           (list
+            'decode-failure
+            (list 'detail detail)
+            (list 'http-status 200)
+            (list 'body-excerpt body)))
+          (list 'elapsed-ms 1)))))
   (check-value 'model-openai-decode-error-status
                (result-field result 'status #f) 'error)
   (check-value 'model-openai-decode-error-phase
                (result-field error-datum 'phase #f) 'decode)
   (check-value 'model-openai-decode-error-body
-               (result-field decode 'body-excerpt #f) body)))
+               (result-field decode 'body-excerpt #f) body)
+  (check-value
+   'model-openai-decode-error-field-order
+   error-datum
+   expected-error)
+  (check-value
+   'model-openai-decode-error-summary
+   (result-field result 'message #f)
+   (expected-provider-error-summary reason))))
 
 (testing-runner-main "Consent Models Openai portable tests" (command-line))
