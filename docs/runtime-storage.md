@@ -297,11 +297,96 @@ The following cases fail closed:
 - a released or non-current owner operation; and
 - a reset mark from another owner lifetime or beyond the current prefix.
 
+## Scheme Corpus Audit
+
+The repository-wide audit used three questions for each apparent accumulator:
+
+1. Is the final value vector-like, or is a list, string, bytevector, queue, or
+   hash table the actual abstraction?
+2. Is the final length unknown during the one pass that produces elements?
+3. Must the code run before optional standard libraries are realized, and can
+   it remain bounded and callback-free?
+
+Passing all three questions is a strong primitive-storage fit. Code that calls
+user procedures or implements an optional public sequence belongs above the
+bootstrap boundary and should use SRFI 214 instead.
+
+### Primitive Refactors
+
+The memory-key graph capture already uses private growable vectors for dense
+labels, edges, and canonical descriptors. That remains the highest-value use:
+the final shape is a vector, graph size is not known before traversal, and the
+algorithm runs on a bootstrap path.
+
+The reader now uses the same primitive in two further places:
+
+- source-location indexing appends line starts while its existing exact-size
+  offset-to-line vector is filled; and
+- vector and bytevector literal parsing appends elements under the reader's
+  configured length ceiling, snapshots once, and then either returns the host
+  vector or fills an exact-size owned vector or bytevector.
+
+Both builders know a permanent maximum before appending, invoke no user code,
+and discard their private capacity after producing a detached result. They
+remove intermediate cons cells and reverse passes without changing reader
+limits, element order, source metadata, or owned-datum construction.
+
+### SRFI 214 Follow-Ups
+
+Two optional standard-library modules should use the public flexvector surface
+after #210 lands:
+
+- SRFI 42 `vector-ec` and `string-ec` can collect unknown comprehension output
+  with `flexvector-add-back!`, then use `flexvector->vector` or
+  `flexvector->string`; and
+- SRFI 158 `generator->vector`, `vector-accumulator`, and
+  `reverse-vector-accumulator` can avoid intermediate lists through
+  `generator->flexvector`, back insertion, conversion, and reversal.
+
+These paths execute user expressions or generator procedures and expose
+standard-library behavior. They therefore must not depend directly on the
+callback-free primitive, even if the SRFI 214 implementation internally reuses
+compatible primitive storage.
+
+### Candidates Rejected or Deferred
+
+- Explicit traversal stacks and FIFO worklists in `(consent datum)`,
+  `(consent interpreter)`, `(consent result)`, `(consent symbol-boundary)`,
+  `(consent library)`, `(agent memory-key)`, and `(agent memory-query)` need
+  push/pop or queue/deque semantics. Issue #969 owns that bootstrap worklist
+  abstraction; treating a populated vector prefix as an ad hoc queue would
+  recreate the duplication that the foundation issues are meant to remove.
+- `(data transient-map)` grows an open-addressed hash table. Its sparse slots,
+  probing, deletion markers, and rehash threshold are not a growable sequence;
+  replacing its backing vector with this primitive would hide rather than
+  simplify the table invariants.
+- Fixed-size vector operations in the evaluator, datum heap, numeric backend,
+  base prelude, and native bridge already know their result length. Exact
+  allocation and direct indexed filling are cheaper and clearer than geometric
+  growth.
+- Reader string and escaped-symbol accumulators are already linear and usually
+  small. Promoting every token to a record plus backing vector would add fixed
+  overhead; a future character or string builder should be justified by
+  profiles rather than by sequence resemblance alone.
+- Writer fragments and interpreter string or bytevector port refills ultimately
+  need contiguous text or bytes, not object slots. The refill paths deserve a
+  chunked byte/string buffer review because repeated concatenation can copy
+  quadratically, but an object growable vector would complicate cursor access
+  and unread-remainder semantics instead of solving that representation need.
+- Ordinary `cons` plus `reverse` loops that intentionally return lists should
+  stay lists. Avoiding lists is not itself a reason to cross the storage-layer
+  boundary.
+
 ## Layering and Consumers
 
 The memory-key canonicalizer now uses this library for its dense label, edge,
 and descriptor vectors. Its graph semantics and asymptotic gates remain owned
 by `(agent memory-key)`; only the compatible storage machinery moved.
+
+The reader uses per-call growable vectors for line-start and literal-element
+builders. It snapshots before publishing a result and releases the private
+storage during dynamic cleanup, so capacity and lifecycle policy cannot escape
+through the reader API.
 
 Issue #210 continues to own SRFI 214 names, validation, aliases, documentation,
 and public flexvector semantics. It may reuse the private storage where those

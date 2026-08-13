@@ -83,6 +83,12 @@
           (consent datum)
           (consent identity-map)
           (consent numeric)
+          (only (consent runtime-storage)
+                consent-growable-vector-active?
+                consent-growable-vector-append!
+                consent-growable-vector-release!
+                consent-growable-vector-snapshot
+                consent-make-growable-vector)
           (consent symbol)
           (consent symbol-boundary))
   (begin
@@ -96,6 +102,16 @@
     (define consent-default-maximum-bytevector-length 100000)
     ;; Default maximum string size accepted by the portable reader.
     (define consent-default-maximum-string-size 1048576)
+
+    ;; Small builders avoid an initial resize without reserving their full
+    ;; configured ceiling up front.
+    (define reader-initial-growable-capacity 16)
+
+    (define (make-reader-growable-vector maximum-capacity)
+      "Return empty bounded storage for one reader-local builder."
+      (consent-make-growable-vector
+       (min reader-initial-growable-capacity maximum-capacity)
+       maximum-capacity))
     ;; Default maximum total datum node count accepted by reader validation.
     (define consent-default-maximum-total-nodes 1000000)
 
@@ -858,16 +874,30 @@ r"
       "The offset vector includes the end position. A final newline retains"
       "the historical end-column convention because no datum starts after it."
       (let* ((length (vector-length characters))
-             (offset-lines (make-vector (+ length 1) 0)))
-        (let loop ((offset 0) (line 0) (starts '(0)))
-          (vector-set! offset-lines offset line)
-          (if (= offset length)
-              (vector (list->vector (reverse starts)) offset-lines)
-              (let ((next (+ offset 1)))
-                (if (and (char=? (vector-ref characters offset) #\newline)
-                         (< next length))
-                    (loop next (+ line 1) (cons next starts))
-                    (loop next line starts)))))))
+             (offset-lines (make-vector (+ length 1) 0))
+             (starts (make-reader-growable-vector (+ length 1))))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (consent-growable-vector-append! starts 0)
+           (let loop ((offset 0) (line 0))
+             (vector-set! offset-lines offset line)
+             (if (= offset length)
+                 (vector
+                  (consent-growable-vector-snapshot starts)
+                  offset-lines)
+                 (let ((next (+ offset 1)))
+                   (if (and
+                        (char=?
+                         (vector-ref characters offset) #\newline)
+                        (< next length))
+                       (begin
+                         (consent-growable-vector-append! starts next)
+                         (loop next (+ line 1)))
+                       (loop next line))))))
+         (lambda ()
+           (if (consent-growable-vector-active? starts)
+               (consent-growable-vector-release! starts))))))
 
     (define (source-location-line-column line-starts offset-lines offset)
       "Return one-based (LINE . COLUMN) through the direct offset index."
@@ -2765,28 +2795,34 @@ dotted tail"))
       "Read vector or bytevector elements under the active length budget."
       (check-depth reader depth)
       (push-pending! reader (string->symbol kind))
-      (let loop ((items '()) (count 0))
-        (skip-intertoken-space! reader depth)
-        (cond
-         ((eof? reader)
-          (reader-incomplete reader "unterminated sequence" kind))
-         ((char=? (peek reader) close-char)
-          (advance! reader)
-          (pop-pending! reader)
-          ;; Return reverse source order and the already-known count. Owned
-          ;; callers fill exact-size shells backward without another list copy.
-          (cons items count))
-         ((char=? (peek reader) #\.)
-          (reader-error reader "dot is not allowed in sequence" kind))
-         (else
-          (let ((datum (read-datum reader (+ depth 1)))
-                (next-count (+ count 1)))
-            (if (> next-count maximum-length)
-                (limit-error reader
-                             "sequence length exceeds maximum length"
-                             kind
-                             maximum-length))
-            (loop (cons datum items) next-count))))))
+      (let ((items (make-reader-growable-vector maximum-length)))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (let loop ((count 0))
+             (skip-intertoken-space! reader depth)
+             (cond
+              ((eof? reader)
+               (reader-incomplete reader "unterminated sequence" kind))
+              ((char=? (peek reader) close-char)
+               (advance! reader)
+               (pop-pending! reader)
+               (consent-growable-vector-snapshot items))
+              ((char=? (peek reader) #\.)
+               (reader-error reader "dot is not allowed in sequence" kind))
+              (else
+               (let ((datum (read-datum reader (+ depth 1)))
+                     (next-count (+ count 1)))
+                 (if (> next-count maximum-length)
+                     (limit-error reader
+                                  "sequence length exceeds maximum length"
+                                  kind
+                                  maximum-length))
+                 (consent-growable-vector-append! items datum)
+                 (loop next-count))))))
+         (lambda ()
+           (if (consent-growable-vector-active? items)
+               (consent-growable-vector-release! items))))))
 
     (define (exact-integer-value datum)
       "Extract an exact integer value from an Consent Scheme number datum."
@@ -2802,76 +2838,62 @@ dotted tail"))
              (<= 0 value)
              (<= value 255))))
 
-    (define (list->bytevector bytes)
-      "Convert a list of exact byte values into a bytevector."
-      (let* ((length (length bytes))
-             (bytevector (make-bytevector length)))
-        (let loop ((index 0) (rest bytes))
-          (if (null? rest)
-              bytevector
-              (begin
-                (bytevector-u8-set! bytevector index (car rest))
-                (loop (+ index 1) (cdr rest)))))))
-
     (define (read-vector reader depth)
       "Read an R7RS vector literal."
       (advance! reader 2)
-      (let* ((sequence
+      (let* ((items
               (read-vector-elements
                reader
                depth
                "vector"
                #\)
                (reader-maximum-vector-length reader)))
-             (items (car sequence))
-             (count (cdr sequence)))
+             (count (vector-length items)))
         (note-node! reader)
         (if (reader-owned-construction? reader)
             (let ((vector
                    (reader-make-owned-shell reader 'vector count)))
-              (let fill ((rest items) (index (- count 1)))
-                (if (null? rest)
+              (let fill ((index 0))
+                (if (= index count)
                     vector
                     (begin
                       (reader-fill-owned-slot!
-                       reader vector index (car rest))
-                      (fill (cdr rest) (- index 1))))))
-            (list->vector (reverse items)))))
+                       reader vector index (vector-ref items index))
+                      (fill (+ index 1))))))
+            items)))
 
     (define (read-bytevector-literal reader depth)
       "Read an R7RS bytevector literal and validate byte elements."
       (advance! reader 4)
-      (let* ((sequence
+      (let* ((items
               (read-vector-elements
                reader
                depth
                "bytevector"
                #\)
                (reader-maximum-bytevector-length reader)))
-             (items (car sequence))
-             (count (cdr sequence))
+             (count (vector-length items))
              (bytevector
-              (and (reader-owned-construction? reader)
-                   (reader-make-owned-shell reader 'bytevector count))))
-        (let loop ((rest items) (index (- count 1)) (bytes '()))
-          (cond
-           ((null? rest)
-            (note-node! reader)
-            (if bytevector
-                bytevector
-                (list->bytevector bytes)))
-           ((exact-byte? (car rest))
-            (let ((byte (exact-integer-value (car rest))))
-              (if bytevector
-                  (reader-fill-owned-slot!
-                   reader bytevector index byte))
-              (loop (cdr rest)
-                    (- index 1)
-                    (if bytevector bytes (cons byte bytes)))))
-           (else
-            (reader-error reader
-                          "bytevector element is not an exact byte"
-                          (consent-datum->external (car rest))))))))
+              (if (reader-owned-construction? reader)
+                  (reader-make-owned-shell reader 'bytevector count)
+                  (make-bytevector count))))
+        (let loop ((index 0))
+          (if (= index count)
+              (begin
+                (note-node! reader)
+                bytevector)
+              (let ((datum (vector-ref items index)))
+                (if (exact-byte? datum)
+                    (let ((byte (exact-integer-value datum)))
+                      (if (reader-owned-construction? reader)
+                          (reader-fill-owned-slot!
+                           reader bytevector index byte)
+                          (bytevector-u8-set! bytevector index byte))
+                      (loop (+ index 1)))
+                    (reader-error
+                     reader
+                     "bytevector element is not an exact byte"
+                     (consent-datum->external datum))))))))
 
     (define (quote-datum reader name datum)
       "Build the canonical abbreviated quote form for NAME and DATUM."

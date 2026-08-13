@@ -1808,6 +1808,7 @@
           (library (consent datum))
           (library (consent identity-map))
           (library (consent numeric))
+          (library (consent runtime-storage))
           (library (consent symbol))
           (library (consent symbol-boundary))))
         (provenance ((origin repo)))
