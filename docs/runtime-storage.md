@@ -18,6 +18,52 @@ loader and direct or compiled R7RS routes execute the same Scheme source. A
 future native runtime may accelerate the backing storage, but it must preserve
 the bounds, clearing, counters, ownership, and failure behavior described here.
 
+## Choosing the Storage Layer
+
+Use a growable vector when one algorithm directly owns its storage and lifetime.
+Use a scratch arena when storage is reused across calls or runtime phases and a
+stale operation must be rejected after cleanup.
+
+| Need | Layer | Why |
+| --- | --- | --- |
+| Indexed storage with a permanent bound | Growable vector | Smallest API. |
+| Reuse with explicit phase ownership | Scratch arena | Stale owners fail. |
+| Collector without heap growth | `pre-reserved` arena | Fails full. |
+| Temporary safe growth | `allow-growth` arena | Grows boundedly. |
+
+Neither layer is a general sequence abstraction. The library is private,
+mutable, callback-free, and deliberately narrower than SRFI 214.
+
+## Storage Shape and Invariants
+
+The logical prefix and the allocated backing vector are different bounds. The
+configured maximum is a budget, not storage allocated in advance.
+
+```mermaid
+flowchart LR
+  subgraph backing["Allocated backing vector"]
+    used["Populated prefix<br/>0 through length - 1<br/>may retain values"]
+    spare["Reserved suffix<br/>length through capacity - 1<br/>must contain #f"]
+  end
+
+  budget["Unallocated capacity budget<br/>capacity through maximum - 1"]
+
+  used ---|"length boundary"| spare
+  spare ---|"capacity boundary"| budget
+```
+
+At every active-vector boundary:
+
+- `0 <= length <= capacity <= maximum-capacity`;
+- only indexes below `length` are populated and addressable;
+- every reserved slot at or above `length` contains `#f`;
+- reset moves `length` to zero without reducing `capacity`; and
+- release clears the prefix, replaces the backing vector with an empty vector,
+  and permanently makes the growable vector inactive.
+
+The high-water and cumulative counters remain available after release. They
+describe the object's history, not its current logical contents.
+
 ## Growable Vectors
 
 `consent-make-growable-vector` takes an initial capacity and a maximum
@@ -45,6 +91,25 @@ count, and released state as Scheme-readable data.
 `consent-growable-vector-unused-slots-cleared?` is a private diagnostic for the
 garbage-collector root invariant. It scans reserved slots outside the logical
 prefix and confirms that none retains a stale value.
+
+### Complexity and Allocation
+
+The table abbreviates the common `consent-growable-vector-` prefix.
+
+| Operation | Time | Backing allocation |
+| --- | --- | --- |
+| `length`, `capacity`, `ref`, `set!` | O(1) | None. |
+| `append!` | Amortized O(1) | Only when full. |
+| `reserve!`, `grow!` | O(length) when larger | Only when larger. |
+| `snapshot` | O(length) | Always; returns a copy. |
+| `reset!`, `release!` | O(length) | None. |
+| `unused-slots-cleared?` | O(capacity) | None. |
+| `stats` | O(1) | Allocates the result datum. |
+
+For example, repeated append from initial capacity zero and maximum capacity ten
+uses capacities `0, 1, 2, 4, 8, 10`. The next append fails before allocation.
+`reserve!` instead requests an exact larger capacity; `grow!` treats its
+argument as a minimum and may choose the larger geometric capacity.
 
 ## Scratch Arenas
 
@@ -84,6 +149,95 @@ owner before entering the portion of a phase in which ordinary allocation is
 forbidden. Marks do not allocate compound storage. A compiled adapter may make
 the owner token and exact marks immediate values, but cannot weaken their
 lifetime checks.
+
+Although a mark is represented by an exact integer, callers must treat it as
+opaque. It must not be decoded, adjusted, transferred to another owner, or used
+after its owner is released.
+
+### Arena Lifecycle
+
+The arena retains its backing capacity while owner lifetimes come and go. The
+owner, not the arena alone, is the capability required for active operations.
+
+```mermaid
+stateDiagram-v2
+    state "Idle arena" as idle
+    state "Active owner" as owned
+
+    [*] --> idle
+    idle --> idle: reserve! may allocate
+    idle --> owned: acquire!(phase) creates owner
+    owned --> owned: append!, ref, set!, mark, reset!
+    owned --> idle: release! clears populated prefix
+
+    note right of idle
+      No current owner
+      length is zero
+      capacity is retained
+    end note
+
+    note right of owned
+      Only the current owner is valid
+      Nested acquire and reserve fail
+      Invalid operations leave state unchanged
+    end note
+```
+
+Allocation-sensitive code must order the lifecycle deliberately:
+
+1. Reserve the needed capacity while the arena is idle.
+2. Acquire the owner before entering the no-allocation section; acquisition
+   creates the owner record and lifetime token.
+3. Use only owner operations within the reserved capacity.
+4. Leave the no-allocation section and release the owner, clearing all roots.
+
+Do not call `snapshot`, either statistics procedure, or other result-building
+diagnostics inside a strict no-allocation section. A `pre-reserved` append does
+not allocate backing storage, but it fails without changing state when capacity
+is exhausted.
+
+### Worked Mark and Reset Trace
+
+This trace keeps one root, discards later temporary work, and then releases the
+whole lifetime:
+
+```scheme
+(define arena
+  (consent-make-scratch-arena 2 8 'pre-reserved))
+
+(consent-scratch-arena-reserve! arena 6)
+
+(let ((owner (consent-scratch-arena-acquire! arena 'trace)))
+  (consent-scratch-owner-append! owner 'root-a)
+  (let ((mark (consent-scratch-owner-mark owner)))
+    (consent-scratch-owner-append! owner 'root-b)
+    (consent-scratch-owner-reset! owner mark))
+  (consent-scratch-owner-release! owner))
+```
+
+The state changes are:
+
+| Point | Active | Length | Capacity | Retained values |
+| --- | --- | ---: | ---: | --- |
+| After reserve | No | 0 | 6 | None. |
+| After acquire | Yes | 0 | 6 | None. |
+| At mark | Yes | 1 | 6 | `root-a`. |
+| Before reset | Yes | 2 | 6 | `root-a`, `root-b`. |
+| After reset | Yes | 1 | 6 | `root-a`; later slots are `#f`. |
+| After release | No | 0 | 6 | None; all reserved slots are `#f`. |
+
+The reset increments the arena reset count. Release increments its release
+count and invalidates `owner`, while the arena keeps six slots for its next
+lifetime.
+
+### Concurrency Boundary
+
+The portable records and the library-wide owner-token counter are not
+synchronized. An arena and its growable vector belong to one serialized runtime
+execution context at a time. A host that shares them across native threads must
+serialize access or provide an adapter with equivalent atomic ownership and
+publication behavior. Owner checks prevent stale-lifetime use; they are not a
+data-race primitive.
 
 ## Dynamic Extent and Re-entry
 
