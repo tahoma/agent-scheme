@@ -57,6 +57,8 @@
           consent-growable-vector-append!
           consent-growable-vector-ref
           consent-growable-vector-set!
+          consent-growable-vector-unsafe-ref
+          consent-growable-vector-unsafe-set!
           consent-growable-vector-copy!
           consent-growable-vector-fill!
           consent-growable-vector-reserve!

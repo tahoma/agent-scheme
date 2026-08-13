@@ -126,6 +126,12 @@ The populated prefix is separate from reserved capacity:
 - release clears every populated slot, drops the backing vector, and makes the
   growable vector permanently inactive.
 
+The private growable-vector library also exposes unchecked slot access for
+trusted runtime substrates that have already validated their own bounds. The
+worklist uses that narrow interface so each queue operation validates once;
+callers still cannot observe the backing vector. Ordinary consumers use the
+checked `ref` and `set!` operations.
+
 These operations are distinct primitive-backend lifetime signals. A native or
 collector-aware backend must not collapse them into aliases: clear abandons the
 high-water allocation for the initial-capacity backing, reset retains the
@@ -504,6 +510,15 @@ The three migrated queues now use `push-back!` and `pop-front!`, release their
 ring storage through `dynamic-wind`, and retain their existing algorithm-owned
 bounds and ordering. No stack was migrated merely to reduce consing; a future
 stack abstraction should be justified on its own contract and measurements.
+
+The first memory-key migration exposed validation amplification in the
+interpreted bootstrap: each queue operation revalidated both the worklist and
+its growable-vector slot. On one same-machine run of the exact high-indegree
+scale gate, the list queue took 87.393 seconds and the layered checked path took
+106.618 seconds. Letting the already-validated worklist use the growable
+vector's trusted slot operations reduced the same gate to 7.350 seconds. The
+backing vector remains hidden, while checked growable-vector callers retain
+their original contract.
 
 ### Candidates Rejected or Deferred
 

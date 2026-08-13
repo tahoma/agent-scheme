@@ -33,16 +33,16 @@
           (only (consent growable-vector)
                 consent-make-growable-vector
                 consent-growable-vector-append!
-                consent-growable-vector-capacity
-                consent-growable-vector-ref
                 consent-growable-vector-release!
-                consent-growable-vector-set!
+                consent-growable-vector-unsafe-ref
+                consent-growable-vector-unsafe-set!
                 consent-growable-vector-unused-slots-cleared?))
   (begin
     ;; Mutable circular-buffer state plus deterministic operation counters.
     (define-record-type <consent-worklist>
       (make-worklist-record
-       storage size front initial-capacity maximum-capacity growth-policy
+       storage size front capacity initial-capacity maximum-capacity
+       growth-policy
        high-water push-fronts push-backs pop-fronts pop-backs
        capacity-changes automatic-growths copied-elements clears resets
        active?)
@@ -50,6 +50,7 @@
       (storage worklist-storage set-worklist-storage!)
       (size worklist-size set-worklist-size!)
       (front worklist-front-index set-worklist-front-index!)
+      (capacity worklist-reserved-capacity set-worklist-reserved-capacity!)
       (initial-capacity worklist-initial-capacity)
       (maximum-capacity worklist-maximum-capacity)
       (growth-policy worklist-growth-policy)
@@ -125,24 +126,26 @@
     (define (worklist-capacity-value worklist)
       "Return WORKLIST's capacity, including zero after release."
       (if (worklist-active? worklist)
-          (consent-growable-vector-capacity
-           (worklist-storage worklist))
+          (worklist-reserved-capacity worklist)
           0))
 
     (define (worklist-physical-index worklist offset)
       "Return physical index for logical OFFSET in WORKLIST."
-      (let ((capacity (worklist-capacity-value worklist)))
-        (modulo (+ (worklist-front-index worklist) offset) capacity)))
+      (let* ((capacity (worklist-capacity-value worklist))
+             (candidate (+ (worklist-front-index worklist) offset)))
+        (if (>= candidate capacity)
+            (- candidate capacity)
+            candidate)))
 
     (define (worklist-slot-ref worklist offset)
       "Return WORKLIST's value at logical OFFSET."
-      (consent-growable-vector-ref
+      (consent-growable-vector-unsafe-ref
        (worklist-storage worklist)
        (worklist-physical-index worklist offset)))
 
     (define (worklist-slot-set! worklist offset value)
       "Set WORKLIST's logical OFFSET to VALUE."
-      (consent-growable-vector-set!
+      (consent-growable-vector-unsafe-set!
        (worklist-storage worklist)
        (worklist-physical-index worklist offset)
        value))
@@ -158,11 +161,12 @@
         (let copy ((offset 0))
           (if (< offset size)
               (begin
-                (consent-growable-vector-set!
+                (consent-growable-vector-unsafe-set!
                  new-storage offset (worklist-slot-ref worklist offset))
                 (copy (+ offset 1)))))
         (consent-growable-vector-release! old-storage)
         (set-worklist-storage! worklist new-storage)
+        (set-worklist-reserved-capacity! worklist requested)
         (set-worklist-front-index! worklist 0)
         (set-worklist-capacity-changes!
          worklist (+ (worklist-capacity-changes worklist) 1))
@@ -247,6 +251,7 @@
        (make-slot-storage initial-capacity maximum-capacity)
        0
        0
+       initial-capacity
        initial-capacity
        maximum-capacity
        growth-policy
@@ -359,7 +364,7 @@
                   (- capacity 1)
                   (- (worklist-front-index worklist) 1))))
         (set-worklist-front-index! worklist front)
-        (consent-growable-vector-set!
+        (consent-growable-vector-unsafe-set!
          (worklist-storage worklist) front value))
       (note-worklist-size! worklist (+ (worklist-size worklist) 1))
       (set-worklist-push-fronts!
@@ -410,15 +415,17 @@
       (let* ((capacity (worklist-capacity-value worklist))
              (front (worklist-front-index worklist))
              (value
-              (consent-growable-vector-ref
+              (consent-growable-vector-unsafe-ref
                (worklist-storage worklist) front))
              (new-size (- (worklist-size worklist) 1)))
-        (consent-growable-vector-set!
+        (consent-growable-vector-unsafe-set!
          (worklist-storage worklist) front #f)
         (set-worklist-size! worklist new-size)
         (set-worklist-front-index!
          worklist
-         (if (= new-size 0) 0 (modulo (+ front 1) capacity)))
+         (if (= new-size 0)
+             0
+             (if (= (+ front 1) capacity) 0 (+ front 1))))
         (set-worklist-pop-fronts!
          worklist (+ (worklist-pop-fronts worklist) 1))
         value))
@@ -433,10 +440,10 @@
       (let* ((offset (- (worklist-size worklist) 1))
              (physical (worklist-physical-index worklist offset))
              (value
-              (consent-growable-vector-ref
+              (consent-growable-vector-unsafe-ref
                (worklist-storage worklist) physical))
              (new-size offset))
-        (consent-growable-vector-set!
+        (consent-growable-vector-unsafe-set!
          (worklist-storage worklist) physical #f)
         (set-worklist-size! worklist new-size)
         (if (= new-size 0)
@@ -476,7 +483,9 @@
               (worklist-initial-capacity worklist)
               (worklist-maximum-capacity worklist))))
         (consent-growable-vector-release! (worklist-storage worklist))
-        (set-worklist-storage! worklist new-storage))
+        (set-worklist-storage! worklist new-storage)
+        (set-worklist-reserved-capacity!
+         worklist (worklist-initial-capacity worklist)))
       (set-worklist-size! worklist 0)
       (set-worklist-front-index! worklist 0)
       (set-worklist-clears! worklist (+ (worklist-clears worklist) 1))
@@ -509,6 +518,7 @@
             (reset-worklist-storage! worklist)
             (consent-growable-vector-release!
              (worklist-storage worklist))
+            (set-worklist-reserved-capacity! worklist 0)
             (set-worklist-active! worklist #f)))
       worklist)
 
