@@ -1081,7 +1081,7 @@ jobs:
         host:
           - host: chibi
             host_name: Chibi
-            apt_package: chibi-scheme
+            apt_package: chibi-scheme chibi-scheme-common
             make_target: test-portable-chibi
             group_set: direct
             log_prefix: portable-chibi

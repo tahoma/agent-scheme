@@ -795,7 +795,8 @@ reflection 6.800\n"
     (should (string-match-p
              (concat "- host: chibi\n"
                      "[[:space:]]+host_name: Chibi\n"
-                     "[[:space:]]+apt_package: chibi-scheme\n"
+                     "[[:space:]]+apt_package: chibi-scheme "
+                     "chibi-scheme-common\n"
                      "[[:space:]]+make_target: test-portable-chibi")
              workflow))
     (should (string-match-p
