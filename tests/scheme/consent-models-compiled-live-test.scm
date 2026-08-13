@@ -22,7 +22,9 @@
                          datum)))
     (cond
      ((not (pair? fields)) #f)
-     ((eq? (car (car fields)) name) (cadr (car fields)))
+     ((and (pair? (car fields))
+           (eq? (car (car fields)) name))
+      (cadr (car fields)))
      (else (loop (cdr fields))))))
 
 (define (env-or-default name default)
@@ -61,9 +63,10 @@
          (response
           (model-complete
            'scheme-scripter
-           "Call the local-echo tool with text exactly portable-ci-tool-call."
+           "Call local-echo with text exactly CONSENT_SMOKE_OK."
            (list (list 'tools (list tool))
-                 (list 'tool-choice tool))))
+                 (list 'tool-choice tool)
+                 (list 'temperature 0))))
          (tool-calls (field response 'tool-calls))
          (call (if (and (pair? tool-calls) (pair? (car tool-calls)))
                    (car tool-calls)
@@ -77,5 +80,6 @@
                  (let ((name (field call 'name)))
                    (and (symbol? name)
                         (string=? (symbol->string name) "local-echo"))))
-    (test-assert "compiled host receives a string tool argument"
-                 (string? text))))
+    (test-assert "compiled host receives the exact tool argument"
+                 (and (string? text)
+                      (string=? text "CONSENT_SMOKE_OK")))))

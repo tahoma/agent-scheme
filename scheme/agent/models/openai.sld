@@ -731,20 +731,26 @@
               (model-openai-raise-provider-error
                (model-openai-http-error-projection
                 context role url http-status body elapsed-ms)))
-          (guard (condition
-                  (else
-                   (model-openai-raise-provider-error
-                    (model-openai-decode-error-projection
-                     context
-                     role
-                     url
-                     (model-openai-condition-detail
-                      condition
-                      (vector-ref context 6))
-                     body
-                     elapsed-ms
-                     http-status))))
-            (model-openai-parse-response body)))))
+          ;; Return a tagged parse outcome from the guard, then raise outside
+          ;; its handler.  This avoids hosts whose guard handler can observe a
+          ;; fresh exception raised while handling the original parse error.
+          (let ((outcome
+                 (guard (condition
+                         (else (vector #f condition)))
+                   (vector #t (model-openai-parse-response body)))))
+            (if (vector-ref outcome 0)
+                (vector-ref outcome 1)
+                (model-openai-raise-provider-error
+                 (model-openai-decode-error-projection
+                  context
+                  role
+                  url
+                  (model-openai-condition-detail
+                   (vector-ref outcome 1)
+                   (vector-ref context 6))
+                  body
+                  elapsed-ms
+                  http-status)))))))
 
     (define (model-openai-compatible-http-completion-result
              provider model role prompt options . maybe-attempt)
