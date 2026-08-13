@@ -87,7 +87,11 @@ does; retaining an ERT test does not make it the semantic source of truth.
   deterministic work accounting, stale-slot clearing, suspension, exception
   cleanup, and continuation re-entry are canonical in
   `tests/scheme/consent-worklist-test.scm`. The program runs on direct and
-  compiled hosts; ERT retains one Emacs source-loader integration route.
+  compiled hosts; ERT retains one Emacs source-loader integration route. The
+  post-implementation coverage review added zero-capacity and constructor
+  boundaries, exact failure-state checks, wrapped reserve, detached snapshots,
+  directional statistics, idempotent release, and a deterministic list-model
+  sweep across zero, odd, growing, and pre-reserved capacities.
 - `(consent character)` owned-record construction, the complete Unicode scalar
   boundary, host/native adapter contracts, and NUL-through-maximum nested datum
   round trips are canonical in `tests/scheme/consent-character-test.scm`.
@@ -117,6 +121,15 @@ claim: one ERT case may contain many assertions, while one registered portable
 case retains each SRFI 64 result. The ownership map and executable marker checks
 answer the meaningful question: which environment owns each semantic case, and
 what portable test makes a host-neutral claim executable?
+
+Stateful storage suites should pair focused boundary examples with a
+deterministic model history. The examples make contract and failure diagnostics
+reviewable; the model checks interactions among operations, wrapping, growth,
+clearing, and stored false values that an operation-by-operation checklist can
+miss. Both forms must compare state before and after rejected operations so an
+error-only assertion cannot hide partial mutation. This pattern now covers
+growable vectors, transient maps, and worklists and is the preferred baseline
+for future mutable runtime substrates.
 
 ## Justified ERT coverage
 

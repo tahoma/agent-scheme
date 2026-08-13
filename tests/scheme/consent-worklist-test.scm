@@ -20,6 +20,11 @@
   "Return whether THUNK raises a Scheme condition."
   (if (raised-condition thunk) #t #f))
 
+(define (error-message=? condition expected)
+  "Return whether CONDITION is an error with EXPECTED message."
+  (and (error-object? condition)
+       (string=? (error-object-message condition) expected)))
+
 (define (stats-ref stats name)
   "Return NAME's value from private worklist STATS."
   (let ((field (assq name (cdr stats))))
@@ -32,6 +37,112 @@
         (begin
           (consent-worklist-push-back! worklist index)
           (loop (+ index 1))))))
+
+(define (list-last values)
+  "Return the final value in nonempty VALUES."
+  (if (null? (cdr values))
+      (car values)
+      (list-last (cdr values))))
+
+(define (list-without-last values)
+  "Return nonempty VALUES without its final pair."
+  (reverse (cdr (reverse values))))
+
+(define (model-value step)
+  "Return a deterministic retained value for model STEP."
+  (if (= (modulo step 11) 0)
+      #f
+      (list 'value step)))
+
+(define (run-worklist-model! specification steps)
+  "Compare a worklist with a list oracle for STEPS operations."
+  (let* ((initial-capacity (car specification))
+         (maximum-capacity (cadr specification))
+         (growth-policy (car (cddr specification)))
+         (worklist
+          (consent-make-worklist
+           initial-capacity maximum-capacity growth-policy)))
+    (let loop ((step 0) (model '()))
+      (if (< step steps)
+          (let* ((size (length model))
+                 (choice (modulo (+ step initial-capacity) 8))
+                 (value (model-value step))
+                 (next
+                  (cond
+                   ((= size 0)
+                    (consent-worklist-push-back! worklist value)
+                    (list value))
+                   ((= size maximum-capacity)
+                    (if (= (modulo step 2) 0)
+                        (begin
+                          (test-equal 'worklist-model-pop-front
+                                      (car model)
+                                      (consent-worklist-pop-front! worklist))
+                          (cdr model))
+                        (begin
+                          (test-equal 'worklist-model-pop-back
+                                      (list-last model)
+                                      (consent-worklist-pop-back! worklist))
+                          (list-without-last model))))
+                   ((or (= choice 0) (= choice 1) (= choice 6))
+                    (consent-worklist-push-front! worklist value)
+                    (cons value model))
+                   ((or (= choice 2) (= choice 3) (= choice 4))
+                    (consent-worklist-push-back! worklist value)
+                    (append model (list value)))
+                   ((= choice 5)
+                    (test-equal 'worklist-model-pop-front
+                                (car model)
+                                (consent-worklist-pop-front! worklist))
+                    (cdr model))
+                   (else
+                    (test-equal 'worklist-model-pop-back
+                                (list-last model)
+                                (consent-worklist-pop-back! worklist))
+                    (list-without-last model)))))
+            (test-equal 'worklist-model-snapshot
+                        (list specification step next)
+                        (list
+                         specification
+                         step
+                         (vector->list
+                          (consent-worklist-snapshot worklist))))
+            (test-equal 'worklist-model-size
+                        (list specification step (length next))
+                        (list
+                         specification
+                         step
+                         (consent-worklist-size worklist)))
+            (test-equal 'worklist-model-empty
+                        (null? next)
+                        (consent-worklist-empty? worklist))
+            (if (not (null? next))
+                (begin
+                  (test-equal 'worklist-model-front
+                              (car next)
+                              (consent-worklist-front worklist))
+                  (test-equal 'worklist-model-back
+                              (list-last next)
+                              (consent-worklist-back worklist))))
+            (test-equal 'worklist-model-work-units
+                        (+ step 1)
+                        (consent-worklist-work-units worklist))
+            (test-assert 'worklist-model-clears-inactive-slots
+                         (consent-worklist-unused-slots-cleared? worklist))
+            (loop (+ step 1) next))
+          (let ((stats (consent-worklist-stats worklist)))
+            (test-assert 'worklist-model-used-both-push-ends
+                         (and (> (stats-ref stats 'push-fronts) 0)
+                              (> (stats-ref stats 'push-backs) 0)))
+            (test-assert 'worklist-model-used-both-pop-ends
+                         (and (> (stats-ref stats 'pop-fronts) 0)
+                              (> (stats-ref stats 'pop-backs) 0)))
+            (test-equal 'worklist-model-directional-work-total
+                        steps
+                        (+ (stats-ref stats 'push-fronts)
+                           (stats-ref stats 'push-backs)
+                           (stats-ref stats 'pop-fronts)
+                           (stats-ref stats 'pop-backs))))))))
 
 (testing-registry-case
  'worklist-fifo-and-deque-contract '(portable runtime storage worklist)
@@ -148,6 +259,158 @@
                   (consent-worklist-reserve! worklist 9))))
   (test-equal 'worklist-reserve-preserves-order '#(0 1 2 3)
               (consent-worklist-snapshot worklist))))
+
+(testing-registry-case
+ 'worklist-boundaries-stats-and-lifecycle
+ '(portable runtime storage worklist model boundary error state)
+(test-assert 'worklist-predicate-rejects-other-values
+             (not (consent-worklist? 'not-storage)))
+(test-assert 'worklist-active-rejects-other-values
+             (not (consent-worklist-active? 'not-storage)))
+(test-assert 'worklist-negative-initial-capacity-rejected
+             (raises?
+              (lambda ()
+                (consent-make-worklist -1 8 'allow-growth))))
+(test-assert 'worklist-inexact-maximum-capacity-rejected
+             (raises?
+              (lambda ()
+                (consent-make-worklist 0 8.0 'allow-growth))))
+(test-assert 'worklist-inverted-capacity-rejected
+             (raises?
+              (lambda ()
+                (consent-make-worklist 9 8 'allow-growth))))
+(test-assert 'worklist-invalid-growth-policy-rejected
+             (raises?
+              (lambda ()
+                (consent-make-worklist 0 8 'sometimes))))
+(let ((zero (consent-make-worklist 0 0 'allow-growth)))
+  (test-equal
+   'worklist-zero-capacity-initial-stats
+   '(worklist-stats
+     (growth-policy allow-growth)
+     (active #t)
+     (size 0)
+     (capacity 0)
+     (maximum-capacity 0)
+     (high-water 0)
+     (front-index 0)
+     (push-fronts 0)
+     (push-backs 0)
+     (pop-fronts 0)
+     (pop-backs 0)
+     (pushes 0)
+     (pops 0)
+     (work-units 0)
+     (capacity-changes 0)
+     (automatic-growths 0)
+     (copied-elements 0)
+     (clears 0)
+     (resets 0))
+   (consent-worklist-stats zero))
+  (let* ((before (consent-worklist-stats zero))
+         (condition
+          (raised-condition
+           (lambda ()
+             (consent-worklist-push-front! zero 'overflow)))))
+    (test-assert
+     'worklist-zero-capacity-push-has-stable-error
+     (error-message=?
+      condition
+      "consent-worklist-push-front!: maximum capacity exceeded"))
+    (test-equal 'worklist-zero-capacity-failure-is-atomic
+                before
+                (consent-worklist-stats zero))))
+(let ((worklist (consent-make-worklist 3 6 'allow-growth)))
+  (for-each
+   (lambda (value)
+     (consent-worklist-push-back! worklist value))
+   '(a b c))
+  (test-equal 'worklist-wrapped-reserve-pop 'a
+              (consent-worklist-pop-front! worklist))
+  (consent-worklist-push-back! worklist 'd)
+  (let ((before (consent-worklist-stats worklist)))
+    (test-assert 'worklist-reserve-no-op-returns-self
+                 (eq? worklist
+                      (consent-worklist-reserve! worklist 3)))
+    (test-equal 'worklist-reserve-no-op-preserves-stats
+                before
+                (consent-worklist-stats worklist)))
+  (consent-worklist-reserve! worklist 6)
+  (test-equal 'worklist-wrapped-reserve-preserves-order
+              '#(b c d)
+              (consent-worklist-snapshot worklist))
+  (test-equal 'worklist-wrapped-reserve-linearizes-front
+              0
+              (stats-ref (consent-worklist-stats worklist) 'front-index))
+  (let ((snapshot (consent-worklist-snapshot worklist)))
+    (vector-set! snapshot 0 'mutated)
+    (test-equal 'worklist-snapshot-is-detached
+                'b
+                (consent-worklist-front worklist)))
+  (consent-worklist-push-front! worklist 'front)
+  (consent-worklist-push-back! worklist 'back)
+  (consent-worklist-push-back! worklist 'last)
+  (let ((before-values (consent-worklist-snapshot worklist))
+        (before-stats (consent-worklist-stats worklist)))
+    (test-assert 'worklist-maximum-overflow-rejected
+                 (raises?
+                  (lambda ()
+                    (consent-worklist-push-front! worklist 'overflow))))
+    (test-equal 'worklist-maximum-overflow-preserves-values
+                before-values
+                (consent-worklist-snapshot worklist))
+    (test-equal 'worklist-maximum-overflow-preserves-stats
+                before-stats
+                (consent-worklist-stats worklist)))
+  (consent-worklist-reset! worklist)
+  (test-assert 'worklist-empty-back-rejected
+               (raises? (lambda () (consent-worklist-back worklist))))
+  (test-assert 'worklist-empty-pop-back-rejected
+               (raises?
+                (lambda ()
+                  (consent-worklist-pop-back! worklist))))
+  (test-assert 'worklist-reset-returns-self
+               (eq? worklist (consent-worklist-reset! worklist)))
+  (test-assert 'worklist-clear-returns-self
+               (eq? worklist (consent-worklist-clear! worklist)))
+  (test-equal 'worklist-clear-restores-initial-after-reserve
+              3
+              (consent-worklist-capacity worklist))
+  (test-equal 'worklist-lifecycle-counts
+              '(1 2)
+              (let ((stats (consent-worklist-stats worklist)))
+                (list
+                 (stats-ref stats 'clears)
+                 (stats-ref stats 'resets))))
+  (test-assert 'worklist-release-returns-self
+               (eq? worklist (consent-worklist-release! worklist)))
+  (let ((released (consent-worklist-stats worklist)))
+    (test-assert 'worklist-release-is-terminal
+                 (not (consent-worklist-active? worklist)))
+    (test-equal 'worklist-release-drops-capacity
+                0
+                (stats-ref released 'capacity))
+    (test-assert 'worklist-release-clears-storage
+                 (consent-worklist-unused-slots-cleared? worklist))
+    (consent-worklist-release! worklist)
+    (test-equal 'worklist-double-release-is-idempotent
+                released
+                (consent-worklist-stats worklist)))
+  (test-assert 'worklist-released-query-rejected
+               (raises?
+                (lambda ()
+                  (consent-worklist-size worklist))))))
+
+(testing-registry-case
+ 'worklist-deterministic-model-sweep
+ '(portable runtime storage worklist model performance state)
+(for-each
+ (lambda (specification)
+   (run-worklist-model! specification 96))
+ '((0 17 allow-growth)
+   (1 17 allow-growth)
+   (3 17 allow-growth)
+   (5 5 pre-reserved))))
 
 (testing-registry-case
  'worklist-clear-reset-release-and-reentry
