@@ -31,6 +31,8 @@
                 "-L"
                 (expand-file-name "lisp" consent--test-root)
                 "--eval"
+                "(setq load-prefer-newer t)"
+                "--eval"
                 "(progn
                    (require 'seq)
                    (require 'consent-base)
@@ -39,8 +41,14 @@
                    (unless (member \"+\" (consent-base-primitive-names))
                      (kill-emacs 2))
                    (unless (member \"append\"
-                                   (consent-base-prelude-binding-names))
+                                   (consent-base-primitive-names))
                      (kill-emacs 3))
+                   (unless (member \"map\"
+                                   (consent-base-prelude-binding-names))
+                     (kill-emacs 5))
+                   (when (member \"append\"
+                                 (consent-base-prelude-binding-names))
+                     (kill-emacs 6))
                    (let ((spec
                           (car (seq-filter
                                 (lambda (entry)

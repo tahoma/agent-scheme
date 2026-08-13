@@ -51,6 +51,9 @@
           consent-number-kind
           consent-number-value
           consent-number-owned-value
+          consent-number-representation-snapshot
+          consent-number-representation-snapshot-outer
+          consent-outer-representation-kind
           consent-make-canonical-integer
           consent-make-canonical-decimal
           consent-make-canonical-rational
@@ -249,13 +252,13 @@
       "Return VALUE's car across the host and owned representations."
       (if (pair? value)
           (car value)
-          (consent-datum-car value)))
+          (consent-datum-car-trusted value)))
 
     (define (reader-cdr value)
       "Return VALUE's cdr across the host and owned representations."
       (if (pair? value)
           (cdr value)
-          (consent-datum-cdr value)))
+          (consent-datum-cdr-trusted value)))
 
     (define (reader-string? value)
       "Report whether VALUE is a host-native or owned string."
@@ -264,7 +267,7 @@
     (define (reader-string-length value)
       "Return VALUE's string length across both representations."
       (if (consent-datum-string? value)
-          (consent-datum-string-length value)
+          (consent-datum-string-length-trusted value)
           (string-length value)))
 
     (define (reader-string->host value)
@@ -280,7 +283,7 @@
             (do ((index 0 (+ index 1)))
                 ((= index length) (get-output-string output))
               (write-char
-               (consent-datum-string-ref-host value index)
+               (consent-datum-string-ref-host-trusted value index)
                output)))
           (substring value 0 length)))
 
@@ -291,13 +294,13 @@
     (define (reader-vector-length value)
       "Return VALUE's vector length across both representations."
       (if (consent-datum-vector? value)
-          (consent-datum-vector-length value)
+          (consent-datum-vector-length-trusted value)
           (vector-length value)))
 
     (define (reader-vector-ref value index)
       "Return VALUE's vector element at INDEX across both representations."
       (if (consent-datum-vector? value)
-          (consent-datum-vector-ref value index)
+          (consent-datum-vector-ref-trusted value index)
           (vector-ref value index)))
 
     (define (reader-bytevector? value)
@@ -466,6 +469,208 @@
           (consent-number-value-field datum)
           (error "consent-number-owned-value expected a canonical number"
                  datum)))
+
+    (define snapshot-decimal-digits "0123456789")
+
+    (define (canonical-number-exactness-character exactness)
+      "Return the stable representation character for canonical EXACTNESS."
+      (case exactness
+        ((exact) #\e)
+        ((inexact) #\i)
+        (else (error "unknown canonical number exactness" exactness))))
+
+    (define (canonical-infnan-character value)
+      "Return the stable representation character for special VALUE."
+      (cond
+       ((string=? value "-inf.0") #\0)
+       ((string=? value "+inf.0") #\1)
+       ((string=? value "+nan.0") #\2)
+       (else (error "unknown canonical special number" value))))
+
+    (define (snapshot-decimal-digit-count value)
+      "Return the number of decimal digits in nonnegative host VALUE."
+      (let loop ((remaining value) (count 1))
+        (if (< remaining 10)
+            count
+            (loop (quotient remaining 10) (+ count 1)))))
+
+    (define (snapshot-length-prefixed-size length)
+      "Return encoded size of decimal LENGTH, a colon, and its payload."
+      (+ (snapshot-decimal-digit-count length) 1 length))
+
+    (define (canonical-number-snapshot-plan datum)
+      "Plan DATUM's snapshot without retaining an owned payload reference."
+      (if (not (consent-number? datum))
+          (error "number snapshot expected a canonical number" datum))
+      (let ((exactness
+             (canonical-number-exactness-character
+              (consent-number-exactness datum)))
+            (value (consent-number-value-field datum)))
+        (case (consent-number-kind datum)
+          ((integer)
+           (let ((payload
+                  (owned-numeric
+                   'integer-representation-snapshot value)))
+             (vector (+ 2 (string-length payload))
+                     #\I exactness payload)))
+          ((rational)
+           (let ((numerator
+                  (owned-numeric
+                   'integer-representation-snapshot (car value)))
+                 (denominator
+                  (owned-numeric
+                   'integer-representation-snapshot (cdr value))))
+             (vector
+              (+ 2
+                 (snapshot-length-prefixed-size
+                  (string-length numerator))
+                 (snapshot-length-prefixed-size
+                  (string-length denominator)))
+              #\R exactness numerator denominator)))
+          ((decimal)
+           (let ((payload
+                  (owned-numeric
+                   'binary64-representation-snapshot value)))
+             (vector (+ 2 (string-length payload))
+                     #\D exactness payload)))
+          ((infnan)
+           (vector 3 #\S exactness
+                   (canonical-infnan-character value)))
+          ((complex)
+           (let ((real
+                  (canonical-number-snapshot-plan (car value)))
+                 (imaginary
+                  (canonical-number-snapshot-plan (cdr value))))
+             (vector
+              (+ 2
+                 (snapshot-length-prefixed-size (vector-ref real 0))
+                 (snapshot-length-prefixed-size
+                  (vector-ref imaginary 0)))
+              #\C exactness real imaginary)))
+          (else
+           (error "unknown canonical number kind"
+                  (consent-number-kind datum))))))
+
+    (define (snapshot-copy-string! target index source)
+      "Copy SOURCE into TARGET at INDEX and return the following index."
+      (let ((length (string-length source)))
+        (let loop ((source-index 0))
+          (if (= source-index length)
+              (+ index length)
+              (begin
+                (string-set!
+                 target
+                 (+ index source-index)
+                 (string-ref source source-index))
+                (loop (+ source-index 1)))))))
+
+    (define (snapshot-write-length-prefix! target index length)
+      "Write decimal LENGTH and a colon at INDEX; return the following index."
+      (let ((digits (snapshot-decimal-digit-count length)))
+        (string-set! target (+ index digits) #\:)
+        (let loop ((offset (- digits 1)) (remaining length))
+          (if (< offset 0)
+              (+ index digits 1)
+              (begin
+                (string-set!
+                 target
+                 (+ index offset)
+                 (string-ref snapshot-decimal-digits
+                             (modulo remaining 10)))
+                (loop (- offset 1) (quotient remaining 10)))))))
+
+    (define (snapshot-write-plan! target index plan)
+      "Write payload-free PLAN into TARGET at INDEX; return the next index."
+      (let ((kind (vector-ref plan 1)))
+        (string-set! target index kind)
+        (string-set! target (+ index 1) (vector-ref plan 2))
+        (let ((payload-index (+ index 2)))
+          (cond
+           ((or (char=? kind #\I) (char=? kind #\D))
+            (snapshot-copy-string!
+             target payload-index (vector-ref plan 3)))
+           ((char=? kind #\S)
+            (string-set! target payload-index (vector-ref plan 3))
+            (+ payload-index 1))
+           ((char=? kind #\R)
+            (let* ((numerator (vector-ref plan 3))
+                   (denominator (vector-ref plan 4))
+                   (after-prefix
+                    (snapshot-write-length-prefix!
+                     target payload-index (string-length numerator)))
+                   (after-numerator
+                    (snapshot-copy-string!
+                     target after-prefix numerator))
+                   (after-second-prefix
+                    (snapshot-write-length-prefix!
+                     target
+                     after-numerator
+                     (string-length denominator))))
+              (snapshot-copy-string!
+               target after-second-prefix denominator)))
+           ((char=? kind #\C)
+            (let* ((real (vector-ref plan 3))
+                   (imaginary (vector-ref plan 4))
+                   (after-prefix
+                    (snapshot-write-length-prefix!
+                     target payload-index (vector-ref real 0)))
+                   (after-real
+                    (snapshot-write-plan! target after-prefix real))
+                   (after-second-prefix
+                    (snapshot-write-length-prefix!
+                     target after-real (vector-ref imaginary 0))))
+              (snapshot-write-plan!
+               target after-second-prefix imaginary)))
+           (else (error "unknown canonical number snapshot plan" plan))))))
+
+    (define (consent-number-representation-snapshot-outer datum)
+      "Return #f unless an interpreter overlay recognizes outer DATUM."
+      #((parameters
+         (datum (type object)
+          (description "Possible outer-owner canonical number to inspect.")))
+        (returns (type (or string false))
+         (description
+          "Fresh O-prefixed internal numeric ASCII, or #f when unrecognized."))
+        (effects allocation error))
+      #f)
+
+    (define (consent-outer-representation-kind datum markers)
+      "Classify DATUM by returning one caller-supplied identity marker."
+      "MARKERS supplies seven outer kinds, private/raw, and direct markers."
+      #((parameters
+         (datum (type any)
+          (description "Possible outer-owner datum to classify."))
+         (markers (type vector)
+          (description "Nine private identity markers in documented order.")))
+        (returns (type any)
+         (description "An outer-kind, private/raw, or direct-host marker."))
+        (effects pure error))
+      (vector-ref markers 8))
+
+    (define (consent-number-representation-snapshot datum)
+      "Return fresh collision-free ASCII for canonical DATUM, or #f."
+      "Owner, kind, and exactness precede length-delimited payload snapshots."
+      #((parameters
+         (datum (type object)
+          (description "Possible canonical number to inspect and copy.")))
+        (returns (type (or string false))
+         (description
+          "Fresh nonretaining ASCII for a canonical number; otherwise #f."))
+        (effects error allocation))
+      (if (not (consent-number? datum))
+          (consent-number-representation-snapshot-outer datum)
+          (let* ((plan (canonical-number-snapshot-plan datum))
+                 (payload-length (vector-ref plan 0))
+                 (length (+ payload-length 1))
+                 (result (make-string length #\0))
+                 (end
+                  (begin
+                    (string-set! result 0 #\L)
+                    (snapshot-write-plan! result 1 plan))))
+            (if (not (= end length))
+                (error "canonical number snapshot length mismatch"
+                       end length))
+            result)))
 
     (define (owned-integer->host value)
       "Convert small owned integer VALUE for a bootstrap adapter."
@@ -1746,29 +1951,6 @@ er record."
             number))
        (else number)))
 
-    (define (integer-decimal-text? text)
-      "Report whether TEXT is an unsigned decimal integer token."
-      (let ((length (string-length text)))
-        (let ((start
-               (if (and (> length 0)
-                        (or (char=? (string-ref text 0) #\+)
-                            (char=? (string-ref text 0) #\-)))
-                   1
-                   0)))
-          (and (< start length)
-               (let loop ((index start))
-                 (or (= index length)
-                     (and (char>=? (string-ref text index) #\0)
-                          (char<=? (string-ref text index) #\9)
-                          (loop (+ index 1)))))))))
-
-    (define (terminal-dot-decimal-text? text)
-      "Report whether TEXT is a host decimal spelling that ends with a dot."
-      (let ((length (string-length text)))
-        (and (> length 1)
-             (char=? (string-ref text (- length 1)) #\.)
-             (integer-decimal-text? (substring text 0 (- length 1))))))
-
     (define (consent-number->external number)
       "Public renderer for Consent Scheme numeric values."
       #((parameters
@@ -1790,13 +1972,9 @@ er record."
             (let ((special-kind (host-inexact-special-kind number)))
               (if special-kind
                   special-kind
-                  (let ((text (number->string number)))
-                    (cond
-                     ((integer-decimal-text? text)
-                      (string-append text ".0"))
-                     ((terminal-dot-decimal-text? text)
-                      (string-append text "0"))
-                     (else text)))))
+                  (owned-numeric
+                   'binary64->string
+                   (owned-numeric 'binary64-import-host number))))
             (number->string number)))
        ((eq? (consent-number-kind number) 'integer)
         (consent-integer->radix-string
@@ -4480,13 +4658,17 @@ e"
                               (write-symbol-name
                                (reader-datum-symbol-name value))))
                          (loop rest))
-                        ((consent-character? value)
-                         (emit!
-                          (if display?
-                              (string
-                               (consent-character->host-character value))
-                              (write-character-datum value)))
-                         (loop rest))
+                        ((or (consent-character? value) (char? value))
+                         (let ((character
+                                (if (consent-character? value)
+                                    value
+                                    (consent-host-character->character value))))
+                           (emit!
+                            (if display?
+                                (string
+                                 (consent-character->host-character character))
+                                (write-character-datum character)))
+                           (loop rest)))
                         ((or (consent-number? value) (number? value))
                          (emit! (consent-number->external value))
                          (loop rest))

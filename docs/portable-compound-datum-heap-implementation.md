@@ -268,19 +268,17 @@ near-4x doubling became near-2x linear scaling. Deterministic probe-count and
 allocation tests enforce that structural bound without making wall-clock
 timing a correctness gate.
 
-### Final source-realization follow-up
+### Final frozen implementation and compiled verification
 
-CI on the initial snapshot exposed a separate quadratic source-library copy
-registry and material provenance overhead. The final implementation uses a
-fast identity map for shared cached syntax, reparses labelled source when only
-the compatibility identity alist is available, propagates compact immutable
-source notes, and uses Gambit's native identity table directly. Its complete
-`scheme/` file digest is:
+The final performance work kept the fast source-copy registry, compact source
+notes, native host identity tables, and allocation-free fixed-marker matching.
+The complete final `scheme/` digest is:
 
-`39c67311cf4583d930bcf86717b92ff49db8bb2d613b1058a0105350f3f7e06a`
+`1796921d50d9c0de86e99e466401c81b5fa90c33b20d21d57e67c99e8048e9d1`
 
-The digest is path-sensitive because the inner records contain relative file
-names. It was produced from the repository root with:
+It remained unchanged through both final builds and every A/B run. The digest
+is path-sensitive because its inner records contain relative file names. It was
+produced from the repository root with:
 
 ```sh
 find scheme -type f -print0 |
@@ -289,39 +287,147 @@ find scheme -type f -print0 |
   shasum -a 256
 ```
 
-A fresh matched cold import used the same program and Gambit process boundary
-for clean `origin/main` and the final worktree. The program imported
-`(cli repl-shell)`, timed `cli-repl-records-from-string` on the exact source
-`"(import (consent eval))\n"`, and reported five returned records:
+Fresh final artifacts reported Consent Scheme 0.18.38. Their compiler image
+had 51 declared roots, 53 resolved compilation units, 90 embedded or installed
+source files, and 19 exact native-registration roots. The matched artifact
+hashes were:
 
-```sh
-CONSENT_LIBRARY_PATH="$TARGET/scheme" /usr/bin/time -p \
-  gsi "-:r7rs,search=$TARGET/scheme" \
-  /private/tmp/consent-347-eval-import-final.scm
-```
+- Baseline Gambit 0.18.37:
+  `92840b80377dfad2e2530e5033eed27f674929c3208ac41103eb508a96c289a5`
+- Final Gambit 0.18.38:
+  `979aa986e8272a3a42e81ec5131099bcce2e060befd45af3494cf0691d4f6f83`
+- Baseline Racket 0.18.37:
+  `0154596da29abef978845f6b5d2d2fb8ffa0994d27bc6b960b456e081dc53780`
+- Final Racket 0.18.38:
+  `f0b7d7ac62614a4bc5a0f196ae3785874b503f6f78a2a3fdb26769c7593d9eaf`
 
-Clean `origin/main` reported 12.312099 internal seconds and 12.72 wall
-seconds. The final worktree reported 14.499141 internal seconds and 14.99 wall
-seconds: +2.187042 seconds and +17.76% internally, or +2.27 seconds and
-+17.85% at the process boundary. Both comparisons are below the repository's
-dual regression threshold of at least 20% and at least three seconds. On the
-same 523,335-byte interpreter source with metadata disabled, one post-fast-path
-frozen-tree sample took 1.518137 seconds. The prior minimum of two
-pre-fast-path branch-reader samples was 2.006898 seconds; the minimum of three
-clean-main-reader/current-source cross-matrix samples was 1.388773 seconds.
+#### Selective native kernels
 
-The final string-range owner copies only the requested characters. A profile of
-the unchanged compiled model test found 12,043 `substring` calls, representing
-90.15% of its owned-string allocations, in repeated fixed-marker scans. The
-final redaction implementation performs allocation-free prefix matching at
-each candidate. Its three final samples were 2.52s, 2.54s, and 2.54s, versus
-1.15s and 1.16s on clean main. The means were 2.533s and 1.155s: +1.378s and
-+119.34%, below the dual threshold because the absolute increase is under
-three seconds.
+The final image does not native-register retaining source facades merely to
+make the benchmark green. It registers three new pure, callback-free,
+non-retaining kernels, each with a fail-closed procedure inventory and zero
+data bindings:
 
-A fresh standalone Gambit build started successfully with the host library
-search path hidden. Its complete compiled selector passed 45/45 programs in
-93.43 wall seconds with its six shards running in parallel. The 14-program
-agent shard took 11.88s versus 9.12s on clean main: +2.76s and +30.26%, below
-the absolute threshold. The two-program property shard took 38.41s versus
-35.05s: +3.36s and +9.59%, below the relative threshold.
+- `(agent memory-query)` has four procedures for find, tag, recent, and
+  selection queries. `(agent memory)` retains the sole mutable store,
+  persistent indexes, and every mutation and replacement operation.
+- `(agent models openai-codec)` has three procedures for request projection,
+  response parsing, and provider-error record projection. `(agent models
+  openai)` retains endpoint choice, transport, retry, callbacks, redaction,
+  error orchestration, and result publication.
+- `(agent redaction-kernel)` has one fixed-spelling scanner. `(agent
+  redaction)` retains traversal, policy, replacement, logs, local-only state,
+  provider safety, and pass ordering.
+
+Each isolated compiled prototype used an unchanged workload and binary except
+for the named candidate:
+
+| Isolated compiled prototype | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| Memory query, eight-case corpus | 1.30s | 0.77s | -0.53s (-40.8%) |
+| OpenAI request and response codec | 2.36s | 1.61s | -0.75s (-31.8%) |
+| OpenAI provider error, nine cases | 1.71s | 1.55s | -0.16s (-9.4%) |
+| OpenAI provider error, expanded | 3.98s | 3.64s | -0.34s (-8.5%) |
+| Redaction scanner, exact corpus | 1.47s | 1.25s | -0.22s (-15.0%) |
+| Redaction scanner, expanded corpus | 3.77s | 3.18s | -0.59s (-15.6%) |
+
+The redaction diagnostic also records the algorithmic cause rather than only
+wall time. The allocation-free source scanner was already linear, but its
+interpreted work grew once per input character. Moving only that pure scan into
+the stateless compiled kernel made evaluator work essentially independent of
+diagnostic length while the source facade retained policy and logging:
+
+| Diagnostic length | Before steps | Final steps |
+| ---: | ---: | ---: |
+| 1 | 12,420 | 11,630 |
+| 240 | 41,648 | 11,630 |
+| 1,000 | 134,368 | 11,630 |
+| 4,096 | 512,090 | 11,640 |
+
+These prototype results establish the effect of each candidate; they are not
+treated as additive predictions. The final product comparisons below remain
+the authority. A generated-source codec was rejected after 0.58s to 0.57s
+proved to be noise. An inline-pair prototype produced no product improvement.
+An environment identity index recovered only 1.7% to 4.9% in product runs and
+did not justify its additional cache-coherence surface.
+
+#### Final matched A/B
+
+The compiled comparisons used clean `origin/main` at `722e301e7073`, the same
+machine and environment, and `/usr/bin/time -p`. Every program ran three times
+in the balanced order base/current, current/base, base/current. The agent
+comparison ran the frozen baseline test files against both libraries; the
+random and property files were byte-identical between the two trees. Source
+metadata was enabled, docstrings were retained in full, and the source-metadata
+limit was 250,000.
+
+The Gambit agent corpus exposed every remaining program-level residual. Times
+are median real seconds:
+
+| Program | Baseline | Final | Change |
+| --- | ---: | ---: | ---: |
+| Transcript | 0.32 | 0.26 | -0.06 (-18.8%) |
+| Session store | 0.31 | 0.28 | -0.03 (-9.7%) |
+| Context | 0.45 | 0.41 | -0.04 (-8.9%) |
+| Network | 0.33 | 0.28 | -0.05 (-15.2%) |
+| Plan | 0.49 | 0.51 | +0.02 (+4.1%) |
+| VCS | 0.98 | 0.92 | -0.06 (-6.1%) |
+| Memory | 0.52 | 0.74 | +0.22 (+42.3%) |
+| Registry | 0.44 | 0.47 | +0.03 (+6.8%) |
+| Proposal | 0.44 | 0.46 | +0.02 (+4.5%) |
+| Runner | 0.55 | 0.63 | +0.08 (+14.5%) |
+| Reliability | 0.91 | 0.92 | +0.01 (+1.1%) |
+| Prompt | 0.58 | 0.78 | +0.20 (+34.5%) |
+| Generated source | 0.41 | 0.54 | +0.13 (+31.7%) |
+| OpenAI | 1.16 | 1.24 | +0.08 (+6.9%) |
+
+All timed program executions exited successfully and retained result parity.
+The aggregate medians were:
+
+| Host and workload | Executions | Baseline | Final | Real-time change |
+| --- | ---: | ---: | ---: | ---: |
+| Gambit agent | 84/84 | 7.90s | 8.45s | +0.55s (+7.0%) |
+| Gambit random | 30/30 | 82.13s | 86.61s | +4.48s (+5.5%) |
+| Gambit property | 12/12 | 33.79s | 28.19s | -5.60s (-16.6%) |
+| Racket property | 12/12 | 40.18s | 32.42s | -7.76s (-19.3%) |
+
+Median user time moved 7.74s to 8.26s for the agent corpus (+6.7%),
+81.61s to 86.09s for random (+5.5%), 33.63s to 28.04s for Gambit property
+(-16.6%), and 38.74s to 31.27s for Racket property (-19.3%).
+
+The random per-program real medians were 0.39s to 0.35s for random bits,
+13.15s to 13.91s for the upstream SRFI 27 corpus, 0.40s to 0.35s for
+distributions, 1.68s to 1.46s for data generators, and 66.47s to 70.53s for
+the upstream generator corpus. Gambit property moved 21.07s to 16.88s for the
+main corpus and 12.74s to 11.36s upstream. Racket property moved 24.83s to
+19.27s for the main corpus and 15.40s to 13.15s upstream.
+
+The compiled agent aggregate therefore still has a measured 7.0% real-time
+regression, with memory, prompt, and generated source the largest remaining
+program residuals. This is an optimization target, not a result dismissed by
+the release threshold. The random aggregate likewise remains 5.5% slower.
+Conversely, the property workloads are materially faster on both compiled
+hosts.
+
+Both complete compiled selectors passed 45/45 programs with zero failed or
+missing results: Gambit took 90.94s, with random/property/library/agent/runtime/
+integration shards at 91/32/71/29/21/3 seconds; Racket took 100.71s, with those
+shards at 101/36/89/41/29/4 seconds. Direct hosts retain the full 64/256/1024
+memory-index stress ladders. Compiled host-run uses explicit 8/32/128 ladders
+to keep the same scaling assertions without multiplying source-interpreter
+work. Earlier 106s Gambit and 118s Racket memory-program observations were
+test-volume amplification and are superseded, not product improvements. The
+final bounded memory program took 17s on Gambit and 22s on Racket. The
+`scheme/` digest and both binary hashes matched before and after these gates.
+
+#### Interpreted-path caveat
+
+One direct Emacs ERT cold-loads and exercises the internal reader and memory
+query source graph in a single evaluator context. Two final measurements took
+18.41s and 19.25s, with 275,962 evaluator steps and 40,752 host callbacks.
+That interpreted cold-load remains expensive. The test has an explicit
+500,000-step and 50,000-callback allowance for this bounded bootstrap; no
+runtime default or production source-call budget was raised. The production
+adapter invocation was separately observed at 32 evaluator steps and zero host
+callbacks. This distinction does not erase the direct interpreted cost; it
+keeps that cost separate from the compiled product measurements above.

@@ -50,6 +50,7 @@
     ("=" consent--primitive= 2 nil)
     (">" consent--primitive> 2 nil)
     (">=" consent--primitive>= 2 nil)
+    ("append" consent--primitive-append 0 nil)
     ("apply" consent--primitive-apply 2 nil)
     ("binary-port?" consent--primitive-binary-port? 1 1)
     ("boolean=?" consent--primitive-boolean=? 2 nil)
@@ -118,6 +119,7 @@
     ("integer->char" consent--primitive-integer->char 1 1)
     ("integer?" consent--primitive-integer? 1 1)
     ("lcm" consent--primitive-lcm 0 nil)
+    ("length" consent--primitive-length 1 1)
     ("list->string" consent--primitive-list->string 1 1)
     ("list->vector" consent--primitive-list->vector 1 1)
     ("list?" consent--primitive-list? 1 1)
@@ -157,6 +159,7 @@
     ("read-u8" consent--primitive-read-u8 0 1)
     ("real?" consent--primitive-real? 1 1)
     ("remainder" consent--primitive-remainder 2 2)
+    ("reverse" consent--primitive-reverse 1 1)
     ("round" consent--primitive-round 1 1)
     ("set-car!" consent--primitive-set-car! 2 2)
     ("set-cdr!" consent--primitive-set-cdr! 2 2)
@@ -277,6 +280,11 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
       "Return #t when the numeric arguments are monotonically nonincreasing."
      ((numbers (list-of real) "Real numbers to compare."))
      (boolean "Whether the numbers are monotonically nonincreasing."))
+    ("append"
+     "Append LISTS in order, reusing the final argument as the result tail."
+     ((lists (list-of any)
+       "List arguments; only the final argument may be improper."))
+     (any "The appended result, sharing its final tail."))
     ("apply"
      "Call a procedure with leading arguments followed by the final list\
  argument."
@@ -531,6 +539,9 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ("lcm" "Return the least common multiple, or 1 with no arguments."
      ((integers (list-of integer) "Integer arguments."))
      (integer "The non-negative least common multiple."))
+    ("length" "Return the number of pairs in LIST."
+     ((list list "Proper list whose length is requested."))
+     (exact-non-negative-integer "The list length."))
     ("list->string"
       "Return a newly allocated string containing list characters."
      ((list (list-of char) "List of characters."))
@@ -667,6 +678,11 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      ((n1 integer "Dividend integer.")
       (n2 integer "Divisor integer."))
      (integer "The truncated remainder."))
+    ("reverse"
+      "Return a newly allocated list containing LIST's elements in reverse\
+ order."
+     ((list list "Proper list whose elements are reversed."))
+     (list "A newly allocated list in reverse order."))
     ("round" "Return the nearest integer to a real number."
      ((x real "Real number to round."))
      (integer "The nearest integer to X."))

@@ -31,45 +31,6 @@
   "Return the cdr of the cdr of PAIR."
   (cdr (cdr pair)))
 
-(define (length list)
-  (define (loop cursor count)
-    "R7RS requires a proper list; reaching a non-pair tail forces an error"
-    "through a primitive operation instead of silently accepting dotted input.\
-"
-    (if (null? cursor)
-        count
-        (if (pair? cursor)
-            (loop (cdr cursor) (+ count 1))
-            (car cursor))))
-  "Return the number of pairs in LIST."
-  (loop list 0))
-
-(define (append . lists)
-  (define (append-two left right)
-    "The final argument is reused as the tail, matching Scheme's variadic"
-    "`append' behavior for both proper and improper final lists."
-    (if (null? left)
-        right
-        (cons (car left)
-              (append-two (cdr left) right))))
-  "Return LISTS appended in order, reusing the final argument as tail."
-  (if (null? lists)
-      '()
-      (if (null? (cdr lists))
-          (car lists)
-          (append-two (car lists)
-                      (apply append (cdr lists))))))
-
-(define (reverse list)
-  (define (loop cursor result)
-    (if (null? cursor)
-        result
-        (if (pair? cursor)
-            (loop (cdr cursor) (cons (car cursor) result))
-            (car cursor))))
-  "Return a newly allocated list containing LIST's elements in reverse order."
-  (loop list '()))
-
 (define (list-tail list k)
   "Return the sublist of LIST reached after K cdr operations."
   (if (< k 0)

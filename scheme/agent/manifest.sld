@@ -82,8 +82,69 @@
           (effects (agent-event))
           (capabilities ())))
         (dependencies ())
+       (provenance ((origin repo)))
+       (status implemented)
+       (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (agent memory-key))
+        (owner agent)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer implementation)
+        (source-kind source-library)
+        (source (path "memory-key.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (memory-prepare-index-key
+          call-with-memory-index-key-session
+          memory-index-key-sealed-wrapper?
+          memory-index-key-bounded-comparison?
+          memory-index-key?
+          memory-index-key<?
+          memory-index-key=?
+          memory-index-key-symbol-name))
+        (dependencies
+         ((library (scheme base))
+          (library (consent character))
+          (library (consent datum))
+          (library (consent identity-map))
+          (library (consent reader))
+          (library (consent symbol))
+          (library (data avl-tree))))
         (provenance ((origin repo)))
-        (status implemented)
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (agent memory-query))
+        (owner agent)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer implementation)
+        (source-kind source-library)
+        (source (path "memory-query.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (memory-query-find
+          memory-query-by-tag
+          memory-query-recent
+          memory-query-select))
+        (dependencies
+         ((library (scheme base))
+          (library (agent memory-key))
+          (library (consent identity-map))
+          (library (consent reader))
+          (library (data avl-tree))
+          (library (stdlib list))))
+        (provenance ((origin repo)))
+        (status internal)
         (canonical #t))
        (manifest-entry
         (schema-version 1)
@@ -781,8 +842,10 @@
           memory-yield))
         (dependencies
          ((library (scheme base))
-          (library (stdlib list))
-          (library (scheme write))))
+          (library (agent memory-key))
+          (library (agent memory-query))
+          (library (data avl-tree))
+          (library (consent identity-map))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1066,6 +1129,31 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (agent models openai-codec))
+        (owner agent)
+        (provider repo-source)
+        (visibility internal-agent-model)
+        (layer provider)
+        (source-kind source-library)
+        (source (path "models/openai-codec.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (model-openai-codec-request-json-projected
+          model-openai-codec-parse-response
+          model-openai-codec-provider-error-projected))
+        (dependencies
+         ((library (scheme base))
+          (library (consent identity-map))
+          (library (stdlib generator))
+          (library (stdlib json))))
+        (provenance ((origin repo)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (agent models openai))
         (owner agent)
         (provider repo-source)
@@ -1084,10 +1172,9 @@
         (dependencies
          ((library (scheme base))
           (library (scheme write))
+          (library (agent models openai-codec))
           (library (agent redaction))
-          (library (cli process-host))
-          (library (stdlib generator))
-          (library (stdlib json))))
+          (library (cli process-host))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1508,6 +1595,26 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (agent redaction-kernel))
+        (owner agent)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer implementation)
+        (source-kind source-library)
+        (source (path "redaction-kernel.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (redaction-kernel-secret-string?))
+        (dependencies
+         ((library (scheme base))))
+        (provenance ((origin repo)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (agent redaction))
         (owner agent)
         (provider repo-source)
@@ -1528,6 +1635,7 @@
         (dependencies
          ((library (scheme base))
           (library (scheme char))
+          (library (agent redaction-kernel))
           (library (stdlib generator))))
         (provenance ((origin repo)))
         (status implemented)

@@ -25,6 +25,7 @@
         (api-version (compat 0))
         (source-version unknown)
         (realization portable-source)
+        (primitive-overlay-library (consent identity-map primitive))
         (exports
          (consent-library-manifest
           consent-library-manifest-ref))
@@ -32,6 +33,55 @@
          ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind primitive-library)
+        (name (consent identity-map primitive))
+        (owner consent-core)
+        (provider host-adapter)
+        (visibility internal-runtime)
+        (layer primitive)
+        (source-kind primitive-library)
+        (source (implementation-id consent-identity-map))
+        (implementation-resolver
+         (module consent-base)
+         (procedure consent-standard-primitive-implementation))
+        (api-version internal)
+        (source-version runtime)
+        (realization host-primitive)
+        (exports
+         (consent-identity-map-fast-backend?
+          consent-make-identity-map
+          consent-identity-map-ref
+          consent-identity-map-set!))
+        (primitive-exports
+         ((name consent-identity-map-fast-backend?)
+          (primitive primitive-consent-identity-map-fast-backend?)
+          (arity 0 0)
+          (effects (pure))
+          (capabilities ()))
+         ((name consent-make-identity-map)
+          (primitive primitive-consent-make-identity-map)
+          (arity 0 0)
+          (effects (allocation))
+          (capabilities ()))
+         ((name consent-identity-map-ref)
+          (primitive primitive-consent-identity-map-ref)
+          (arity 3 3)
+          (effects (state-read))
+          (capabilities ()))
+         ((name consent-identity-map-set!)
+          (primitive primitive-consent-identity-map-set!)
+          (arity 3 3)
+          (effects (state-write))
+          (capabilities ())))
+        (dependencies
+         ((library (scheme base))))
+        (provenance
+         ((origin repo)
+          (boundary host-identity-hash)))
+        (status internal)
         (canonical #t))
        (manifest-entry
         (schema-version 1)
@@ -121,9 +171,6 @@
           call-with-consent-datum-object-map
           consent-call-with-datum-construction
           consent-datum-same?
-          consent-datum-make-internal-slots
-          consent-datum-internal-slot-ref
-          consent-datum-internal-slot-set!
           consent-datum-pair?
           consent-datum-cons
           consent-datum-car
@@ -1673,6 +1720,7 @@
           consent-number-kind
           consent-number-value
           consent-number-owned-value
+          consent-number-representation-snapshot
           consent-make-canonical-integer
           consent-make-canonical-decimal
           consent-make-canonical-rational

@@ -256,8 +256,28 @@ non-retention audit. Direct compiled use of owned values or explicit promoted
 handles belongs to #120 and #662 rather than turning borrowed host containers
 into a durable second heap.
 
+### Selective stateless native kernels
+
+Portable source realization remains the default for agent libraries. A
+performance-sensitive slice may use the borrowed native bridge only as a
+bounded stateless kernel: it must be pure, callback-free, non-retaining, and
+free of module mutation or host effects. Registration names every exported
+procedure and data binding in an exact fail-closed inventory; a missing,
+additional, or wrongly typed binding rejects the entire library before any
+binding is exposed.
+
+The source facade remains the behavior-owning layer. It projects inputs for the
+narrow kernel and retains mutable state, policy decisions, callbacks, effectful
+adapters, error orchestration, and result publication. The kernel may compute a
+query, codec projection, or fixed predicate, but it may neither retain a
+borrowed mirror nor turn native registration into authority for the surrounding
+facade. This rule permits measured acceleration without creating a second
+compound heap or making native registration the default for portable code.
+
 Call-scoped owned traversals use one intrusive private header on each object;
 one lookup performs one header probe and scope release restores any outer mark.
+While an inner map is current, an outer map lookup is intentionally absent;
+releasing the inner map restores the outer entry's visibility.
 The borrowed host's identity adapter is reserved for host objects. Gambit uses
 its native identity table; other configured performance hosts provide SRFI 69
 identity hashing. The plain R7RS identity-alist fallback preserves correctness

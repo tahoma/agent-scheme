@@ -56,20 +56,41 @@ plan, not for choosing the graph it compiles.
 
 Native registration is deliberately narrower than native compilation. The
 `consent-runtime` image compiles every root in its plan, but its
-`native-libraries` field contains 16 libraries. Thirteen directly linked
+`native-libraries` field contains 19 libraries. Thirteen directly linked
 Consent core/owner libraries keep one bootstrap ABI. Representation-owner
 bindings use explicit preservation policies; default conversion rejects before
 it would allocate an unclassified borrowed mirror or callback shim. The other
-three entries, `(agent task)`, `(agent transcript)`, and `(agent context)`, are
-stateless call-scoped transforms: registration validates their complete exact
-inventory of 46 procedures and 10 constants before any binding is exposed.
+six entries are `(agent task)`, `(agent transcript)`, `(agent context)`,
+`(agent memory-query)`, `(agent models openai-codec)`, and
+`(agent redaction-kernel)`. They are stateless call-scoped transforms:
+registration validates their complete exact inventory of 54 procedures and 10
+constants before any binding is exposed.
+The procedure/data counts are `(agent task)` 28/6, `(agent transcript)` 12/4,
+`(agent context)` 6/0, `(agent memory-query)` 4/0,
+`(agent models openai-codec)` 3/0, and `(agent redaction-kernel)` 1/0.
+
+Three of those roots are selective native kernels behind source facades. The
+`(agent memory)` facade retains the sole mutable store, persistent indexes, and
+all mutation and replacement operations; `(agent memory-query)` owns only the
+read-only find, tag, recent, and selection computations. The
+`(agent models openai)` facade retains endpoint and transport effects, retry,
+callbacks, redaction, provider-error orchestration, and result publication;
+`(agent models openai-codec)` owns request JSON projection, response parsing,
+and provider-error record projection. The `(agent redaction)` facade retains
+recursive traversal, source and field policy, replacement, logs, local-only
+behavior, provider safety, and pass ordering; `(agent redaction-kernel)` owns
+only the case-sensitive scan for its fixed secret spellings. Each kernel is
+pure, callback-free, and non-retaining, and declares an explicit zero-data
+inventory.
 
 General project roots whose exports can retain a compound value in a closure,
 record, parameter, or module state are omitted. An interpreted import then
 resolves the canonical embedded source realization, even though the borrowed
 backend still compiles and links that root for direct callers. This avoids a
 durable borrowed-host compound heap. Expanding the allowlist requires an exact
-non-retention audit and a corresponding binding inventory. Making compiled
+non-retention audit and a corresponding fail-closed binding inventory. Policy,
+state, effects, callbacks, and orchestration stay in the source facade; native
+registration is not permission to move them into its kernel. Making compiled
 internal libraries consume Consent-owned compounds directly belongs to #120's
 native lowering and owned primitive realization.
 
