@@ -29,13 +29,16 @@
               consent-datum-cons
               consent-datum-export
               consent-datum-heap-mutation-hook-set!
+              consent-datum-internal-slot-ref
               consent-datum-list-copy
               consent-datum-make-vector
+              consent-datum-object-id
               consent-datum-object-revision
               consent-datum-pair?
               consent-datum-same?
               consent-datum-set-cdr!
               consent-datum-string?
+              consent-datum-string-from-host
               consent-datum-string-length
               consent-datum-string->host
               consent-datum-vector?
@@ -85,9 +88,11 @@
               authorize-process-capability
               authorize-network-capability
               charge-bytevector-allocation!
+              charge-literal!
               charge-list-allocation!
               charge-string-allocation!
               charge-vector-allocation!
+              cell-value
               consent-host-datum->consent-datum
               consent-native-library-ref
               consent-register-native-library!
@@ -103,19 +108,25 @@
               context-datum-heap
               context-source-copy-count
               context-copy-datum-source!
+              context-cell-set!
               context-source-copy-set-fresh!
               context-source-copy-set!
               context-source-copy-source-ref
               context-steps
+              context-use-environment-datum-heap!
               context-value-nodes
               documentation-metadata?
               documentation-metadata-fields
+              environment-ref
+              make-cell
               make-identifier
+              make-multiple-values
               network-capability-handle
               network-port-capability-handle
               new-eval-context
               process-capability-handle
               process-port-capability-handle
+              primitive-procedure-function
               proper-list-elements
               procedure-body
               value-node-count)
@@ -1054,6 +1065,8 @@ the "
                  (list (parameter-type '+ 'numbers)
                        (return-type '+)
                        (metadata-field '+ 'effects)
+                       (parameter-type 'append 'lists)
+                       (return-type 'append)
                        (parameter-type 'vector-ref 'k)
                        (return-type 'floor/)
                        (parameter-type 'read-char 'port)
@@ -1065,6 +1078,8 @@ the "
                  "((list-of number)
                    number
                    (pure)
+                   (list-of any)
+                   any
                    exact-non-negative-integer
                    (values integer integer)
                    textual-input-port
@@ -1963,6 +1978,69 @@ ged "
 (testing-registry-case
  'literal-number '(portable core)
 (check-external 'literal-number "42" "42"))
+
+(testing-registry-case
+ 'atomic-literal-charge-keeps-identity-and-count
+ '(portable core datum performance budget)
+(let* ((context (new-eval-context '()))
+       (literal (consent-make-canonical-integer 42))
+       (charged (charge-literal! literal context)))
+  (check 'atomic-literal-charge-keeps-identity-and-count
+         (list (eq? literal charged)
+               (context-value-nodes context)
+               (value-node-count charged '()))
+         '(#t 1 1))))
+
+(testing-registry-case
+ 'atomic-literal-charge-enforces-value-budget
+ '(portable core datum performance budget)
+(check-result-contains
+ 'atomic-literal-charge-enforces-value-budget
+ "42"
+ '("value node budget exceeded" "(reason value-nodes)")
+ '((max-value-nodes . 0))))
+
+(testing-registry-case
+ 'compound-literal-charge-keeps-owned-topology-and-count
+ '(portable core datum performance graph budget)
+(let* ((context (new-eval-context '()))
+       (shared (cons 'compound '()))
+       (literal (vector shared shared)))
+  (set-cdr! shared shared)
+  (let* ((charged (charge-literal! literal context))
+         (left (consent-datum-vector-ref charged 0))
+         (right (consent-datum-vector-ref charged 1)))
+    (check 'compound-literal-charge-keeps-owned-topology-and-count
+           (list (consent-datum-vector? charged)
+                 (consent-datum-pair? left)
+                 (consent-datum-same? left right)
+                 (consent-datum-same? left (consent-datum-cdr left))
+                 (context-value-nodes context)
+                 (value-node-count charged '()))
+           '(#t #t #t #t 3 3)))))
+
+(testing-registry-case
+ 'compound-literal-wrapper-leaf-falls-back-to-owned-count
+ '(portable core datum performance graph budget)
+(let* ((context (new-eval-context '()))
+       (heap (context-datum-heap context))
+       (shared
+        (consent-datum-string-from-host heap "ab"))
+       (wrapper (make-multiple-values (list shared shared)))
+       (literal (vector wrapper))
+       (charged (charge-literal! literal context)))
+  ;; The counted importer deliberately treats the runtime wrapper as a leaf.
+  ;; Its invalid-leaf flag must select the canonical owned-result walk, which
+  ;; follows the wrapper and counts its shared child exactly once.
+  (check
+   'compound-literal-wrapper-leaf-falls-back-to-owned-count
+   (list
+    (consent-datum-vector? charged)
+    (eq? wrapper (consent-datum-vector-ref charged 0))
+    (context-value-nodes context)
+    (value-node-count charged '()))
+   '(#t #t 5 5))))
+
 ;; Evaluated numbers share the canonical constructors' representation class
 ;; (see the reader suite's integer-matches-canonical-number-class): the
 ;; invariant is agreement with a canonical integer, not the surrounding
@@ -2006,6 +2084,77 @@ ged "
 (check-external 'operator-expression
                 "((if #f + *) 3 4)"
                 "12"))
+
+(testing-registry-case
+ 'host-spine-ordinary-combination '(portable core performance)
+(let ((twenty (consent-make-canonical-integer 20))
+      (twenty-two (consent-make-canonical-integer 22)))
+  (check 'host-spine-ordinary-combination
+         (consent-number-value
+          (raw-consent-eval (list '+ twenty twenty-two)))
+         42)))
+
+(testing-registry-case
+ 'host-spine-special-combination '(portable core performance)
+(let ((forty-two (consent-make-canonical-integer 42))
+      (zero (consent-make-canonical-integer 0)))
+  (check 'host-spine-special-combination
+         (consent-number-value
+          (raw-consent-eval (list 'if #t forty-two zero)))
+         42)))
+
+(testing-registry-case
+ 'host-spine-macro-combination '(portable core macro performance)
+(check-external
+ 'host-spine-macro-combination
+ "(let-syntax ((twice (syntax-rules ()
+                       ((_ value) (+ value value)))))
+    (twice 21))"
+ "42"))
+
+;; A malformed combination spine is rejected before its operator expression
+;; can mutate the evaluation environment. Cover both improper and cyclic
+;; public inputs; recursive syntax projection must preserve that ordering.
+(testing-registry-case
+ 'host-spine-shape-errors-precede-operator-effects
+ '(portable core graph performance error-order)
+(let* ((environment (consent-make-base-environment))
+       (operator
+        (list 'begin
+              (list 'set!
+                    'combination-effect-count
+                    (list '+ 'combination-effect-count 1))
+              '+))
+       (improper (cons operator (cons 20 22)))
+       (cyclic (list operator 20 22))
+       (cyclic-tail (cdr (cdr cyclic))))
+  (raw-consent-eval-source
+   "(define combination-effect-count 0)"
+   environment)
+  (set-cdr! cyclic-tail cyclic)
+  (let* ((improper-result
+          (consent-result->external
+           (raw-consent-eval-result improper environment '())))
+         (after-improper
+          (consent-number-value
+           (raw-consent-eval 'combination-effect-count environment)))
+         (cyclic-result
+          (consent-result->external
+           (raw-consent-eval-result cyclic environment '())))
+         (after-cyclic
+          (consent-number-value
+           (raw-consent-eval 'combination-effect-count environment))))
+    (check 'host-spine-shape-errors-precede-operator-effects
+           (list
+            (string-contains?
+             improper-result
+             "expression must be a proper list")
+            after-improper
+            (string-contains?
+             cyclic-result
+             "expression must be a proper list")
+            after-cyclic)
+           '(#t 0 #t 0)))))
 (testing-registry-case
  'unknown-identifier '(portable core)
 (check 'unknown-identifier
@@ -2022,20 +2171,22 @@ ged "
          (if (and (consent-host-symbol-memq '+ names)
                   (consent-host-symbol-memq 'apply names)
                   (consent-host-symbol-memq 'car names)
+                  (consent-host-symbol-memq 'append names)
+                  (consent-host-symbol-memq 'length names)
+                  (consent-host-symbol-memq 'reverse names)
                   (consent-host-symbol-memq 'vector-ref names)
-                  (not (consent-host-symbol-memq 'append names))
                   (not (consent-host-symbol-memq 'cadr names))
-                  (not (consent-host-symbol-memq 'length names))
                   (not (consent-host-symbol-memq 'map names))
                   (not (consent-host-symbol-memq 'string-map names))
                   (not (consent-host-symbol-memq 'string-for-each names))
                   (not (consent-host-symbol-memq 'vector-map names))
                   (not (consent-host-symbol-memq 'vector-for-each names))
                   (not (consent-host-symbol-memq 'zero? names))
-                  (consent-host-symbol-memq 'append prelude-names)
+                  (not (consent-host-symbol-memq 'append prelude-names))
                   (consent-host-symbol-memq 'cadr prelude-names)
-                  (consent-host-symbol-memq 'length prelude-names)
+                  (not (consent-host-symbol-memq 'length prelude-names))
                   (consent-host-symbol-memq 'map prelude-names)
+                  (not (consent-host-symbol-memq 'reverse prelude-names))
                   (consent-host-symbol-memq 'string-map prelude-names)
                   (consent-host-symbol-memq 'string-for-each prelude-names)
                   (consent-host-symbol-memq 'vector-map prelude-names)
@@ -2060,10 +2211,24 @@ ged "
          (cadr (assq 'source
                      (find-primitive-spec 'vector-ref binding-specs)))
          'kernel)
-  (check 'base-prelude-source-spec
+  (check 'base-list-kernel-source-specs
+         (map (lambda (name)
+                (cadr
+                 (assq 'source
+                       (find-primitive-spec name binding-specs))))
+              '(length reverse))
+         '(kernel kernel))
+  (check 'base-list-kernel-arities
+         (map (lambda (name)
+                (let ((spec (find-primitive-spec name specs)))
+                  (list (cadr (assq 'minimum-arity spec))
+                        (cadr (assq 'maximum-arity spec)))))
+              '(append length reverse))
+         '((0 #f) (1 1) (1 1)))
+  (check 'base-append-kernel-source-spec
          (cadr (assq 'source
                      (find-primitive-spec 'append binding-specs)))
-         'prelude)
+         'kernel)
   (check 'base-prelude-string-map-source-spec
          (cadr (assq 'source
                      (find-primitive-spec 'string-map binding-specs)))
@@ -3767,6 +3932,169 @@ ash))
                 "(4 beta #t)"))
 
 (testing-registry-case
+ 'append-preserves-copy-sharing-and-error-order
+ '(portable core performance error-order)
+(check-external
+ 'append-preserves-copy-sharing
+ "(let* ((left (list 'left))
+         (middle (list 'middle))
+         (tail (list 'tail))
+         (result (append left middle tail))
+         (atom-tail (vector 'atom-tail))
+         (improper (append '(head) atom-tail)))
+    (list result
+          (not (eq? result left))
+          (not (eq? (cdr result) middle))
+          (eq? (cddr result) tail)
+          (eq? (cdr improper) atom-tail)))"
+ "((left middle tail) #t #t #t #t)")
+(check-result-contains
+ 'append-rightmost-error-precedes-earlier-error
+ "(append 'not-first 'not-second 'tail)"
+ '("car expected pair" "not-second"))
+(check-result-contains
+ 'append-rejects-cyclic-non-final-argument
+ "(let ((value (list 'cycle)))
+    (set-cdr! value value)
+    (append value 'tail))"
+ '("car expected pair")))
+
+(testing-registry-case
+ 'append-charges-exactly-copied-pairs
+ '(portable core datum performance budget)
+(check-external
+ 'append-exact-allocation-budget-succeeds
+ "(let ((left (list 'left-1 'left-2))
+        (middle (list 'middle))
+        (tail (list 'tail)))
+    (with-budget
+     '(budget (allocation-nodes 3))
+     (append left middle tail)))"
+ "(left-1 left-2 middle tail)")
+(check-result-contains
+ 'append-exact-allocation-budget-rejects-one-less
+ "(let ((left (list 'left-1 'left-2))
+        (middle (list 'middle))
+        (tail (list 'tail)))
+    (with-budget
+     '(budget (allocation-nodes 2))
+     (append left middle tail)))"
+ '("value node budget exceeded")))
+
+(testing-registry-case
+ 'append-budget-precedes-earlier-prefix-error
+ '(portable core datum performance budget error-order)
+(check-result-contains
+ 'append-budget-precedes-earlier-prefix-error
+ "(let ((later (list 'copied)))
+    (with-budget
+     '(budget (allocation-nodes 0))
+     (append 'not-first later 'tail)))"
+ '("value node budget exceeded")))
+
+(testing-registry-case
+ 'reverse-charges-exactly-copied-pairs
+ '(portable core datum performance budget)
+(check-external
+ 'reverse-exact-allocation-budget-succeeds
+ "(let ((source (list 'first 'second 'third)))
+    (with-budget
+     '(budget (allocation-nodes 3))
+     (reverse source)))"
+ "(third second first)")
+(check-result-contains
+ 'reverse-exact-allocation-budget-rejects-one-less
+ "(let ((source (list 'first 'second 'third)))
+    (with-budget
+     '(budget (allocation-nodes 2))
+     (reverse source)))"
+ '("value node budget exceeded")))
+
+(testing-registry-case
+ 'append-and-reverse-budget-failures-do-not-build-result-spines
+ '(portable core datum performance budget)
+(let* ((table (consent-make-symbol-table))
+       (environment (consent-make-base-environment table))
+       (append-function
+        (primitive-procedure-function
+         (environment-ref
+          environment (consent-intern-symbol table "append"))))
+       (reverse-function
+        (primitive-procedure-function
+         (environment-ref
+          environment (consent-intern-symbol table "reverse"))))
+       (append-context
+        (new-eval-context (list (cons 'max-value-nodes 1))))
+       (append-heap (context-datum-heap append-context))
+       (append-prefix
+        (let loop ((remaining 4096) (result '()))
+          (if (= remaining 0)
+              result
+              (loop
+               (- remaining 1)
+               (consent-datum-cons append-heap 'copied result)))))
+       (append-tail (consent-datum-cons append-heap 'tail '()))
+       (append-marker (consent-datum-cons append-heap 'marker '()))
+       (append-marker-id (consent-datum-object-id append-marker))
+       (append-raised?
+        (raises?
+         (lambda ()
+           (append-function
+            (list append-prefix append-tail) append-context))))
+       (after-append
+        (consent-datum-cons append-heap 'after-append '()))
+       (reverse-context
+        (new-eval-context (list (cons 'max-value-nodes 1))))
+       (reverse-heap (context-datum-heap reverse-context))
+       (reverse-source
+        (let loop ((remaining 4096) (result '()))
+          (if (= remaining 0)
+              result
+              (loop
+               (- remaining 1)
+               (consent-datum-cons reverse-heap 'copied result)))))
+       (reverse-marker
+        (consent-datum-cons reverse-heap 'marker '()))
+       (reverse-marker-id (consent-datum-object-id reverse-marker))
+       (reverse-raised?
+        (raises?
+         (lambda ()
+           (reverse-function (list reverse-source) reverse-context))))
+       (after-reverse
+        (consent-datum-cons reverse-heap 'after-reverse '())))
+  (check
+   'append-and-reverse-budget-failures-do-not-build-result-spines
+   (list
+    append-raised?
+    (context-value-nodes append-context)
+    (- (consent-datum-object-id after-append) append-marker-id)
+    (consent-datum-object-revision append-prefix)
+    reverse-raised?
+    (context-value-nodes reverse-context)
+    (- (consent-datum-object-id after-reverse) reverse-marker-id)
+    (consent-datum-object-revision reverse-source))
+   '(#t 4096 1 0 #t 4096 1 0))))
+
+;; The old recursive public `apply' path allocated and charged every decreasing
+;; argument tail, consuming 3,646 value nodes for this 80-element case. The
+;; primitive receives private argument transport and empty prefixes allocate
+;; no result nodes, so total work is linear in the argument spine.
+(testing-registry-case
+ 'append-many-empty-arguments-is-linear
+ '(portable core performance budget)
+(check-external
+ 'append-many-empty-arguments-is-linear
+ "(import (scheme base) (agent reflect))
+  (let ((tail (list 'tail)))
+    (let loop ((remaining 80) (arguments (list tail)))
+      (if (= remaining 0)
+          (with-budget
+           '(budget (allocation-nodes 100))
+           (eq? (apply append arguments) tail))
+          (loop (- remaining 1) (cons '() arguments)))))"
+ "#t"))
+
+(testing-registry-case
  'deep-equality-is-stack-safe-and-cycle-aware
  '(portable core datum performance graph)
 (check-external/options
@@ -4011,6 +4339,171 @@ ash))
  "(#(0 0 1 2 3) #(1 2 3 4 4))"))
 
 (testing-registry-case
+ 'lexical-cell-write-through-cache-preserves-mutation-order
+ '(portable core datum mutation performance error-order)
+(let* ((context (new-eval-context '()))
+       (heap (context-datum-heap context))
+       (cell (make-cell 'before context))
+       (owned-slots #f)
+       (events '())
+       (reentering? #f))
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! owned-slots object)
+     (set! events
+           (cons
+            (list
+             (if reentering? 'inner 'outer)
+             operation
+             old
+             new
+             (cell-value cell)
+             (consent-datum-internal-slot-ref object slot)
+             (consent-datum-object-revision object))
+            events))
+     (if (not reentering?)
+         (begin
+           (set! reentering? #t)
+           (context-cell-set! context cell 'binding-set! 'inner)
+           (set! reentering? #f)))
+     #t))
+  (context-cell-set! context cell 'binding-set! 'outer)
+  (check
+   'lexical-cell-reentrant-write-through
+   (list
+    (reverse events)
+    (cell-value cell)
+    (consent-datum-internal-slot-ref owned-slots 0)
+    (consent-datum-object-revision owned-slots))
+   '(((outer binding-set! before outer before before 0)
+      (inner binding-set! before inner before before 0))
+     outer outer 2))
+  (let ((observed #f))
+    (consent-datum-heap-mutation-hook-set!
+     heap
+     (lambda (active-heap object operation slot old new)
+       (set! observed
+             (list
+              operation
+              old
+              new
+              (cell-value cell)
+              (consent-datum-internal-slot-ref object slot)
+              (consent-datum-object-revision object)))
+       (error "test cell mutation hook abort")))
+    (check
+     'lexical-cell-aborted-write-keeps-cache-and-slot
+     (list
+      (raises?
+       (lambda ()
+         (context-cell-set! context cell 'binding-set! 'aborted)))
+      observed
+      (cell-value cell)
+      (consent-datum-internal-slot-ref owned-slots 0)
+      (consent-datum-object-revision owned-slots))
+     '(#t (binding-set! outer aborted outer outer 2) outer outer 2)))
+  (let ((other-context (new-eval-context '())))
+    (check
+     'lexical-cell-cross-heap-write-keeps-cache-and-slot
+     (list
+      (raises?
+       (lambda ()
+         (context-cell-set!
+          other-context cell 'binding-set! 'cross-heap)))
+      (cell-value cell)
+      (consent-datum-internal-slot-ref owned-slots 0)
+      (consent-datum-object-revision owned-slots))
+     '(#t outer outer 2)))
+  (let ((bootstrap-cell (make-cell 'bootstrap))
+        (bootstrap-slots #f))
+    (consent-datum-heap-mutation-hook-set!
+     heap
+     (lambda (active-heap object operation slot old new)
+       (set! bootstrap-slots object)
+       #t))
+    (context-cell-set!
+     context bootstrap-cell 'binding-define! 'promoted)
+    (check
+     'lexical-cell-lazy-promotion-writes-through
+     (list
+      (cell-value bootstrap-cell)
+      (consent-datum-internal-slot-ref bootstrap-slots 0)
+      (consent-datum-object-revision bootstrap-slots))
+     '(promoted promoted 1)))))
+
+(testing-registry-case
+ 'trusted-vector-primitives-preserve-effects-and-errors
+ '(portable core datum mutation performance error-order)
+(let* ((environment (consent-make-base-environment))
+       (heap (consent-make-datum-heap))
+       (context
+        (new-eval-context (list (cons 'datum-heap heap))))
+       (mutation-events '()))
+  (context-use-environment-datum-heap! context environment)
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! mutation-events (cons (list operation slot) mutation-events))
+     #t))
+  (let* ((result
+          (raw-consent-eval-source
+           "(let ((value (vector #\\a #\\b #\\c #\\d)))
+              (vector-copy! value 1 value 0 3)
+              (vector-set! value 0 #\\z)
+              (vector-fill! value #\\x 2 3)
+              (vector value
+                      (vector-length value)
+                      (vector-ref value 1)
+                      (vector->list value)
+                      (vector->string value)
+                      (vector-copy value 1 3)
+                      (vector-append value '#(#\\!))))"
+           environment
+           '()))
+         (value (consent-datum-vector-ref result 0))
+         (copy (consent-datum-vector-ref result 5))
+         (appended (consent-datum-vector-ref result 6))
+         (type-error
+          (consent-result->external
+           (raw-consent-eval-source-result
+            "(vector-ref 'not-a-vector 0)" environment '())))
+         (index-error
+          (consent-result->external
+           (raw-consent-eval-source-result
+            "(vector-ref '#(a) 1)" environment '())))
+         (copy-error
+          (consent-result->external
+           (raw-consent-eval-source-result
+            "(let ((value (vector 'a)))
+               (vector-copy! value 1 value 0 1))"
+            environment
+            '()))))
+    (check
+     'trusted-vector-primitives-preserve-effects-and-errors
+     (list
+      (consent-value->external result)
+      (reverse mutation-events)
+      (list
+       (consent-datum-object-revision result)
+       (consent-datum-object-revision value)
+       (consent-datum-object-revision copy)
+       (consent-datum-object-revision appended))
+      (string-contains? type-error "vector-ref must be a vector")
+      (string-contains? index-error "vector-ref index out of range")
+      (string-contains?
+       copy-error "vector-copy! target range exceeds length"))
+     '("#(#(#\\z #\\a #\\x #\\c) 4 #\\a (#\\z #\\a #\\x #\\c) \
+\"zaxc\" #(#\\a #\\x) #(#\\z #\\a #\\x #\\c #\\!))"
+       ((vector-set! 1)
+        (vector-set! 2)
+        (vector-set! 3)
+        (vector-set! 0)
+        (vector-set! 2))
+       (0 5 0 0)
+       #t #t #t)))))
+
+(testing-registry-case
  'large-vector-copy-overlap-is-linear
  '(portable core datum mutation performance)
 (check-external/options
@@ -4053,6 +4546,79 @@ ash))
  "(\"aabcd\" \"bcdee\" #t #t #t)"))
 
 (testing-registry-case
+ 'trusted-string-primitives-preserve-effects-and-errors
+ '(portable core datum mutation performance error-order)
+(let* ((environment (consent-make-base-environment))
+       (heap (consent-make-datum-heap))
+       (context
+        (new-eval-context (list (cons 'datum-heap heap))))
+       (mutation-events '()))
+  (context-use-environment-datum-heap! context environment)
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! mutation-events (cons (list operation slot) mutation-events))
+     #t))
+  (let* ((result
+          (raw-consent-eval-source
+           "(let ((value (string-copy \"abcd\")))
+              (string-copy! value 1 value 0 3)
+              (string-set! value 0 #\\z)
+              (string-fill! value #\\x 2 3)
+              (vector value
+                      (string-length value)
+                      (string-ref value 1)
+                      (string->list value)
+                      (string->vector value)
+                      (substring value 1 3)
+                      (string-copy value 1 3)
+                      (string=? value \"zaxc\")
+                      (string<? \"abc\" \"abd\")))"
+           environment
+           '()))
+         (value (consent-datum-vector-ref result 0))
+         (substring-value (consent-datum-vector-ref result 5))
+         (copy (consent-datum-vector-ref result 6))
+         (type-error
+          (consent-result->external
+           (raw-consent-eval-source-result
+            "(string-ref 'not-a-string 0)" environment '())))
+         (index-error
+          (consent-result->external
+           (raw-consent-eval-source-result
+            "(string-ref \"a\" 1)" environment '())))
+         (copy-error
+          (consent-result->external
+           (raw-consent-eval-source-result
+            "(let ((value (string-copy \"a\")))
+               (string-copy! value 1 value 0 1))"
+            environment
+            '()))))
+    (check
+     'trusted-string-primitives-preserve-effects-and-errors
+     (list
+      (consent-value->external result)
+      (reverse mutation-events)
+      (list
+       (consent-datum-object-revision result)
+       (consent-datum-object-revision value)
+       (consent-datum-object-revision substring-value)
+       (consent-datum-object-revision copy))
+      (string-contains? type-error "string-ref must be a string")
+      (string-contains? index-error "string-ref index out of range")
+      (string-contains?
+       copy-error "string-copy! target range exceeds length"))
+     '("#(\"zaxc\" 4 #\\a (#\\z #\\a #\\x #\\c) \
+#(#\\z #\\a #\\x #\\c) \"ax\" \"ax\" #t #t)"
+       ((string-set! 1)
+        (string-set! 2)
+        (string-set! 3)
+        (string-set! 0)
+        (string-set! 2))
+       (0 5 0 0)
+       #t #t #t)))))
+
+(testing-registry-case
  'base-derived-string-vector-iteration '(portable core)
 (check-external 'base-derived-string-vector-iteration
                 "(let ((chars '())
@@ -4082,6 +4648,119 @@ ash))
                        (map (lambda (x) (* x x)) '(2 3 4))
                        total)"
                 "(10 (4 9 16) 6)"))
+
+(testing-registry-case
+ 'length-reverse-and-append-valid-results-keep-owned-invariants
+ '(portable core datum performance graph mutation)
+(let* ((table (consent-make-symbol-table))
+       (environment (consent-make-base-environment table))
+       (heap (consent-make-datum-heap))
+       (options
+        (list (cons 'datum-heap heap) (cons 'symbol-table table)))
+       (context
+        (new-eval-context options))
+       (mutation-events '()))
+  (context-use-environment-datum-heap! context environment)
+  (let* ((input
+          (raw-consent-eval-source
+           "(define input '(first second third))
+            (define append-left '(left-1 left-2))
+            (define append-middle '(middle))
+            (define append-tail '(tail))
+            input"
+           environment
+           options))
+         (append-tail
+          (raw-consent-eval-source "append-tail" environment options)))
+    (consent-datum-heap-mutation-hook-set!
+     heap
+     (lambda (active-heap object operation slot old new)
+       (set! mutation-events (cons (list operation slot) mutation-events))
+       #t))
+    (let* ((result
+            (raw-consent-eval-source
+             "(reverse input)" environment options))
+           (result-second (consent-datum-cdr result))
+           (result-third (consent-datum-cdr result-second))
+           (length-result
+            (raw-consent-eval-source "(length input)" environment options))
+           (append-result
+            (raw-consent-eval-source
+             "(append append-left append-middle append-tail)"
+             environment
+             options))
+           (append-second (consent-datum-cdr append-result))
+           (append-third (consent-datum-cdr append-second))
+           (canonical-length (consent-make-canonical-integer 3))
+           (proper-mutation-events (reverse mutation-events))
+           ;; Reusing a public environment normalizes its binding cell once
+           ;; per submission. Exclude those framework writes and require the
+           ;; list result construction itself to stay off mutation gateways.
+           (non-binding-mutation-events
+            (let loop ((rest proper-mutation-events) (result '()))
+              (if (null? rest)
+                  (reverse result)
+                  (let ((event (car rest)))
+                    (loop
+                     (cdr rest)
+                     (if (eq? (car event) 'binding-set!)
+                         result
+                         (cons event result))))))))
+      (check
+       'length-reverse-and-append-valid-results-keep-owned-invariants
+       (list
+        (consent-value->external result)
+        (consent-value->external append-result)
+        (consent-number-value length-result)
+        (eq? (number? length-result) (number? canonical-length))
+        non-binding-mutation-events
+        (list
+         (consent-datum-object-revision result)
+         (consent-datum-object-revision result-second)
+         (consent-datum-object-revision result-third))
+        (list
+         (consent-datum-object-revision append-result)
+         (consent-datum-object-revision append-second)
+         (consent-datum-object-revision append-third))
+        (and
+         (not (consent-datum-same? result input))
+         (null? (consent-datum-cdr result-third))
+         (consent-datum-same?
+          (consent-datum-cdr append-third)
+          append-tail)))
+       '("(third second first)"
+         "(left-1 left-2 middle tail)"
+         3 #t () (0 0 0) (0 0 0) #t))))))
+
+(testing-registry-case
+ 'length-and-reverse-reject-malformed-spines
+ '(portable core datum performance graph error-order)
+(check-external/options
+ 'length-counts-large-proper-list
+ "(length (make-list 4096 'item))"
+ '((max-steps . 500000)
+   (max-host-callbacks . 100000))
+ "4096")
+(check-result-contains
+ 'length-rejects-improper-spine
+ "(length '(first . tail))"
+ '("length must be a proper list"))
+(check-result-contains
+ 'reverse-rejects-improper-spine
+ "(reverse '(first . tail))"
+ '("reverse must be a proper list"))
+(check-result-contains
+ 'length-rejects-cyclic-spine
+ "(let ((value (cons 'cycle '())))
+    (set-cdr! value value)
+    (length value))"
+ '("length must be a proper list"))
+(check-result-contains
+ 'reverse-rejects-cyclic-spine
+ "(let ((value (cons 'cycle '())))
+    (set-cdr! value value)
+    (reverse value))"
+ '("reverse must be a proper list")))
 
 (testing-registry-case
  'sequence-length-primitives-return-canonical-numbers '(portable core)
@@ -7256,6 +7935,78 @@ only")
          #t)))
 
 (testing-registry-case
+ 'agent-memory-state-root-publish-is-atomic
+ '(portable core datum mutation memory error-order)
+(let* ((environment (consent-make-base-environment))
+       (heap (consent-make-datum-heap))
+       (context
+        (new-eval-context (list (cons 'datum-heap heap))))
+       (observed '()))
+  (context-use-environment-datum-heap! context environment)
+  (raw-consent-eval-source
+   "(import (scheme base) (agent memory))
+    (define store (consent-make-memory-store))
+    (memory-store-put! store
+                       'instance
+                       'alpha
+                       '((value \"alpha\")))"
+   environment
+   '())
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! observed (cons (list operation slot) observed))
+     (if (eq? operation 'vector-set!)
+         (error "reject memory state-root publish")
+         #t)))
+  (let ((raised?
+         (raises?
+          (lambda ()
+            (raw-consent-eval-source
+             "(memory-store-put! store
+                                 'instance
+                                 'beta
+                                 '((value \"beta\")))"
+             environment
+             '())))))
+    (consent-datum-heap-mutation-hook-set! heap #f)
+    (let ((state
+           (raw-consent-eval-source
+            "(let ((before (map memory-record-id
+                                (memory-store-records store)))
+                   (alpha-record
+                    (memory-store-ref store 'instance 'alpha))
+                   (beta-record
+                    (memory-store-ref store 'instance 'beta)))
+               (list before
+                     (and alpha-record
+                          (memory-record-id alpha-record))
+                     beta-record
+                     (memory-record-id
+                      (memory-store-add!
+                       store
+                       'instance
+                       'fact
+                       '((value \"after rejection\"))))))"
+            environment
+            '())))
+      (let filter-framework-writes
+          ((rest (reverse observed)) (store-writes '()))
+        (if (null? rest)
+            (check
+             'agent-memory-state-root-publish-is-atomic
+             (list raised?
+                   (reverse store-writes)
+                   (consent-value->external state))
+             '(#t ((vector-set! 0))
+               "((alpha) alpha #f m-2)"))
+            (filter-framework-writes
+             (cdr rest)
+             (if (eq? (caar rest) 'binding-set!)
+                 store-writes
+                 (cons (car rest) store-writes)))))))))
+
+(testing-registry-case
  'agent-memory-reflection-selection-primitives '(portable core)
 (let* ((result
         (consent-eval-source-result
@@ -8018,6 +8769,67 @@ ed 5) (host-calls 1)))"))
        (consent-datum-vector-length vector-value)))
      '(17 0 #t (0 0 0 0 0 0) #t element-source
        (#t 4 #t 3 #t 4))))))
+
+(testing-registry-case
+ 'list-charge-validates-before-publish-and-preserves-budget-order
+ '(portable core datum performance mutation graph budget error-order)
+(let* ((context (new-eval-context '()))
+       (heap (context-datum-heap context))
+       (owned-cycle (consent-datum-cons heap 'cycle '()))
+       (cycle-id (consent-datum-object-id owned-cycle))
+       (invalid-hook-events 0)
+       (budget-context
+        (new-eval-context (list (cons 'max-value-nodes 2))))
+       (budget-heap (context-datum-heap budget-context))
+       (budget-marker
+        (consent-datum-cons budget-heap 'marker '()))
+       (budget-marker-id (consent-datum-object-id budget-marker))
+       (budget-hook-events 0))
+  (consent-datum-set-cdr! heap owned-cycle owned-cycle)
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! invalid-hook-events (+ invalid-hook-events 1))
+     #t))
+  (let ((improper-raised?
+         (raises?
+          (lambda ()
+            (charge-list-allocation! '(valid . invalid) context))))
+        (cycle-raised?
+         (raises?
+          (lambda ()
+            (charge-list-allocation! owned-cycle context)))))
+    (consent-datum-heap-mutation-hook-set! heap #f)
+    (let ((after-invalid
+           (consent-datum-cons heap 'after-invalid '())))
+      (consent-datum-heap-mutation-hook-set!
+       budget-heap
+       (lambda (active-heap object operation slot old new)
+         (set! budget-hook-events (+ budget-hook-events 1))
+         #t))
+      (let ((budget-raised?
+             (raises?
+              (lambda ()
+                (charge-list-allocation!
+                 '(one two three) budget-context)))))
+        (consent-datum-heap-mutation-hook-set! budget-heap #f)
+        (let ((after-budget
+               (consent-datum-cons budget-heap 'after-budget '())))
+          (check
+           'list-charge-validates-before-publish-and-preserves-budget-order
+           (list
+            improper-raised?
+            cycle-raised?
+            (context-value-nodes context)
+            invalid-hook-events
+            (- (consent-datum-object-id after-invalid) cycle-id)
+            (consent-datum-object-revision owned-cycle)
+            budget-raised?
+            (context-value-nodes budget-context)
+            budget-hook-events
+            (- (consent-datum-object-id after-budget)
+               budget-marker-id))
+           '(#t #t 0 0 1 1 #t 3 0 4))))))))
 
 (testing-registry-case
  'make-compound-primitives-initialize-owned-values

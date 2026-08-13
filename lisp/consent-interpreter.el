@@ -3221,11 +3221,239 @@ the maximum endpoint for DESCRIPTION."
           (consent--make-canonical-decimal float-pi)
         (consent--make-canonical-decimal 0.0)))))
 
+(defun consent--primitive-consent-identity-map-fast-backend?
+    (_arguments _context)
+  "Report that the Emacs identity-map primitive uses an eq hash table."
+  consent-true)
+
+(defun consent--primitive-consent-make-identity-map (_arguments _context)
+  "Return an opaque identity-keyed hash table."
+  (make-hash-table :test #'eq))
+
+(defun consent--primitive-consent-identity-map-ref (arguments _context)
+  "Return an identity-keyed value or the caller's absent marker."
+  (gethash (cadr arguments) (car arguments) (caddr arguments)))
+
+(defun consent--primitive-consent-identity-map-set! (arguments _context)
+  "Associate an interpreter value in an opaque identity-keyed hash table."
+  (puthash (cadr arguments) (caddr arguments) (car arguments))
+  (caddr arguments))
+
+(defun consent--number-snapshot-integer (value)
+  "Return canonical integer VALUE as signed minimal hexadecimal ASCII."
+  (if (zerop value)
+      "0"
+    (format "%+x" value)))
+
+(defun consent--number-snapshot-binary64 (value)
+  "Return finite canonical binary64 VALUE as fixed-width tuple ASCII."
+  (let* ((negative (< value 0.0))
+         (absolute (abs value))
+         (stored-exponent
+          (cond
+           ((zerop absolute) 0)
+           ((>= (logb absolute) -1022) (- (logb absolute) 52))
+           (t -1074)))
+         (significand
+          (if (zerop absolute)
+              0
+            (truncate
+             (consent--scale-float-power-of-two
+              absolute (- stored-exponent)))))
+         (biased-exponent (+ stored-exponent 1074)))
+    (format "f%c%04x%014x"
+            (if negative ?- ?+)
+            biased-exponent
+            significand)))
+
+(defun consent--number-snapshot-decimal-digit-count (value)
+  "Return the number of decimal digits in nonnegative integer VALUE."
+  (let ((remaining value)
+        (count 1))
+    (while (>= remaining 10)
+      (setq remaining (/ remaining 10)
+            count (1+ count)))
+    count))
+
+(defun consent--number-snapshot-length-prefixed-size (length)
+  "Return encoded decimal LENGTH, colon, and payload size."
+  (+ (consent--number-snapshot-decimal-digit-count length) 1 length))
+
+(defun consent--number-snapshot-plan (number)
+  "Return a payload-sharing linear serialization plan for NUMBER."
+  (unless (consent-number-p number)
+    (error "number snapshot expected a canonical number"))
+  (let ((exactness
+         (pcase (consent-number-exactness number)
+           ('exact ?e)
+           ('inexact ?i)
+           (_ (error "unknown canonical number exactness")))))
+    (pcase (consent-number-kind number)
+      ('integer
+       (let ((payload
+              (consent--number-snapshot-integer
+               (consent-number-value number))))
+         (vector (+ 2 (length payload)) ?I exactness payload)))
+      ('rational
+       (let* ((value (consent-number-value number))
+              (numerator
+               (consent--number-snapshot-integer (car value)))
+              (denominator
+               (consent--number-snapshot-integer (cdr value))))
+         (vector
+          (+ 2
+             (consent--number-snapshot-length-prefixed-size
+              (length numerator))
+             (consent--number-snapshot-length-prefixed-size
+              (length denominator)))
+          ?R exactness numerator denominator)))
+      ('decimal
+       (let ((payload
+              (consent--number-snapshot-binary64
+               (consent-number-value number))))
+         (vector (+ 2 (length payload)) ?D exactness payload)))
+      ('infnan
+       (vector
+        3 ?S exactness
+        (pcase (consent-number-value number)
+          ('-inf.0 ?0)
+          ('+inf.0 ?1)
+          ('+nan.0 ?2)
+          (_ (error "unknown canonical special number")))))
+      ('complex
+       (let* ((value (consent-number-value number))
+              (real (consent--number-snapshot-plan (car value)))
+              (imaginary (consent--number-snapshot-plan (cdr value))))
+         (vector
+          (+ 2
+             (consent--number-snapshot-length-prefixed-size (aref real 0))
+             (consent--number-snapshot-length-prefixed-size
+              (aref imaginary 0)))
+          ?C exactness real imaginary)))
+      (_ (error "unknown canonical number kind")))))
+
+(defun consent--number-snapshot-copy-string (target index source)
+  "Copy SOURCE into TARGET at INDEX and return the following index."
+  (let ((offset 0))
+    (while (< offset (length source))
+      (aset target (+ index offset) (aref source offset))
+      (setq offset (1+ offset)))
+    (+ index (length source))))
+
+(defun consent--number-snapshot-write-length-prefix (target index length)
+  "Write decimal LENGTH and a colon at INDEX; return the next index."
+  (let ((digits (consent--number-snapshot-decimal-digit-count length))
+        (remaining length))
+    (aset target (+ index digits) ?:)
+    (let ((offset (1- digits)))
+      (while (>= offset 0)
+        (aset target (+ index offset) (+ ?0 (% remaining 10)))
+        (setq remaining (/ remaining 10)
+              offset (1- offset))))
+    (+ index digits 1)))
+
+(defun consent--number-snapshot-write-plan (target index plan)
+  "Write PLAN into TARGET at INDEX and return the following index."
+  (let ((kind (aref plan 1)))
+    (aset target index kind)
+    (aset target (1+ index) (aref plan 2))
+    (let ((payload-index (+ index 2)))
+      (cond
+       ((or (= kind ?I) (= kind ?D))
+        (consent--number-snapshot-copy-string
+         target payload-index (aref plan 3)))
+       ((= kind ?S)
+        (aset target payload-index (aref plan 3))
+        (1+ payload-index))
+       ((= kind ?R)
+        (let* ((numerator (aref plan 3))
+               (denominator (aref plan 4))
+               (after-prefix
+                (consent--number-snapshot-write-length-prefix
+                 target payload-index (length numerator)))
+               (after-numerator
+                (consent--number-snapshot-copy-string
+                 target after-prefix numerator))
+               (after-second-prefix
+                (consent--number-snapshot-write-length-prefix
+                 target after-numerator (length denominator))))
+          (consent--number-snapshot-copy-string
+           target after-second-prefix denominator)))
+       ((= kind ?C)
+        (let* ((real (aref plan 3))
+               (imaginary (aref plan 4))
+               (after-prefix
+                (consent--number-snapshot-write-length-prefix
+                 target payload-index (aref real 0)))
+               (after-real
+                (consent--number-snapshot-write-plan
+                 target after-prefix real))
+               (after-second-prefix
+                (consent--number-snapshot-write-length-prefix
+                 target after-real (aref imaginary 0))))
+          (consent--number-snapshot-write-plan
+           target after-second-prefix imaginary)))
+       (t (error "unknown canonical number snapshot plan"))))))
+
+(defun consent--number-snapshot-allocate-result (length)
+  "Allocate one final snapshot string of LENGTH code units."
+  (make-string length ?0))
+
+(defun consent--number-representation-snapshot-with-owner (number owner)
+  "Return NUMBER's OWNER-prefixed collision-free ASCII snapshot, or nil.
+The owner-free plan and writer share payload strings and allocate exactly one
+final result string.  OWNER appears only at that result's root."
+  (when (consent-number-p number)
+    (let* ((plan (consent--number-snapshot-plan number))
+           (length (1+ (aref plan 0)))
+           (result (consent--number-snapshot-allocate-result length)))
+      (aset result 0 owner)
+      (unless (= (consent--number-snapshot-write-plan result 1 plan) length)
+        (error "canonical number snapshot length mismatch"))
+      result)))
+
+(defun consent--number-representation-snapshot (number)
+  "Return NUMBER's L-prefixed collision-free ASCII snapshot, or nil."
+  (consent--number-representation-snapshot-with-owner number ?L))
+
+(defun consent--primitive-consent-number-representation-snapshot-outer
+    (arguments context)
+  "Return charged ASCII for an outer canonical number, or false."
+  (let ((snapshot
+         (consent--number-representation-snapshot-with-owner
+          (car arguments) ?O)))
+    (if snapshot
+        (consent--charge-string-allocation snapshot context)
+      consent-false)))
+
+(defun consent--primitive-consent-outer-representation-kind
+    (arguments _context)
+  "Return a supplied marker for an outer-owned datum representation."
+  (let ((datum (car arguments))
+        (markers (cadr arguments)))
+    (unless (and (consent--scheme-vector-p markers)
+                 (= (length markers) 9))
+      (error "outer representation markers must be a nine-vector"))
+    (cond
+     ((consp datum) (aref markers 0))
+     ((consent--scheme-vector-p datum) (aref markers 1))
+     ((stringp datum) (aref markers 2))
+     ((consent-bytevector-p datum) (aref markers 3))
+     ((consent-character-p datum) (aref markers 4))
+     ((consent-symbol-p datum) (aref markers 5))
+     ((consent-number-p datum) (aref markers 6))
+     ;; Source-library arguments can be ordinary guest atoms after the
+     ;; evaluator boundary.  They remain in the outer domain; unrecognized
+     ;; private reader records still fall through to the fail-closed marker.
+     ((symbolp datum) (aref markers 5))
+     ((numberp datum) (aref markers 6))
+     (t (aref markers 7)))))
+
 (defun consent--primitive-cons (arguments context)
   "Primitive cons over ARGUMENTS."
   ;; One fresh pair; its car/cdr were charged where they were allocated.
-  ;; Charging `cons' charges every prelude list builder (list, append, reverse,
-  ;; map, ...) that conses, with no walk of the growing result.
+  ;; Charging `cons' charges remaining prelude list builders such as map,
+  ;; with no walk of the growing result.
   (consent--charge-value-allocation
    (cons (car arguments) (cadr arguments))
    1
@@ -3294,27 +3522,47 @@ the maximum endpoint for DESCRIPTION."
         consent-true
       consent-false)))
 
+(defun consent--proper-list-length-maybe (value)
+  "Return VALUE's finite proper-list length, or nil for an invalid spine."
+  ;; Floyd's algorithm rejects cycles without allocating a host identity map.
+  (let ((cursor value)
+        (slow value)
+        (fast value)
+        (count 0)
+        shape-known-proper)
+    (catch 'invalid
+      (while (and cursor (not shape-known-proper))
+        (unless (consp cursor)
+          (throw 'invalid nil))
+        (setq cursor (cdr cursor)
+              count (1+ count))
+        (cond
+         ((null fast)
+          (setq shape-known-proper t))
+         ((not (consp fast))
+          (throw 'invalid nil))
+         (t
+          (setq fast (cdr fast))
+          (cond
+           ((null fast)
+            (setq shape-known-proper t))
+           ((not (consp fast))
+            (throw 'invalid nil))
+           (t
+            (setq slow (cdr slow)
+                  fast (cdr fast))
+            (when (eq slow fast)
+              (throw 'invalid nil)))))))
+      ;; FAST has proved this remaining suffix proper, so count it without
+      ;; repeating a shape predicate at each cell.
+      (while cursor
+        (setq cursor (cdr cursor)
+              count (1+ count)))
+      count)))
+
 (defun consent--proper-list-p (value)
   "Return non-nil when VALUE is a proper finite list."
-  (let ((seen (make-hash-table :test #'eq))
-        (cursor value)
-        proper)
-    (catch 'done
-      (while t
-        (cond
-         ((null cursor)
-          (setq proper t)
-          (throw 'done nil))
-         ((not (consp cursor))
-          (setq proper nil)
-          (throw 'done nil))
-         ((gethash cursor seen)
-          (setq proper nil)
-          (throw 'done nil))
-         (t
-          (puthash cursor t seen)
-          (setq cursor (cdr cursor))))))
-    proper))
+  (integerp (consent--proper-list-length-maybe value)))
 
 (defun consent--primitive-list? (arguments _context)
   "Primitive list? over ARGUMENTS."
@@ -3323,25 +3571,83 @@ the maximum endpoint for DESCRIPTION."
 
 (defun consent--primitive-length (arguments _context)
   "Primitive length over ARGUMENTS."
-  (consent--number-from-host
-   (length (consent--proper-list-elements (car arguments) "length"))))
+  (let ((count (consent--proper-list-length-maybe (car arguments))))
+    (unless count
+      (consent--eval-error "length must be a proper list"))
+    (consent--number-from-host count)))
 
-(defun consent--primitive-append (arguments _context)
+(defun consent--append-reversed-elements-and-count (value)
+  "Return reversed VALUE elements and count after one validating traversal."
+  (let ((cursor value)
+        (slow value)
+        (fast value)
+        elements
+        (count 0)
+        shape-known-proper)
+    (while (and cursor (not shape-known-proper))
+      (unless (consp cursor)
+        (consent--eval-error
+         "car expected pair, got %s" (consent-value->external cursor)))
+      (push (car cursor) elements)
+      (setq cursor (cdr cursor)
+            count (1+ count))
+      (cond
+       ((null fast)
+        (setq shape-known-proper t))
+       ((not (consp fast))
+        (consent--eval-error
+         "car expected pair, got %s" (consent-value->external fast)))
+       (t
+        (setq fast (cdr fast))
+        (cond
+         ((null fast)
+          (setq shape-known-proper t))
+         ((not (consp fast))
+          (consent--eval-error
+           "car expected pair, got %s" (consent-value->external fast)))
+         (t
+          (setq slow (cdr slow)
+                fast (cdr fast))
+          (when (eq slow fast)
+            (consent--eval-error "car expected pair")))))))
+    ;; FAST has already checked this remaining suffix when it reaches nil.
+    (while cursor
+      (push (car cursor) elements)
+      (setq cursor (cdr cursor)
+            count (1+ count)))
+    (cons elements count)))
+
+(defun consent--append-build-prefix (reversed-elements tail)
+  "Copy REVERSED-ELEMENTS onto TAIL and return the resulting list."
+  (dolist (element reversed-elements tail)
+    (setq tail (cons element tail))))
+
+(defun consent--primitive-append (arguments context)
   "Primitive append over ARGUMENTS."
-  (cond
-   ((null arguments) nil)
-   ((null (cdr arguments)) (car arguments))
-   (t
-    (let ((prefixes nil)
-          (last-tail (car (last arguments))))
-      (dolist (list (butlast arguments))
-        (push (consent--proper-list-elements list "append argument")
-              prefixes))
-      (apply #'append (append (nreverse prefixes) (list last-tail)))))))
+  (if (null arguments)
+      nil
+    (let* ((reversed (reverse arguments))
+           (rest (cdr reversed))
+           (result (car reversed)))
+      (dolist (prefix rest)
+        (let* ((copy
+                (consent--append-reversed-elements-and-count prefix))
+               (elements (car copy))
+               (count (cdr copy)))
+          ;; Append observes prefixes right-to-left. Validate and precharge
+          ;; this prefix before copying it or inspecting the next earlier one.
+          (consent--note-value-allocation context count)
+          (setq result (consent--append-build-prefix elements result))))
+      result)))
 
-(defun consent--primitive-reverse (arguments _context)
+(defun consent--primitive-reverse (arguments context)
   "Primitive reverse over ARGUMENTS."
-  (reverse (consent--proper-list-elements (car arguments) "reverse")))
+  (let* ((value (car arguments))
+         (count (consent--proper-list-length-maybe value)))
+    (unless count
+      (consent--eval-error "reverse must be a proper list"))
+    (consent--note-value-allocation context count)
+    (reverse value)))
 
 (defun consent--primitive-list-tail (arguments _context)
   "Primitive list-tail over ARGUMENTS."
@@ -3427,17 +3733,37 @@ the maximum endpoint for DESCRIPTION."
           (setcdr tail cursor))
         (consent--charge-value-allocation head count context)))))
 
+(defun consent--number-representation-eqv-p (left right)
+  "Compare canonical numbers without source spelling or radix metadata."
+  (and (consent-number-p left)
+       (consent-number-p right)
+       (eq (consent-number-kind left) (consent-number-kind right))
+       (eq (consent-number-exactness left)
+           (consent-number-exactness right))
+       (pcase (consent-number-kind left)
+         ('complex
+          (let ((left-value (consent-number-value left))
+                (right-value (consent-number-value right)))
+            (and
+             (consent--number-representation-eqv-p
+              (car left-value) (car right-value))
+             (consent--number-representation-eqv-p
+              (cdr left-value) (cdr right-value)))))
+         ('decimal
+          (let ((left-value (consent-number-value left))
+                (right-value (consent-number-value right)))
+            (or (and (zerop left-value) (zerop right-value))
+                (= left-value right-value))))
+         (_
+          (equal (consent-number-value left)
+                 (consent-number-value right))))))
+
 (defun consent--eqv-p (left right)
   "Return non-nil if LEFT and RIGHT are eqv? under the current value model."
   (cond
    ((eq left right) t)
    ((and (consent-number-p left) (consent-number-p right))
-    (and (eq (consent-number-kind left)
-             (consent-number-kind right))
-         (eq (consent-number-exactness left)
-             (consent-number-exactness right))
-         (equal (consent-number-value left)
-                (consent-number-value right))))
+    (consent--number-representation-eqv-p left right))
    ((and (consent-character-p left) (consent-character-p right))
     (= (consent-character-code left)
        (consent-character-code right)))

@@ -5,6 +5,9 @@
 (import (scheme base)
         (scheme process-context)
         (prefix (agent context) native-context:)
+        (prefix (agent memory-query) native-memory-query:)
+        (prefix (agent models openai-codec) native-openai-codec:)
+        (prefix (agent redaction-kernel) native-redaction-kernel:)
         (prefix (agent task) native-task:)
         (prefix (agent transcript) native-transcript:)
         (prefix (consent symbol) native-symbol:)
@@ -25,6 +28,9 @@
         (only (consent reader)
               consent-datum-source
               consent-datum-source-set!
+              consent-make-record
+              consent-make-record-type
+              consent-record?
               consent-source-metadata-count)
         (only (consent result) value->result-datum)
         (only (consent runtime)
@@ -36,6 +42,7 @@
               consent-make-empty-environment
               consent-native-applier-ref
               consent-register-native-library!
+              context-cell-set!
               context-datum-heap
               context-native-binding-cache
               environment-cell
@@ -44,6 +51,7 @@
               library-binding-name
               library-binding-object
               library-exports
+              make-cell
               make-primitive-procedure
               make-consent-error-object
               new-eval-context
@@ -162,6 +170,43 @@
          (cons name value)
          binding))
    (native-symbol-test-bindings)))
+
+(define (native-openai-codec-test-bindings)
+  "Return the exact compiled OpenAI codec borrow inventory."
+  (list
+   (cons
+    'model-openai-codec-request-json-projected
+    native-openai-codec:model-openai-codec-request-json-projected)
+   (cons
+    'model-openai-codec-parse-response
+    native-openai-codec:model-openai-codec-parse-response)
+   (cons
+    'model-openai-codec-provider-error-projected
+    native-openai-codec:model-openai-codec-provider-error-projected)))
+
+(define (native-memory-query-test-bindings)
+  "Return the exact compiled memory-query borrow inventory."
+  (list
+   (cons 'memory-query-find native-memory-query:memory-query-find)
+   (cons 'memory-query-by-tag native-memory-query:memory-query-by-tag)
+   (cons 'memory-query-recent native-memory-query:memory-query-recent)
+   (cons 'memory-query-select native-memory-query:memory-query-select)))
+
+(define (native-redaction-kernel-test-bindings)
+  "Return the exact compiled redaction-kernel borrow inventory."
+  (list
+   (cons
+    'redaction-kernel-secret-string?
+    native-redaction-kernel:redaction-kernel-secret-string?)))
+
+(define (native-memory-query-bindings-with name value)
+  "Return memory-query bindings with NAME replaced by VALUE."
+  (map
+   (lambda (binding)
+     (if (consent-host-symbol-eq? (car binding) name)
+         (cons name value)
+         binding))
+   (native-memory-query-test-bindings)))
 
 (testing-registry-case
  'owned-compound-representation '(portable runtime datum boundary)
@@ -328,6 +373,270 @@
                      (consent-datum-cons heap 'after 'tail))))))
 
 (testing-registry-case
+ 'owned-trusted-pair-vector-and-string-access
+ '(portable runtime datum mutation performance)
+(let* ((heap (consent-make-datum-heap))
+       (other-heap (consent-make-datum-heap))
+       (pair (consent-datum-cons heap 'head 'tail))
+       (vector (consent-datum-make-vector heap 2 'before))
+       (string (consent-datum-string-from-host heap "fast"))
+       (default-vector (consent-datum-make-vector heap 1 'default-before))
+       (events '())
+       (reentering? #f)
+       (manifest-entry (consent-library-manifest-ref '(consent datum)))
+       (exports (cadr (assq 'exports (cdr manifest-entry))))
+       (raises?
+        (lambda (thunk)
+          (guard (condition (else #t))
+            (thunk)
+            #f))))
+  (test-equal
+   'trusted-pair-access
+   '(head tail head tail)
+   (list
+    (consent-datum-car-trusted pair)
+    (consent-datum-cdr-trusted pair)
+    (consent-datum-car pair)
+    (consent-datum-cdr pair)))
+  (test-assert
+   'checked-pair-access-rejects-other-kinds
+   (and
+    (raises? (lambda () (consent-datum-car vector)))
+    (raises? (lambda () (consent-datum-cdr vector)))))
+  (test-equal
+   'trusted-vector-access
+   '(2 before)
+   (list
+    (consent-datum-vector-length-trusted vector)
+    (consent-datum-vector-ref-trusted vector 0)))
+  (test-equal
+   'trusted-string-access
+   '(4 #\a 4 #\a)
+   (list
+    (consent-datum-string-length-trusted string)
+    (consent-datum-string-ref-host-trusted string 1)
+    (consent-datum-string-length string)
+    (consent-datum-string-ref-host string 1)))
+  (consent-datum-vector-set-trusted!
+   heap default-vector 0 'default-after)
+  (test-equal
+   'trusted-vector-default-write
+   '(default-after 1)
+   (list
+    (consent-datum-vector-ref-trusted default-vector 0)
+    (consent-datum-object-revision default-vector)))
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! events
+           (cons
+            (list
+             (eq? active-heap heap)
+             operation
+             slot
+             old
+             new
+             (consent-datum-vector-ref-trusted object slot)
+             (consent-datum-object-revision object))
+            events))
+     #t))
+  (consent-datum-vector-set-trusted! heap vector 0 'after)
+  ;; Setting the same value remains an observable mutation.
+  (consent-datum-vector-set-trusted! heap vector 0 'after)
+  (test-equal
+   'trusted-vector-hook-observes-old-state
+   '((#t vector-set! 0 before after before 0)
+     (#t vector-set! 0 after after after 1))
+   (reverse events))
+  (test-equal
+   'trusted-vector-same-value-advances-revision
+   '(after 2)
+   (list
+    (consent-datum-vector-ref-trusted vector 0)
+    (consent-datum-object-revision vector)))
+  (set! events '())
+  (test-assert
+   'trusted-vector-rejects-cross-heap-and-index
+   (and
+    (raises?
+     (lambda ()
+       (consent-datum-vector-set-trusted!
+        other-heap vector 0 'cross-heap)))
+    (raises?
+     (lambda ()
+       (consent-datum-vector-set-trusted! heap vector 2 'past-end)))))
+  (test-equal
+   'trusted-vector-validation-does-not-mutate
+   '(after 2 ())
+   (list
+    (consent-datum-vector-ref-trusted vector 0)
+    (consent-datum-object-revision vector)
+    events))
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! events
+           (list
+            (eq? active-heap heap)
+            operation
+            slot
+            old
+            new
+            (consent-datum-vector-ref-trusted object slot)
+            (consent-datum-object-revision object)))
+     (error "test mutation hook abort")))
+  (test-assert
+   'trusted-vector-hook-can-abort
+   (raises?
+    (lambda ()
+      (consent-datum-vector-set-trusted! heap vector 1 'aborted))))
+  (test-equal
+   'trusted-vector-hook-abort-leaves-state
+   '(before 2 (#t vector-set! 1 before aborted before 2))
+   (list
+    (consent-datum-vector-ref-trusted vector 1)
+    (consent-datum-object-revision vector)
+    events))
+  (set! events '())
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (let ((phase (if reentering? 'inner 'outer)))
+       (set! events
+             (cons
+              (list
+               phase
+               operation
+               old
+               new
+               (consent-datum-vector-ref-trusted object slot)
+               (consent-datum-object-revision object))
+              events))
+       (if (not reentering?)
+           (begin
+             (set! reentering? #t)
+             (consent-datum-vector-set-trusted!
+              active-heap object slot 'inner)
+             (set! reentering? #f)))
+       #t)))
+  (consent-datum-vector-set-trusted! heap vector 0 'outer)
+  (test-equal
+   'trusted-vector-reentrant-hook-order
+   '((outer vector-set! after outer after 2)
+     (inner vector-set! after inner after 2))
+   (reverse events))
+  (test-equal
+   'trusted-vector-reentrant-revision
+   '(outer 4)
+   (list
+    (consent-datum-vector-ref-trusted vector 0)
+    (consent-datum-object-revision vector)))
+  (let* ((context
+          (new-eval-context
+           '((internal-libraries-allowed . #t))))
+         (library
+          (resolve-library
+           '(consent datum)
+           context
+           (consent-make-empty-environment)))
+         (internal-exports
+          (map library-binding-name (library-exports library))))
+    ;; The source exports remain available to statically linked core code, as
+    ;; exercised above. The manifest must filter the unchecked helpers from
+    ;; even an explicitly authorized interpreted internal import.
+    (test-assert
+     'trusted-vector-kept-off-interpreted-surface
+     (and
+      (not (memq 'consent-datum-vector-length-trusted exports))
+      (not (memq 'consent-datum-vector-ref-trusted exports))
+      (not (memq 'consent-datum-vector-set-trusted! exports))
+      (not (memq 'consent-datum-car-trusted exports))
+      (not (memq 'consent-datum-cdr-trusted exports))
+      (not (memq 'consent-datum-string-length-trusted exports))
+      (not (memq 'consent-datum-string-ref-host-trusted exports))
+      (not (memq 'consent-datum-make-internal-slots exports))
+      (not (memq 'consent-datum-internal-slot-ref exports))
+      (not (memq 'consent-datum-internal-slot-set! exports))
+      (not
+       (memq 'consent-datum-vector-length-trusted internal-exports))
+      (not (memq 'consent-datum-vector-ref-trusted internal-exports))
+      (not
+       (memq 'consent-datum-vector-set-trusted! internal-exports))
+      (not (memq 'consent-datum-car-trusted internal-exports))
+      (not (memq 'consent-datum-cdr-trusted internal-exports))
+      (not
+       (memq 'consent-datum-string-length-trusted internal-exports))
+      (not
+       (memq 'consent-datum-string-ref-host-trusted internal-exports))
+      (not
+       (memq 'consent-datum-make-internal-slots internal-exports))
+      (not
+       (memq 'consent-datum-internal-slot-ref internal-exports))
+      (not
+       (memq 'consent-datum-internal-slot-set! internal-exports)))))))
+
+(testing-registry-case
+ 'owned-bytevector-mutation-order-and-abort
+ '(portable runtime datum mutation performance)
+(let* ((heap (consent-make-datum-heap))
+       (bytes (consent-datum-make-bytevector heap 1 7))
+       (event #f)
+       (raises?
+        (lambda (thunk)
+          (guard (condition (else #t))
+            (thunk)
+            #f))))
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! event
+           (list
+            (eq? active-heap heap)
+            operation
+            slot
+            old
+            new
+            (consent-datum-bytevector-u8-ref object slot)
+            (consent-datum-object-revision object)))
+     #t))
+  (consent-datum-bytevector-u8-set! heap bytes 0 9)
+  (test-equal
+   'bytevector-hook-observes-old-state
+   '(#t bytevector-u8-set! 0 7 9 7 0)
+   event)
+  (test-equal
+   'bytevector-write-advances-revision
+   '(9 1)
+   (list
+    (consent-datum-bytevector-u8-ref bytes 0)
+    (consent-datum-object-revision bytes)))
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! event
+           (list
+            (eq? active-heap heap)
+            operation
+            slot
+            old
+            new
+            (consent-datum-bytevector-u8-ref object slot)
+            (consent-datum-object-revision object)))
+     (error "test bytevector mutation hook abort")))
+  (test-assert
+   'bytevector-hook-can-abort
+   (raises?
+    (lambda ()
+      (consent-datum-bytevector-u8-set! heap bytes 0 11))))
+  (test-equal
+   'bytevector-hook-abort-leaves-state
+   '(9 1 (#t bytevector-u8-set! 0 9 11 9 1))
+   (list
+    (consent-datum-bytevector-u8-ref bytes 0)
+    (consent-datum-object-revision bytes)
+    event))))
+
+(testing-registry-case
  'owned-fork-metadata '(portable runtime datum checkpoint)
 (let ((heap (consent-make-datum-heap)))
   (consent-datum-heap-owner-set! heap 'branch-a)
@@ -371,7 +680,10 @@
         (consent-datum-object-map-set! inner object 'inner)
         (test-equal 'nested-map-inner-entry
                     'inner
-                    (consent-datum-object-map-ref inner object #f))))
+                    (consent-datum-object-map-ref inner object #f))
+        (test-equal 'nested-map-hides-outer-entry
+                    'absent
+                    (consent-datum-object-map-ref outer object 'absent))))
      (test-equal 'nested-map-restores-outer-entry
                  'outer
                  (consent-datum-object-map-ref outer object #f))))
@@ -521,6 +833,147 @@
   (test-equal 'lexical-cell-mutation-event
               '((#t cell binding-set! 0 before after))
               events)))
+
+(testing-registry-case
+ 'owned-cell-cache-coherence '(portable runtime datum mutation performance)
+(let* ((context (new-eval-context '()))
+       (heap (context-datum-heap context))
+       (success-cell (make-cell 'before context))
+       (success-slots #f)
+       (success-event #f)
+       (abort-cell (make-cell 'before context))
+       (abort-slots #f)
+       (abort-event #f)
+       (reentrant-cell (make-cell 'before context))
+       (reentrant-slots #f)
+       (reentrant? #f)
+       (reentrant-events '())
+       (lazy-cell (make-cell 'bootstrap))
+       (lazy-slots #f)
+       (lazy-event #f)
+       (raises?
+        (lambda (thunk)
+          (guard (condition (else #t))
+            (thunk)
+            #f))))
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! success-slots object)
+     (set! success-event
+           (list
+            (eq? active-heap heap)
+            operation
+            slot
+            old
+            new
+            (consent-datum-internal-slot-ref object slot)
+            (cell-value success-cell)))
+     #t))
+  (context-cell-set! context success-cell 'binding-set! 'after)
+  (test-equal
+   'cell-cache-hook-sees-old-slot-and-value
+   '(#t binding-set! 0 before after before before)
+   success-event)
+  (test-equal
+   'cell-cache-success-keeps-slot-and-value-equal
+   '(after after)
+   (list
+    (consent-datum-internal-slot-ref success-slots 0)
+    (cell-value success-cell)))
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! abort-slots object)
+     (set! abort-event
+           (list
+            operation
+            slot
+            old
+            new
+            (consent-datum-internal-slot-ref object slot)
+            (cell-value abort-cell)))
+     (error "test cell mutation hook abort")))
+  (test-assert
+   'cell-cache-hook-can-abort
+   (raises?
+    (lambda ()
+      (context-cell-set! context abort-cell 'binding-set! 'aborted))))
+  (test-equal
+   'cell-cache-abort-hook-sees-old-slot-and-value
+   '(binding-set! 0 before aborted before before)
+   abort-event)
+  (test-equal
+   'cell-cache-abort-keeps-slot-and-value-unchanged
+   '(before before 0)
+   (list
+    (consent-datum-internal-slot-ref abort-slots 0)
+    (cell-value abort-cell)
+    (consent-datum-object-revision abort-slots)))
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! reentrant-slots object)
+     (let ((phase (if reentrant? 'inner 'outer)))
+       (set! reentrant-events
+             (cons
+              (list
+               phase
+               old
+               new
+               (consent-datum-internal-slot-ref object slot)
+               (cell-value reentrant-cell))
+              reentrant-events))
+       (if (not reentrant?)
+           (begin
+             (set! reentrant? #t)
+             (context-cell-set!
+              context reentrant-cell 'binding-set! 'inner)
+             (set! reentrant? #f)
+             (set! reentrant-events
+                   (cons
+                    (list
+                     'outer-after-inner
+                     (consent-datum-internal-slot-ref object slot)
+                     (cell-value reentrant-cell))
+                    reentrant-events))))
+       #t)))
+  (context-cell-set! context reentrant-cell 'binding-set! 'outer)
+  (test-equal
+   'cell-cache-reentrant-hook-order-and-coherence
+   '((outer before outer before before)
+     (inner before inner before before)
+     (outer-after-inner inner inner))
+   (reverse reentrant-events))
+  (test-equal
+   'cell-cache-reentrant-final-slot-and-value
+   '(outer outer 2)
+   (list
+    (consent-datum-internal-slot-ref reentrant-slots 0)
+    (cell-value reentrant-cell)
+    (consent-datum-object-revision reentrant-slots)))
+  (consent-datum-heap-mutation-hook-set!
+   heap
+   (lambda (active-heap object operation slot old new)
+     (set! lazy-slots object)
+     (set! lazy-event
+           (list
+            old
+            new
+            (consent-datum-internal-slot-ref object slot)
+            (cell-value lazy-cell)))
+     #t))
+  (context-cell-set! context lazy-cell 'binding-set! 'promoted)
+  (test-equal
+   'cell-cache-lazy-promotion-hook-sees-old-values
+   '(bootstrap promoted bootstrap bootstrap)
+   lazy-event)
+  (test-equal
+   'cell-cache-lazy-promotion-keeps-slot-and-value-equal
+   '(promoted promoted)
+   (list
+    (consent-datum-internal-slot-ref lazy-slots 0)
+    (cell-value lazy-cell)))))
 
 (testing-registry-case
  'owned-string-and-bytevector-mutation '(portable runtime datum mutation)
@@ -729,6 +1182,295 @@
                 1
                 export-source-copies)
     (test-assert 'export-copy-source-runs-after-edges export-root-ready?))))
+
+(testing-registry-case
+ 'owned-import-reuses-false-target
+ '(portable runtime datum graph boundary performance)
+(let* ((heap (consent-make-datum-heap))
+       (shared (cons 'ignored 'ignored))
+       (root (vector shared shared))
+       (reuse-calls 0)
+       (copy-calls 0)
+       (raises?
+        (lambda (thunk)
+          (guard (condition (else #t))
+            (thunk)
+            #f)))
+       (imported
+        (consent-datum-import
+         heap
+         root
+         (lambda (item) item)
+         (lambda (target source)
+           (set! copy-calls (+ copy-calls 1))
+           target)
+         (lambda (source absent)
+           (set! reuse-calls (+ reuse-calls 1))
+           (if (eq? source shared) #f absent)))))
+  (test-equal
+   'false-reuse-target-is-memoized
+   '(#f #f)
+   (list
+    (consent-datum-vector-ref imported 0)
+    (consent-datum-vector-ref imported 1)))
+  (test-equal 'false-reuse-hook-runs-once-per-source 2 reuse-calls)
+  (test-equal 'false-reuse-skips-source-copy 1 copy-calls)
+  (test-assert
+   'ordinary-import-still-rejects-false-leaf-converter
+   (raises?
+    (lambda ()
+      (consent-datum-import heap (cons 'leaf 'tail) #f))))
+  (test-assert
+   'ordinary-import-still-rejects-false-reuse-callback
+   (raises?
+    (lambda ()
+      (consent-datum-import
+       heap
+       (cons 'leaf 'tail)
+       (lambda (item) item)
+       (lambda (target source) target)
+       #f))))))
+
+(testing-registry-case
+ 'owned-counted-import-host-cycle-and-invalid
+ '(portable runtime datum graph boundary performance)
+(let* ((heap (consent-make-datum-heap))
+       (source-pair (cons 'valid #f))
+       (source-string (string-copy "ab"))
+       (source-bytes (bytevector 1 2))
+       (source-root
+        (vector
+         source-pair
+         source-pair
+         source-string
+         source-string
+         source-bytes
+         source-bytes
+         'bad))
+       (owned #f)
+       (node-count #f)
+       (invalid-leaf? #f)
+       (first-invalid-leaf #f)
+       (leaf-events '())
+       (copy-events '())
+       (callbacks-ready? #t))
+  (set-cdr! source-pair source-root)
+  (call-with-values
+   (lambda ()
+     (consent-datum-import-with-node-count
+      heap
+      source-root
+      (lambda (item)
+        (set! leaf-events (cons item leaf-events))
+        (not (eq? item 'bad)))
+      (lambda (target source)
+        (let ((label
+               (cond
+                ((eq? source source-pair) 'pair)
+                ((eq? source source-string) 'string)
+                ((eq? source source-bytes) 'bytevector)
+                ((eq? source source-root) 'vector)
+                (else 'unexpected))))
+          (set! copy-events (cons label copy-events))
+          (cond
+           ((eq? source source-pair)
+            (set! callbacks-ready?
+                  (and
+                   callbacks-ready?
+                   (eq? 'valid (consent-datum-car target))
+                   (consent-datum-same?
+                    target
+                    (consent-datum-vector-ref
+                     (consent-datum-cdr target) 0)))))
+           ((eq? source source-root)
+            (set! callbacks-ready?
+                  (and
+                   callbacks-ready?
+                   (consent-datum-same?
+                    (consent-datum-vector-ref target 0)
+                    (consent-datum-vector-ref target 1))
+                   (consent-datum-same?
+                    (consent-datum-vector-ref target 2)
+                    (consent-datum-vector-ref target 3))
+                   (consent-datum-same?
+                    (consent-datum-vector-ref target 4)
+                    (consent-datum-vector-ref target 5)))))))
+        target)))
+   (lambda (result count invalid? invalid)
+     (set! owned result)
+     (set! node-count count)
+     (set! invalid-leaf? invalid?)
+     (set! first-invalid-leaf invalid)))
+  (test-assert
+   'counted-host-import-preserves-cycle-and-sharing
+   (let ((pair (consent-datum-vector-ref owned 0)))
+     (and
+      (consent-datum-vector? owned)
+      (consent-datum-same?
+       pair (consent-datum-vector-ref owned 1))
+      (consent-datum-same? owned (consent-datum-cdr pair))
+      (consent-datum-same?
+       (consent-datum-vector-ref owned 2)
+       (consent-datum-vector-ref owned 3))
+      (consent-datum-same?
+       (consent-datum-vector-ref owned 4)
+       (consent-datum-vector-ref owned 5)))))
+  (test-equal 'counted-host-import-exact-node-count 10 node-count)
+  (test-equal
+   'counted-host-import-defers-first-invalid-leaf
+   '(#t bad)
+   (list invalid-leaf? first-invalid-leaf))
+  (test-equal
+   'counted-host-import-leaf-observation-order
+   '(valid bad)
+   (reverse leaf-events))
+  (test-equal
+   'counted-host-import-copy-callback-order
+   '(pair string bytevector vector)
+   (reverse copy-events))
+  (test-assert
+   'counted-host-import-callbacks-see-initialized-edges
+   callbacks-ready?)
+  (let* ((manifest-entry
+          (consent-library-manifest-ref '(consent datum)))
+         (exports (cadr (assq 'exports (cdr manifest-entry))))
+         (context
+          (new-eval-context
+           '((internal-libraries-allowed . #t))))
+         (library
+          (resolve-library
+           '(consent datum)
+           context
+           (consent-make-empty-environment)))
+         (internal-exports
+          (map library-binding-name (library-exports library))))
+    (test-assert
+     'counted-import-kept-off-interpreted-surface
+     (and
+      (not
+       (memq 'consent-datum-import-with-node-count exports))
+      (not
+       (memq
+        'consent-datum-import-with-node-count internal-exports)))))))
+
+(testing-registry-case
+ 'owned-counted-import-scalar-false-sentinel
+ '(portable runtime datum graph boundary performance)
+(let ((copy-calls 0))
+  (call-with-values
+   (lambda ()
+     (consent-datum-import-with-node-count
+      (consent-make-datum-heap)
+      #f
+      (lambda (item) #f)
+      (lambda (target source)
+        (set! copy-calls (+ copy-calls 1))
+        target)))
+   (lambda (owned count invalid? invalid)
+     (test-equal
+      'counted-scalar-false-has-separate-invalid-flag
+      '(#f 1 #t #f)
+      (list owned count invalid? invalid))))
+  (test-equal 'counted-scalar-skips-copy-callback 0 copy-calls)))
+
+(testing-registry-case
+ 'owned-counted-import-defers-non-atomic-wrapper
+ '(portable runtime datum graph boundary performance)
+(let* ((heap (consent-make-datum-heap))
+       (type (consent-make-record-type 'box '(value)))
+       (fields (consent-datum-make-vector heap 1 'value))
+       (record (consent-make-record type fields))
+       (source (vector record)))
+  (call-with-values
+   (lambda ()
+     (consent-datum-import-with-node-count
+      heap
+      source
+      (lambda (item) (not (consent-record? item)))
+      (lambda (target original) target)))
+   (lambda (owned count invalid? invalid)
+     (test-assert
+      'counted-non-atomic-wrapper-is-retained-for-fallback
+      (eq? record (consent-datum-vector-ref owned 0)))
+     (test-equal
+      'counted-non-atomic-wrapper-returns-invalid-without-raising
+      '(2 #t)
+      (list count invalid?))
+     (test-assert
+      'counted-non-atomic-wrapper-is-first-invalid
+      (eq? record invalid))))))
+
+(testing-registry-case
+ 'owned-counted-import-same-heap-cycle
+ '(portable runtime datum graph boundary performance)
+(let* ((heap (consent-make-datum-heap))
+       (string (consent-datum-string-from-host heap "ok"))
+       (pair (consent-datum-cons heap string #f))
+       (root (consent-datum-make-vector heap 3 pair))
+       (copy-calls 0))
+  (consent-datum-vector-set! heap root 1 pair)
+  (consent-datum-vector-set! heap root 2 'bad)
+  (consent-datum-set-cdr! heap pair root)
+  (call-with-values
+   (lambda ()
+     (consent-datum-import-with-node-count
+      heap
+      root
+      (lambda (item) (not (eq? item 'bad)))
+      (lambda (target source)
+        (set! copy-calls (+ copy-calls 1))
+        target)))
+   (lambda (owned count invalid? invalid)
+     (test-assert
+      'counted-same-heap-root-keeps-identity
+      (consent-datum-same? root owned))
+     (test-equal 'counted-same-heap-exact-node-count 6 count)
+     (test-equal
+      'counted-same-heap-reports-invalid
+      '(#t bad)
+      (list invalid? invalid))))
+  (test-equal 'counted-same-heap-skips-copy-callbacks 0 copy-calls)))
+
+(testing-registry-case
+ 'owned-counted-import-cross-heap-cycle
+ '(portable runtime datum graph boundary performance)
+(let* ((source-heap (consent-make-datum-heap))
+       (target-heap (consent-make-datum-heap))
+       (pair (consent-datum-cons source-heap 'leaf #f))
+       (root (consent-datum-make-vector source-heap 2 pair))
+       (copy-events '()))
+  (consent-datum-vector-set! source-heap root 1 pair)
+  (consent-datum-set-cdr! source-heap pair root)
+  (call-with-values
+   (lambda ()
+     (consent-datum-import-with-node-count
+      target-heap
+      root
+      (lambda (item) #t)
+      (lambda (target source)
+        (set! copy-events
+              (cons
+               (consent-datum-object-kind target)
+               copy-events))
+        target)))
+   (lambda (owned count invalid? invalid)
+     (let ((owned-pair (consent-datum-vector-ref owned 0)))
+       (test-assert
+        'counted-cross-heap-preserves-fresh-cycle-and-sharing
+        (and
+         (not (consent-datum-same? root owned))
+         (consent-datum-same?
+          owned-pair (consent-datum-vector-ref owned 1))
+         (consent-datum-same? owned (consent-datum-cdr owned-pair))))
+       (test-equal 'counted-cross-heap-exact-node-count 3 count)
+       (test-equal
+        'counted-cross-heap-valid-result
+        '(#f #f)
+        (list invalid? invalid)))))
+  (test-equal
+   'counted-cross-heap-copy-callback-order
+   '(pair vector)
+   (reverse copy-events))))
 
 (testing-registry-case
  'datum-scalar-path-skips-owned-allocation
@@ -1423,6 +2165,15 @@
  '(portable runtime datum boundary registry)
 (begin
   (consent-register-native-library!
+   '(agent memory-query)
+   (native-memory-query-test-bindings))
+  (consent-register-native-library!
+   '(agent models openai-codec)
+   (native-openai-codec-test-bindings))
+  (consent-register-native-library!
+   '(agent redaction-kernel)
+   (native-redaction-kernel-test-bindings))
+  (consent-register-native-library!
    '(agent task)
    (list
     (cons 'task-states native-task:task-states)
@@ -1501,8 +2252,37 @@
           native-context:make-conversation-summary)
     (cons 'make-focus-context native-context:make-focus-context)
     (cons 'make-context-bundle native-context:make-context-bundle)))
-  (let ((context (new-eval-context '()))
+  (let ((context
+         (new-eval-context
+          '((internal-libraries-allowed . #t))))
         (environment (consent-make-empty-environment)))
+    (test-equal
+     'native-memory-query-binding-inventory
+     '(memory-query-find
+       memory-query-by-tag
+       memory-query-recent
+       memory-query-select)
+     (map car (native-memory-query-test-bindings)))
+    (test-assert
+     'native-memory-query-binding-inventory-valid
+     (resolve-library '(agent memory-query) context environment))
+    (test-equal
+     'native-openai-codec-binding-inventory
+     '(model-openai-codec-request-json-projected
+       model-openai-codec-parse-response
+       model-openai-codec-provider-error-projected)
+     (map car (native-openai-codec-test-bindings)))
+    (test-assert
+     'native-openai-codec-binding-inventory-valid
+     (resolve-library
+      '(agent models openai-codec) context environment))
+    (test-equal
+     'native-redaction-kernel-binding-inventory
+     '(redaction-kernel-secret-string?)
+     (map car (native-redaction-kernel-test-bindings)))
+    (test-assert
+     'native-redaction-kernel-binding-inventory-valid
+     (resolve-library '(agent redaction-kernel) context environment))
     (test-assert
      'native-task-binding-inventory-valid
      (resolve-library '(agent task) context environment))
@@ -1512,6 +2292,586 @@
     (test-assert
      'native-context-binding-inventory-valid
      (resolve-library '(agent context) context environment)))))
+
+(testing-registry-case
+ 'native-memory-query-borrow-inventory-fails-closed
+ '(portable runtime datum boundary registry)
+(let* ((bindings (native-memory-query-test-bindings))
+       (resolve-condition
+        (lambda (candidate-bindings)
+          (consent-register-native-library!
+           '(agent memory-query)
+           candidate-bindings)
+          (guard (condition (else condition))
+            (resolve-library
+             '(agent memory-query)
+             (new-eval-context
+              '((internal-libraries-allowed . #t)))
+             (consent-make-empty-environment))
+            #f)))
+       (missing-condition (resolve-condition (cdr bindings)))
+       (extra-procedure-condition
+        (resolve-condition
+         (append
+          bindings
+          (list (cons 'unexpected-memory-query (lambda () #t))))))
+       (extra-data-condition
+        (resolve-condition
+         (append bindings (list (cons 'unexpected-memory-data 'retained))))))
+  (consent-register-native-library! '(agent memory-query) bindings)
+  (test-assert
+   'native-memory-query-missing-procedure-rejected
+   (error-object? missing-condition))
+  (test-equal
+   'native-memory-query-missing-procedure-message
+   "native-binding-inventory-mismatch: missing procedure"
+   (error-object-message missing-condition))
+  (test-assert
+   'native-memory-query-extra-procedure-rejected
+   (error-object? extra-procedure-condition))
+  (test-assert
+   'native-memory-query-zero-data-inventory-rejects-data
+   (error-object? extra-data-condition))
+  (test-equal
+   'native-memory-query-unexpected-binding-message
+   '("native-binding-inventory-mismatch: unexpected binding"
+     "native-binding-inventory-mismatch: unexpected binding")
+   (list
+    (error-object-message extra-procedure-condition)
+    (error-object-message extra-data-condition)))))
+
+(testing-registry-case
+ 'native-openai-codec-borrow-inventory-fails-closed
+ '(portable runtime datum boundary registry)
+(let* ((bindings (native-openai-codec-test-bindings))
+       (resolve-condition
+        (lambda (candidate-bindings)
+          (consent-register-native-library!
+           '(agent models openai-codec)
+           candidate-bindings)
+          (guard (condition (else condition))
+            (resolve-library
+             '(agent models openai-codec)
+             (new-eval-context
+              '((internal-libraries-allowed . #t)))
+             (consent-make-empty-environment))
+            #f)))
+       (missing-condition
+        (resolve-condition (cdr bindings)))
+       (extra-procedure-condition
+        (resolve-condition
+         (append
+          bindings
+          (list (cons 'unexpected-codec-binding (lambda () #t))))))
+       (extra-data-condition
+        (resolve-condition
+         (append bindings (list (cons 'unexpected-codec-data 'retained))))))
+  (consent-register-native-library!
+   '(agent models openai-codec)
+   bindings)
+  (test-assert
+   'native-openai-codec-missing-binding-rejected
+   (error-object? missing-condition))
+  (test-equal
+   'native-openai-codec-missing-binding-message
+   "native-binding-inventory-mismatch: missing procedure"
+   (error-object-message missing-condition))
+  (test-assert
+   'native-openai-codec-extra-binding-rejected
+   (error-object? extra-procedure-condition))
+  (test-assert
+   'native-openai-codec-zero-data-inventory-rejects-data
+   (error-object? extra-data-condition))
+  (test-equal
+   'native-openai-codec-extra-binding-messages
+   '("native-binding-inventory-mismatch: unexpected binding"
+     "native-binding-inventory-mismatch: unexpected binding")
+   (list
+    (error-object-message extra-procedure-condition)
+    (error-object-message extra-data-condition)))))
+
+(testing-registry-case
+ 'native-redaction-kernel-borrow-inventory-fails-closed
+ '(portable runtime datum boundary registry)
+(let* ((bindings (native-redaction-kernel-test-bindings))
+       (resolve-condition
+        (lambda (candidate-bindings)
+          (consent-register-native-library!
+           '(agent redaction-kernel)
+           candidate-bindings)
+          (guard (condition (else condition))
+            (resolve-library
+             '(agent redaction-kernel)
+             (new-eval-context
+              '((internal-libraries-allowed . #t)))
+             (consent-make-empty-environment))
+            #f)))
+       (missing-condition (resolve-condition '()))
+       (extra-procedure-condition
+        (resolve-condition
+         (append
+          bindings
+          (list (cons 'unexpected-redaction-kernel (lambda () #t))))))
+       (extra-data-condition
+        (resolve-condition
+         (append
+          bindings
+          (list (cons 'unexpected-redaction-data 'retained))))))
+  (consent-register-native-library!
+   '(agent redaction-kernel)
+   bindings)
+  (test-assert
+   'native-redaction-kernel-missing-procedure-rejected
+   (error-object? missing-condition))
+  (test-equal
+   'native-redaction-kernel-missing-procedure-message
+   "native-binding-inventory-mismatch: missing procedure"
+   (error-object-message missing-condition))
+  (test-assert
+   'native-redaction-kernel-extra-procedure-rejected
+   (error-object? extra-procedure-condition))
+  (test-assert
+   'native-redaction-kernel-zero-data-inventory-rejects-data
+   (error-object? extra-data-condition))
+  (test-equal
+   'native-redaction-kernel-unexpected-binding-messages
+   '("native-binding-inventory-mismatch: unexpected binding"
+     "native-binding-inventory-mismatch: unexpected binding")
+   (list
+    (error-object-message extra-procedure-condition)
+    (error-object-message extra-data-condition)))))
+
+(testing-registry-case
+ 'native-redaction-kernel-callback-and-reentry-fail-closed
+ '(portable runtime datum boundary callback reentry)
+(let ((previous-applier (consent-native-applier-ref))
+      (callback-called? #f)
+      (callback-binding-entered? #f)
+      (nested-native-called? #f)
+      (reentry-binding-entered? #f))
+  (let* ((context
+          (new-eval-context
+           '((internal-libraries-allowed . #t))))
+         (text
+          (consent-datum-import
+           (context-datum-heap context)
+           "prefix sk-x"))
+         (callback
+          (make-primitive-procedure
+           'redaction-kernel-test-callback
+           (lambda (arguments callback-context)
+             (set! callback-called? #t)
+             #t)
+           0
+           0)))
+    (consent-register-native-library!
+     '(agent redaction-kernel)
+     (list
+      (cons
+       'redaction-kernel-secret-string?
+       (lambda (text-mirror)
+         (set! callback-binding-entered? #t)
+         (consent-apply-callable callback '())))))
+    (let* ((library
+            (resolve-library
+             '(agent redaction-kernel)
+             context
+             (consent-make-empty-environment)))
+           (callable
+            (cell-value
+             (test-library-binding-cell
+              library
+              'redaction-kernel-secret-string?)))
+           (condition
+            (dynamic-wind
+             (lambda ()
+               (consent-install-native-applier!
+                (lambda (procedure arguments callback-context)
+                  ((primitive-procedure-function procedure)
+                   arguments
+                   callback-context))))
+             (lambda ()
+               (guard (raised (else raised))
+                 ((primitive-procedure-function callable)
+                  (list text)
+                  context)))
+             (lambda ()
+               (consent-install-native-applier! previous-applier)))))
+      (test-assert
+       'native-redaction-kernel-malicious-callback-binding-entered
+       callback-binding-entered?)
+      (test-assert
+       'native-redaction-kernel-callback-not-invoked
+       (not callback-called?))
+      (test-assert
+       'native-redaction-kernel-nested-callback-rejected
+       (consent-error-object? condition))
+      (test-equal
+       'native-redaction-kernel-nested-callback-message
+       "native-compound-callback-unavailable: scalar values required"
+       (consent-error-object-message condition))))
+  (let* ((context
+          (new-eval-context
+           '((internal-libraries-allowed . #t))))
+         (text
+          (consent-datum-import
+           (context-datum-heap context)
+           "prefix sk-x")))
+    (consent-register-native-library!
+     '(agent redaction-kernel)
+     (list
+      (cons
+       'redaction-kernel-secret-string?
+       (lambda (text-mirror)
+         (set! reentry-binding-entered? #t)
+         (consent-call-native-library
+          (lambda ()
+            (set! nested-native-called? #t)
+            #t)
+          context)))))
+    (let* ((library
+            (resolve-library
+             '(agent redaction-kernel)
+             context
+             (consent-make-empty-environment)))
+           (callable
+            (cell-value
+             (test-library-binding-cell
+              library
+              'redaction-kernel-secret-string?)))
+           (condition
+            (guard (raised (else raised))
+              ((primitive-procedure-function callable)
+               (list text)
+               context))))
+      (test-assert
+       'native-redaction-kernel-malicious-reentry-binding-entered
+       reentry-binding-entered?)
+      (test-assert
+       'native-redaction-kernel-nested-native-not-called
+       (not nested-native-called?))
+      (test-assert
+       'native-redaction-kernel-nested-reentry-rejected
+       (consent-error-object? condition))
+      (test-equal
+       'native-redaction-kernel-nested-reentry-message
+       "native-compound-reentry-unavailable: scalar values required"
+       (consent-error-object-message condition))))
+  (consent-register-native-library!
+   '(agent redaction-kernel)
+   (native-redaction-kernel-test-bindings))))
+
+(testing-registry-case
+ 'native-redaction-kernel-preserves-string-identity
+ '(portable runtime datum boundary identity mutation)
+(begin
+  (consent-register-native-library!
+   '(agent redaction-kernel)
+   (native-redaction-kernel-test-bindings))
+  (let* ((context
+          (new-eval-context
+           '((internal-libraries-allowed . #t))))
+         (heap (context-datum-heap context))
+         (text (consent-datum-import heap "prefix ghp_x"))
+         (alias text)
+         (revision (consent-datum-object-revision text))
+         (library
+          (resolve-library
+           '(agent redaction-kernel)
+           context
+           (consent-make-empty-environment)))
+         (callable
+          (cell-value
+           (test-library-binding-cell
+            library
+            'redaction-kernel-secret-string?)))
+         (result
+          ((primitive-procedure-function callable)
+           (list text)
+           context)))
+    (test-assert 'native-redaction-kernel-match-result result)
+    (test-assert
+     'native-redaction-kernel-input-keeps-owned-identity
+     (consent-datum-same? text alias))
+    (test-equal
+     'native-redaction-kernel-input-revision-unchanged
+     revision
+     (consent-datum-object-revision text))
+    (test-equal
+     'native-redaction-kernel-input-content-unchanged
+     "prefix ghp_x"
+     (consent-runtime-datum->native-datum text)))))
+
+(testing-registry-case
+ 'native-openai-codec-owned-error-projection
+ '(portable runtime datum boundary graph)
+(begin
+  (consent-register-native-library!
+   '(agent models openai-codec)
+   (native-openai-codec-test-bindings))
+  (let* ((context
+          (new-eval-context
+           '((internal-libraries-allowed . #t))))
+         (heap (context-datum-heap context))
+         (library
+          (resolve-library
+           '(agent models openai-codec)
+           context
+           (consent-make-empty-environment)))
+         (callable
+          (cell-value
+           (test-library-binding-cell
+            library
+            'model-openai-codec-provider-error-projected)))
+         (transport-context
+          (consent-datum-import
+           heap
+           '#(local-errors
+              qwen-coder
+              local
+              openai-compatible-http
+              7
+              0
+              240)))
+         (url
+          (consent-datum-import
+           heap
+           "http://127.0.0.1:11434/v1/chat/completions"))
+         (reason (consent-datum-import heap "HTTP 503: safe"))
+         (extra-fields
+          (consent-datum-import heap '((phase http))))
+         (projection
+          ((primitive-procedure-function callable)
+           (list
+            transport-context
+            'scheme-scripter
+            url
+            reason
+            reason
+            extra-fields)
+           context))
+         (native-projection
+          (consent-runtime-datum->native-datum projection))
+         (error-datum (vector-ref native-projection 1)))
+    (test-assert
+     'native-openai-codec-projection-is-owned
+     (and (consent-datum-object? projection)
+          (eq? (consent-datum-object-kind projection) 'vector)))
+    (test-equal
+     'native-openai-codec-owned-summary
+     (string-append
+      "local model transport failed for provider local-errors model "
+      "qwen-coder via openai-compatible-http: HTTP 503: safe")
+     (vector-ref native-projection 0))
+    (test-equal
+     'native-openai-codec-owned-error-shape
+     '(model-provider-error (phase http))
+     (list (car error-datum) (car (reverse (cdr error-datum))))))))
+
+(testing-registry-case
+ 'native-memory-query-callback-and-reentry-fail-closed
+ '(portable runtime datum boundary callback reentry)
+(let ((previous-applier (consent-native-applier-ref)))
+  (define (callback-probe name argument-tail)
+    "Probe one memory-query NAME with a compound-active callback."
+    (let ((callback-called? #f)
+          (native-called? #f))
+      (consent-register-native-library!
+       '(agent memory-query)
+       (native-memory-query-bindings-with
+        name
+        (lambda native-arguments
+          (set! native-called? #t)
+          ((car (car (reverse native-arguments)))))))
+      (let* ((context
+              (new-eval-context
+               '((internal-libraries-allowed . #t))))
+             (records
+              (consent-datum-cons
+               (context-datum-heap context)
+               'record
+               '()))
+             (callback
+              (make-primitive-procedure
+               'memory-query-test-callback
+               (lambda (arguments callback-context)
+                 (set! callback-called? #t)
+                 #t)
+               0
+               0))
+             (library
+              (resolve-library
+               '(agent memory-query)
+               context
+               (consent-make-empty-environment)))
+             (callable
+              (cell-value (test-library-binding-cell library name)))
+             (condition
+              (dynamic-wind
+               (lambda ()
+                 (consent-install-native-applier!
+                  (lambda (procedure arguments callback-context)
+                    ((primitive-procedure-function procedure)
+                     arguments
+                     callback-context))))
+               (lambda ()
+                 (guard (raised (else raised))
+                   ((primitive-procedure-function callable)
+                    (append
+                     (list records)
+                     argument-tail
+                     (list (list callback)))
+                    context)))
+               (lambda ()
+                 (consent-install-native-applier! previous-applier)))))
+        (list native-called? callback-called? condition))))
+  (define (boundary-condition-message condition)
+    "Return CONDITION's portable error message, or #f."
+    (cond
+     ((consent-error-object? condition)
+      (consent-error-object-message condition))
+     ((error-object? condition) (error-object-message condition))
+     (else #f)))
+  (let* ((probes
+          (list
+           (callback-probe 'memory-query-find '(project))
+           (callback-probe 'memory-query-by-tag '(project))
+           (callback-probe 'memory-query-recent '(project))
+           (callback-probe 'memory-query-select '(0 query policy))))
+         (conditions (map (lambda (probe) (list-ref probe 2)) probes)))
+    (test-equal
+     'all-memory-query-native-bindings-entered
+     '(#t #t #t #t)
+     (map car probes))
+    (test-equal
+     'memory-query-callbacks-rejected-before-reentry
+     '(#f #f #f #f)
+     (map cadr probes))
+    (test-equal
+     'memory-query-nested-callbacks-fail-closed
+     '("native-compound-callback-unavailable: scalar values required"
+       "native-compound-callback-unavailable: scalar values required"
+       "native-compound-callback-unavailable: scalar values required"
+       "native-compound-callback-unavailable: scalar values required")
+     (map boundary-condition-message conditions)))
+  (consent-register-native-library!
+   '(agent memory-query)
+   (native-memory-query-test-bindings))))
+
+(testing-registry-case
+ 'native-memory-query-preserves-identities-without-mutation
+ '(portable runtime datum boundary identity mutation)
+(begin
+  (consent-register-native-library!
+   '(agent memory-query)
+   (native-memory-query-test-bindings))
+  (let* ((context
+          (new-eval-context
+           '((internal-libraries-allowed . #t))))
+         (heap (context-datum-heap context))
+         (records
+          (consent-datum-import
+           heap
+           '((memory
+              (id identity-record)
+              (scope project)
+              (key identity-record)
+              (kind datum)
+              (memory-class semantic)
+              (tags (identity-query))
+              (value "identity payload")
+              (source ())
+              (confidence high)
+              (importance 1)
+              (created-at 1)
+              (updated-at 1)))))
+         (query (consent-datum-import heap '(identity-query)))
+         (policy
+          (consent-datum-import
+           heap
+           '(retrieval-policy (cutoff 0) (limit 1))))
+         (request-context
+          (consent-datum-import
+           heap
+           '(retrieval-context
+             (scope project)
+             (allowed-scopes (project))
+             (logical-clock 1))))
+         (library
+          (resolve-library
+           '(agent memory-query)
+           context
+           (consent-make-empty-environment))))
+    (define (runtime-car value)
+      "Return VALUE's first slot across host and owned pairs."
+      (if (consent-datum-pair? value)
+          (consent-datum-car value)
+          (car value)))
+    (define (runtime-cdr value)
+      "Return VALUE's tail across host and owned pairs."
+      (if (consent-datum-pair? value)
+          (consent-datum-cdr value)
+          (cdr value)))
+    (define (runtime-field value name)
+      "Return field NAME from an owned tagged record VALUE."
+      (let loop ((fields (runtime-cdr value)))
+        (if (null? fields)
+            #f
+            (let ((field (runtime-car fields)))
+              (if (consent-host-symbol-eq? (runtime-car field) name)
+                  (runtime-car (runtime-cdr field))
+                  (loop (runtime-cdr fields)))))))
+    (define (call-query name arguments)
+      "Call native query binding NAME with runtime ARGUMENTS."
+      ((primitive-procedure-function
+        (cell-value (test-library-binding-cell library name)))
+       arguments
+       context))
+    (let* ((record (runtime-car records))
+           (records-revision (consent-datum-object-revision records))
+           (record-revision (consent-datum-object-revision record))
+           (records-snapshot
+            (consent-runtime-datum->native-datum records))
+           (found
+            (call-query
+             'memory-query-find
+             (list records 'project "identity payload")))
+           (tagged
+            (call-query
+             'memory-query-by-tag
+             (list records 'project 'identity-query)))
+           (recent
+            (call-query
+             'memory-query-recent
+             (list records 'project 1)))
+           (selection
+            (call-query
+             'memory-query-select
+             (list records 1 query policy request-context))))
+      (test-assert
+       'memory-query-results-reuse-canonical-record
+       (and
+        (consent-datum-same? record (runtime-car found))
+        (consent-datum-same? record (runtime-car tagged))
+        (consent-datum-same? record (runtime-car recent))
+        (consent-datum-same?
+         record
+         (runtime-car (runtime-field selection 'records)))))
+      (test-assert
+       'memory-query-selection-reuses-input-receipts
+       (and
+        (consent-datum-same? query (runtime-field selection 'query))
+        (consent-datum-same? policy (runtime-field selection 'policy))
+        (consent-datum-same?
+         request-context
+         (runtime-field selection 'context))))
+      (test-equal
+       'memory-query-leaves-source-record-graph-unchanged
+       (list records-revision record-revision records-snapshot)
+       (list
+        (consent-datum-object-revision records)
+        (consent-datum-object-revision record)
+        (consent-runtime-datum->native-datum records)))))))
 
 (testing-registry-case
  'native-binding-cache-owned-by-evaluation-context

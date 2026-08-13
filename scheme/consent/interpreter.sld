@@ -225,7 +225,7 @@ d."
                 (let* ((length
                         (if pair-kind?
                             0
-                            (consent-datum-vector-length item)))
+                            (consent-datum-vector-length-trusted item)))
                        (copy
                         (if pair-kind?
                             (cons #f #f)
@@ -244,18 +244,18 @@ d."
                   (if pair-kind?
                       (begin
                         (push-visit!
-                         (consent-datum-cdr item)
+                         (consent-datum-cdr-trusted item)
                          (lambda (rendered)
                            (set-cdr! copy rendered)))
                         (push-visit!
-                         (consent-datum-car item)
+                         (consent-datum-car-trusted item)
                          (lambda (rendered)
                            (set-car! copy rendered))))
                       (let loop ((index (- length 1)))
                         (if (>= index 0)
                             (begin
                               (push-visit!
-                               (consent-datum-vector-ref item index)
+                               (consent-datum-vector-ref-trusted item index)
                                (lambda (rendered)
                                  (vector-set! copy index rendered)))
                               (loop (- index 1))))))))))
@@ -697,7 +697,7 @@ procedures."
               (make-primitive-procedure
                name
                (lambda (arguments context)
-                 (consent-datum-vector-ref
+                 (consent-datum-vector-ref-trusted
                   (consent-record-fields
                    (expect-record-of-type
                     (car arguments)
@@ -719,8 +719,8 @@ procedures."
               (make-primitive-procedure
                name
                (lambda (arguments context)
-                 (consent-datum-vector-set!
-                  (context-datum-heap context)
+                 (consent-datum-vector-set-trusted!
+                 (context-datum-heap context)
                   (consent-record-fields
                    (expect-record-of-type
                     (car arguments)
@@ -1186,30 +1186,33 @@ s."
                       (cond
                        ((null? items) #t)
                        ((contract-type-matches?
-                         (cadr type) (consent-datum-car items))
-                        (loop (consent-datum-cdr items)))
+                         (cadr type)
+                         (consent-datum-car-trusted items))
+                        (loop (consent-datum-cdr-trusted items)))
                        (else #f))))
                #t))
          ((contract-tag=? (car type) 'vector-of)
            (if (= (length type) 2)
                (and (consent-datum-vector? value)
-                    (let loop ((index 0))
-                      (cond
-                       ((= index (consent-datum-vector-length value)) #t)
-                       ((contract-type-matches?
-                         (cadr type)
-                         (consent-datum-vector-ref value index))
-                        (loop (+ index 1)))
-                       (else #f))))
+                    (let ((length
+                           (consent-datum-vector-length-trusted value)))
+                      (let loop ((index 0))
+                        (cond
+                         ((= index length) #t)
+                         ((contract-type-matches?
+                           (cadr type)
+                           (consent-datum-vector-ref-trusted value index))
+                          (loop (+ index 1)))
+                         (else #f)))))
                #t))
          ((contract-tag=? (car type) 'pair)
            (cond
             ((= (length type) 3)
              (and (consent-datum-pair? value)
                   (contract-type-matches?
-                   (cadr type) (consent-datum-car value))
+                   (cadr type) (consent-datum-car-trusted value))
                   (contract-type-matches?
-                   (third type) (consent-datum-cdr value))))
+                   (third type) (consent-datum-cdr-trusted value))))
             (else (consent-datum-pair? value))))
          ((contract-tag=? (car type) 'procedure) (contract-procedure? value))
          ((contract-tag=? (car type) 'values) #t)
@@ -1834,7 +1837,13 @@ er")
     (define (eval-combination expression environment context tail?
       continuation)
       "Evaluate a combination or special form with tail-position awareness."
-      (let ((parts (proper-list-elements expression "expression")))
+      ;; Public evaluator inputs have already been projected recursively into
+      ;; private host syntax, and eval-expression dispatches here only for a
+      ;; host pair. Validate that original spine before any operator effect,
+      ;; then reuse it instead of collecting and reversing every combination.
+      (if (not (proper-host-list? expression))
+          (eval-error "expression must be a proper list"))
+      (let ((parts expression))
         (if (null? parts)
             (eval-error "empty list is not an expression"))
         (let* ((operator (car parts))
@@ -3613,8 +3622,8 @@ t"
       "Implement the `cons` primitive with argument validation and Consent Sch\
 eme values."
       ;; One fresh pair; its car/cdr were charged where they were allocated.
-      ;; Charging `cons' charges every prelude list builder (list, append,
-      ;; reverse, map, ...) that conses, with no walk of the growing result.
+      ;; Charging `cons' charges remaining prelude list builders such as map,
+      ;; with no walk of the growing result.
       (charge-value-allocation!
        (consent-datum-cons
         (context-datum-heap context)
@@ -3628,7 +3637,7 @@ eme values."
 me values."
       (let ((pair (car arguments)))
         (if (consent-datum-pair? pair)
-            (consent-datum-car pair)
+            (consent-datum-car-trusted pair)
             (eval-error "car expected pair" pair))))
 
     (define (primitive-cdr arguments context)
@@ -3636,7 +3645,7 @@ me values."
 me values."
       (let ((pair (car arguments)))
         (if (consent-datum-pair? pair)
-            (consent-datum-cdr pair)
+            (consent-datum-cdr-trusted pair)
             (eval-error "cdr expected pair" pair))))
 
     (define (primitive-list arguments context)
@@ -3655,13 +3664,13 @@ eme values."
       "Return owned or private host PAIR's cdr."
       (if (pair? pair)
           (cdr pair)
-          (consent-datum-cdr pair)))
+          (consent-datum-cdr-trusted pair)))
 
     (define (list-node-car pair)
       "Return owned or private host PAIR's car."
       (if (pair? pair)
           (car pair)
-          (consent-datum-car pair)))
+          (consent-datum-car-trusted pair)))
 
     (define (same-list-node? left right)
       "Report whether LEFT and RIGHT are the same pair node."
@@ -3695,7 +3704,7 @@ eme values."
       (proper-list-shape?
        value
        consent-datum-pair?
-       consent-datum-cdr
+       consent-datum-cdr-trusted
        consent-datum-same?))
 
     (define (proper-mixed-list? value)
@@ -3703,18 +3712,151 @@ eme values."
       (proper-list-shape?
        value list-node? list-node-cdr same-list-node?))
 
+    (define (proper-host-list? value)
+      "Report whether VALUE is a proper private host list."
+      ;; Evaluator combinations are private host syntax after projection. Keep
+      ;; their hot-path validation on constant-space host operations; mixed or
+      ;; public datum consumers continue to use proper-list-elements below.
+      (proper-list-shape? value pair? cdr eq?))
+
+    (define (proper-list-length/maybe value)
+      (define (count-known-proper cursor count)
+        "Count CURSOR once Floyd's hare proves the remaining spine."
+        (if (null? cursor)
+            count
+            (count-known-proper
+             (list-node-cdr cursor) (+ count 1))))
+      "Return VALUE's mixed-list length, or false for an invalid spine."
+      (let loop ((cursor value)
+                 (slow value)
+                 (fast value)
+                 (count 0))
+        (cond
+         ((null? cursor) count)
+         ((not (list-node? cursor)) #f)
+         (else
+          (let ((next-cursor (list-node-cdr cursor))
+                (next-count (+ count 1)))
+            (cond
+             ((null? fast)
+              (count-known-proper next-cursor next-count))
+             ((not (list-node? fast)) #f)
+             (else
+              (let ((fast-one (list-node-cdr fast)))
+                (cond
+                 ((null? fast-one)
+                  (count-known-proper next-cursor next-count))
+                 ((not (list-node? fast-one)) #f)
+                 (else
+                  (let ((slow-one (list-node-cdr slow))
+                        (fast-two (list-node-cdr fast-one)))
+                    (if (same-list-node? slow-one fast-two)
+                        #f
+                        (loop
+                         next-cursor
+                         slow-one
+                         fast-two
+                         next-count)))))))))))))
+
+    (define (proper-list-reversed-elements/maybe value)
+      (define (collect-known-proper cursor elements)
+        "Collect CURSOR once Floyd's hare proves the remaining spine."
+        (if (null? cursor)
+            elements
+            (collect-known-proper
+             (list-node-cdr cursor)
+             (cons (list-node-car cursor) elements))))
+      "Return reversed VALUE elements, or false for an invalid spine."
+      (let loop ((cursor value)
+                 (slow value)
+                 (fast value)
+                 (elements '()))
+        (cond
+         ((null? cursor) elements)
+         ((not (list-node? cursor)) #f)
+         (else
+          (let ((next-cursor (list-node-cdr cursor))
+                (next-elements
+                 (cons (list-node-car cursor) elements)))
+            (cond
+             ((null? fast)
+              (collect-known-proper next-cursor next-elements))
+             ((not (list-node? fast)) #f)
+             (else
+              (let ((fast-one (list-node-cdr fast)))
+                (cond
+                 ((null? fast-one)
+                  (collect-known-proper next-cursor next-elements))
+                 ((not (list-node? fast-one)) #f)
+                 (else
+                  (let ((slow-one (list-node-cdr slow))
+                        (fast-two (list-node-cdr fast-one)))
+                    (if (same-list-node? slow-one fast-two)
+                        #f
+                        (loop
+                         next-cursor
+                         slow-one
+                         fast-two
+                         next-elements)))))))))))))
+
     (define (proper-list-elements value description)
       "Return VALUE's elements, rejecting improper and cyclic lists."
-      (if (not (proper-mixed-list? value))
-          (eval-error
-           (string-append description " must be a proper list")))
-      ;; Validation proved this spine finite; collection needs no identity
-      ;; table and therefore performs no per-call hash allocation.
-      (let loop ((cursor value) (elements '()))
+      (let ((elements (proper-list-reversed-elements/maybe value)))
+        (if (not elements)
+            (eval-error
+             (string-append description " must be a proper list")))
+        ;; Reverse only the promised result list. Source validation and
+        ;; collection share the single map-free traversal above.
+        (reverse elements)))
+
+    (define (append-reversed-elements-and-count value)
+      (define (collect-known-proper cursor elements count)
+        "Collect CURSOR once Floyd's hare has proved the remaining spine."
         (if (null? cursor)
-            (reverse elements)
-            (loop (list-node-cdr cursor)
-                  (cons (list-node-car cursor) elements)))))
+            (cons elements count)
+            (collect-known-proper
+             (list-node-cdr cursor)
+             (cons (list-node-car cursor) elements)
+             (+ count 1))))
+      "Return reversed VALUE elements and count after one validating pass."
+      (let loop ((cursor value)
+                 (slow value)
+                 (fast value)
+                 (elements '())
+                 (count 0))
+        (cond
+         ((null? cursor) (cons elements count))
+         ((not (list-node? cursor))
+          (eval-error "car expected pair" cursor))
+         (else
+          (let ((next-cursor (list-node-cdr cursor))
+                (next-elements
+                 (cons (list-node-car cursor) elements))
+                (next-count (+ count 1)))
+            (cond
+             ((null? fast)
+              (collect-known-proper
+               next-cursor next-elements next-count))
+             ((not (list-node? fast))
+              (eval-error "car expected pair" fast))
+             (else
+              (let ((fast-one (list-node-cdr fast)))
+                (cond
+                 ((null? fast-one)
+                  (collect-known-proper
+                   next-cursor next-elements next-count))
+                 ((not (list-node? fast-one))
+                  (eval-error "car expected pair" fast-one))
+                 (else
+                  (let ((slow-one (list-node-cdr slow))
+                        (fast-two (list-node-cdr fast-one)))
+                    (if (same-list-node? slow-one fast-two)
+                        (eval-error "car expected pair")
+                        (loop next-cursor
+                              slow-one
+                              fast-two
+                              next-elements
+                              next-count)))))))))))))
 
     (define (primitive-list? arguments context)
       "Implement the `list?` primitive with argument validation and Consent"
@@ -3724,7 +3866,10 @@ eme values."
     (define (primitive-length arguments context)
       "Implement the `length` primitive with argument validation and Consent"
       "Scheme values."
-      (length (proper-list-elements (car arguments) "length")))
+      (let ((count (proper-list-length/maybe (car arguments))))
+        (if (not count)
+            (eval-error "length must be a proper list"))
+        (consent-make-canonical-integer count)))
 
     (define (primitive-append arguments context)
       "Implement the `append` primitive with argument validation and Consent"
@@ -3734,31 +3879,41 @@ eme values."
           (let* ((heap (context-datum-heap context))
                  (reversed (reverse arguments)))
             (let loop ((rest (cdr reversed))
-                       (result (car reversed))
-                       (count 0))
+                       (result (car reversed)))
               (if (null? rest)
-                  (charge-value-allocation! result count context)
-                  (let rebuild
-                      ((elements
-                        (reverse
-                         (proper-list-elements
-                          (car rest)
-                          "append argument")))
-                       (tail result)
-                       (next-count count))
-                    (if (null? elements)
-                        (loop (cdr rest) tail next-count)
-                        (rebuild
-                         (cdr elements)
-                         (consent-datum-cons heap (car elements) tail)
-                         (+ next-count 1)))))))))
+                  result
+                  (let* ((copy
+                          (append-reversed-elements-and-count (car rest)))
+                         (elements (car copy))
+                         (count (cdr copy)))
+                    ;; Preserve the right-to-left append order: validate and
+                    ;; precharge this prefix before building it or inspecting
+                    ;; the next earlier prefix.
+                    (note-value-allocation! context count)
+                    (let rebuild ((elements elements) (tail result))
+                      (if (null? elements)
+                          (loop (cdr rest) tail)
+                          (rebuild
+                           (cdr elements)
+                           (consent-datum-cons
+                            heap (car elements) tail))))))))))
 
     (define (primitive-reverse arguments context)
       "Implement the `reverse` primitive with argument validation and Consent"
       "Scheme values."
-      (charge-list-allocation!
-       (reverse (proper-list-elements (car arguments) "reverse"))
-       context))
+      (let* ((value (car arguments))
+             (count (proper-list-length/maybe value)))
+        (if (not count)
+            (eval-error "reverse must be a proper list"))
+        (note-value-allocation! context count)
+        (let ((heap (context-datum-heap context)))
+          (let loop ((cursor value) (result '()))
+            (if (null? cursor)
+                result
+                (loop
+                 (list-node-cdr cursor)
+                 (consent-datum-cons
+                  heap (list-node-car cursor) result)))))))
 
     (define (primitive-list-tail arguments context)
       "Implement the `list-tail` primitive with argument validation and Consen\
@@ -3771,7 +3926,8 @@ t"
           (cond
            ((zero? remaining) cursor)
            ((consent-datum-pair? cursor)
-            (loop (consent-datum-cdr cursor) (- remaining 1)))
+            (loop
+             (consent-datum-cdr-trusted cursor) (- remaining 1)))
            (else (eval-error "list-tail index exceeds list length"))))))
 
     (define (primitive-list-ref arguments context)
@@ -3780,7 +3936,7 @@ t"
       "Scheme values."
       (let ((tail (primitive-list-tail arguments context)))
         (if (consent-datum-pair? tail)
-            (consent-datum-car tail)
+            (consent-datum-car-trusted tail)
             (eval-error "list-ref index exceeds list length"))))
 
     (define (primitive-list-set! arguments context)
@@ -7915,6 +8071,76 @@ d.")))
                (else #f))))
         (if metadata (own-runtime-datum metadata context) #f)))
 
+    (define (primitive-consent-identity-map-fast-backend?
+             arguments context)
+      "Report whether the statically imported host identity map is fast."
+      (consent-identity-map-fast-backend?))
+
+    (define (primitive-consent-make-identity-map arguments context)
+      "Return one opaque host identity map for an interpreted source call."
+      ;; The table and its buckets are internal scratch, not Consent datum
+      ;; nodes.  Do not make logical value budgets depend on a host's table
+      ;; representation or resize policy.
+      (consent-make-identity-map))
+
+    (define (primitive-consent-identity-map-ref arguments context)
+      "Return an identity-keyed value or the caller's absent marker."
+      (consent-identity-map-ref
+       (car arguments) (second arguments) (third arguments)))
+
+    (define (primitive-consent-identity-map-set! arguments context)
+      "Associate an interpreter value in an opaque host identity map."
+      (consent-identity-map-set!
+       (car arguments) (second arguments) (third arguments)))
+
+    (define (primitive-consent-number-representation-snapshot-outer
+             arguments context)
+      "Return charged ASCII for an outer canonical number, or false."
+      (let ((snapshot
+             (consent-number-representation-snapshot (car arguments))))
+        (if snapshot
+            (begin
+              (string-set! snapshot 0 #\O)
+              (charge-string-allocation! snapshot context))
+            #f)))
+
+    (define (primitive-consent-outer-representation-kind arguments context)
+      "Return a supplied marker for an outer-owned datum representation."
+      (let ((datum (car arguments))
+            (markers (second arguments)))
+        (if (or (not (consent-datum-vector? markers))
+                (not (= (consent-datum-vector-length markers) 9)))
+            (error "outer representation markers must be a nine-vector"
+                   markers))
+        (cond
+         ((consent-datum-pair? datum)
+          (consent-datum-vector-ref markers 0))
+         ((consent-datum-vector? datum)
+          (consent-datum-vector-ref markers 1))
+         ((consent-datum-string? datum)
+          (consent-datum-vector-ref markers 2))
+         ((consent-datum-bytevector? datum)
+          (consent-datum-vector-ref markers 3))
+         ((consent-character? datum)
+          (consent-datum-vector-ref markers 4))
+         ((consent-symbol? datum)
+          (consent-datum-vector-ref markers 5))
+         ((consent-number? datum)
+          (consent-datum-vector-ref markers 6))
+         ;; Source-library calls receive ordinary guest values through the
+         ;; evaluator's base representation.  Classify those representations
+         ;; in the same outer domain as evaluator-owned values.  Duplicate
+         ;; private reader records satisfy none of these host predicates and
+         ;; therefore remain fail-closed below.
+         ((pair? datum) (consent-datum-vector-ref markers 0))
+         ((vector? datum) (consent-datum-vector-ref markers 1))
+         ((string? datum) (consent-datum-vector-ref markers 2))
+         ((bytevector? datum) (consent-datum-vector-ref markers 3))
+         ((char? datum) (consent-datum-vector-ref markers 4))
+         ((symbol? datum) (consent-datum-vector-ref markers 5))
+         ((number? datum) (consent-datum-vector-ref markers 6))
+         (else (consent-datum-vector-ref markers 7)))))
+
     (define (primitive-memory-put! arguments context)
       "Store a keyed memory record in the portable interpreter memory store."
       (portable-library-call memory-model:memory-store-put!
@@ -9408,7 +9634,7 @@ e"
       "Implement the `string-length` primitive with argument validation and"
       "Consent Scheme values."
       (consent-make-canonical-integer
-       (consent-datum-string-length
+       (consent-datum-string-length-trusted
         (expect-string (car arguments) "string-length"))))
 
     (define (primitive-string-ref arguments context)
@@ -9417,11 +9643,11 @@ e"
       (let* ((string (expect-string (car arguments) "string-ref"))
              (index (expect-nonnegative-index
                      (second arguments)
-                     (consent-datum-string-length string)
+                     (consent-datum-string-length-trusted string)
                      "string-ref"
                      #f)))
         (consent-host-character->character
-         (consent-datum-string-ref-host string index))))
+         (consent-datum-string-ref-host-trusted string index))))
 
     (define (primitive-string-set! arguments context)
       "Implement the `string-set!` primitive with argument validation and"
@@ -9429,7 +9655,7 @@ e"
       (let* ((string (expect-string (car arguments) "string-set!"))
              (index (expect-nonnegative-index
                      (second arguments)
-                     (consent-datum-string-length string)
+                     (consent-datum-string-length-trusted string)
                      "string-set!"
                      #f))
              (char (expect-host-character
@@ -9444,7 +9670,7 @@ e"
 t"
       "Scheme values."
       (let* ((string (expect-string (car arguments) "substring"))
-             (length (consent-datum-string-length string))
+             (length (consent-datum-string-length-trusted string))
              (start (expect-nonnegative-index
                      (second arguments)
                      length
@@ -9480,14 +9706,15 @@ t"
              (range (optional-range
                      arguments
                      1
-                     (consent-datum-string-length string)
+                     (consent-datum-string-length-trusted string)
                      "string->list")))
         (let loop ((index (car range)) (result '()))
           (if (= index (cdr range))
               (charge-list-allocation! (reverse result) context)
               (loop (+ index 1)
                     (cons (consent-host-character->character
-                           (consent-datum-string-ref-host string index))
+                           (consent-datum-string-ref-host-trusted
+                            string index))
                           result))))))
 
     (define (primitive-list->string arguments context)
@@ -9507,7 +9734,7 @@ t"
              (range (optional-range
                      arguments
                      1
-                     (consent-datum-string-length string)
+                     (consent-datum-string-length-trusted string)
                      "string->vector"))
              (length (- (cdr range) (car range)))
              (vector (make-vector length #f)))
@@ -9517,7 +9744,8 @@ t"
                 (vector-set!
                  vector target-index
                  (consent-host-character->character
-                  (consent-datum-string-ref-host string source-index)))
+                  (consent-datum-string-ref-host-trusted
+                   string source-index)))
                 (loop (+ source-index 1) (+ target-index 1)))))
         (charge-vector-allocation! vector context)))
 
@@ -9528,7 +9756,7 @@ t"
              (range (optional-range
                      arguments
                      1
-                     (consent-datum-vector-length vector)
+                     (consent-datum-vector-length-trusted vector)
                      "vector->string")))
         (let loop ((index (car range)) (result '()))
           (if (= index (cdr range))
@@ -9536,7 +9764,7 @@ t"
                 context)
               (loop (+ index 1)
                     (cons (expect-host-character
-                           (consent-datum-vector-ref vector index)
+                           (consent-datum-vector-ref-trusted vector index)
                            "vector->string")
                           result))))))
 
@@ -9547,7 +9775,7 @@ t"
              (range (optional-range
                      arguments
                      1
-                     (consent-datum-string-length string)
+                     (consent-datum-string-length-trusted string)
                      "string-copy")))
         (charge-value-allocation!
          (consent-datum-string-copy-range
@@ -9564,19 +9792,19 @@ t"
       (let* ((to (expect-string (car arguments) "string-copy! target"))
              (at (expect-nonnegative-index
                   (second arguments)
-                  (consent-datum-string-length to)
+                  (consent-datum-string-length-trusted to)
                   "string-copy!"
                   #t))
              (from (expect-string (third arguments) "string-copy! source"))
              (range (optional-range
                      arguments
                      3
-                     (consent-datum-string-length from)
+                     (consent-datum-string-length-trusted from)
                      "string-copy!"))
              (length (- (cdr range) (car range)))
              (source (make-vector length #f)))
         (if (> (+ at (- (cdr range) (car range)))
-               (consent-datum-string-length to))
+               (consent-datum-string-length-trusted to))
             (eval-error "string-copy! target range exceeds length"))
         ;; Snapshot through datum accessors before any write so overlapping
         ;; copies have R7RS semantics without allocating a host string.
@@ -9586,7 +9814,7 @@ t"
                 (vector-set!
                  source
                  snapshot-index
-                 (consent-datum-string-ref-host from source-index))
+                 (consent-datum-string-ref-host-trusted from source-index))
                 (snapshot (+ source-index 1) (+ snapshot-index 1)))))
         (let copy ((snapshot-index 0) (target-index at))
           (if (< snapshot-index length)
@@ -9609,7 +9837,7 @@ t"
              (range (optional-range
                      arguments
                      2
-                     (consent-datum-string-length string)
+                     (consent-datum-string-length-trusted string)
                      "string-fill!")))
         (let loop ((index (car range)))
           (if (< index (cdr range))
@@ -9621,8 +9849,8 @@ t"
 
     (define (string-scalar-compare left right)
       "Compare owned strings lexicographically by Unicode scalar value."
-      (let ((left-length (consent-datum-string-length left))
-            (right-length (consent-datum-string-length right)))
+      (let ((left-length (consent-datum-string-length-trusted left))
+            (right-length (consent-datum-string-length-trusted right)))
         (let loop ((index 0))
           (cond
            ((and (= index left-length) (= index right-length)) 0)
@@ -9631,10 +9859,10 @@ t"
            (else
             (let ((left-code
                    (char->integer
-                    (consent-datum-string-ref-host left index)))
+                    (consent-datum-string-ref-host-trusted left index)))
                   (right-code
                    (char->integer
-                    (consent-datum-string-ref-host right index))))
+                    (consent-datum-string-ref-host-trusted right index))))
               (cond
                ((< left-code right-code) -1)
                ((> left-code right-code) 1)
@@ -9704,10 +9932,10 @@ t"
           (let ((value
                  (apply-procedure
                   procedure
-                  (map consent-datum-car cursors)
+                  (map consent-datum-car-trusted cursors)
                   context
                   #f)))
-            (loop (map consent-datum-cdr cursors)
+            (loop (map consent-datum-cdr-trusted cursors)
                   (if keep-results?
                       (cons (single-value value "map result") results)
                       results)))))))
@@ -10116,7 +10344,7 @@ me values."
       "Implement the `vector-length` primitive with argument validation and"
       "Consent Scheme values."
       (consent-make-canonical-integer
-       (consent-datum-vector-length
+       (consent-datum-vector-length-trusted
         (expect-vector (car arguments) "vector-length"))))
 
     (define (primitive-vector-ref arguments context)
@@ -10125,10 +10353,10 @@ me values."
       (let* ((vector (expect-vector (car arguments) "vector-ref"))
              (index (expect-nonnegative-index
                      (second arguments)
-                     (consent-datum-vector-length vector)
+                     (consent-datum-vector-length-trusted vector)
                      "vector-ref"
                      #f)))
-        (consent-datum-vector-ref vector index)))
+        (consent-datum-vector-ref-trusted vector index)))
 
     (define (primitive-vector-set! arguments context)
       "Implement the `vector-set!` primitive with argument validation and"
@@ -10136,10 +10364,10 @@ me values."
       (let* ((vector (expect-vector (car arguments) "vector-set!"))
              (index (expect-nonnegative-index
                      (second arguments)
-                     (consent-datum-vector-length vector)
+                     (consent-datum-vector-length-trusted vector)
                      "vector-set!"
                      #f)))
-        (consent-datum-vector-set!
+        (consent-datum-vector-set-trusted!
          (context-datum-heap context) vector index (third arguments))
         consent-unspecified))
 
@@ -10150,13 +10378,13 @@ me values."
              (range (optional-range
                      arguments
                      1
-                     (consent-datum-vector-length vector)
+                     (consent-datum-vector-length-trusted vector)
                      "vector->list")))
         (let loop ((index (car range)) (result '()))
           (if (= index (cdr range))
               (charge-list-allocation! (reverse result) context)
               (loop (+ index 1)
-                    (cons (consent-datum-vector-ref vector index)
+                    (cons (consent-datum-vector-ref-trusted vector index)
                           result))))))
 
     (define (primitive-list->vector arguments context)
@@ -10174,7 +10402,7 @@ me values."
              (range (optional-range
                      arguments
                      1
-                     (consent-datum-vector-length source)
+                     (consent-datum-vector-length-trusted source)
                      "vector-copy"))
              (length (- (cdr range) (car range)))
              (copy (make-vector length #f)))
@@ -10183,7 +10411,7 @@ me values."
               (begin
                 (vector-set!
                  copy target-index
-                 (consent-datum-vector-ref source source-index))
+                 (consent-datum-vector-ref-trusted source source-index))
                 (loop (+ source-index 1) (+ target-index 1)))))
         (charge-vector-allocation! copy context)))
 
@@ -10193,19 +10421,19 @@ me values."
       (let* ((to (expect-vector (car arguments) "vector-copy! target"))
              (at (expect-nonnegative-index
                   (second arguments)
-                  (consent-datum-vector-length to)
+                  (consent-datum-vector-length-trusted to)
                   "vector-copy!"
                   #t))
              (from (expect-vector (third arguments) "vector-copy! source"))
              (range (optional-range
                      arguments
                      3
-                     (consent-datum-vector-length from)
+                     (consent-datum-vector-length-trusted from)
                      "vector-copy!"))
              (length (- (cdr range) (car range)))
              (source (make-vector length #f)))
         (if (> (+ at (- (cdr range) (car range)))
-               (consent-datum-vector-length to))
+               (consent-datum-vector-length-trusted to))
             (eval-error "vector-copy! target range exceeds length"))
         ;; R7RS requires overlap to behave as if the source range had first
         ;; been copied. A host vector snapshot gives exactly one indexed read
@@ -10216,12 +10444,12 @@ me values."
                 (vector-set!
                  source
                  snapshot-index
-                 (consent-datum-vector-ref from source-index))
+                 (consent-datum-vector-ref-trusted from source-index))
                 (snapshot (+ source-index 1) (+ snapshot-index 1)))))
         (let copy ((snapshot-index 0) (target-index at))
           (if (< snapshot-index length)
               (begin
-                (consent-datum-vector-set!
+                (consent-datum-vector-set-trusted!
                  (context-datum-heap context)
                  to
                  target-index
@@ -10240,12 +10468,12 @@ me values."
                              (expect-vector argument "vector-append")))
                         (let loop ((index 0) (result '()))
                           (if (= index
-                                 (consent-datum-vector-length vector))
+                                 (consent-datum-vector-length-trusted vector))
                               (reverse result)
                               (loop
                                (+ index 1)
                                (cons
-                                (consent-datum-vector-ref vector index)
+                                (consent-datum-vector-ref-trusted vector index)
                                 result))))))
                     arguments)))
        context))
@@ -10258,12 +10486,12 @@ me values."
              (range (optional-range
                      arguments
                      2
-                     (consent-datum-vector-length vector)
+                     (consent-datum-vector-length-trusted vector)
                      "vector-fill!")))
         (let loop ((index (car range)))
           (if (< index (cdr range))
               (begin
-                (consent-datum-vector-set!
+                (consent-datum-vector-set-trusted!
                  (context-datum-heap context) vector index fill)
                 (loop (+ index 1)))))
         consent-unspecified))
@@ -10563,9 +10791,11 @@ d"
           (if owned?
               (begin
                 (push!
-                 (consent-datum-cdr first) (consent-datum-cdr second))
+                 (consent-datum-cdr-trusted first)
+                 (consent-datum-cdr-trusted second))
                 (push!
-                 (consent-datum-car first) (consent-datum-car second)))
+                 (consent-datum-car-trusted first)
+                 (consent-datum-car-trusted second)))
               (begin
                 (push! (cdr first) (cdr second))
                 (push! (car first) (car second)))))
@@ -10576,8 +10806,8 @@ d"
                 (begin
                   (if owned?
                       (push!
-                       (consent-datum-vector-ref first index)
-                       (consent-datum-vector-ref second index))
+                       (consent-datum-vector-ref-trusted first index)
+                       (consent-datum-vector-ref-trusted second index))
                       (push!
                        (vector-ref first index)
                        (vector-ref second index)))
@@ -10601,8 +10831,8 @@ d"
              (= index length)
              (and
               (char=?
-               (consent-datum-string-ref-host first index)
-               (consent-datum-string-ref-host second index))
+               (consent-datum-string-ref-host-trusted first index)
+               (consent-datum-string-ref-host-trusted second index))
               (loop (+ index 1))))))
         (define (owned-bytevector-content=? first second length)
           "Compare LENGTH owned bytevector slots without host copies."
@@ -10643,9 +10873,10 @@ d"
                  ((or (pair? first) (pair? second)) #f)
                  ((and (consent-datum-vector? first)
                        (consent-datum-vector? second))
-                  (let ((length (consent-datum-vector-length first)))
+                  (let ((length
+                         (consent-datum-vector-length-trusted first)))
                     (if (not (= length
-                                (consent-datum-vector-length second)))
+                                (consent-datum-vector-length-trusted second)))
                         #f
                         (begin
                           (if (not (seen-or-mark! first second))
@@ -10667,9 +10898,10 @@ d"
                  ((or (vector? first) (vector? second)) #f)
                  ((and (consent-datum-string? first)
                        (consent-datum-string? second))
-                  (let ((length (consent-datum-string-length first)))
+                  (let ((length
+                         (consent-datum-string-length-trusted first)))
                     (if (not (= length
-                                (consent-datum-string-length second)))
+                                (consent-datum-string-length-trusted second)))
                         #f
                         (if (seen-or-mark! first second)
                             (loop)
@@ -10732,8 +10964,10 @@ eme values."
         (cond
          ((null? cursor) #f)
          ((not (consent-datum-pair? cursor)) #f)
-         ((eq-value? (car arguments) (consent-datum-car cursor)) cursor)
-         (else (loop (consent-datum-cdr cursor))))))
+         ((eq-value?
+           (car arguments) (consent-datum-car-trusted cursor))
+          cursor)
+         (else (loop (consent-datum-cdr-trusted cursor))))))
 
     (define (primitive-memv arguments context)
       "Implement the `memv` primitive with argument validation and Consent Sch\
@@ -10742,8 +10976,10 @@ eme values."
         (cond
          ((null? cursor) #f)
          ((not (consent-datum-pair? cursor)) #f)
-         ((eqv-value? (car arguments) (consent-datum-car cursor)) cursor)
-         (else (loop (consent-datum-cdr cursor))))))
+         ((eqv-value?
+           (car arguments) (consent-datum-car-trusted cursor))
+          cursor)
+         (else (loop (consent-datum-cdr-trusted cursor))))))
 
     (define (primitive-member arguments context)
       "Implement the `member` primitive with argument validation and Consent"
@@ -10753,9 +10989,11 @@ eme values."
          ((null? cursor) #f)
          ((not (consent-datum-pair? cursor)) #f)
          ((equal-value?
-           (car arguments) (consent-datum-car cursor) context)
+           (car arguments)
+           (consent-datum-car-trusted cursor)
+           context)
           cursor)
-         (else (loop (consent-datum-cdr cursor))))))
+         (else (loop (consent-datum-cdr-trusted cursor))))))
 
     (define (primitive-assq arguments context)
       "Implement the `assq` primitive with argument validation and Consent Sch\
@@ -10764,12 +11002,13 @@ eme values."
         (cond
          ((null? cursor) #f)
          ((not (consent-datum-pair? cursor)) #f)
-         ((let ((entry (consent-datum-car cursor)))
+         ((let ((entry (consent-datum-car-trusted cursor)))
             (and (consent-datum-pair? entry)
                  (eq-value?
-                  (car arguments) (consent-datum-car entry))
+                  (car arguments)
+                  (consent-datum-car-trusted entry))
                  entry)))
-         (else (loop (consent-datum-cdr cursor))))))
+         (else (loop (consent-datum-cdr-trusted cursor))))))
 
     (define (primitive-assv arguments context)
       "Implement the `assv` primitive with argument validation and Consent Sch\
@@ -10778,12 +11017,13 @@ eme values."
         (cond
          ((null? cursor) #f)
          ((not (consent-datum-pair? cursor)) #f)
-         ((let ((entry (consent-datum-car cursor)))
+         ((let ((entry (consent-datum-car-trusted cursor)))
             (and (consent-datum-pair? entry)
                  (eqv-value?
-                  (car arguments) (consent-datum-car entry))
+                  (car arguments)
+                  (consent-datum-car-trusted entry))
                  entry)))
-         (else (loop (consent-datum-cdr cursor))))))
+         (else (loop (consent-datum-cdr-trusted cursor))))))
 
     (define (primitive-assoc arguments context)
       "Implement the `assoc` primitive with argument validation and Consent"
@@ -10792,12 +11032,14 @@ eme values."
         (cond
          ((null? cursor) #f)
          ((not (consent-datum-pair? cursor)) #f)
-         ((let ((entry (consent-datum-car cursor)))
+         ((let ((entry (consent-datum-car-trusted cursor)))
             (and (consent-datum-pair? entry)
                  (equal-value?
-                  (car arguments) (consent-datum-car entry) context)
+                  (car arguments)
+                  (consent-datum-car-trusted entry)
+                  context)
                  entry)))
-         (else (loop (consent-datum-cdr cursor))))))
+         (else (loop (consent-datum-cdr-trusted cursor))))))
 
     ;; Map library resolver implementation names to interpreter procedures.
     (define library-primitive-implementation-table
@@ -10963,6 +11205,18 @@ eme values."
        (cons 'primitive-handle-kind primitive-handle-kind)
        (cons 'primitive-handle-revalidate primitive-handle-revalidate)
        (cons 'primitive-handle-release! primitive-handle-release!)
+       (cons 'primitive-consent-identity-map-fast-backend?
+             primitive-consent-identity-map-fast-backend?)
+       (cons 'primitive-consent-make-identity-map
+             primitive-consent-make-identity-map)
+       (cons 'primitive-consent-identity-map-ref
+             primitive-consent-identity-map-ref)
+       (cons 'primitive-consent-identity-map-set!
+             primitive-consent-identity-map-set!)
+       (cons 'primitive-consent-number-representation-snapshot-outer
+             primitive-consent-number-representation-snapshot-outer)
+       (cons 'primitive-consent-outer-representation-kind
+             primitive-consent-outer-representation-kind)
        (cons 'primitive-memory-put! primitive-memory-put!)
        (cons 'primitive-memory-ref primitive-memory-ref)
        (cons 'primitive-memory-delete! primitive-memory-delete!)
@@ -11052,6 +11306,7 @@ eme values."
        (cons 'primitive= primitive=)
        (cons 'primitive> primitive>)
        (cons 'primitive>= primitive>=)
+       (cons 'primitive-append primitive-append)
        (cons 'primitive-apply primitive-apply)
        (cons 'primitive-binary-port? primitive-binary-port?)
        (cons 'primitive-boolean=? primitive-boolean=?)
@@ -11120,6 +11375,7 @@ eme values."
        (cons 'primitive-integer->char primitive-integer->char)
        (cons 'primitive-integer? primitive-integer?)
        (cons 'primitive-lcm primitive-lcm)
+       (cons 'primitive-length primitive-length)
        (cons 'primitive-list->string primitive-list->string)
        (cons 'primitive-list->vector primitive-list->vector)
        (cons 'primitive-list? primitive-list?)
@@ -11160,6 +11416,7 @@ eme values."
        (cons 'primitive-read-u8 primitive-read-u8)
        (cons 'primitive-real? primitive-real?)
        (cons 'primitive-remainder primitive-remainder)
+       (cons 'primitive-reverse primitive-reverse)
        (cons 'primitive-round primitive-round)
        (cons 'primitive-set-car! primitive-set-car!)
        (cons 'primitive-set-cdr! primitive-set-cdr!)

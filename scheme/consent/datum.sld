@@ -42,7 +42,9 @@
           consent-datum-pair?
           consent-datum-cons
           consent-datum-car
+          consent-datum-car-trusted
           consent-datum-cdr
+          consent-datum-cdr-trusted
           consent-datum-set-car!
           consent-datum-set-cdr!
           consent-datum-list-copy
@@ -52,7 +54,9 @@
           consent-datum-make-string
           consent-datum-string-copy-range
           consent-datum-string-length
+          consent-datum-string-length-trusted
           consent-datum-string-ref-host
+          consent-datum-string-ref-host-trusted
           consent-datum-string-set-host!
           consent-datum-vector?
           consent-datum-vector-from-host
@@ -60,8 +64,11 @@
           consent-datum-vector->host
           consent-datum-make-vector
           consent-datum-vector-length
+          consent-datum-vector-length-trusted
           consent-datum-vector-ref
+          consent-datum-vector-ref-trusted
           consent-datum-vector-set!
+          consent-datum-vector-set-trusted!
           consent-datum-bytevector?
           consent-datum-bytevector-from-host
           consent-datum-bytevector->host
@@ -70,6 +77,7 @@
           consent-datum-bytevector-u8-ref
           consent-datum-bytevector-u8-set!
           consent-datum-import
+          consent-datum-import-with-node-count
           consent-datum-export)
   (import (scheme base)
           (consent identity-map))
@@ -118,10 +126,6 @@
       (source-metadata consent-datum-object-source-metadata
                        raw-set-datum-object-source-metadata!))
 
-    (define (default-mutation-hook heap object operation slot old new)
-      "Permit one mutation when no branch-aware barrier is installed."
-      #t)
-
     (define (consent-make-datum-heap)
       "Return a fresh portable compound datum heap."
       #((parameters)
@@ -130,7 +134,9 @@
         (effects allocation state-write))
       (let ((id next-datum-heap-id))
         (set! next-datum-heap-id (+ id 1))
-        (make-datum-heap-record id 0 id 0 default-mutation-hook)))
+        ;; A false hook is the explicit no-observer state. Procedure identity
+        ;; is not a portable discriminator for recognizing a no-op default.
+        (make-datum-heap-record id 0 id 0 #f)))
 
     ;; Context-free internal callers use this root heap. Evaluation contexts
     ;; allocate their own heap instead of sharing it.
@@ -152,19 +158,19 @@
       "Install HEAP's narrow mutation HOOK and return HEAP."
       #((parameters
          (heap (type datum-heap) (description "Heap to configure."))
-         (hook (type procedure)
+         (hook (type (or procedure boolean))
           (description
            ("Procedure receiving heap, object, operation, slot, old,"
-             "and new before each visible mutation."))))
+             "and new before each visible mutation, or #f to clear it."))))
         (returns (type datum-heap) (description "Updated HEAP."))
         (effects state-write error))
       (if (not (consent-datum-heap? heap))
           (error
            "consent-datum-heap-mutation-hook-set!: expected heap"
            heap))
-      (if (not (procedure? hook))
+      (if (and hook (not (procedure? hook)))
           (error
-           "consent-datum-heap-mutation-hook-set!: expected procedure"
+           "consent-datum-heap-mutation-hook-set!: expected procedure or #f"
            hook))
       (set-datum-heap-mutation-hook! heap hook)
       heap)
@@ -570,11 +576,7 @@
           (error
            "consent-datum-internal-slot-set!: object belongs to other heap"
            object))
-      (let* ((storage (datum-object-storage object))
-             (old (vector-ref storage index)))
-        (mutate!
-         heap object operation index old value
-         (lambda () (vector-set! storage index value)))))
+      (vector-storage-set! heap object operation index value))
 
     (define (check-object heap object kind description)
       "Validate HEAP, OBJECT, and KIND for DESCRIPTION."
@@ -588,16 +590,37 @@
                  object))
       object)
 
-    (define (mutate! heap object operation slot old new setter)
-      "Route one object mutation through HEAP before calling SETTER."
+    (define (prepare-mutation! heap object operation slot old new)
+      "Validate and observe one mutation before private storage changes."
       (if (not (consent-datum-object-mutable? object))
           (error "attempt to mutate an immutable compound datum" object))
-      ((datum-heap-mutation-hook heap)
-       heap object operation slot old new)
-      (setter)
+      (let ((hook (datum-heap-mutation-hook heap)))
+        (if hook
+            (hook heap object operation slot old new))))
+
+    (define (complete-mutation! object)
+      "Advance OBJECT's revision after one private storage mutation."
+      ;; Re-read after the hook and write so a reentrant mutation cannot have
+      ;; its revision overwritten by an outer operation's stale snapshot.
       (set-datum-object-revision!
        object
        (+ 1 (consent-datum-object-revision object))))
+
+    (define (vector-storage-set! heap object operation index value)
+      "Set validated vector-backed OBJECT storage through HEAP."
+      (let* ((storage (datum-object-storage object))
+             (old (vector-ref storage index)))
+        (prepare-mutation! heap object operation index old value)
+        (vector-set! storage index value)
+        (complete-mutation! object)))
+
+    (define (bytevector-storage-set! heap object operation index value)
+      "Set validated bytevector-backed OBJECT storage through HEAP."
+      (let* ((storage (datum-object-storage object))
+             (old (bytevector-u8-ref storage index)))
+        (prepare-mutation! heap object operation index old value)
+        (bytevector-u8-set! storage index value)
+        (complete-mutation! object)))
 
     (define (consent-datum-pair? value)
       "Report whether VALUE is an owned pair."
@@ -633,6 +656,15 @@
         (effects error))
       (if (not (consent-datum-pair? pair))
           (error "consent-datum-car: expected owned pair" pair))
+      (consent-datum-car-trusted pair))
+
+    (define (consent-datum-car-trusted pair)
+      "Return proven owned PAIR's car without repeating kind validation."
+      #((parameters
+         (pair (type pair)
+          (description "Owned pair already validated by the caller.")))
+        (returns (type any) (description "Stored car value."))
+        (effects error))
       (vector-ref (datum-object-storage pair) 0))
 
     (define (consent-datum-cdr pair)
@@ -642,16 +674,21 @@
         (effects error))
       (if (not (consent-datum-pair? pair))
           (error "consent-datum-cdr: expected owned pair" pair))
+      (consent-datum-cdr-trusted pair))
+
+    (define (consent-datum-cdr-trusted pair)
+      "Return proven owned PAIR's cdr without repeating kind validation."
+      #((parameters
+         (pair (type pair)
+          (description "Owned pair already validated by the caller.")))
+        (returns (type any) (description "Stored cdr value."))
+        (effects error))
       (vector-ref (datum-object-storage pair) 1))
 
     (define (pair-set! heap pair slot value operation)
       "Set PAIR's SLOT to VALUE through the mutation gateway."
       (check-object heap pair 'pair operation)
-      (let* ((storage (datum-object-storage pair))
-             (old (vector-ref storage slot)))
-        (mutate!
-         heap pair operation slot old value
-         (lambda () (vector-set! storage slot value)))))
+      (vector-storage-set! heap pair operation slot value))
 
     (define (consent-datum-set-car! heap pair value)
       "Set owned PAIR's car to VALUE through HEAP."
@@ -678,11 +715,12 @@
       (if (not (consent-datum-pair? value))
           #f
           (let detect ((slow value) (fast value))
-            (let ((fast-one (consent-datum-cdr fast)))
+            (let ((fast-one (consent-datum-cdr-trusted fast)))
               (if (not (consent-datum-pair? fast-one))
                   #f
-                  (let ((slow-one (consent-datum-cdr slow))
-                        (fast-two (consent-datum-cdr fast-one)))
+                  (let ((slow-one (consent-datum-cdr-trusted slow))
+                        (fast-two
+                         (consent-datum-cdr-trusted fast-one)))
                     (if (not (consent-datum-pair? fast-two))
                         #f
                         (if (consent-datum-same? slow-one fast-two)
@@ -691,16 +729,17 @@
                                         (mu 0))
                               (if (consent-datum-same? left right)
                                   (let period
-                                      ((cursor (consent-datum-cdr left))
+                                      ((cursor
+                                        (consent-datum-cdr-trusted left))
                                        (period-length 1))
                                     (if (consent-datum-same? cursor left)
                                         (cons mu period-length)
                                         (period
-                                         (consent-datum-cdr cursor)
+                                         (consent-datum-cdr-trusted cursor)
                                          (+ period-length 1))))
                                   (entry
-                                   (consent-datum-cdr left)
-                                   (consent-datum-cdr right)
+                                   (consent-datum-cdr-trusted left)
+                                   (consent-datum-cdr-trusted right)
                                    (+ mu 1))))
                             (detect slow-one fast-two)))))))))
 
@@ -709,8 +748,8 @@
       (let scan ((cursor value) (reversed-cars '()) (count 0))
         (if (consent-datum-pair? cursor)
             (scan
-             (consent-datum-cdr cursor)
-             (cons (consent-datum-car cursor) reversed-cars)
+             (consent-datum-cdr-trusted cursor)
+             (cons (consent-datum-car-trusted cursor) reversed-cars)
              (+ count 1))
             (let rebuild ((cars reversed-cars) (tail cursor))
               (if (null? cars)
@@ -729,8 +768,10 @@
         (let collect ((cursor value) (index 0))
           (if (< index count)
               (begin
-                (vector-set! cars index (consent-datum-car cursor))
-                (collect (consent-datum-cdr cursor) (+ index 1)))))
+                (vector-set!
+                 cars index (consent-datum-car-trusted cursor))
+                (collect
+                 (consent-datum-cdr-trusted cursor) (+ index 1)))))
         ;; Allocate every identity before installing edges. These private
         ;; initializers do not emit mutation hooks or increment revisions.
         (let allocate ((index 0))
@@ -871,6 +912,16 @@
         (effects error))
       (if (not (consent-datum-string? string))
           (error "consent-datum-string-length: expected owned string" string))
+      (consent-datum-string-length-trusted string))
+
+    (define (consent-datum-string-length-trusted string)
+      "Return already-validated owned STRING's length."
+      #((parameters
+         (string (type string)
+          (description "Owned string already validated by the caller.")))
+        (returns (type exact-non-negative-integer)
+         (description "Number of characters in STRING."))
+        (effects error))
       (vector-length (datum-object-storage string)))
 
     (define (consent-datum-string-ref-host string index)
@@ -884,6 +935,17 @@
       (if (not (consent-datum-string? string))
           (error "consent-datum-string-ref-host: expected owned string"
                  string))
+      (consent-datum-string-ref-host-trusted string index))
+
+    (define (consent-datum-string-ref-host-trusted string index)
+      "Return already-validated owned STRING's host character at INDEX."
+      #((parameters
+         (string (type string)
+          (description "Owned string already validated by the caller."))
+         (index (type exact-non-negative-integer)
+          (description "Zero-based character index.")))
+        (returns (type character) (description "Character at INDEX."))
+        (effects error))
       (vector-ref (datum-object-storage string) index))
 
     (define (consent-datum-string-set-host! heap string index character)
@@ -898,11 +960,7 @@
         (returns . "The unspecified value.")
         (effects state-write error))
       (check-object heap string 'string "string-set!")
-      (let* ((storage (datum-object-storage string))
-             (old (vector-ref storage index)))
-        (mutate!
-         heap string 'string-set! index old character
-         (lambda () (vector-set! storage index character)))))
+      (vector-storage-set! heap string 'string-set! index character))
 
     (define (consent-datum-vector? value)
       "Report whether VALUE is an owned vector."
@@ -1003,6 +1061,16 @@
         (effects error))
       (if (not (consent-datum-vector? vector))
           (error "consent-datum-vector-length: expected owned vector" vector))
+      (consent-datum-vector-length-trusted vector))
+
+    (define (consent-datum-vector-length-trusted vector)
+      "Return already-validated owned VECTOR's length."
+      #((parameters
+         (vector (type vector)
+          (description "Owned vector already validated by the caller.")))
+        (returns (type exact-non-negative-integer)
+         (description "Number of elements in VECTOR."))
+        (effects error))
       (vector-length (datum-object-storage vector)))
 
     (define (consent-datum-vector-ref vector index)
@@ -1015,6 +1083,17 @@
         (effects error))
       (if (not (consent-datum-vector? vector))
           (error "consent-datum-vector-ref: expected owned vector" vector))
+      (consent-datum-vector-ref-trusted vector index))
+
+    (define (consent-datum-vector-ref-trusted vector index)
+      "Return already-validated owned VECTOR's element at INDEX."
+      #((parameters
+         (vector (type vector)
+          (description "Owned vector already validated by the caller."))
+         (index (type exact-non-negative-integer)
+          (description "Zero-based element index.")))
+        (returns (type any) (description "Stored element."))
+        (effects error))
       (vector-ref (datum-object-storage vector) index))
 
     (define (consent-datum-vector-set! heap vector index value)
@@ -1028,11 +1107,26 @@
         (returns . "The unspecified value.")
         (effects state-write error))
       (check-object heap vector 'vector "vector-set!")
-      (let* ((storage (datum-object-storage vector))
-             (old (vector-ref storage index)))
-        (mutate!
-         heap vector 'vector-set! index old value
-         (lambda () (vector-set! storage index value)))))
+      (vector-storage-set! heap vector 'vector-set! index value))
+
+    (define (consent-datum-vector-set-trusted! heap vector index value)
+      "Set already-validated owned VECTOR at INDEX through HEAP."
+      #((parameters
+         (heap (type datum-heap) (description "Active heap."))
+         (vector (type vector)
+          (description "Owned vector already validated by the caller."))
+         (index (type exact-non-negative-integer)
+          (description "Zero-based element index."))
+         (value . "Replacement element."))
+        (returns . "The unspecified value.")
+        (effects state-write error))
+      ;; Kind validation belongs to the trusted caller, but heap identity is
+      ;; still an ownership boundary and must fail closed here.
+      (if (not (eq? heap (datum-object-heap vector)))
+          (error
+           "consent-datum-vector-set-trusted!: object belongs to other heap"
+           vector))
+      (vector-storage-set! heap vector 'vector-set! index value))
 
     (define (consent-datum-bytevector? value)
       "Report whether VALUE is an owned bytevector."
@@ -1135,11 +1229,8 @@
         (returns . "The unspecified value.")
         (effects state-write error))
       (check-object heap bytevector 'bytevector "bytevector-u8-set!")
-      (let* ((storage (datum-object-storage bytevector))
-             (old (bytevector-u8-ref storage index)))
-        (mutate!
-         heap bytevector 'bytevector-u8-set! index old byte
-         (lambda () (bytevector-u8-set! storage index byte)))))
+      (bytevector-storage-set!
+       heap bytevector 'bytevector-u8-set! index byte))
 
     ;; A call-scoped owned-object map is an intrusive traversal mark, the same
     ;; mature pattern used by collectors and graph algorithms. Every owned
@@ -1305,6 +1396,381 @@
       "Record host VALUE's graph COPY in mutable registry SEEN."
       (consent-identity-map-set! seen value copy))
 
+    (define (datum-import-graph
+             heap value leaf copy-source reuse leaf-valid?)
+      "Import and optionally count one compound graph iteratively."
+      (let ((counted? (and leaf-valid? #t))
+            (absent-token (vector 'consent-datum-import-absent))
+            (count-only-token
+             (and leaf-valid?
+                  (vector 'consent-datum-import-count-only)))
+            (host-seen #f)
+            (owned-seen #f)
+            (node-count 0)
+            (invalid-leaf? #f)
+            (first-invalid-leaf #f))
+        (define (note-nodes! count)
+          "Add COUNT nodes when this import is counting."
+          (if counted? (set! node-count (+ node-count count))))
+        (define (note-leaf! item)
+          "Count ITEM and retain the first leaf rejected by LEAF-VALID?."
+          (if counted?
+              (begin
+                (set! node-count (+ node-count 1))
+                (if (and (not invalid-leaf?)
+                         (not (leaf-valid? item)))
+                    (begin
+                      (set! invalid-leaf? #t)
+                      (set! first-invalid-leaf item))))))
+        (define (import-host-ref item)
+          "Return ITEM's imported host copy, or the private absent token."
+          (if host-seen
+              (consent-identity-map-ref host-seen item absent-token)
+              absent-token))
+        (define (import-host-set! item copy)
+          "Memoize host ITEM as COPY, allocating the map on first use."
+          (if (not host-seen)
+              (set! host-seen (consent-make-identity-map)))
+          (host-seen-set! host-seen item copy))
+        (define (import-owned-ref item)
+          "Return ITEM's cross-heap copy, or the private absent token."
+          (if owned-seen
+              (consent-datum-object-map-ref
+               owned-seen item absent-token)
+              absent-token))
+        (define (import-owned-set! item copy)
+          "Memoize owned ITEM as COPY, allocating the map on first use."
+          (if (not owned-seen)
+              (set! owned-seen (consent-make-datum-object-map)))
+          (consent-datum-object-map-set! owned-seen item copy))
+        ;; Work entries are #(tag source destination slot). Tags zero and three
+        ;; copy with counting enabled or disabled. Tag one finishes source
+        ;; metadata after outgoing edges. Tag two counts an already-owned
+        ;; subtree without rewriting it. The explicit DFS stack keeps graph
+        ;; depth off the Scheme implementation's control stack.
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+          (let ((root (vector #f))
+                (work '()))
+          (define (push-copy-visit! source destination slot count-source?)
+            "Schedule SOURCE for copying, optionally counting its subtree."
+            (set! work
+                  (cons
+                   (vector
+                    (if count-source? 0 3) source destination slot)
+                   work)))
+          (define (push-finish! source copy)
+            "Schedule one post-edge source metadata copy."
+            (set! work (cons (vector 1 source copy 0) work)))
+          (define (push-count-visit! source)
+            "Schedule SOURCE for counting without copying or callbacks."
+            (set! work (cons (vector 2 source #f 0) work)))
+          (define (deliver! destination slot result)
+            "Store one imported RESULT in its already-allocated parent."
+            (vector-set! destination slot result))
+          (define (accept-host-reuse! source destination slot)
+            "Try host SOURCE's reuse hook and memoize an accepted target."
+            (if counted?
+                #f
+             (let ((candidate (reuse source absent-token)))
+               (if (eq? candidate absent-token)
+                   #f
+                   (begin
+                     (import-host-set! source candidate)
+                     (deliver! destination slot candidate)
+                     #t)))))
+          (define (accept-owned-reuse! source destination slot)
+            "Try owned SOURCE's reuse hook and memoize an accepted target."
+            (if counted?
+                #f
+             (let ((candidate (reuse source absent-token)))
+               (if (eq? candidate absent-token)
+                   #f
+                   (begin
+                     (import-owned-set! source candidate)
+                     (deliver! destination slot candidate)
+                     #t)))))
+          (define (push-owned-vector-edges!
+                   source copy length count-source?)
+            "Schedule SOURCE vector edges in ascending observation order."
+            (let ((storage (datum-object-storage copy)))
+              (let loop ((index (- length 1)))
+                (if (>= index 0)
+                    (begin
+                      (push-copy-visit!
+                       (consent-datum-vector-ref-trusted source index)
+                       storage
+                       index
+                       count-source?)
+                      (loop (- index 1)))))))
+          (define (push-host-vector-edges!
+                   source copy length count-source?)
+            "Schedule host SOURCE vector edges in ascending order."
+            (let ((storage (datum-object-storage copy)))
+              (let loop ((index (- length 1)))
+                (if (>= index 0)
+                    (begin
+                      (push-copy-visit!
+                       (vector-ref source index)
+                       storage
+                       index
+                       count-source?)
+                      (loop (- index 1)))))))
+          (define (start-owned-copy!
+                   source destination slot count-source?)
+            "Allocate and schedule one cross-heap owned compound copy."
+            (case (consent-datum-object-kind source)
+              ((pair)
+               (let ((copy
+                      (make-pair-placeholder
+                       heap (consent-datum-object-mutable? source))))
+                 (import-owned-set! source copy)
+                 (deliver! destination slot copy)
+                 (if count-source? (note-nodes! 1))
+                 (push-finish! source copy)
+                 (push-copy-visit!
+                  (consent-datum-cdr-trusted source)
+                  (datum-object-storage copy)
+                  1
+                  count-source?)
+                 (push-copy-visit!
+                  (consent-datum-car-trusted source)
+                  (datum-object-storage copy)
+                  0
+                  count-source?)))
+              ((string)
+               (let ((copy
+                      (allocate-datum-object
+                       heap
+                       'string
+                       (copy-string-storage (datum-object-storage source))
+                       (consent-datum-object-mutable? source))))
+                 (import-owned-set! source copy)
+                 (deliver! destination slot copy)
+                 (if count-source?
+                     (note-nodes!
+                      (+ 1 (vector-length (datum-object-storage source)))))
+                 (push-finish! source copy)))
+              ((bytevector)
+               (let ((copy
+                      (allocate-datum-object
+                       heap
+                       'bytevector
+                       (copy-host-bytevector (datum-object-storage source))
+                       (consent-datum-object-mutable? source))))
+                 (import-owned-set! source copy)
+                 (deliver! destination slot copy)
+                 (if count-source?
+                     (note-nodes!
+                      (+ 1
+                         (bytevector-length
+                          (datum-object-storage source)))))
+                 (push-finish! source copy)))
+              ((vector)
+               (let* ((length
+                       (consent-datum-vector-length-trusted source))
+                      (copy
+                       (make-vector-placeholder
+                        heap
+                        length
+                        (consent-datum-object-mutable? source))))
+                 (import-owned-set! source copy)
+                 (deliver! destination slot copy)
+                 (if count-source? (note-nodes! 1))
+                 (push-finish! source copy)
+                 (push-owned-vector-edges!
+                  source copy length count-source?)))
+              (else
+               (error
+                "consent-datum-import: unsupported owned kind"
+                source))))
+          (define (start-host-copy!
+                   source destination slot count-source?)
+            "Allocate and schedule one host compound copy into HEAP."
+            (cond
+             ((pair? source)
+              (let ((copy (make-pair-placeholder heap #t)))
+                (import-host-set! source copy)
+                (deliver! destination slot copy)
+                (if count-source? (note-nodes! 1))
+                (push-finish! source copy)
+                (push-copy-visit!
+                 (cdr source)
+                 (datum-object-storage copy)
+                 1
+                 count-source?)
+                (push-copy-visit!
+                 (car source)
+                 (datum-object-storage copy)
+                 0
+                 count-source?)))
+             ((string? source)
+              (let ((copy (consent-datum-string-from-host heap source)))
+                (import-host-set! source copy)
+                (deliver! destination slot copy)
+                (if count-source?
+                    (note-nodes! (+ 1 (string-length source))))
+                (push-finish! source copy)))
+             ((bytevector? source)
+              (let ((copy
+                     (consent-datum-bytevector-from-host heap source)))
+                (import-host-set! source copy)
+                (deliver! destination slot copy)
+                (if count-source?
+                    (note-nodes! (+ 1 (bytevector-length source))))
+                (push-finish! source copy)))
+             ((vector? source)
+              (let* ((length (vector-length source))
+                     (copy (make-vector-placeholder heap length #t)))
+                (import-host-set! source copy)
+                (deliver! destination slot copy)
+                (if count-source? (note-nodes! 1))
+                (push-finish! source copy)
+                (push-host-vector-edges!
+                 source copy length count-source?)))))
+          (define (visit-owned!
+                   source destination slot count-source?)
+            "Deliver one owned SOURCE or schedule its cross-heap copy."
+            (if (eq? heap (datum-object-heap source))
+                (begin
+                  (deliver! destination slot source)
+                  (if (and counted? count-source?)
+                      (push-count-visit! source)))
+                (let ((prior (import-owned-ref source)))
+                  (cond
+                   ((and counted? (eq? prior count-only-token))
+                    (start-owned-copy! source destination slot #f))
+                   ((not (eq? prior absent-token))
+                    (deliver! destination slot prior))
+                   ((accept-owned-reuse! source destination slot))
+                   (else
+                    (start-owned-copy!
+                     source destination slot count-source?))))))
+          (define (visit-host!
+                   source destination slot count-source?)
+            "Deliver one host SOURCE or schedule its compound copy."
+            (if (or (pair? source)
+                    (string? source)
+                    (bytevector? source)
+                    (vector? source))
+                (let ((prior (import-host-ref source)))
+                  (cond
+                   ((and counted? (eq? prior count-only-token))
+                    (start-host-copy! source destination slot #f))
+                   ((not (eq? prior absent-token))
+                    (deliver! destination slot prior))
+                   ((accept-host-reuse! source destination slot))
+                   (else
+                    (start-host-copy!
+                     source destination slot count-source?))))
+                (begin
+                  (if count-source? (note-leaf! source))
+                  (deliver!
+                   destination slot
+                   (if counted? source (leaf source))))))
+          (define (count-owned! source)
+            "Count an unseen owned SOURCE without copying it."
+            (if (eq? (import-owned-ref source) absent-token)
+                (begin
+                  (import-owned-set! source count-only-token)
+                  (case (consent-datum-object-kind source)
+                    ((pair)
+                     (note-nodes! 1)
+                     (push-count-visit!
+                      (consent-datum-cdr-trusted source))
+                     (push-count-visit!
+                      (consent-datum-car-trusted source)))
+                    ((string)
+                     (note-nodes!
+                      (+ 1 (vector-length (datum-object-storage source)))))
+                    ((bytevector)
+                     (note-nodes!
+                      (+ 1
+                         (bytevector-length
+                          (datum-object-storage source)))))
+                    ((vector)
+                     (note-nodes! 1)
+                     (let ((length
+                            (consent-datum-vector-length-trusted source)))
+                       (let loop ((index (- length 1)))
+                         (if (>= index 0)
+                             (begin
+                               (push-count-visit!
+                                (consent-datum-vector-ref-trusted
+                                 source index))
+                               (loop (- index 1)))))))
+                    (else
+                     (error
+                      "consent-datum-import: unsupported owned kind"
+                      source))))))
+          (define (count-host-compound! source)
+            "Count an unseen host compound SOURCE without copying it."
+            (if (eq? (import-host-ref source) absent-token)
+                (begin
+                  (import-host-set! source count-only-token)
+                  (cond
+                   ((pair? source)
+                    (note-nodes! 1)
+                    (push-count-visit! (cdr source))
+                    (push-count-visit! (car source)))
+                   ((string? source)
+                    (note-nodes! (+ 1 (string-length source))))
+                   ((bytevector? source)
+                    (note-nodes! (+ 1 (bytevector-length source))))
+                   ((vector? source)
+                    (note-nodes! 1)
+                    (let loop ((index (- (vector-length source) 1)))
+                      (if (>= index 0)
+                          (begin
+                            (push-count-visit!
+                             (vector-ref source index))
+                            (loop (- index 1))))))))))
+          (define (visit-count-only! source)
+            "Count SOURCE's reachable nodes without copying its graph."
+            (cond
+             ((consent-datum-object? source) (count-owned! source))
+             ((or (pair? source)
+                  (string? source)
+                  (bytevector? source)
+                  (vector? source))
+              (count-host-compound! source))
+             (else (note-leaf! source))))
+          ;; Ordinary imports seed the no-count tag and therefore never enter
+          ;; the counting branches below. Counted imports propagate tag zero
+          ;; until a previously count-only subtree needs copying via tag three.
+          (push-copy-visit! value root 0 counted?)
+          (let loop ()
+            (if (null? work)
+                (if counted?
+                    (values
+                     (vector-ref root 0)
+                     node-count
+                     invalid-leaf?
+                     first-invalid-leaf)
+                    (vector-ref root 0))
+                (let ((job (car work)))
+                  (set! work (cdr work))
+                  (case (vector-ref job 0)
+                    ((0 3)
+                     (let ((source (vector-ref job 1))
+                           (destination (vector-ref job 2))
+                           (slot (vector-ref job 3))
+                           (count-source? (= (vector-ref job 0) 0)))
+                       (if (consent-datum-object? source)
+                           (visit-owned!
+                            source destination slot count-source?)
+                           (visit-host!
+                            source destination slot count-source?))))
+                    ((1)
+                     (copy-source
+                      (vector-ref job 2) (vector-ref job 1)))
+                    (else (visit-count-only! (vector-ref job 1))))
+                  (loop))))))
+         (lambda ()
+           (if owned-seen
+               (consent-datum-object-map-release! owned-seen))))))
+
     (define (consent-datum-import heap value . rest)
       "Import host compound VALUE into HEAP, preserving sharing and cycles."
       #((parameters
@@ -1329,224 +1795,52 @@
         (if (null? rest) value ((car rest) value)))
        (else
         (let ((leaf (if (null? rest) (lambda (item) item) (car rest)))
-            (copy-source
-             (if (or (null? rest) (null? (cdr rest)))
-                 (lambda (target source) target)
-                 (cadr rest)))
-            (reuse
-             (if (or (null? rest)
-                     (null? (cdr rest))
-                     (null? (cddr rest)))
-                 (lambda (source absent) absent)
-                 (car (cddr rest))))
-            (absent-token (vector 'consent-datum-import-absent))
-            (host-seen #f)
-            (owned-seen #f))
-        (define (import-host-ref item)
-          "Return ITEM's imported host copy, or the private absent token."
-          (if host-seen
-              (consent-identity-map-ref host-seen item absent-token)
-              absent-token))
-        (define (import-host-set! item copy)
-          "Memoize host ITEM as COPY, allocating the map on first use."
-          (if (not host-seen)
-              (set! host-seen (consent-make-identity-map)))
-          (host-seen-set! host-seen item copy))
-        (define (import-owned-ref item)
-          "Return ITEM's cross-heap copy, or the private absent token."
-          (if owned-seen
-              (consent-datum-object-map-ref
-               owned-seen item absent-token)
-              absent-token))
-        (define (import-owned-set! item copy)
-          "Memoize owned ITEM as COPY, allocating the map on first use."
-          (if (not owned-seen)
-              (set! owned-seen (consent-make-datum-object-map)))
-          (consent-datum-object-map-set! owned-seen item copy))
-        ;; Work entries are #(tag source destination slot).  Visit entries use
-        ;; tag zero and write into a private host vector.  Finish entries use
-        ;; tag one and call COPY-SOURCE only after all outgoing edges have
-        ;; been initialized.  This is an explicit DFS stack, so graph depth
-        ;; does not consume the Scheme implementation's control stack.
-        (dynamic-wind
-         (lambda () #t)
-         (lambda ()
-          (let ((root (vector #f))
-                (work '()))
-          (define (push-visit! source destination slot)
-            "Schedule SOURCE for delivery into DESTINATION at SLOT."
-            (set! work
-                  (cons (vector 0 source destination slot) work)))
-          (define (push-finish! source copy)
-            "Schedule one post-edge source metadata copy."
-            (set! work (cons (vector 1 source copy 0) work)))
-          (define (deliver! destination slot result)
-            "Store one imported RESULT in its already-allocated parent."
-            (vector-set! destination slot result))
-          (define (accept-host-reuse! source destination slot)
-            "Try host SOURCE's reuse hook and memoize an accepted target."
-            (let ((candidate (reuse source absent-token)))
-              (if (eq? candidate absent-token)
-                  #f
-                  (begin
-                    (import-host-set! source candidate)
-                    (deliver! destination slot candidate)
-                    #t))))
-          (define (accept-owned-reuse! source destination slot)
-            "Try owned SOURCE's reuse hook and memoize an accepted target."
-            (let ((candidate (reuse source absent-token)))
-              (if (eq? candidate absent-token)
-                  #f
-                  (begin
-                    (import-owned-set! source candidate)
-                    (deliver! destination slot candidate)
-                    #t))))
-          (define (push-owned-vector-edges! source copy length)
-            "Schedule SOURCE vector edges in ascending observation order."
-            (let ((storage (datum-object-storage copy)))
-              (let loop ((index (- length 1)))
-                (if (>= index 0)
-                    (begin
-                      (push-visit!
-                       (consent-datum-vector-ref source index)
-                       storage
-                       index)
-                      (loop (- index 1)))))))
-          (define (push-host-vector-edges! source copy length)
-            "Schedule host SOURCE vector edges in ascending order."
-            (let ((storage (datum-object-storage copy)))
-              (let loop ((index (- length 1)))
-                (if (>= index 0)
-                    (begin
-                      (push-visit! (vector-ref source index) storage index)
-                      (loop (- index 1)))))))
-          (define (start-owned-copy! source destination slot)
-            "Allocate and schedule one cross-heap owned compound copy."
-            (case (consent-datum-object-kind source)
-              ((pair)
-               (let ((copy
-                      (make-pair-placeholder
-                       heap (consent-datum-object-mutable? source))))
-                 (import-owned-set! source copy)
-                 (deliver! destination slot copy)
-                 (push-finish! source copy)
-                 (push-visit!
-                  (consent-datum-cdr source)
-                  (datum-object-storage copy)
-                  1)
-                 (push-visit!
-                  (consent-datum-car source)
-                  (datum-object-storage copy)
-                  0)))
-              ((string)
-               (let ((copy
-                      (allocate-datum-object
-                       heap
-                       'string
-                       (copy-string-storage (datum-object-storage source))
-                       (consent-datum-object-mutable? source))))
-                 (import-owned-set! source copy)
-                 (deliver! destination slot copy)
-                 (push-finish! source copy)))
-              ((bytevector)
-               (let ((copy
-                      (allocate-datum-object
-                       heap
-                       'bytevector
-                       (copy-host-bytevector (datum-object-storage source))
-                       (consent-datum-object-mutable? source))))
-                 (import-owned-set! source copy)
-                 (deliver! destination slot copy)
-                 (push-finish! source copy)))
-              ((vector)
-               (let* ((length (consent-datum-vector-length source))
-                      (copy
-                       (make-vector-placeholder
-                        heap
-                        length
-                        (consent-datum-object-mutable? source))))
-                 (import-owned-set! source copy)
-                 (deliver! destination slot copy)
-                 (push-finish! source copy)
-                 (push-owned-vector-edges! source copy length)))
-              (else
-               (error
-                "consent-datum-import: unsupported owned kind"
-                source))))
-          (define (start-host-copy! source destination slot)
-            "Allocate and schedule one host compound copy into HEAP."
-            (cond
-             ((pair? source)
-              (let ((copy (make-pair-placeholder heap #t)))
-                (import-host-set! source copy)
-                (deliver! destination slot copy)
-                (push-finish! source copy)
-                (push-visit!
-                 (cdr source) (datum-object-storage copy) 1)
-                (push-visit!
-                 (car source) (datum-object-storage copy) 0)))
-             ((string? source)
-              (let ((copy (consent-datum-string-from-host heap source)))
-                (import-host-set! source copy)
-                (deliver! destination slot copy)
-                (push-finish! source copy)))
-             ((bytevector? source)
-              (let ((copy
-                     (consent-datum-bytevector-from-host heap source)))
-                (import-host-set! source copy)
-                (deliver! destination slot copy)
-                (push-finish! source copy)))
-             ((vector? source)
-              (let* ((length (vector-length source))
-                     (copy (make-vector-placeholder heap length #t)))
-                (import-host-set! source copy)
-                (deliver! destination slot copy)
-                (push-finish! source copy)
-                (push-host-vector-edges! source copy length)))))
-          (define (visit-owned! source destination slot)
-            "Deliver one owned SOURCE or schedule its cross-heap copy."
-            (if (eq? heap (datum-object-heap source))
-                (deliver! destination slot source)
-                (let ((prior (import-owned-ref source)))
-                  (cond
-                   ((not (eq? prior absent-token))
-                    (deliver! destination slot prior))
-                   ((accept-owned-reuse! source destination slot))
-                   (else
-                    (start-owned-copy! source destination slot))))))
-          (define (visit-host! source destination slot)
-            "Deliver one host SOURCE or schedule its compound copy."
-            (if (or (pair? source)
-                    (string? source)
-                    (bytevector? source)
-                    (vector? source))
-                (let ((prior (import-host-ref source)))
-                  (cond
-                   ((not (eq? prior absent-token))
-                    (deliver! destination slot prior))
-                   ((accept-host-reuse! source destination slot))
-                   (else
-                    (start-host-copy! source destination slot))))
-                (deliver! destination slot (leaf source))))
-          (push-visit! value root 0)
-          (let loop ()
-            (if (null? work)
-                (vector-ref root 0)
-                (let ((job (car work)))
-                  (set! work (cdr work))
-                  (if (= (vector-ref job 0) 0)
-                      (let ((source (vector-ref job 1))
-                            (destination (vector-ref job 2))
-                            (slot (vector-ref job 3)))
-                        (if (consent-datum-object? source)
-                            (visit-owned! source destination slot)
-                            (visit-host! source destination slot)))
-                      (copy-source
-                       (vector-ref job 2) (vector-ref job 1)))
-                  (loop))))))
-         (lambda ()
-           (if owned-seen
-               (consent-datum-object-map-release! owned-seen))))))))
+              (copy-source
+               (if (or (null? rest) (null? (cdr rest)))
+                   (lambda (target source) target)
+                   (cadr rest)))
+              (reuse
+               (if (or (null? rest)
+                       (null? (cdr rest))
+                       (null? (cddr rest)))
+                   (lambda (source absent) absent)
+                   (car (cddr rest)))))
+          (datum-import-graph
+           heap value leaf copy-source reuse #f)))))
+
+    (define (consent-datum-import-with-node-count
+             heap value leaf-valid? copy-source!)
+      "Import VALUE while counting its exact unique reachable datum nodes."
+      #((parameters
+         (heap (type datum-heap) (description "Destination heap."))
+         (value . "Host or already-owned graph root." )
+         (leaf-valid? (type procedure)
+          (description "Non-raising predicate for atomic leaves."))
+         (copy-source! (type procedure)
+          (description
+           ("Callback receiving each fresh target and its source after"
+             "the target's outgoing edges have been initialized."))))
+        (returns
+         . ("Four values: the owned root, exact node count, whether an"
+            "invalid leaf was seen, and the first invalid leaf."))
+        (effects allocation state-read state-write error))
+      (if (not (procedure? leaf-valid?))
+          (error
+           "consent-datum-import-with-node-count: expected leaf predicate"
+           leaf-valid?))
+      (if (not (procedure? copy-source!))
+          (error
+           "consent-datum-import-with-node-count: expected source callback"
+           copy-source!))
+      (if (or (consent-datum-object? value)
+              (pair? value)
+              (string? value)
+              (bytevector? value)
+              (vector? value))
+          (datum-import-graph
+           heap value #f copy-source! #f leaf-valid?)
+          (let ((valid? (leaf-valid? value)))
+            (values value 1 (not valid?) (if valid? #f value)))))
 
     (define (consent-datum-export value . rest)
       "Export owned compound VALUE as a host graph, preserving topology."
@@ -1652,8 +1946,10 @@
                  (export-owned-set! source copy)
                  (deliver! destination slot copy)
                  (push-finish! source copy)
-                 (push-visit! (consent-datum-cdr source) copy -2)
-                 (push-visit! (consent-datum-car source) copy -1)))
+                 (push-visit!
+                  (consent-datum-cdr-trusted source) copy -2)
+                 (push-visit!
+                  (consent-datum-car-trusted source) copy -1)))
               ((string)
                (let ((copy (consent-datum-string->host source)))
                  (export-owned-set! source copy)

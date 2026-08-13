@@ -10,6 +10,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'cl-lib)
 (require 'seq)
 (require 'consent-eval)
 
@@ -74,11 +75,23 @@
         (prelude-names (consent-base-prelude-binding-names))
         (specs (consent-base-primitive-specs))
         (binding-specs (consent-base-binding-specs)))
-    (dolist (name '("+" "apply" "car" "vector-ref" "bytevector-u8-ref"))
+    (dolist (name '("+" "append" "apply" "car" "length" "reverse"
+                    "vector-ref" "bytevector-u8-ref"))
       (should (member name names)))
-    (dolist (name '("append" "cadr" "length" "map" "zero?"))
+    (dolist (name '("cadr" "map" "zero?"))
       (should-not (member name names))
       (should (member name prelude-names)))
+    (should-not (member "append" prelude-names))
+    (dolist (name '("length" "reverse"))
+      (should-not (member name prelude-names))
+      (let ((spec
+             (seq-find
+              (lambda (candidate)
+                (equal (plist-get candidate :name) name))
+              binding-specs)))
+        (should (eq (plist-get spec :source) 'kernel))
+        (should (equal (plist-get spec :minimum-arity) 1))
+        (should (equal (plist-get spec :maximum-arity) 1))))
     (dolist (name '("call-with-values" "call/cc" "dynamic-wind" "values"))
       (should (member name names)))
     (should
@@ -104,7 +117,14 @@
              (equal (plist-get spec :name) "append"))
            binding-specs)
           :source)
-         'prelude))))
+         'kernel))
+    (let ((append-spec
+           (seq-find
+            (lambda (spec)
+              (equal (plist-get spec :name) "append"))
+            specs)))
+      (should (equal (plist-get append-spec :minimum-arity) 0))
+      (should-not (plist-get append-spec :maximum-arity)))))
 
 (ert-deftest consent-base-test-primitive-manifest-is-inspectable ()
   "Expose canonical metadata for primitives and effectful standard bindings."
@@ -193,6 +213,9 @@
        (equal (consent-base-test--documentation-field spec "effects")
               (list (plist-get spec :effect))))))
   (let ((plus (consent-base-test--manifest-spec "(scheme base)" "+"))
+        (append-spec (consent-base-test--manifest-spec
+                      "(scheme base)"
+                      "append"))
         (floor-divide (consent-base-test--manifest-spec
                        "(scheme base)"
                        "floor/"))
@@ -208,6 +231,9 @@
     (should (equal (consent-base-test--parameter-type plus 'numbers)
                    '(list-of number)))
     (should (eq (consent-base-test--return-type plus) 'number))
+    (should (equal (consent-base-test--parameter-type append-spec 'lists)
+                   '(list-of any)))
+    (should (eq (consent-base-test--return-type append-spec) 'any))
     (should (eq (consent-base-test--parameter-type vector-ref 'vector)
                 'vector))
     (should
@@ -298,6 +324,9 @@
            "(length (append '(1 2) '(3 4)))")
           "4"))
   (should
+   (equal (consent-base-test--external "(reverse '(alpha beta gamma))")
+          "(gamma beta alpha)"))
+  (should
    (equal (consent-base-test--external "(cadr '(alpha beta gamma))")
           "beta"))
   (should
@@ -314,6 +343,136 @@
    (equal (consent-base-test--external
            "(list (eq? 'a 'a) (eqv? 1 1) (equal? '(1 \"x\") '(1 \"x\")))")
           "(#t #t #t)")))
+
+(ert-deftest consent-base-test-append-kernel-semantics ()
+  "Preserve append identity, ordering, diagnostics, and allocation charging."
+  (let* ((context (consent--new-eval-context '(:max-value-nodes 3)))
+         (tail (list 'tail)))
+    (should-not (consent--primitive-append nil context))
+    (should (eq (consent--primitive-append (list tail) context) tail))
+    (let* ((result
+            (consent--primitive-append
+             (list (list 'left-1 'left-2) (list 'middle) tail)
+             context))
+           (shared-tail (nthcdr 3 result)))
+      (should (equal result '(left-1 left-2 middle tail)))
+      (should (eq shared-tail tail))
+      (should (= (consent--eval-context-value-nodes context) 3))))
+  (let* ((context (consent--new-eval-context '(:max-value-nodes 1)))
+         (prefix (make-list 4096 'copied))
+         (prefix-second (cdr prefix))
+         (prefix-last (last prefix))
+         (tail (list 'tail))
+         (build-called nil)
+         (original-build
+          (symbol-function 'consent--append-build-prefix)))
+    (cl-letf (((symbol-function 'consent--append-build-prefix)
+               (lambda (elements result)
+                 (setq build-called t)
+                 (funcall original-build elements result))))
+      (should-error
+       (consent--primitive-append (list prefix tail) context)
+       :type 'consent-budget-error))
+    (should-not build-called)
+    (should (eq (cdr prefix) prefix-second))
+    (should (eq (last prefix) prefix-last))
+    (should (equal prefix (make-list 4096 'copied)))
+    (should (equal tail '(tail)))
+    (should (= (consent--eval-context-value-nodes context) 4096)))
+  (let* ((context (consent--new-eval-context '(:max-value-nodes 0)))
+         (tail (list 'tail)))
+    ;; The later prefix is observed, validated, and charged before the
+    ;; malformed earlier prefix under append's right-to-left semantics.
+    (should-error
+     (consent--primitive-append
+      (list 'not-first (list 'copied) tail) context)
+     :type 'consent-budget-error)
+    (should (= (consent--eval-context-value-nodes context) 1)))
+  (let ((error
+         (should-error
+          (consent-eval-source "(append 'not-first 'not-second 'tail)")
+          :type 'consent-eval-error)))
+    (should (string-match-p
+             (regexp-quote "car expected pair")
+             (error-message-string error)))
+    (should (string-match-p
+             (regexp-quote "not-second")
+             (error-message-string error))))
+  (let ((error
+         (with-timeout
+             (2 (ert-fail "cyclic append argument did not terminate"))
+           (should-error
+            (consent-eval-source
+             "(let ((value (list 'cycle)))
+                (set-cdr! value value)
+                (append value 'tail))")
+            :type 'consent-eval-error))))
+    (should
+     (string-match-p
+      (regexp-quote "car expected pair")
+      (error-message-string error)))))
+
+(ert-deftest consent-base-test-length-and-reverse-reject-malformed-lists ()
+  "Reject improper and cyclic list spines before returning or allocating."
+  (should
+   (equal
+    (consent-value->external
+     (consent--primitive-length (list (make-list 4096 'item)) nil))
+    "4096"))
+  (dolist (case
+           '(("(length '(first . tail))"
+              . "length must be a proper list")
+             ("(reverse '(first . tail))"
+              . "reverse must be a proper list")
+             ("(let ((value (cons 'cycle '())))
+                 (set-cdr! value value)
+                 (length value))"
+              . "length must be a proper list")
+             ("(let ((value (cons 'cycle '())))
+                 (set-cdr! value value)
+                 (reverse value))"
+              . "reverse must be a proper list")))
+    (let ((error
+           (with-timeout
+               (2 (ert-fail "cyclic list primitive did not terminate"))
+             (should-error
+              (consent-eval-source (car case))
+              :type 'consent-eval-error))))
+      (should
+       (string-match-p
+        (regexp-quote (cdr case))
+        (error-message-string error))))))
+
+(ert-deftest consent-base-test-reverse-charges-before-copying-spine ()
+  "Charge exact reverse pairs before allocating and preserve source identity."
+  (let* ((context (consent--new-eval-context '(:max-value-nodes 3)))
+         (source (list 'first 'second 'third))
+         (source-cells (list source (cdr source) (cddr source)))
+         (result (consent--primitive-reverse (list source) context))
+         (result-cells (list result (cdr result) (cddr result))))
+    (should (equal result '(third second first)))
+    (should (equal source '(first second third)))
+    (dolist (cell source-cells)
+      (should-not (memq cell result-cells)))
+    (should (= (consent--eval-context-value-nodes context) 3)))
+  (let* ((context (consent--new-eval-context '(:max-value-nodes 1)))
+         (source (make-list 4096 'copied))
+         (source-second (cdr source))
+         (source-last (last source))
+         (reverse-called nil)
+         (original-reverse (symbol-function 'reverse)))
+    (cl-letf (((symbol-function 'reverse)
+               (lambda (value)
+                 (setq reverse-called t)
+                 (funcall original-reverse value))))
+      (should-error
+       (consent--primitive-reverse (list source) context)
+       :type 'consent-budget-error))
+    (should-not reverse-called)
+    (should (eq (cdr source) source-second))
+    (should (eq (last source) source-last))
+    (should (equal source (make-list 4096 'copied)))
+    (should (= (consent--eval-context-value-nodes context) 4096))))
 
 (ert-deftest consent-base-test-records-and-circular-equality ()
   "Evaluate R7RS records and equality over circular data."

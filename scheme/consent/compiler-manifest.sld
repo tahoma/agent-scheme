@@ -22,6 +22,7 @@
            (data transient-map)
            (agent task)
            (agent transcript)
+           (agent models openai-codec)
            (agent models openai)
            (agent registry)
            (agent proposal)
@@ -32,8 +33,10 @@
            (agent context)
            (agent helper)
            (agent job)
+           (agent memory-query)
            (agent memory)
            (agent plan)
+           (agent redaction-kernel)
            (agent redaction)
            (agent session)
            (stdlib and-let-star)
@@ -75,8 +78,8 @@
          ;; datum, numeric, reader, runtime, and symbol record owners. Their
          ;; boundary rejects before conversion would allocate an unclassified
          ;; borrowed mirror or callback shim rather than assuming that every
-         ;; core export may borrow one. The three agent entries are stateless,
-         ;; call-scoped transforms whose exact procedure and constant
+         ;; core export may borrow one. The agent entries have audited,
+         ;; call-scoped boundaries whose exact procedure and constant
          ;; inventories are validated before registration.
          ;;
          ;; Every other project root remains compiled and linked, but is not
@@ -85,13 +88,21 @@
          ;; compounds in a closure, record, parameter, or module state. That
          ;; routing prevents borrowed-host containers from becoming a durable
          ;; second heap while #120 supplies native lowering over Consent-owned
-         ;; base primitives. The transient overlay and identity map likewise
-         ;; remain ordinary compiled dependencies because their private records
-         ;; never cross the core interface.
+         ;; base primitives. The OpenAI codec, memory-query kernel, and
+         ;; redaction scanner are stateless call-scoped transforms with no
+         ;; callback invocation or durable storage surface. Memory-key remains
+         ;; a compiled dependency inside memory-query, while the persistent
+         ;; memory facade realizes that same source directly. The transient
+         ;; overlay and identity map likewise remain ordinary compiled
+         ;; dependencies because their private records never cross the core
+         ;; interface.
          (native-libraries
           ((agent task)
            (agent transcript)
+           (agent models openai-codec)
            (agent context)
+           (agent memory-query)
+           (agent redaction-kernel)
            (consent character)
            (consent datum)
            (consent symbol)

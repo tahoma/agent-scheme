@@ -739,7 +739,7 @@ t."
     (define-record-type <cell>
       (make-cell-record value owned-slots)
       cell?
-      (value raw-cell-value)
+      (value raw-cell-value set-raw-cell-value!)
       (owned-slots cell-owned-slots set-cell-owned-slots!))
 
     (define (make-cell value . maybe-context)
@@ -760,14 +760,11 @@ t."
             (list value)))))
 
     (define (cell-value cell)
-      "Return CELL's current value from owned or bootstrap storage."
+      "Return CELL's current value from its write-through read cache."
       #((parameters (cell (type cell) (description "Cell to inspect.")))
         (returns (type any) (description "Current stored value."))
         (effects state-read error))
-      (let ((slots (cell-owned-slots cell)))
-        (if slots
-            (consent-datum-internal-slot-ref slots 0)
-            (raw-cell-value cell))))
+      (raw-cell-value cell))
 
     (define (context-cell-set! context cell operation value)
       "Set CELL to VALUE through CONTEXT's datum-heap mutation gateway."
@@ -788,8 +785,12 @@ t."
                           heap 'cell (list (raw-cell-value cell)))))
                     (set-cell-owned-slots! cell created)
                     created))))
+        ;; The owned slot remains the mutation identity and revision owner.
+        ;; Update the read cache only after its gateway returns: a rejected
+        ;; cross-heap write or aborting observer must leave both copies old.
         (consent-datum-internal-slot-set!
-         heap slots operation 0 value)))
+         heap slots operation 0 value)
+        (set-raw-cell-value! cell value)))
 
     ;; Value environments are internal mutable frames; imported names mark the
     ;; current frame bindings that Scheme source cannot redefine or mutate.
@@ -4206,7 +4207,7 @@ e"
               (context-datum-heap context) value)))
         (note-value-allocation!
          context
-         (+ 1 (consent-datum-string-length owned)))
+         (+ 1 (consent-datum-string-length-trusted owned)))
         owned))
 
     (define (charge-bytevector-allocation! value context)
@@ -4252,7 +4253,7 @@ it."
               (context-datum-heap context) value)))
         (note-value-allocation!
          context
-         (+ 1 (consent-datum-vector-length owned)))
+         (+ 1 (consent-datum-vector-length-trusted owned)))
         owned))
 
     (define (charge-list-allocation! value context)
@@ -4269,29 +4270,21 @@ it."
         (returns (type list)
          (description "The original list VALUE, unchanged."))
         (effects state-write error))
-      (if (not (proper-list? value))
-          (eval-error "allocated list must be a proper list"))
-      ;; Collect source nodes in reverse order, then allocate the visible spine
-      ;; from its tail. This is three bounded linear passes including Floyd
-      ;; validation, needs no identity registry, and leaves every fresh pair at
-      ;; revision zero. Elements are reused unchanged, retaining their existing
-      ;; ownership and source notes.
-      (let collect ((cursor value) (nodes '()) (count 0))
-        (if (null? cursor)
-            (let build ((rest nodes) (result '()))
-              (if (null? rest)
-                  (charge-value-allocation! result count context)
-                  (let ((source (car rest)))
-                    (build
-                     (cdr rest)
-                     (consent-datum-cons
-                      (context-datum-heap context)
-                      (proper-list-node-car source)
-                      result)))))
-            (collect
-             (proper-list-node-cdr cursor)
-             (cons cursor nodes)
-             (+ count 1)))))
+      (let ((elements (proper-list-reversed-elements value)))
+        (if (not elements)
+            (eval-error "allocated list must be a proper list"))
+        ;; Validation and element collection share one Floyd traversal. Build
+        ;; only after that traversal succeeds, so malformed input cannot
+        ;; publish pairs or consume the value-node budget. Fresh pairs stay at
+        ;; revision zero and elements retain identity and source metadata.
+        (let build ((rest elements) (result '()) (count 0))
+          (if (null? rest)
+              (charge-value-allocation! result count context)
+              (build
+               (cdr rest)
+               (consent-datum-cons
+                (context-datum-heap context) (car rest) result)
+               (+ count 1))))))
 
     (define (value-node-atomic? value)
       "Report whether VALUE is one opaque node with no traversed children."
@@ -4370,7 +4363,7 @@ it."
                              (owned? (consent-datum-vector? fields))
                              (length
                               (if owned?
-                                  (consent-datum-vector-length fields)
+                                  (consent-datum-vector-length-trusted fields)
                                   (vector-length fields))))
                         (runtime-identity-map-set! visited item #t)
                         (let push ((index (- length 1)) (next rest))
@@ -4380,7 +4373,8 @@ it."
                                (- index 1)
                                (cons
                                 (if owned?
-                                    (consent-datum-vector-ref fields index)
+                                    (consent-datum-vector-ref-trusted
+                                     fields index)
                                     (vector-ref fields index))
                                 next)))))))
                  ((multiple-values? item)
@@ -4409,7 +4403,7 @@ it."
                         (loop
                          rest
                          (+ count 1
-                            (consent-datum-string-length item))))))
+                            (consent-datum-string-length-trusted item))))))
                  ((consent-datum-bytevector? item)
                   (if (runtime-identity-map-ref visited item #f)
                       (loop rest count)
@@ -4426,13 +4420,15 @@ it."
                         (runtime-identity-map-set! visited item #t)
                         (loop
                          (cons
-                          (consent-datum-car item)
-                          (cons (consent-datum-cdr item) rest))
+                          (consent-datum-car-trusted item)
+                          (cons
+                           (consent-datum-cdr-trusted item) rest))
                          (+ count 1)))))
                  ((consent-datum-vector? item)
                   (if (runtime-identity-map-ref visited item #f)
                       (loop rest count)
-                      (let ((length (consent-datum-vector-length item)))
+                      (let ((length
+                             (consent-datum-vector-length-trusted item)))
                         (runtime-identity-map-set! visited item #t)
                         (let push ((index (- length 1)) (next rest))
                           (if (< index 0)
@@ -4440,7 +4436,7 @@ it."
                               (push
                                (- index 1)
                                (cons
-                                (consent-datum-vector-ref item index)
+                                (consent-datum-vector-ref-trusted item index)
                                 next)))))))
                  ((string? item)
                   (if (runtime-identity-map-ref visited item #f)
@@ -4504,11 +4500,10 @@ it."
 
     (define (charge-literal! value context)
       "Charge a quoted or self-evaluating literal's node count at evaluation."
-      "Literals are realized from source rather than constructed, so they are"
-      "budgeted by a single bounded walk over the source datum -- off the hot"
-      "primitive path -- which keeps the literal result-size fixtures exact"
-      "while the per-result walk is removed from constructor and accessor"
-      "results."
+      "Atomic literals charge one node directly. Compound literals are"
+      "realized from source rather than constructed. Host and cross-heap"
+      "graphs fuse ownership and counting; same-heap and wrapper-bearing"
+      "graphs retain the canonical bounded count walk."
       #((parameters
          (value . "Literal datum whose node count is charged.")
          (context (type eval-context)
@@ -4516,14 +4511,46 @@ it."
             ("Evaluation context whose value-node budget is charged."))))
         (returns . "The original literal VALUE, unchanged.")
         (effects state-write error))
-      (let ((owned (own-allocated-compound value context)))
-        (note-value-allocation!
-         context
-         (value-node-count
-          owned
-          '()
-          (and context (context-internal-libraries-allowed? context))))
-        owned))
+      (let ((heap (context-datum-heap context))
+            (tolerant
+             (and context
+                  (context-internal-libraries-allowed? context))))
+        (cond
+         ;; Atomic literals have no traversed edges and cross the ownership
+         ;; boundary unchanged, so neither graph state nor an importer helps.
+         ((value-node-atomic? value)
+          (note-value-allocation! context 1)
+          value)
+         ;; Same-heap roots already have their final identity. Preserve the
+         ;; existing single count walk rather than entering a copy traversal.
+         ((and
+           (consent-datum-object? value)
+           (= (consent-datum-object-heap-id value)
+              (consent-datum-heap-id heap)))
+          (note-value-allocation!
+           context (value-node-count value '() tolerant))
+          value)
+         (else
+          (call-with-values
+           (lambda ()
+             (consent-datum-import-with-node-count
+              heap
+              value
+              value-node-atomic?
+              (lambda (target source)
+                (context-copy-datum-source!
+                 context target source #t))))
+           (lambda (owned count invalid-leaf? first-invalid-leaf)
+             ;; A record or multiple-values wrapper is an importer leaf but
+             ;; has runtime-counted children. The completed owned result is
+             ;; the authority for that fallback. In both paths every source
+             ;; callback has run before the value budget can stop evaluation.
+             (note-value-allocation!
+              context
+              (if invalid-leaf?
+                  (value-node-count owned '() tolerant)
+                  count))
+             owned))))))
 
     (define (budget-spec-ref spec keys)
       "Return SPEC's first numeric value among KEYS as a host number, or #f."
@@ -4724,13 +4751,13 @@ ng"
       "Return owned or private host PAIR's car."
       (if (pair? pair)
           (car pair)
-          (consent-datum-car pair)))
+          (consent-datum-car-trusted pair)))
 
     (define (proper-list-node-cdr pair)
       "Return owned or private host PAIR's cdr."
       (if (pair? pair)
           (cdr pair)
-          (consent-datum-cdr pair)))
+          (consent-datum-cdr-trusted pair)))
 
     (define (proper-list-node-same? left right)
       "Report whether LEFT and RIGHT are the same mixed pair node."
@@ -4759,6 +4786,50 @@ ng"
                     #f
                     (loop slow-one fast-two))))))))))
 
+    (define (proper-list-reversed-elements datum)
+      (define (collect-known-proper cursor elements)
+        "Collect CURSOR after Floyd's hare proves the remaining spine."
+        (if (null? cursor)
+            elements
+            (collect-known-proper
+             (proper-list-node-cdr cursor)
+             (cons (proper-list-node-car cursor) elements))))
+      "Return reversed DATUM elements, or false for an invalid spine."
+      ;; The ordinary collection cursor advances once while the tortoise and
+      ;; hare validate the same spine. No owned result is allocated until this
+      ;; helper returns successfully to its caller.
+      (let loop ((cursor datum)
+                 (slow datum)
+                 (fast datum)
+                 (elements '()))
+        (cond
+         ((null? cursor) elements)
+         ((not (proper-list-node? cursor)) #f)
+         (else
+          (let ((next-cursor (proper-list-node-cdr cursor))
+                (next-elements
+                 (cons (proper-list-node-car cursor) elements)))
+            (cond
+             ((null? fast)
+              (collect-known-proper next-cursor next-elements))
+             ((not (proper-list-node? fast)) #f)
+             (else
+              (let ((fast-one (proper-list-node-cdr fast)))
+                (cond
+                 ((null? fast-one)
+                  (collect-known-proper next-cursor next-elements))
+                 ((not (proper-list-node? fast-one)) #f)
+                 (else
+                  (let ((slow-one (proper-list-node-cdr slow))
+                        (fast-two (proper-list-node-cdr fast-one)))
+                    (if (proper-list-node-same? slow-one fast-two)
+                        #f
+                        (loop
+                         next-cursor
+                         slow-one
+                         fast-two
+                         next-elements)))))))))))))
+
     (define (proper-list-elements datum description)
       "Return DATUM's elements or reject an improper or cyclic spine."
       #((parameters
@@ -4773,17 +4844,13 @@ ng"
           ("A fresh list of DATUM's elements; raises when DATUM is not"
             "a proper list.")))
         (effects error))
-      (if (not (proper-list? datum))
-          (eval-error
-           (string-append description " must be a proper list")))
-      ;; Validation proved the spine finite. Collection is a second linear,
-      ;; map-free pass and allocates only the result list promised above.
-      (let loop ((cursor datum) (elements '()))
-        (if (null? cursor)
-            (reverse elements)
-            (loop
-             (proper-list-node-cdr cursor)
-             (cons (proper-list-node-car cursor) elements)))))
+      (let ((elements (proper-list-reversed-elements datum)))
+        (if (not elements)
+            (eval-error
+             (string-append description " must be a proper list")))
+        ;; Reverse only the promised result list; source validation and
+        ;; collection already shared one map-free traversal.
+        (reverse elements)))
 
     ;; Documentation metadata fields whose list values append in source order.
     (define documentation-list-field-names '(examples see-also))

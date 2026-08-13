@@ -159,13 +159,16 @@
       (names (unit-names units)))
   (test-equal
    'native-registration-allowlist-size
-   16
+   19
    (length native-libraries))
   (test-equal
    'native-registration-allowlist
    '((agent task)
      (agent transcript)
+     (agent models openai-codec)
      (agent context)
+     (agent memory-query)
+     (agent redaction-kernel)
      (consent character)
      (consent datum)
      (consent symbol)
@@ -184,6 +187,8 @@
    'retaining-libraries-use-source-registration
    (let loop ((rest '((data avl-tree)
                       (agent approval)
+                      (agent memory)
+                      (agent models openai)
                       (agent prompt)
                       (agent registry)
                       (agent session)
@@ -204,6 +209,30 @@
      (or (null? rest)
          (and (member (car rest) names)
               (loop (cdr rest))))))
+  (test-assert
+   'openai-codec-is-native-root
+   (and (member '(agent models openai-codec) roots)
+        (member '(agent models openai-codec) native-libraries)))
+  (test-assert
+   'openai-facade-is-source-root-not-native
+   (and (member '(agent models openai) roots)
+        (not (member '(agent models openai) native-libraries))))
+  (test-assert
+   'memory-query-is-native-root
+   (and (member '(agent memory-query) roots)
+        (member '(agent memory-query) native-libraries)))
+  (test-assert
+   'memory-facade-is-source-root-not-native
+   (and (member '(agent memory) roots)
+        (not (member '(agent memory) native-libraries))))
+  (test-assert
+   'redaction-kernel-is-native-root
+   (and (member '(agent redaction-kernel) roots)
+        (member '(agent redaction-kernel) native-libraries)))
+  (test-assert
+   'redaction-facade-is-source-root-not-native
+   (and (member '(agent redaction) roots)
+        (not (member '(agent redaction) native-libraries))))
   (test-equal
    'generated-embedded-source-is-last
    '(consent embedded-source)
@@ -214,9 +243,41 @@
  'portable-agent-realizations '(portable compiler manifest agent)
 (begin
   (test-equal
+   'openai-codec-uses-canonical-portable-source
+   "agent/models/openai-codec.sld"
+   (consent-compiler-unit-source
+    (unit-ref '(agent models openai-codec))))
+  (test-equal
+   'openai-facade-uses-canonical-portable-source
+   "agent/models/openai.sld"
+   (consent-compiler-unit-source (unit-ref '(agent models openai))))
+  (test-assert
+   'openai-codec-precedes-facade
+   (ordered-before?
+    '(agent models openai-codec)
+    '(agent models openai)))
+  (test-equal
+   'memory-query-uses-canonical-portable-source
+   "agent/memory-query.sld"
+   (consent-compiler-unit-source (unit-ref '(agent memory-query))))
+  (test-equal
+   'memory-facade-uses-canonical-portable-source
+   "agent/memory.sld"
+   (consent-compiler-unit-source (unit-ref '(agent memory))))
+  (test-assert
+   'memory-query-precedes-facade
+   (ordered-before? '(agent memory-query) '(agent memory)))
+  (test-equal
    'context-uses-canonical-portable-source
    "agent/context.sld"
    (consent-compiler-unit-source (unit-ref '(agent context))))
+  (test-equal
+   'redaction-kernel-uses-canonical-portable-source
+   "agent/redaction-kernel.sld"
+   (consent-compiler-unit-source (unit-ref '(agent redaction-kernel))))
+  (test-assert
+   'redaction-kernel-precedes-facade
+   (ordered-before? '(agent redaction-kernel) '(agent redaction)))
   (test-equal
    'redaction-uses-canonical-portable-source
    "agent/redaction.sld"

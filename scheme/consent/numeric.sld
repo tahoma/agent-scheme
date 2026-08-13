@@ -459,6 +459,72 @@
                   (consent-numeric-backend-limb-bits backend))
                (small-bit-length (vector-ref limbs (- length 1)))))))
 
+    (define (integer-representation-snapshot backend value)
+      "Return VALUE as fresh ASCII sign and minimal hexadecimal magnitude."
+      "Limbs are streamed once from low to high, so work is linear in limbs"
+      "plus output characters."
+      (if (not (owned-integer? value))
+          (error "integer snapshot expected an owned integer" value))
+      (let* ((sign (integer-sign value))
+             (limbs (integer-limbs backend value))
+             (limb-count (vector-length limbs)))
+        (if (= sign 0)
+            (make-string 1 #\0)
+            (let* ((width
+                    (consent-numeric-backend-limb-bits backend))
+                   (top-bits
+                    (small-bit-length
+                     (vector-ref limbs (- limb-count 1))))
+                   (bit-count (+ (* (- limb-count 1) width) top-bits))
+                   (magnitude-digits (quotient (+ bit-count 3) 4))
+                   (result (make-string (+ magnitude-digits 1) #\0)))
+              (string-set! result 0 (if (< sign 0) #\- #\+))
+              (let limb-loop ((limb-index 0)
+                              (buffer 0)
+                              (buffered-bits 0)
+                              (output-index magnitude-digits))
+                (if (= limb-index limb-count)
+                    (begin
+                      (if (> buffered-bits 0)
+                          (begin
+                            (string-set!
+                             result
+                             output-index
+                             (string-ref digit-characters buffer))
+                            (set! output-index (- output-index 1))))
+                      (if (not (= output-index 0))
+                          (error "integer snapshot digit count mismatch"
+                                 value output-index))
+                      result)
+                    (let* ((limb (vector-ref limbs limb-index))
+                           (limb-width
+                            (if (= limb-index (- limb-count 1))
+                                top-bits
+                                width))
+                           (packed
+                            (+ buffer
+                               (* limb
+                                  (small-power 2 buffered-bits))))
+                           (available (+ buffered-bits limb-width)))
+                      (let byte-loop ((remaining packed)
+                                      (bits available)
+                                      (index output-index))
+                        (if (>= bits 4)
+                            (begin
+                              (string-set!
+                               result
+                               index
+                               (string-ref
+                                digit-characters
+                                (modulo remaining 16)))
+                              (byte-loop (quotient remaining 16)
+                                         (- bits 4)
+                                         (- index 1)))
+                            (limb-loop (+ limb-index 1)
+                                       remaining
+                                       bits
+                                       index))))))))))
+
     (define (integer-bit-ref backend value index)
       "Return bit INDEX from the magnitude of owned integer VALUE."
       (let* ((width (consent-numeric-backend-limb-bits backend))
@@ -1274,6 +1340,57 @@
                (owned-binary64-significand right))
               0)))
 
+    (define (write-small-fixed-hex! result start length value)
+      "Write nonnegative small VALUE into RESULT as fixed-width hexadecimal."
+      (let loop ((index (- (+ start length) 1)) (remaining value))
+        (if (< index start)
+            (if (= remaining 0)
+                result
+                (error "small hexadecimal encoding overflow" value length))
+            (begin
+              (string-set!
+               result
+               index
+               (string-ref digit-characters (modulo remaining 16)))
+              (loop (- index 1) (quotient remaining 16))))))
+
+    (define (binary64-representation-snapshot backend value)
+      "Return VALUE's canonical binary64 tuple as fresh fixed-width ASCII."
+      "The layout is class, sign, four exponent hex digits, and fourteen"
+      "significand hex digits."
+      (if (not (owned-binary64? value))
+          (error "binary64 snapshot expected an owned binary64" value))
+      (let* ((class (owned-binary64-class value))
+             (class-character
+              (case class
+                ((finite) #\f)
+                ((infinity) #\i)
+                ((nan) #\n)
+                (else (error "unknown owned binary64 class" class))))
+             (result (make-string 20 #\0)))
+        (string-set! result 0 class-character)
+        (string-set!
+         result 1 (if (< (owned-binary64-sign value) 0) #\- #\+))
+        (if (eq? class 'finite)
+            (let* ((biased-exponent
+                    (+ (owned-binary64-exponent value) 1074))
+                   (significand
+                    (integer->small
+                     backend
+                     (owned-binary64-significand value)
+                     portable-positive-fixnum-limit)))
+              (if (not (and (<= 0 biased-exponent)
+                            (<= biased-exponent 2045)))
+                  (error "binary64 snapshot exponent out of range"
+                         (owned-binary64-exponent value)))
+              (if (not significand)
+                  (error "binary64 snapshot significand out of range"
+                         value))
+              (write-small-fixed-hex!
+               result 2 4 biased-exponent)
+              (write-small-fixed-hex! result 6 14 significand)))
+        result))
+
     (define (binary64-binary backend left right operation)
       "Apply finite and special binary64 arithmetic OPERATION."
       (let ((left-class (owned-binary64-class left))
@@ -1719,6 +1836,8 @@
          (integer-parse backend (car arguments) (cadr arguments)))
         ((integer->string)
          (integer->string backend (car arguments) (cadr arguments)))
+        ((integer-representation-snapshot)
+         (integer-representation-snapshot backend (car arguments)))
         ((integer->small)
          (integer->small backend (car arguments) (cadr arguments)))
         ((integer-zero?) (integer-zero? (car arguments)))
@@ -1781,6 +1900,8 @@
         ((binary64-negative?) (binary64-negative? (car arguments)))
         ((binary64-equal?)
          (binary64-equal? (car arguments) (cadr arguments)))
+        ((binary64-representation-snapshot)
+         (binary64-representation-snapshot backend (car arguments)))
         ((binary64-negate)
          (binary64-negate backend (car arguments)))
         ((binary64-from-rational)

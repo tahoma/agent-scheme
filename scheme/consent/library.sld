@@ -4337,15 +4337,36 @@ host"
 
     (define (native-bridge-register-imported!
              bridge target source root)
-      "Copy fresh imported TARGET's native provenance without retaining it."
+      "Register imported TARGET and return its fresh value-node cost."
       ;; ROOT is the temporary multi-value carrier. Known borrowed mirrors are
       ;; intercepted before allocation, so COPY-SOURCE sees fresh result or
       ;; condition nodes only. They receive provenance, never bridge entries
       ;; or mutation snapshots, and die normally with their owning context.
-      (if (not (host-eq? source root))
-          (context-copy-datum-source!
-           (native-bridge-context bridge) target source #t))
-      target)
+      (if (host-eq? source root)
+          0
+          (begin
+            (context-copy-datum-source!
+             (native-bridge-context bridge) target source #t)
+            (native-imported-node-cost target))))
+
+    (define (native-imported-node-cost target)
+      "Return TARGET's exact freshly allocated value-node cost."
+      ;; Match the source interpreter's constructor accounting: pairs charge
+      ;; one shell, while vectors, strings, and bytevectors charge their shell
+      ;; plus their freshly allocated slots or elements. Referenced child
+      ;; values are charged only by the operation that creates those children.
+      (case (consent-datum-object-kind target)
+        ((pair) 1)
+        ((vector)
+         (+ 1 (consent-datum-vector-length-trusted target)))
+        ((string)
+         (+ 1 (consent-datum-string-length-trusted target)))
+        ((bytevector)
+         (+ 1 (consent-datum-bytevector-length target)))
+        (else
+         (error
+          "native result import produced an unsupported compound"
+          target))))
 
     (define (native-bridge-import-reuse bridge source absent)
       "Return SOURCE's already-owned bridge identity, or ABSENT."
@@ -4381,6 +4402,7 @@ host"
       "Own native VALUES and synchronize mapped compound mutations."
       (let* ((entries (native-bridge-entries bridge))
              (specs (native-bridge-slot-specs entries))
+             (fresh-node-count 0)
              (all-values
               (append values
                       (map (lambda (spec) (vector-ref spec 2)) specs)))
@@ -4398,8 +4420,14 @@ host"
                              (native-result-leaf
                               value (native-bridge-context bridge)))
                            (lambda (target source)
-                             (native-bridge-register-imported!
-                              bridge target source root))
+                             ;; ROOT is an importer-only result carrier. Every
+                             ;; other callback denotes one genuinely fresh
+                             ;; owned compound; reused borrowed mirrors bypass
+                             ;; allocation and this callback entirely.
+                             (set! fresh-node-count
+                                   (+ fresh-node-count
+                                      (native-bridge-register-imported!
+                                       bridge target source root))))
                            (lambda (source absent)
                              (native-bridge-import-reuse
                               bridge source absent)))))
@@ -4429,6 +4457,12 @@ host"
               (begin
                 (native-bridge-sync-atomic-entry! bridge (car rest))
                 (sync-atomic (cdr rest)))))
+        ;; Reconciliation first publishes all host-side mutations. The charge
+        ;; then covers exactly the fresh result/writeback graph that became
+        ;; owned, without walking or charging any reused argument subgraph.
+        (if (> fresh-node-count 0)
+            (note-value-allocation!
+             (native-bridge-context bridge) fresh-node-count))
         (let take ((count result-count) (rest converted) (result '()))
           (if (= count 0)
               (reverse result)
@@ -4583,14 +4617,24 @@ host"
     ;; portable Scheme source; only the borrowed-host call ABI needs this shim.
     (define native-callback-argument-libraries
       '((data avl-tree)
-        (agent generated-source)
-        (agent models openai)))
+        (agent generated-source)))
 
     ;; Only these compiled bindings may borrow owned compounds through the
     ;; call-scoped graph adapter. Higher-order or retaining libraries stay on
     ;; their source realization instead of widening this private ABI.
     (define native-compound-borrow-bindings
-      '((((agent task)
+      '((((agent memory-query)
+          memory-query-find
+          memory-query-by-tag
+          memory-query-recent
+          memory-query-select))
+        (((agent models openai-codec)
+          model-openai-codec-request-json-projected
+          model-openai-codec-parse-response
+          model-openai-codec-provider-error-projected))
+        (((agent redaction-kernel)
+          redaction-kernel-secret-string?))
+        (((agent task)
           task-state?
           task-transition-allowed?
           validate-task-transition
@@ -4640,9 +4684,13 @@ host"
           make-focus-context
           make-context-bundle))))
 
-    ;; Public immutable data bindings that native code may borrow directly.
+    ;; Immutable data bindings that native code may borrow directly. Empty
+    ;; entries make a procedure-only inventory's zero-data contract explicit.
     (define native-compound-borrow-data-bindings
-      '((((agent task)
+      '((((agent memory-query)))
+        (((agent models openai-codec)))
+        (((agent redaction-kernel)))
+        (((agent task)
           task-states
           task-pause-states
           task-terminal-states
@@ -4658,7 +4706,7 @@ host"
 
     ;; A small number of directly linked core bindings safely copy a compound
     ;; argument during the call without retaining its borrowed mirror. Keep
-    ;; these exceptions separate from the three complete agent inventories:
+    ;; these exceptions separate from the six complete agent inventories:
     ;; adding one core binding must not make every export in that owner part of
     ;; the call-scoped borrow ABI.
     (define native-core-compound-borrow-bindings
@@ -4993,16 +5041,53 @@ host"
          (lambda (procedure)
            (native-result-procedure procedure context))))))
 
+    (define (native-result-owned-by-context? datum context)
+      "Report whether DATUM is already owned by CONTEXT's compound heap."
+      (and
+       (consent-datum-object? datum)
+       (= (consent-datum-object-heap-id datum)
+          (consent-datum-heap-id (context-datum-heap context)))))
+
+    (define (require-native-result-fast-identity-maps!)
+      "Reject general native result imports without identity hashing."
+      (if (not (consent-identity-map-fast-backend?))
+          (error
+           "native-result-import-unavailable: fast identity maps are \
+required")))
+
     (define (native-own-result-datum datum context)
       "Import native DATUM into CONTEXT's owned compound heap."
       "The shared datum importer memoizes source objects before descending,"
       "so aliases and cycles cross the private host adapter exactly once."
-      (consent-datum-import
-       (context-datum-heap context)
-       datum
-       (lambda (value) (native-result-leaf value context))
-       (lambda (target source)
-         (context-copy-datum-source! context target source #t))))
+      "Scalars and same-heap owned objects need no identity map. Every fresh"
+      "host or cross-heap compound requires a hash-backed map: even flat host"
+      "values can carry provenance in an unbounded identity side table."
+      (cond
+       ((native-result-owned-by-context? datum context) datum)
+       ((not
+         (or (consent-datum-object? datum)
+             (pair? datum)
+             (string? datum)
+             (vector? datum)
+             (bytevector? datum)))
+        (native-result-leaf datum context))
+       (else
+        (require-native-result-fast-identity-maps!)
+        (let ((fresh-node-count 0))
+          (let ((owned
+                 (consent-datum-import
+                  (context-datum-heap context)
+                  datum
+                  (lambda (value) (native-result-leaf value context))
+                  (lambda (target source)
+                    (set! fresh-node-count
+                          (+ fresh-node-count
+                             (native-imported-node-cost target)))
+                    (context-copy-datum-source!
+                     context target source #t)))))
+            (if (> fresh-node-count 0)
+                (note-value-allocation! context fresh-node-count))
+            owned)))))
 
     (define (native-result-value value . maybe-context)
       "Convert one native RESULT for interpreted use."

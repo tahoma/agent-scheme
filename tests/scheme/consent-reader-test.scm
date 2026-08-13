@@ -628,6 +628,41 @@
              "3.0"
              (consent-datum->external 3.0)))
 (testing-registry-case
+ 'host-decimal-fraction-writer '(portable core)
+(test-equal 'host-decimal-fraction-writer
+            "0.1"
+            (consent-datum->external 0.1)))
+(testing-registry-case
+ 'host-decimal-exponent-writer '(portable core)
+(test-equal 'host-decimal-exponent-writer
+            "1e+20"
+            (consent-datum->external 1e20)))
+(testing-registry-case
+ 'host-negative-zero-writer '(portable core)
+(test-equal 'host-negative-zero-writer
+            "0.0"
+            (consent-datum->external -0.0)))
+(testing-registry-case
+ 'host-positive-infinity-writer '(portable core)
+(test-equal 'host-positive-infinity-writer
+            "+inf.0"
+            (consent-datum->external +inf.0)))
+(testing-registry-case
+ 'host-negative-infinity-writer '(portable core)
+(test-equal 'host-negative-infinity-writer
+            "-inf.0"
+            (consent-datum->external -inf.0)))
+(testing-registry-case
+ 'host-nan-writer '(portable core)
+(test-equal 'host-nan-writer
+            "+nan.0"
+            (consent-datum->external +nan.0)))
+(testing-registry-case
+ 'host-character-writer '(portable core)
+(test-equal 'host-character-writer
+            "#\\space"
+            (consent-datum->external #\space)))
+(testing-registry-case
  'hex-integer '(portable core)
 (check-external 'hex-integer "#x2a" "42"))
 (testing-registry-case

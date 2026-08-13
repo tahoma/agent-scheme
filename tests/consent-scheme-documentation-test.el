@@ -257,8 +257,8 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
 
 (defconst consent--scheme-documentation-representative-docstrings
   '(("scheme/consent/base-prelude.scm"
-     "length"
-     "Return the number of pairs in LIST.")
+     "map"
+     "Apply PROC to elements from each input list and return the result list.")
     ("scheme/consent/lazy.sld"
      "force"
      "Return PROMISE's value, evaluating and memoizing delayed thunks once.")
