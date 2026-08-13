@@ -897,7 +897,7 @@
                  (allowed-scopes (project))
                  (logical-clock 8)))
               #f))
-           (define cache-limit-tags
+           (define large-record-tags
              (let loop ((remaining 70) (result '()))
                (if (= remaining 0)
                    result
@@ -907,19 +907,19 @@
                      (string-append
                       \"unique-nohash-tag-\" (number->string remaining))
                      result)))))
-           (define cache-limit-rejection
+           (define large-record-rejection
              (guard
               (condition (else (error-object-message condition)))
               (memory-store-put!
                store 'project 'cache-limit-record
-               (list (list 'tags cache-limit-tags)
+               (list (list 'tags large-record-tags)
                      '(value \"cache limit\")))
               #f))
            (list common-results
                  host-cycle-rejection
                  comparison-rejection
                  access-rejection
-                 cache-limit-rejection)"
+                 large-record-rejection)"
           environment
           ;; The complete forced-nohash matrix currently consumes about
           ;; 2.16 million evaluator steps.  Keep bounded headroom without
@@ -932,7 +932,7 @@
          "\"memory key host compound requires fast identity map\" "
          "\"unbounded memory key comparison requires fast identity map\" "
          "\"unbounded access projection requires fast identity map\" "
-         "\"memory key session cache requires fast identity map\")")))
+         "\"large memory record requires fast identity map\")")))
       (should
        (equal
         (consent-library-test--external/options
@@ -1114,9 +1114,9 @@
           (should (<= (abs (mixed-difference corners 1)) 512))
           (should (<= (abs (mixed-difference corners 2)) 128)))))))
 
-(ert-deftest
-    consent-library-test-agent-memory-key-work-scales-additively ()
-  "Bound shared append and high-indegree key work by physical graph size."
+(defun consent-library-test--assert-agent-memory-key-work
+    (fast-specifications nohash-specifications check-high-indegree)
+  "Assert additive work for FAST-SPECIFICATIONS and NOHASH-SPECIFICATIONS."
   (let ((options '(:internal-libraries-allowed t
                    :max-steps 12000000
                    :max-value-nodes 2000000
@@ -1162,7 +1162,7 @@
           "    (vector-length key)))\n"
           )))
     (cl-labels
-        ((measure-probes (probes nohash?)
+        ((measure-probes (probe-specifications nohash?)
            (let* ((context (consent--new-eval-context options))
                   (environment (consent-make-base-environment))
                   (measure
@@ -1178,14 +1178,25 @@
                      (consent-library-test--run-source-on
                       setup context environment options)
                      (mapcar
-                      (lambda (probe)
-                        (funcall measure (format "(%s 1 1)" probe))
-                        (list
-                         (funcall measure (format "(%s 1 64)" probe))
-                         (funcall measure (format "(%s 8 64)" probe))
-                         (funcall measure (format "(%s 1 512)" probe))
-                         (funcall measure (format "(%s 8 512)" probe))))
-                      probes))))
+                      (lambda (specification)
+                        (let ((probe (nth 0 specification))
+                              (small-width (nth 1 specification))
+                              (large-width (nth 2 specification)))
+                          (funcall measure (format "(%s 1 1)" probe))
+                          (list
+                           (funcall
+                            measure
+                            (format "(%s 1 %d)" probe small-width))
+                           (funcall
+                            measure
+                            (format "(%s 8 %d)" probe small-width))
+                           (funcall
+                            measure
+                            (format "(%s 1 %d)" probe large-width))
+                           (funcall
+                            measure
+                            (format "(%s 8 %d)" probe large-width)))))
+                      probe-specifications))))
              (if nohash?
                  (cl-letf
                      (((symbol-function
@@ -1202,36 +1213,76 @@
                 (- (nth metric nl))
                 (- (nth metric lk))
                 (nth metric ll)))))
-      (let* ((fast
-              (measure-probes
-               '("shared-tag-append-probe"
-                 "high-indegree-key-probe"
-                 "shared-host-number-key-probe")
-               nil))
-             (fast-append (nth 0 fast))
-             (high-indegree (nth 1 fast))
-             (host-number (nth 2 fast))
-             (nohash-append
-              (car
-               (measure-probes '("shared-tag-append-probe") t))))
-        (dolist (corners
-                 (list fast-append nohash-append high-indegree host-number))
-          (dolist (corner corners)
-            (should (stringp (car corner))))
-          (ert-info ((format "memory key work corners: %S" corners))
-            (should (<= (abs (mixed-difference corners 1)) 128))
-            (should (<= (abs (mixed-difference corners 2)) 32))))
-        ;; Width grows eightfold.  A single-pass predecessor snapshot stays
-        ;; below a 12x ledger envelope; rebuilding an incoming list with
-        ;; append grows quadratically and exceeds it decisively.
-        (ert-info
-            ((format "high-indegree key corners: %S" high-indegree))
-          (should
-           (<= (nth 1 (nth 2 high-indegree))
-               (+ (* 12 (nth 1 (nth 0 high-indegree))) 128)))
-          (should
-           (<= (nth 2 (nth 2 high-indegree))
-               (+ (* 12 (nth 2 (nth 0 high-indegree))) 32))))))))
+      (let* ((fast-results
+              (measure-probes fast-specifications nil))
+             (nohash-results
+              (measure-probes nohash-specifications t))
+             (probes
+              (append
+               (cl-mapcar
+                (lambda (specification corners)
+                  (cons (intern (car specification)) corners))
+                fast-specifications
+                fast-results)
+               (cl-mapcar
+                (lambda (specification corners)
+                  (cons
+                   (intern (concat "nohash-" (car specification)))
+                   corners))
+                nohash-specifications
+                nohash-results))))
+        (dolist (probe probes)
+          (let ((name (car probe))
+                (corners (cdr probe)))
+            (dolist (corner corners)
+              (should (stringp (car corner))))
+            (ert-info ((format
+                        "memory key %s work corners: %S"
+                        name
+                        corners))
+              (should (<= (abs (mixed-difference corners 1)) 128))
+              (should (<= (abs (mixed-difference corners 2)) 32)))))
+        (when check-high-indegree
+          (let ((high-indegree
+                 (cdr (assq 'high-indegree-key-probe probes))))
+            ;; Width grows fourfold.  A single-pass predecessor snapshot
+            ;; stays below a 6x ledger envelope; rebuilding an incoming list
+            ;; with append grows quadratically and exceeds it decisively.
+            (ert-info
+                ((format "high-indegree key corners: %S" high-indegree))
+              (should
+               (<= (nth 1 (nth 2 high-indegree))
+                   (+ (* 6 (nth 1 (nth 0 high-indegree))) 128)))
+              (should
+               (<= (nth 2 (nth 2 high-indegree))
+                   (+ (* 6 (nth 2 (nth 0 high-indegree))) 32))))))))))
+
+(ert-deftest
+    consent-library-test-agent-memory-shared-append-scales-additively ()
+  "Bound shared append work by tag count plus shared payload size."
+  ;; Keep both widths above the bounded-descriptor limit.  Crossing that fixed
+  ;; route boundary changes the per-reference constant without introducing a
+  ;; content-size interaction.
+  (consent-library-test--assert-agent-memory-key-work
+   '(("shared-tag-append-probe" 256 2048))
+   '(("shared-tag-append-probe" 256 2048))
+   nil))
+
+(ert-deftest
+    consent-library-test-agent-memory-key-refinement-scales-additively ()
+  "Bound high-indegree key refinement work by physical graph size."
+  (consent-library-test--assert-agent-memory-key-work
+   '(("high-indegree-key-probe" 32 128))
+   '()
+   t))
+
+(ert-deftest
+    consent-library-test-agent-memory-host-number-scales-additively ()
+  "Bound repeated shared-host-number key work by physical graph size."
+  (consent-library-test--assert-agent-memory-key-work
+   '(("shared-host-number-key-probe" 64 512))
+   '()
+   nil))
 
 (ert-deftest
     consent-library-test-agent-memory-key-is-internal-source-backed ()

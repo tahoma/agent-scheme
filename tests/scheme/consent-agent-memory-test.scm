@@ -1904,6 +1904,30 @@
    'select-matches-all-canonical-spellings
    (eq? record (car (memory-selection-records selection))))))
 
+(testing-registry-case
+ 'text-query-fast-path-preserves-string-escaping
+ '(portable agent memory boundary writer)
+  (let* ((store (consent-make-memory-store))
+         (record
+          (memory-store-put!
+           store
+           'project
+           'escaped-text
+           (list
+            (list
+             'value
+             (string-append "line" (string #\newline) "break"))))))
+    (test-assert
+     'plain-string-fragment-matches-directly
+     (eq? record (car (memory-store-find store 'project "line"))))
+    (test-assert
+     'escaped-string-fragment-matches-canonical-text
+     (eq? record (car (memory-store-find store 'project "\\n"))))
+    (test-equal
+     'raw-escaped-character-does-not-bypass-writer
+     '()
+     (memory-store-find store 'project (string #\newline)))))
+
 ;;;; Validation failures and lower-trust redaction filtering
 
 (testing-registry-case
