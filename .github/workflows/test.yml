@@ -1546,6 +1546,12 @@ jobs:
         shard:
           # Longest expected wall-time shards appear first so GitHub starts
           # them in the first runner wave when matrix capacity is constrained.
+          - shard: emacs-library-memory-refinement-performance
+            label: memory key refinement performance
+            make_target: test-emacs-library-memory-refinement-performance
+            summary_name: Emacs memory key refinement performance
+            selector: >-2
+              "consent-library-test-agent-memory-key-refinement-.*"
           - shard: emacs-reflect-documentation-stress
             label: reflection docs/apropos stress
             make_target: test-emacs-reflect-documentation-stress
@@ -1568,6 +1574,16 @@ jobs:
             selector: >-2
               (or "consent-native-cli-daemon.*" "consent-repl.*"
               "consent-vcs.*")
+          - shard: emacs-library-memory-query-performance
+            label: memory query performance
+            make_target: test-emacs-library-memory-query-performance
+            summary_name: Emacs memory query performance
+            selector: >-2
+              (or
+              "consent-library-test-agent-memory-shared-query-.*"
+              "consent-library-test-agent-memory-text-terms-.*"
+              "consent-library-test-agent-memory-shared-append-.*"
+              "consent-library-test-agent-memory-host-number-.*")
           - shard: emacs-agent-reliability
             label: agent reliability
             make_target: test-emacs-agent-reliability
@@ -1596,7 +1612,8 @@ jobs:
             selector: >-2
               (and "consent-library.*" (not (or "consent-library-test-srfi-.*"
               "consent-library-test-stdlib-.*"
-              "consent-library-test-vendored-srfi.*")))
+              "consent-library-test-vendored-srfi.*"
+              "consent-library-test-agent-memory-.*scale.*-additively")))
           - shard: emacs-tools
             label: tools/docs/integration
             make_target: test-emacs-tools
