@@ -485,6 +485,42 @@
              (generator-fold cons 'z (generator 'a 'b 'c 'd 'e))))
 
 (testing-registry-case
+ 'generator-fold/single-generator-pull-count
+ '(portable stdlib performance)
+(test-equal
+ 'generator-fold/single-generator-pull-count
+ '(6 4)
+ (let ((next 1) (pulls 0))
+   (define (source)
+     "Return three integers, counting the final EOF probe."
+     (set! pulls (+ pulls 1))
+     (if (> next 3)
+         (eof-object)
+         (let ((value next))
+           (set! next (+ next 1))
+           value)))
+   (let ((sum (generator-fold + 0 source)))
+     (list sum pulls)))))
+
+(testing-registry-case
+ 'generator->list/bounded-pull-count
+ '(portable stdlib performance)
+(test-equal
+ 'generator->list/bounded-pull-count
+ '((1 2) 2 3 3)
+ (let ((next 1) (pulls 0))
+   (define (source)
+     "Return increasing integers while counting source pulls."
+     (set! pulls (+ pulls 1))
+     (let ((value next))
+       (set! next (+ next 1))
+       value))
+   (let ((result (generator->list source 2)))
+     (let ((pulls-after-result pulls))
+       (let ((next-value (source)))
+         (list result pulls-after-result next-value pulls)))))))
+
+(testing-registry-case
  'generator-fold/large-range '(portable stdlib)
 (test-equal 'generator-fold/large-range
              99990000
@@ -519,6 +555,34 @@
          n)))
 
 (testing-registry-case
+ 'generator-for-each/single-generator-order
+ '(portable stdlib performance)
+(test-equal
+ 'generator-for-each/single-generator-order
+ '((a b c) 4 1)
+ (let ((items '(a b c))
+       (pulls 0)
+       (seen '()))
+   (define (source)
+     "Return the next item while counting the final EOF probe."
+     (set! pulls (+ pulls 1))
+     (if (null? items)
+         (eof-object)
+         (let ((value (car items)))
+           (set! items (cdr items))
+           value)))
+   (let ((returned-count
+          (call-with-values
+           (lambda ()
+             (generator-for-each
+              (lambda (value)
+                (set! seen (cons value seen))
+                (eof-object))
+              source))
+           (lambda returned (length returned)))))
+     (list (reverse seen) pulls returned-count)))))
+
+(testing-registry-case
  'generator-for-each/stops-before-pulling-later-generator '(portable stdlib)
 (test-equal 'generator-for-each/stops-before-pulling-later-generator
              '(((a b)) (c))
@@ -533,6 +597,38 @@
          (list (reverse seen) (generator->list long)))))
 
 (testing-registry-case
+ 'generator-for-each/multiple-generator-route '(portable stdlib)
+(test-equal
+ 'generator-for-each/multiple-generator-route
+ '((left right (proc a x) left right (proc b y) left) (z))
+ (let ((left-items '(a b))
+       (right-items '(x y z))
+       (events '()))
+   (define (left)
+     "Return the next left item while recording each pull."
+     (set! events (cons 'left events))
+     (if (null? left-items)
+         (eof-object)
+         (let ((value (car left-items)))
+           (set! left-items (cdr left-items))
+           value)))
+   (define (right)
+     "Return the next right item while recording each pull."
+     (set! events (cons 'right events))
+     (if (null? right-items)
+         (eof-object)
+         (let ((value (car right-items)))
+           (set! right-items (cdr right-items))
+           value)))
+   (generator-for-each
+    (lambda (left-value right-value)
+      (set! events
+            (cons (list 'proc left-value right-value) events)))
+    left
+    right)
+   (list (reverse events) right-items))))
+
+(testing-registry-case
  'generator-map->list '(portable stdlib)
 (test-equal 'generator-map->list
              '(6 15)
@@ -543,6 +639,31 @@
         (generator 3 6))))
 
 (testing-registry-case
+ 'generator-map->list/single-generator-order
+ '(portable stdlib performance)
+(test-equal
+ 'generator-map->list/single-generator-order
+ '((10 20 30) (1 2 3) 4)
+ (let ((items '(1 2 3))
+       (pulls 0)
+       (seen '()))
+   (define (source)
+     "Return the next item while counting the final EOF probe."
+     (set! pulls (+ pulls 1))
+     (if (null? items)
+         (eof-object)
+         (let ((value (car items)))
+           (set! items (cdr items))
+           value)))
+   (let ((result
+          (generator-map->list
+           (lambda (value)
+             (set! seen (cons value seen))
+             (* value 10))
+           source)))
+     (list result (reverse seen) pulls)))))
+
+(testing-registry-case
  'generator-map->list/stops-before-pulling-later-generator '(portable stdlib)
 (test-equal 'generator-map->list/stops-before-pulling-later-generator
              '(((a b)) (c))
@@ -550,6 +671,41 @@
              (long (generator 'b 'c)))
          (list (generator-map->list list short long)
                (generator->list long)))))
+
+(testing-registry-case
+ 'generator-map->list/multiple-generator-route '(portable stdlib)
+(test-equal
+ 'generator-map->list/multiple-generator-route
+ '(((a x) (b y))
+   (left right map left right map left)
+   (z))
+ (let ((left-items '(a b))
+       (right-items '(x y z))
+       (events '()))
+   (define (left)
+     "Return the next left item while recording each pull."
+     (set! events (cons 'left events))
+     (if (null? left-items)
+         (eof-object)
+         (let ((value (car left-items)))
+           (set! left-items (cdr left-items))
+           value)))
+   (define (right)
+     "Return the next right item while recording each pull."
+     (set! events (cons 'right events))
+     (if (null? right-items)
+         (eof-object)
+         (let ((value (car right-items)))
+           (set! right-items (cdr right-items))
+           value)))
+   (let ((result
+          (generator-map->list
+           (lambda (left-value right-value)
+             (set! events (cons 'map events))
+             (list left-value right-value))
+           left
+           right)))
+     (list result (reverse events) right-items)))))
 
 (testing-registry-case
  'generator-find/match '(portable stdlib)

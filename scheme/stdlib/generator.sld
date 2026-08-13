@@ -987,11 +987,19 @@
         (returns (type any)
          (description "Final fold state."))
         (effects procedure-call))
-      (let loop ((state seed))
-        (let ((values (generator-values-or-eof generators)))
-          (if (eof-object? values)
-              state
-              (loop (apply proc (append values (list state))))))))
+      (if (and (pair? generators) (null? (cdr generators)))
+          (let ((gen (car generators)))
+            (let loop ((state seed))
+              (let ((value (gen)))
+                (if (eof-object? value)
+                    state
+                    (loop (proc value state))))))
+          (let loop ((state seed))
+            (let ((values (generator-values-or-eof generators)))
+              (if (eof-object? values)
+                  state
+                  (loop
+                   (apply proc (append values (list state)))))))))
 
     ;; Apply PROC for side effects over one or more generators.
     (define (generator-for-each proc . generators)
@@ -1004,13 +1012,22 @@
         (returns (type any)
          (description "Unspecified value."))
         (effects procedure-call))
-      (let loop ()
-        (let ((values (generator-values-or-eof generators)))
-          (if (eof-object? values)
-              (unspecified)
-              (begin
-                (apply proc values)
-                (loop))))))
+      (if (and (pair? generators) (null? (cdr generators)))
+          (let ((gen (car generators)))
+            (let loop ()
+              (let ((value (gen)))
+                (if (eof-object? value)
+                    (unspecified)
+                    (begin
+                      (proc value)
+                      (loop))))))
+          (let loop ()
+            (let ((values (generator-values-or-eof generators)))
+              (if (eof-object? values)
+                  (unspecified)
+                  (begin
+                    (apply proc values)
+                    (loop)))))))
 
     ;; Map PROC over one or more generators and return a list.
     (define (generator-map->list proc . generators)
@@ -1023,11 +1040,18 @@
         (returns (type list)
          (description "Mapped values in order."))
         (effects allocation procedure-call))
-      (let loop ((result '()))
-        (let ((values (generator-values-or-eof generators)))
-          (if (eof-object? values)
-              (reverse result)
-              (loop (cons (apply proc values) result))))))
+      (if (and (pair? generators) (null? (cdr generators)))
+          (let ((gen (car generators)))
+            (let loop ((result '()))
+              (let ((value (gen)))
+                (if (eof-object? value)
+                    (reverse result)
+                    (loop (cons (proc value) result))))))
+          (let loop ((result '()))
+            (let ((values (generator-values-or-eof generators)))
+              (if (eof-object? values)
+                  (reverse result)
+                  (loop (cons (apply proc values) result)))))))
 
     ;; Return the first value from GEN satisfying PRED, or #f.
     (define (generator-find pred gen)
