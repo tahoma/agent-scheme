@@ -3,8 +3,13 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; This library owns host-neutral scoped memory records as Scheme-readable
-;;; datums.  Persistence, indexes, and UI buffers are adapter concerns that can
-;;; be rebuilt from these canonical records.
+;;; datums.  Persistence and UI buffers are adapter concerns.  Private runtime
+;;; indexes are rebuildable caches; the canonical record stream remains the
+;;; source of truth.  Store records are append-only immutable snapshots:
+;;; mutating a returned field does not retarget cached lookup.  Install edited
+;;; streams through memory-store-replace-records! so every cache is rebuilt.
+;;; Text search renders the current record read-only; behavior after violating
+;;; the immutable-record contract is otherwise intentionally unspecified.
 
 (define-library (agent memory)
   (export consent-memory-scopes
@@ -34,8 +39,33 @@
           memory-selection-candidates
           memory-selection-cutoff)
   (import (scheme base)
-          (only (stdlib list) filter find remove take)
-          (scheme write))
+          (only (agent memory-key)
+                memory-prepare-index-key
+                call-with-memory-index-key-session
+                memory-index-key-bounded-comparison?
+                memory-index-key<?
+                memory-index-key=?)
+          (only (agent memory-query)
+                memory-query-find
+                memory-query-by-tag
+                memory-query-recent
+                memory-query-select)
+          (only (data avl-tree)
+                make-avl-tree
+                avl-tree-ref
+                avl-tree-ref/key
+                avl-tree-set
+                avl-tree-delete
+                avl-tree-empty?
+                avl-tree-size
+                avl-tree-fold
+                avl-tree-max
+                avl-tree-key-predecessor)
+          (only (consent identity-map)
+                consent-identity-map-fast-backend?
+                consent-make-identity-map
+                consent-identity-map-ref
+                consent-identity-map-set!))
   (begin
     (define (integer-datum sequence)
       "Return SEQUENCE as an exact integer datum."
@@ -47,15 +77,6 @@
           value
           (error "memory count must be an exact integer" value)))
 
-    (define (numeric-value value)
-      "Validate and return VALUE for memory scoring."
-      (if (number? value)
-          value
-          (error "memory score must be numeric" value)))
-
-    (define (memory-number? value)
-      "Return #t when VALUE is a number."
-      (number? value))
     ;; Public memory scopes mirror the Consent Scheme architecture document.
     (define consent-memory-scopes
       '(instance session project))
@@ -66,12 +87,196 @@
       '(working episodic semantic procedural))
 
     ;; Mutable portable memory store for host-neutral tests and interpreter
-    ;; primitives.  Records remain canonical datums in the records field.
+    ;; primitives.  One private immutable state vector holds canonical history,
+    ;; event clocks, current live/key/order indexes, access maxima, and the
+    ;; store-lifetime detached descriptor interner.  Replacing that root in one
+    ;; record mutation keeps every projection atomic when validation rejects an
+    ;; update.
     (define-record-type <consent-memory-store>
-      (make-memory-store records next-id)
+      (make-memory-store state)
       consent-memory-store?
-      (records store-records set-store-records!)
-      (next-id store-next-id set-store-next-id!))
+      (state store-state set-store-state!))
+
+    (define (make-memory-store-state
+             records
+             next-id
+             next-ordinal
+             ordered-index
+             order-indexes
+             access-index
+             descriptor-index)
+      "Return one private immutable root for STORE state."
+      (vector records
+              next-id
+              next-ordinal
+              ordered-index
+              order-indexes
+              access-index
+              descriptor-index))
+
+    (define (store-records store)
+      "Return STORE's canonical record stream from its state root."
+      (vector-ref (store-state store) 0))
+
+    (define (store-next-id store)
+      "Return STORE's next-id cache from its state root."
+      (vector-ref (store-state store) 1))
+
+    (define (store-ordered-index store)
+      "Return STORE's ordered key index from its state root."
+      (vector-ref (store-state store) 3))
+
+    (define (store-next-ordinal store)
+      "Return STORE's private append-event ordinal."
+      (vector-ref (store-state store) 2))
+
+    (define (store-order-indexes store)
+      "Return STORE's current live per-scope order indexes."
+      (vector-ref (store-state store) 4))
+
+    (define (store-access-index store)
+      "Return STORE's latest access sequence index."
+      (vector-ref (store-state store) 5))
+
+    (define (store-descriptor-index store)
+      "Return STORE's lifetime detached descriptor interner."
+      (vector-ref (store-state store) 6))
+
+    ;; Sidecars are private, immutable append-time projections.  Native query
+    ;; code never traverses the record's key, id, accessed, kind, or tags
+    ;; fields, so bridge projection cannot change their equality classes.
+    ;; Slots are live-key, id-key, access-target-key-or-#f, kind-key,
+    ;; tag-key-vector, and event/security flags.  Text is rendered read-only by
+    ;; the native query kernel only when a textual query actually needs it.
+    (define memory-sidecar-access-flag 1)
+    (define memory-sidecar-tombstone-flag 2)
+    (define memory-sidecar-redaction-flag 4)
+
+    (define (make-memory-key-sidecar
+             record live-key id-key access-target-key kind-key tag-keys)
+      "Return one detached append-time query sidecar for RECORD."
+      (vector
+       live-key
+       id-key
+       access-target-key
+       kind-key
+       (list->vector tag-keys)
+       (+ (if (memory-record-access? record)
+              memory-sidecar-access-flag
+              0)
+          (if (memory-record-tombstone? record)
+              memory-sidecar-tombstone-flag
+              0)
+          (if (memory-record-redaction-sensitive? record)
+              memory-sidecar-redaction-flag
+              0))))
+
+    (define (memory-key-sidecar-live-key sidecar)
+      (vector-ref sidecar 0))
+
+    (define (memory-key-sidecar-id-key sidecar)
+      (vector-ref sidecar 1))
+
+    (define (memory-key-sidecar-access-target-key sidecar)
+      (vector-ref sidecar 2))
+
+    (define (memory-key-sidecar-kind-key sidecar)
+      (vector-ref sidecar 3))
+
+    (define (memory-key-sidecar-tag-keys sidecar)
+      (vector-ref sidecar 4))
+
+    (define (memory-key-sidecar-flags sidecar)
+      (vector-ref sidecar 5))
+
+    (define (prepare-memory-tag-keys prepare scope record)
+      "Return detached descriptors for RECORD's accepted tag list."
+      (let ((tags (memory-record-tags record)))
+        (if (not (finite-proper-list? tags))
+            (error "memory record tags must be a finite proper list" tags))
+        (map (lambda (tag) (prepare scope tag)) tags)))
+
+    (define (make-memory-key-sidecar/prepared
+             prepare scope record live-key id-key access-target-key)
+      "Build RECORD's complete sidecar with PREPARE."
+      (let ((kind (memory-record-kind record)))
+        (if (not (symbol? kind))
+            (error "memory record kind must be a symbol" kind))
+        (make-memory-key-sidecar
+         record
+         live-key
+         id-key
+         access-target-key
+         (prepare scope kind)
+         (prepare-memory-tag-keys prepare scope record))))
+
+    (define (memory-key-sidecar-with-keys
+             sidecar live-key id-key access-target-key)
+      "Return SIDECAR with only its canonical identity descriptors replaced."
+      (vector
+       live-key
+       id-key
+       access-target-key
+       (memory-key-sidecar-kind-key sidecar)
+       (memory-key-sidecar-tag-keys sidecar)
+       (memory-key-sidecar-flags sidecar)))
+
+    (define (replace-memory-store-state!
+             store
+             records
+             next-id
+             next-ordinal
+             ordered-index
+             order-indexes
+             access-index
+             descriptor-index)
+      "Atomically publish STORE records and their derived caches."
+      (set-store-state!
+       store
+       (make-memory-store-state
+        records
+        next-id
+        next-ordinal
+        ordered-index
+        order-indexes
+        access-index
+        descriptor-index)))
+
+    (define (memory-ordered-key scope key)
+      "Return one detached durable ordered representation for SCOPE and KEY."
+      (memory-prepare-index-key scope key))
+
+    (define (make-memory-ordered-index)
+      "Return an empty private common scope/key index."
+      (make-avl-tree memory-index-key<?))
+
+    (define (make-memory-order-index)
+      "Return an empty private sequence-ordered live index."
+      (make-avl-tree <))
+
+    (define (make-memory-order-indexes)
+      "Return empty live order indexes for the three public scopes."
+      (vector (make-memory-order-index)
+              (make-memory-order-index)
+              (make-memory-order-index)))
+
+    (define (memory-scope-position scope)
+      "Return SCOPE's fixed order-index position."
+      (cond
+       ((eq? scope 'instance) 0)
+       ((eq? scope 'session) 1)
+       ((eq? scope 'project) 2)
+       (else (error "unknown memory scope" scope))))
+
+    (define (memory-order-index-ref indexes scope)
+      "Return SCOPE's live order index from INDEXES."
+      (vector-ref indexes (memory-scope-position scope)))
+
+    (define (memory-order-indexes-set indexes scope index)
+      "Return INDEXES with SCOPE replaced by INDEX."
+      (let ((copy (vector-copy indexes)))
+        (vector-set! copy (memory-scope-position scope) index)
+        copy))
 
     (define (consent-make-memory-store)
       "Construct an empty memory store."
@@ -81,7 +286,15 @@
           ("A mutable memory store with no records and the next"
             "generated id set to zero.")))
         (effects allocation))
-      (make-memory-store '() 0))
+      (make-memory-store
+       (make-memory-store-state
+        '()
+        0
+        0
+        (make-memory-ordered-index)
+        (make-memory-order-indexes)
+        (make-memory-ordered-index)
+        (make-memory-ordered-index))))
 
     (define (member-equal? value list)
       "Report whether VALUE appears in LIST using equal?."
@@ -96,11 +309,9 @@
           scope
           (error "unknown memory scope" scope)))
 
-    (define (next-sequence! store)
-      "Increment STORE's sequence and return the new value."
-      (let ((next (+ (store-next-id store) 1)))
-        (set-store-next-id! store next)
-        next))
+    (define (next-sequence store)
+      "Return STORE's next sequence without publishing partial state."
+      (+ (store-next-id store) 1))
 
     (define (generated-id sequence)
       "Convert SEQUENCE into a generated memory id."
@@ -109,30 +320,36 @@
 
     (define (field-value datum name)
       "Return field NAME from RECORD or payload DATUM, or #f."
-      (let loop ((fields (if (and (pair? datum) (eq? (car datum) 'memory))
-                             (cdr datum)
-                             datum)))
-        (cond
-         ((null? fields) #f)
-         ((and (pair? (car fields))
-               (eq? (caar fields) name))
-          (cadr (car fields)))
-         (else (loop (cdr fields))))))
+      (let ((fields (if (and (pair? datum) (eq? (car datum) 'memory))
+                        (cdr datum)
+                        datum)))
+        (if (not (finite-proper-list? fields))
+            (error "memory fields must be a finite proper list" datum))
+        (let loop ((rest fields))
+          (cond
+           ((null? rest) #f)
+           ((and (pair? (car rest))
+                 (eq? (caar rest) name))
+            (cadr (car rest)))
+           (else (loop (cdr rest)))))))
 
     (define (field-value/default datum name default)
       "Return field NAME from DATUM, or DEFAULT when NAME is absent."
-      (let loop ((fields (if (and (pair? datum)
-                                  (symbol? (car datum))
-                                  (not (and (pair? (car datum))
-                                            (symbol? (caar datum)))))
-                             (cdr datum)
-                             datum)))
-        (cond
-         ((null? fields) default)
-         ((and (pair? (car fields))
-               (eq? (caar fields) name))
-          (cadr (car fields)))
-         (else (loop (cdr fields))))))
+      (let ((fields (if (and (pair? datum)
+                             (symbol? (car datum))
+                             (not (and (pair? (car datum))
+                                       (symbol? (caar datum)))))
+                        (cdr datum)
+                        datum)))
+        (if (not (finite-proper-list? fields))
+            (error "memory fields must be a finite proper list" datum))
+        (let loop ((rest fields))
+          (cond
+           ((null? rest) default)
+           ((and (pair? (car rest))
+                 (eq? (caar rest) name))
+            (cadr (car rest)))
+           (else (loop (cdr rest)))))))
 
     (define (memory-record-field-value record name . maybe-default)
       "Return field NAME from RECORD, or DEFAULT when absent."
@@ -200,18 +417,13 @@
       "Return RECORD's key field."
       (field-value record 'key))
 
-    (define (memory-record-live-key record)
-      "Return RECORD's scope-qualified key for live projections."
-      (list (field-value record 'scope) (memory-record-key record)))
-
-    (define (memory-record-tags record)
-      "Return RECORD's tags field."
-      (let ((tags (field-value record 'tags)))
-        (if tags tags '())))
-
     (define (memory-record-kind record)
       "Return RECORD's kind field."
       (field-value record 'kind))
+
+    (define (memory-record-tags record)
+      "Return RECORD's tag list, or the empty list when absent."
+      (field-value/default record 'tags '()))
 
     (define (memory-record-tombstone? record)
       "Return #t when RECORD is a tombstone event."
@@ -221,10 +433,156 @@
       "Return #t when RECORD is a memory-access event."
       (eq? (memory-record-kind record) 'memory-access))
 
-    (define (selectable-memory-record? record)
-      "Return #t when RECORD can enter retrieval candidate ranking."
-      (and (not (memory-record-tombstone? record))
-           (not (memory-record-access? record))))
+    (define (finite-proper-list? value)
+      "Return #t when VALUE is a finite proper list."
+      (let loop ((slow value) (fast value))
+        (cond
+         ((null? fast) #t)
+         ((not (pair? fast)) #f)
+         (else
+          (let ((fast-one (cdr fast)))
+            (cond
+             ((null? fast-one) #t)
+             ((not (pair? fast-one)) #f)
+             (else
+              (let ((slow-one (cdr slow))
+                    (fast-two (cdr fast-one)))
+                (and (not (eq? slow-one fast-two))
+                     (loop slow-one fast-two))))))))))
+
+    (define (memory-record-contains-tagged? datum tag . additional-tags)
+      "Return #t when DATUM contains a record headed by a requested tag."
+      ;; Configured products use identity hashing.  Compatibility hosts may
+      ;; inspect only a fixed small graph, so the fallback cannot grow into an
+      ;; unbounded quadratic identity alist.
+      (let ((fast? (consent-identity-map-fast-backend?))
+            (seen (consent-make-identity-map))
+            (seen-count 0)
+            (absent (vector 'absent)))
+        (define (matching-record? value)
+          (and
+           (pair? value)
+           (let ((candidate (car value)))
+             (or
+              (eq? candidate tag)
+              (let loop ((rest additional-tags))
+                (and
+                 (pair? rest)
+                 (or (eq? candidate (car rest))
+                     (loop (cdr rest)))))))))
+        (define (seen? value)
+          (let ((known (consent-identity-map-ref seen value absent)))
+            (if (eq? known absent)
+                (begin
+                  (set! seen-count (+ seen-count 1))
+                  (if (and (not fast?) (> seen-count 64))
+                      (error
+                       "large memory record requires fast identity map"
+                       datum))
+                  (consent-identity-map-set! seen value #t)
+                  #f)
+                #t)))
+        (let walk ((pending (list datum)))
+          (if (null? pending)
+              #f
+              (let ((value (car pending))
+                    (rest (cdr pending)))
+                (cond
+                 ((matching-record? value) #t)
+                 ((pair? value)
+                  (if (seen? value)
+                      (walk rest)
+                      (walk (cons (car value) (cons (cdr value) rest)))))
+                 ((vector? value)
+                  (if (seen? value)
+                      (walk rest)
+                      (let push ((index (- (vector-length value) 1))
+                                 (next rest))
+                        (if (< index 0)
+                            (walk next)
+                            (push
+                             (- index 1)
+                             (cons (vector-ref value index) next))))))
+                 (else (walk rest))))))))
+
+    (define (memory-record-redaction-sensitive? record)
+      "Return #t when accepted RECORD carries restricted content."
+      (or
+       (let ((local-only
+              (field-value/default record 'local-only #f)))
+         (and local-only #t))
+       (memory-record-contains-tagged?
+        record 'local-only 'redaction)))
+
+    ;; A live entry is shared verbatim by the key and order indexes.  Slots are
+    ;; record, canonical live key, lean sidecar, and private append ordinal.
+    ;; Access maxima live separately by canonical id so duplicate ids share one
+    ;; value without rewriting every live entry on each access event.
+    (define (make-memory-live-entry record live-key sidecar ordinal)
+      (vector record live-key sidecar ordinal))
+
+    (define (memory-live-entry-record entry) (vector-ref entry 0))
+    (define (memory-live-entry-key entry) (vector-ref entry 1))
+    (define (memory-live-entry-sidecar entry) (vector-ref entry 2))
+    (define (memory-live-entry-ordinal entry) (vector-ref entry 3))
+
+    (define (memory-live-entry-id-key entry)
+      (memory-key-sidecar-id-key (memory-live-entry-sidecar entry)))
+
+    (define (memory-live-entry-scope entry)
+      (let ((scope
+             (vector-ref (memory-live-entry-key entry) 0)))
+        (cond
+         ((string=? scope "instance") 'instance)
+         ((string=? scope "session") 'session)
+         ((string=? scope "project") 'project)
+         (else (error "invalid prepared memory scope" scope)))))
+
+    (define (memory-descriptor-index-intern index key)
+      "Return canonical KEY and INDEX containing it as two values."
+      (avl-tree-ref/key
+       index
+       key
+       (lambda () (values key (avl-tree-set index key key)))
+       (lambda (stored-key value) (values stored-key index))))
+
+    (define (memory-descriptor-index-ref index key)
+      "Return INDEX's canonical descriptor equal to KEY, or #f."
+      (avl-tree-ref/key
+       index key (lambda () #f) (lambda (stored-key value) stored-key)))
+
+    (define (memory-order-index-remove indexes entry)
+      "Return INDEXES without live ENTRY."
+      (let* ((scope (memory-live-entry-scope entry))
+             (index (memory-order-index-ref indexes scope)))
+        (memory-order-indexes-set
+         indexes
+         scope
+         (avl-tree-delete index (memory-live-entry-ordinal entry)))))
+
+    (define (memory-order-index-set indexes entry)
+      "Return INDEXES containing live ENTRY at its private ordinal."
+      (let* ((scope (memory-live-entry-scope entry))
+             (index (memory-order-index-ref indexes scope)))
+        (memory-order-indexes-set
+         indexes
+         scope
+         (avl-tree-set index (memory-live-entry-ordinal entry) entry))))
+
+    (define (memory-prepared-state-from-records records)
+      "Build every derived cache off-root from canonical RECORDS."
+      (if (not (finite-proper-list? records))
+          (error "memory records must be a finite proper list" records))
+      (let ((scratch (consent-make-memory-store)))
+        (call-with-memory-index-key-session
+         (lambda (prepare)
+           (let loop ((rest (reverse records)))
+             (if (null? rest)
+                 (store-state scratch)
+                 (begin
+                   (append-existing-memory-record/prepared!
+                    scratch (car rest) prepare)
+                   (loop (cdr rest)))))))))
 
     (define (memory-record-sequence record)
       "Return RECORD's highest timestamp sequence, or zero when absent."
@@ -234,26 +592,22 @@
        (let ((updated-at (field-value record 'updated-at)))
          (if updated-at (integer-value updated-at) 0))))
 
-    (define (memory-records-next-id records)
-      "Return the next-id floor implied by RECORDS."
-      (let loop ((rest records) (highest 0))
-        (if (null? rest)
-            highest
-            (loop (cdr rest)
-                  (max highest (memory-record-sequence (car rest)))))))
-
     (define (memory-store-records store)
-      "Return STORE's canonical records, newest first."
+      "Return STORE's immutable canonical records, newest first."
       #((parameters
          (store (type consent-memory-store)
           (description "Memory store to inspect.")))
         (returns (type list)
-         (description "Canonical memory records in newest-first order."))
+         (description
+          ("Canonical memory records in newest-first order.  Treat the"
+            "returned records as immutable; field mutation does not"
+            "retarget indexed lookup.  Use"
+            "memory-store-replace-records! to install an edited stream.")))
         (effects state-read))
       (store-records store))
 
     (define (memory-store-replace-records! store records)
-      "Replace STORE's records and reset its generated id sequence."
+      "Replace STORE's records and rebuild its derived caches."
       #((parameters
          (store (type consent-memory-store)
           (description "Memory store to mutate."))
@@ -262,61 +616,34 @@
         (returns (type list)
          (description "The installed record list."))
         (effects state-write error))
-      (set-store-records! store records)
-      (set-store-next-id! store (memory-records-next-id records))
-      records)
+      (let ((prepared-state
+             (memory-prepared-state-from-records records)))
+        (replace-memory-store-state!
+         store
+         records
+         (vector-ref prepared-state 1)
+         (vector-ref prepared-state 2)
+         (vector-ref prepared-state 3)
+         (vector-ref prepared-state 4)
+         (vector-ref prepared-state 5)
+         (vector-ref prepared-state 6))
+        records))
 
-    (define (datum->string datum)
-      "Render DATUM to a string for simple portable substring search."
-      (let ((port (open-output-string)))
-        (write datum port)
-        (get-output-string port)))
+    (define (missing-memory-ordered-index-record)
+      "Return the absent-record marker for private index lookup."
+      #f)
 
-    (define (string-contains? haystack needle)
-      "Return #t when NEEDLE occurs in HAYSTACK."
-      (let ((haystack-length (string-length haystack))
-            (needle-length (string-length needle)))
-        (let loop ((index 0))
-          (cond
-           ((> (+ index needle-length) haystack-length) #f)
-           ((string=? (substring haystack index (+ index needle-length))
-                      needle)
-            #t)
-           (else (loop (+ index 1)))))))
+    (define (memory-store-entry/prepared store ordered-key)
+      "Return STORE's private index entry for ORDERED-KEY, or #f."
+      (avl-tree-ref
+       (store-ordered-index store)
+       ordered-key
+       missing-memory-ordered-index-record))
 
-    (define (scope-records store scope)
-      "Return all canonical records from STORE belonging to SCOPE, newest firs\
-t."
-      (let ((normalized-scope (normalize-scope scope)))
-        (filter
-         (lambda (record)
-           (eq? (field-value record 'scope) normalized-scope))
-         (store-records store))))
-
-    (define (live-records records)
-      "Return the newest live projection from append-only RECORDS."
-      (let loop ((rest records) (seen '()) (selected '()))
-        (cond
-         ((null? rest) (reverse selected))
-         ((not (selectable-memory-record? (car rest)))
-          (let ((key (memory-record-live-key (car rest))))
-            (if (memory-record-tombstone? (car rest))
-                (loop (cdr rest) (cons key seen) selected)
-                (loop (cdr rest) seen selected))))
-         ((member-equal? (memory-record-live-key (car rest)) seen)
-          (loop (cdr rest) seen selected))
-         (else
-          (loop (cdr rest)
-                (cons (memory-record-live-key (car rest)) seen)
-                (cons (car rest) selected))))))
-
-    (define (scope-live-records store scope)
-      "Return live records from STORE belonging to SCOPE, newest first."
-      (live-records (scope-records store scope)))
-
-    (define (all-live-records store)
-      "Return all live records from STORE, newest first."
-      (live-records (store-records store)))
+    (define (memory-store-ref/prepared store ordered-key)
+      "Return STORE record for prepared ORDERED-KEY, or #f."
+      (let ((entry (memory-store-entry/prepared store ordered-key)))
+        (if entry (vector-ref entry 0) #f)))
 
     (define (memory-store-ref store scope key)
       "Return a memory record from STORE by SCOPE and KEY, or #f."
@@ -330,25 +657,8 @@ t."
          (description "The matching memory record datum, or #f."))
         (effects state-read error))
       (let ((normalized-scope (normalize-scope scope)))
-        (let loop ((records (store-records store)))
-          (cond
-           ((null? records) #f)
-           ((not (eq? (field-value (car records) 'scope) normalized-scope))
-            (loop (cdr records)))
-           ((not (equal? (memory-record-key (car records)) key))
-            (loop (cdr records)))
-           ((memory-record-tombstone? (car records)) #f)
-           ((memory-record-access? (car records)) (loop (cdr records)))
-           (else (car records))))))
-
-    (define (without-record store scope key)
-      "Return STORE records with any record matching KEY in SCOPE removed."
-      (let ((normalized-scope (normalize-scope scope)))
-        (remove
-         (lambda (record)
-           (and (eq? (field-value record 'scope) normalized-scope)
-                (equal? (memory-record-key record) key)))
-         (store-records store))))
+        (memory-store-ref/prepared
+         store (memory-ordered-key normalized-scope key))))
 
     (define (optional-record-fields datum names)
       "Return optional fields named by NAMES from DATUM."
@@ -363,7 +673,9 @@ t."
 
     (define (make-memory-record store scope key kind datum existing)
       "Build a canonical Scheme-readable memory record."
-      (let* ((sequence (next-sequence! store))
+      (if (not (finite-proper-list? datum))
+          (error "memory payload must be a finite proper list" datum))
+      (let* ((sequence (next-sequence store))
              (id (if existing (field-value existing 'id) key))
              (created-at (if existing
                              (field-value existing 'created-at)
@@ -401,6 +713,147 @@ t."
           datum
           '(cites supersedes receipt accessed local-only disclosure)))))
 
+    (define (append-memory-record!
+             store record ordered-key sidecar)
+      "Append RECORD and atomically update current-live derived indexes."
+      (let ((descriptor-index (store-descriptor-index store)))
+        (define (intern key)
+          (call-with-values
+              (lambda ()
+                (memory-descriptor-index-intern descriptor-index key))
+            (lambda (canonical next-index)
+              (set! descriptor-index next-index)
+              canonical)))
+        (define (intern-tag-vector tags)
+          (let* ((length (vector-length tags))
+                 (copy (make-vector length #f)))
+            (let loop ((index 0))
+              (if (= index length)
+                  copy
+                  (begin
+                    (vector-set! copy index (intern (vector-ref tags index)))
+                    (loop (+ index 1)))))))
+        (define (intern-live-sidecar value)
+          (let* ((live-key (intern (memory-key-sidecar-live-key value)))
+                 (raw-id (memory-key-sidecar-id-key value))
+                 (id-key
+                  (if (memory-index-key=? live-key raw-id)
+                      live-key
+                      (intern raw-id)))
+                 (kind-key (intern (memory-key-sidecar-kind-key value)))
+                 (tag-keys
+                  (intern-tag-vector
+                   (memory-key-sidecar-tag-keys value))))
+            (vector live-key
+                    id-key
+                    #f
+                    kind-key
+                    tag-keys
+                    (memory-key-sidecar-flags value))))
+        (let* ((ordinal (+ (store-next-ordinal store) 1))
+               (next-id
+                (max (store-next-id store)
+                     (memory-record-sequence record)))
+               (ordered-index (store-ordered-index store))
+               (order-indexes (store-order-indexes store))
+               (access-index (store-access-index store)))
+          (cond
+           ((memory-record-access? record)
+            (let* ((target-key
+                    (intern
+                     (memory-key-sidecar-access-target-key sidecar)))
+                   (sequence (memory-record-sequence record))
+                   (previous-access
+                    (avl-tree-ref
+                     access-index target-key (lambda () 0)))
+                   (latest-access (max previous-access sequence))
+                   (next-access-index
+                    (avl-tree-set access-index target-key latest-access)))
+              (replace-memory-store-state!
+               store
+               (cons record (store-records store))
+               next-id
+               ordinal
+               ordered-index
+               order-indexes
+               next-access-index
+               descriptor-index)))
+           (else
+            (let* ((live-key
+                    (intern
+                     (if ordered-key
+                         ordered-key
+                         (memory-key-sidecar-live-key sidecar))))
+                   (previous
+                    (avl-tree-ref ordered-index live-key (lambda () #f)))
+                   (without-ordered
+                    (if previous
+                        (avl-tree-delete ordered-index live-key)
+                        ordered-index))
+                   (without-orders
+                    (if previous
+                        (memory-order-index-remove order-indexes previous)
+                        order-indexes)))
+              (if (memory-record-tombstone? record)
+                  (replace-memory-store-state!
+                   store
+                   (cons record (store-records store))
+                   next-id
+                   ordinal
+                   without-ordered
+                   without-orders
+                   access-index
+                   descriptor-index)
+                  (let* ((canonical-sidecar
+                          (intern-live-sidecar
+                           (memory-key-sidecar-with-keys
+                            sidecar
+                            live-key
+                            (memory-key-sidecar-id-key sidecar)
+                            #f)))
+                         (entry
+                          (make-memory-live-entry
+                           record
+                           live-key
+                           canonical-sidecar
+                           ordinal)))
+                    (replace-memory-store-state!
+                     store
+                     (cons record (store-records store))
+                     next-id
+                     ordinal
+                     (avl-tree-set without-ordered live-key entry)
+                     (memory-order-index-set without-orders entry)
+                     access-index
+                     descriptor-index))))))
+        record)))
+
+    (define (append-existing-memory-record/prepared! store record prepare)
+      "Replay RECORD into STORE using session-local PREPARE."
+      (let* ((scope (normalize-scope (field-value record 'scope)))
+             (raw-key (memory-record-key record))
+             (raw-id (memory-record-id record))
+             (live-key (prepare scope raw-key))
+             (id-key
+              (if (eq? raw-key raw-id)
+                  live-key
+                  (prepare scope raw-id)))
+             (access-key
+              (and (memory-record-access? record)
+                   (prepare scope (field-value record 'accessed))))
+             (sidecar
+              (make-memory-key-sidecar/prepared
+               prepare
+               scope record live-key id-key access-key)))
+        (append-memory-record!
+         store record (and (not access-key) live-key) sidecar)))
+
+    (define (append-existing-memory-record! store record)
+      "Replay canonical RECORD into STORE's private derived indexes."
+      (call-with-memory-index-key-session
+       (lambda (prepare)
+         (append-existing-memory-record/prepared! store record prepare))))
+
     (define (memory-store-put! store scope key datum)
       "Store DATUM under KEY in SCOPE and return its memory record."
       #((parameters
@@ -415,18 +868,33 @@ t."
         (returns (type list)
          (description "The stored memory record datum."))
         (effects state-write error))
-      (let* ((normalized-scope (normalize-scope scope))
-             (existing (memory-store-ref store normalized-scope key))
-             (record (make-memory-record store
-                                         normalized-scope
-                                         key
-                                         'datum
-                                         datum
-                                         existing)))
-        (set-store-records!
-         store
-         (cons record (store-records store)))
-        record))
+      (let ((normalized-scope (normalize-scope scope)))
+        (call-with-memory-index-key-session
+         (lambda (prepare)
+           (let* ((ordered-key (prepare normalized-scope key))
+                  (existing-entry
+                   (memory-store-entry/prepared store ordered-key))
+                  (existing
+                   (and existing-entry (vector-ref existing-entry 0)))
+                  (id-key
+                   (if existing-entry
+                       (memory-key-sidecar-id-key
+                        (vector-ref existing-entry 2))
+                       ordered-key))
+                  (record
+                   (make-memory-record
+                    store normalized-scope key 'datum datum existing)))
+             (append-memory-record!
+              store
+              record
+              ordered-key
+              (make-memory-key-sidecar/prepared
+               prepare
+               normalized-scope
+               record
+               ordered-key
+               id-key
+               #f)))))))
 
     (define (make-memory-tombstone store scope key record)
       "Build a tombstone event for RECORD."
@@ -455,14 +923,28 @@ t."
           ("The deleted memory record datum, or #f when no record"
             "matched.")))
         (effects state-write error))
-      (let* ((normalized-scope (normalize-scope scope))
-             (record (memory-store-ref store normalized-scope key)))
-        (if record
-            (set-store-records!
-             store
-             (cons (make-memory-tombstone store normalized-scope key record)
-                   (store-records store))))
-        record))
+      (let ((normalized-scope (normalize-scope scope)))
+        (call-with-memory-index-key-session
+         (lambda (prepare)
+           (let* ((ordered-key (prepare normalized-scope key))
+                  (record
+                   (memory-store-ref/prepared store ordered-key)))
+             (if record
+                 (let ((tombstone
+                        (make-memory-tombstone
+                         store normalized-scope key record)))
+                   (append-memory-record!
+                    store
+                    tombstone
+                    ordered-key
+                    (make-memory-key-sidecar/prepared
+                     prepare
+                     normalized-scope
+                     tombstone
+                     ordered-key
+                     ordered-key
+                     #f))))
+             record)))))
 
     (define (memory-store-add! store scope kind datum)
       "Add DATUM as generated KIND memory in SCOPE and return the record."
@@ -482,27 +964,277 @@ t."
       (let* ((normalized-scope (normalize-scope scope))
              (sequence (+ (store-next-id store) 1))
              (id (generated-id sequence))
-             (record (make-memory-record store
-                                         normalized-scope
-                                         id
-                                         kind
-                                         datum
-                                         #f)))
-        (set-store-records! store (cons record (store-records store)))
-        record))
+             (record
+              (make-memory-record
+               store normalized-scope id kind datum #f)))
+        (call-with-memory-index-key-session
+         (lambda (prepare)
+           (let ((ordered-key (prepare normalized-scope id)))
+             (append-memory-record!
+              store
+              record
+              ordered-key
+              (make-memory-key-sidecar/prepared
+               prepare
+               normalized-scope
+               record
+               ordered-key
+               ordered-key
+               #f)))))))
 
-    (define (record-matches? record query)
-      "Report whether RECORD matches QUERY."
+    (define (memory-order-index-newest index)
+      "Return INDEX values in newest-first ordinal order."
+      (avl-tree-fold
+       (lambda (ordinal entry newest) (cons entry newest))
+       '()
+       index))
+
+    (define (memory-order-index-newest/limit index limit)
+      "Return at most LIMIT newest values by the cheaper bounded traversal."
+      (letrec
+          ((predecessors
+            (lambda (key remaining reversed)
+              (if (<= remaining 0)
+                  (reverse reversed)
+                  (call-with-values
+                      (lambda ()
+                        (avl-tree-key-predecessor
+                         index key (lambda () (values #f #f))))
+                    (lambda (previous-key entry)
+                      (if previous-key
+                          (predecessors
+                           previous-key
+                           (- remaining 1)
+                           (cons entry reversed))
+                          (reverse reversed))))))))
+        (define (prefix values remaining reversed)
+          (if (or (<= remaining 0) (null? values))
+              (reverse reversed)
+              (prefix
+               (cdr values) (- remaining 1) (cons (car values) reversed))))
+        (define (ceiling-log2-plus-one size)
+          (let loop ((power 1) (height 0))
+            (if (>= power (+ size 1))
+                height
+                (loop (* power 2) (+ height 1)))))
+        (let* ((size (avl-tree-size index))
+               (height (ceiling-log2-plus-one size)))
+          (cond
+           ((<= limit 0) '())
+           ((< (* limit height) size)
+            (call-with-values
+                (lambda ()
+                  (avl-tree-max index (lambda () (values #f #f))))
+              (lambda (key entry)
+                (if key
+                    (cons entry (predecessors key (- limit 1) '()))
+                    '()))))
+           (else
+            (prefix (memory-order-index-newest index) limit '()))))))
+
+    (define (memory-scope-live-entries store scope . maybe-limit)
+      "Return SCOPE's current live entries in newest-first order."
+      (let ((index
+             (memory-order-index-ref
+              (store-order-indexes store) (normalize-scope scope))))
+        (if (null? maybe-limit)
+            (memory-order-index-newest index)
+            (memory-order-index-newest/limit
+             index (integer-value (car maybe-limit))))))
+
+    (define (merge-memory-live-entries left right)
+      "Merge newest-first live entry lists LEFT and RIGHT."
+      (letrec
+          ((prepend-reversed
+            (lambda (reversed tail)
+              (let loop ((rest reversed) (result tail))
+                (if (null? rest)
+                    result
+                    (loop (cdr rest) (cons (car rest) result)))))))
+        (let loop ((left-rest left) (right-rest right) (merged '()))
+          (cond
+           ((null? left-rest)
+            (prepend-reversed merged right-rest))
+           ((null? right-rest)
+            (prepend-reversed merged left-rest))
+           ((> (memory-live-entry-ordinal (car left-rest))
+               (memory-live-entry-ordinal (car right-rest)))
+            (loop (cdr left-rest)
+                  right-rest
+                  (cons (car left-rest) merged)))
+           (else
+            (loop left-rest
+                  (cdr right-rest)
+                  (cons (car right-rest) merged)))))))
+
+    (define (memory-all-live-entries store)
+      "Return every current live entry in newest-first stream order."
+      (merge-memory-live-entries
+       (memory-scope-live-entries store 'instance)
+       (merge-memory-live-entries
+        (memory-scope-live-entries store 'session)
+        (memory-scope-live-entries store 'project))))
+
+    (define (memory-live-snapshot store entries . maybe-access?)
+      "Return aligned records and query projections for live ENTRIES."
+      (let* ((include-access?
+              (and (not (null? maybe-access?)) (car maybe-access?)))
+             (refresh-security?
+              (and (pair? maybe-access?)
+                   (pair? (cdr maybe-access?))
+                   (cadr maybe-access?)))
+             (fast?
+              (and include-access?
+                   (consent-identity-map-fast-backend?)))
+             (known-access
+              (and fast? (consent-make-identity-map)))
+             (access-empty?
+              (or (not include-access?)
+                  (avl-tree-empty? (store-access-index store))))
+             (absent (vector 'absent)))
+        (define (selection-sidecar entry)
+          (let* ((sidecar (memory-live-entry-sidecar entry))
+                 (flags
+                  (if (memory-record-redaction-sensitive?
+                       (memory-live-entry-record entry))
+                      memory-sidecar-redaction-flag
+                      0)))
+            (if (= flags (memory-key-sidecar-flags sidecar))
+                sidecar
+                (vector
+                 (memory-key-sidecar-live-key sidecar)
+                 (memory-key-sidecar-id-key sidecar)
+                 #f
+                 (memory-key-sidecar-kind-key sidecar)
+                 (memory-key-sidecar-tag-keys sidecar)
+                 flags))))
+        (define (access-sequence entry)
+          (if access-empty?
+              0
+              (let ((id-key (memory-live-entry-id-key entry)))
+                (if fast?
+                    (let ((known
+                           (consent-identity-map-ref
+                            known-access id-key absent)))
+                      (if (eq? known absent)
+                          (let ((sequence
+                                 (avl-tree-ref
+                                  (store-access-index store)
+                                  id-key
+                                  (lambda () 0))))
+                            (consent-identity-map-set!
+                             known-access id-key sequence)
+                            sequence)
+                          known))
+                    (if (memory-index-key-bounded-comparison? id-key)
+                        (avl-tree-ref
+                         (store-access-index store)
+                         id-key
+                         (lambda () 0))
+                        (error
+                         (string-append
+                          "unbounded access projection requires fast "
+                          "identity map")
+                         id-key))))))
+        (let loop ((rest entries) (records '()) (projections '()))
+          (if (null? rest)
+              (vector (reverse records) (reverse projections))
+              (let ((entry (car rest)))
+                (loop
+                 (cdr rest)
+                 (cons (memory-live-entry-record entry) records)
+                 (cons
+                  (vector
+                   (if refresh-security?
+                       (selection-sidecar entry)
+                       (memory-live-entry-sidecar entry))
+                   (access-sequence entry))
+                  projections)))))))
+
+    (define (memory-store-known-key store scope key)
+      "Return STORE's canonical descriptor for SCOPE/KEY, or #f."
+      (memory-descriptor-index-ref
+       (store-descriptor-index store)
+       (memory-ordered-key scope key)))
+
+    (define (memory-record-match-flags-in-scope
+             records query)
+      "Return QUERY equality flags aligned with live RECORDS."
+      (map (lambda (record) (equal? query record)) records))
+
+    (define (memory-find-projection store records scope query)
+      "Prepare QUERY without exposing record identity fields to native code."
       (cond
        ((string? query)
-        (string-contains? (datum->string record) query))
+        (vector (string-copy query) #f #f))
        ((symbol? query)
-        (or (eq? query (field-value record 'kind))
-            (equal? query (field-value record 'key))
-            (member-equal? query (memory-record-tags record))
-            (string-contains? (datum->string record)
-                              (symbol->string query))))
-       (else (equal? query record))))
+        (vector
+         (string-copy (symbol->string query))
+         (memory-store-known-key store scope query)
+         #f))
+       (else
+        (vector
+         #f
+         #f
+         (memory-record-match-flags-in-scope records query)))))
+
+    (define (memory-query-terms query)
+      "Return QUERY's relevance terms with legacy list expansion."
+      (if (list? query) query (list query)))
+
+    (define (memory-query-term-projection
+             store prepare term bounded-only?)
+      "Return detached text and per-scope identity projections for TERM."
+      (let ((try-prepare
+             (lambda (scope)
+               (let ((prepared
+                      (guard (condition (else #f))
+                        (prepare scope term))))
+                 (if (not prepared)
+                     #f
+                     (begin
+                       (if (and bounded-only?
+                                (not
+                                 (memory-index-key-bounded-comparison?
+                                  prepared)))
+                           (error
+                            (string-append
+                             "unbounded memory query term requires fast "
+                             "identity map")
+                            term))
+                       (memory-descriptor-index-ref
+                        (store-descriptor-index store) prepared)))))))
+        (vector
+         (cond
+          ((string? term) (string-copy term))
+          ((symbol? term) (string-copy (symbol->string term)))
+          (else #f))
+         (list->vector
+          (map try-prepare consent-memory-scopes)))))
+
+    (define (memory-select-query-projection store query)
+      "Return QUERY plus source-prepared relevance term projections."
+      (let* ((fast? (consent-identity-map-fast-backend?))
+             (known (and fast? (consent-make-identity-map)))
+             (absent (vector 'absent)))
+        (call-with-memory-index-key-session
+         (lambda (prepare)
+           (define (projection term)
+             (if fast?
+                 (let ((cached
+                        (consent-identity-map-ref known term absent)))
+                   (if (eq? cached absent)
+                       (let ((value
+                              (memory-query-term-projection
+                               store prepare term #f)))
+                         (consent-identity-map-set! known term value)
+                         value)
+                       cached))
+                 (memory-query-term-projection
+                  store prepare term #t)))
+           (vector
+            query
+            (list->vector (map projection (memory-query-terms query))))))))
 
     (define (memory-store-find store scope query)
       "Return SCOPE records matching QUERY."
@@ -515,10 +1247,18 @@ t."
         (returns (type (list-of list))
          (description "List of matching memory record datums in SCOPE."))
         (effects state-read error))
-      (filter
-       (lambda (record)
-         (record-matches? record query))
-       (scope-live-records store scope)))
+      (let ((normalized-scope (normalize-scope scope)))
+        (let* ((snapshot
+                (memory-live-snapshot
+                 store
+                 (memory-scope-live-entries store normalized-scope)))
+               (records (vector-ref snapshot 0)))
+          (memory-query-find
+           records
+           (vector-ref snapshot 1)
+           normalized-scope
+           (memory-find-projection
+            store records normalized-scope query)))))
 
     (define (memory-store-by-tag store scope tag)
       "Return SCOPE records tagged with TAG."
@@ -531,10 +1271,20 @@ t."
         (returns (type (list-of list))
          (description "List of memory record datums whose tags include TAG."))
         (effects state-read error))
-      (filter
-       (lambda (record)
-         (member-equal? tag (memory-record-tags record)))
-       (scope-live-records store scope)))
+      (let* ((normalized-scope (normalize-scope scope))
+             (tag-key
+              (memory-store-known-key store normalized-scope tag)))
+        (if (not tag-key)
+            '()
+            (let ((snapshot
+                   (memory-live-snapshot
+                    store
+                    (memory-scope-live-entries store normalized-scope))))
+              (memory-query-by-tag
+               (vector-ref snapshot 0)
+               (vector-ref snapshot 1)
+               normalized-scope
+               tag-key)))))
 
     (define (memory-store-recent store scope count)
       "Return COUNT newest memory records in SCOPE."
@@ -550,11 +1300,18 @@ t."
         (returns (type (list-of list))
          (description "At most COUNT newest memory record datums in SCOPE."))
         (effects state-read error))
-      (let* ((records (scope-live-records store scope))
-             (limit (integer-value count)))
-        (if (<= limit 0)
-            '()
-            (take records (min limit (length records))))))
+      (let* ((normalized-scope (normalize-scope scope))
+             (limit (integer-value count))
+             (snapshot
+              (memory-live-snapshot
+               store
+               (memory-scope-live-entries
+                store normalized-scope (max 0 limit)))))
+        (memory-query-recent
+         (vector-ref snapshot 0)
+         (vector-ref snapshot 1)
+         normalized-scope
+         limit)))
 
     (define (memory-store-access! store memory-id scope context)
       "Append a logical-clock access event for MEMORY-ID."
@@ -584,8 +1341,22 @@ t."
                      (list 'confidence 'high)
                      (list 'accessed memory-id))
                #f)))
-        (set-store-records! store (cons record (store-records store)))
-        record))
+        (call-with-memory-index-key-session
+         (lambda (prepare)
+           (let ((live-key
+                  (prepare normalized-scope (memory-record-key record)))
+                 (access-key (prepare normalized-scope memory-id)))
+             (append-memory-record!
+              store
+              record
+              #f
+              (make-memory-key-sidecar/prepared
+               prepare
+               normalized-scope
+               record
+               live-key
+               live-key
+               access-key)))))))
 
     (define (memory-store-reflect! store scope kind datum cites receipt
       loop-id)
@@ -607,6 +1378,8 @@ t."
         (returns (type list)
          (description "The appended reflection memory record."))
         (effects state-write error))
+      (if (not (finite-proper-list? datum))
+          (error "memory payload must be a finite proper list" datum))
       (let* ((normalized-scope (normalize-scope scope))
              (sequence (+ (store-next-id store) 1))
              (record
@@ -622,219 +1395,21 @@ t."
                       (list 'receipt receipt))
                 datum)
                #f)))
-        (set-store-records! store (cons record (store-records store)))
-        record))
-
-    (define (tagged-record? datum tag)
-      "Return #t when DATUM is a tagged list with TAG."
-      (and (pair? datum) (eq? (car datum) tag)))
-
-    (define (contains-tagged? datum tag)
-      "Return #t when DATUM recursively contains a tagged TAG record."
-      (cond
-       ((tagged-record? datum tag) #t)
-       ((pair? datum)
-        (or (contains-tagged? (car datum) tag)
-            (contains-tagged? (cdr datum) tag)))
-       ((vector? datum)
-        (let loop ((index 0))
-          (cond
-           ((= index (vector-length datum)) #f)
-           ((contains-tagged? (vector-ref datum index) tag) #t)
-           (else (loop (+ index 1))))))
-       (else #f)))
-
-    (define (truthy-field? datum name)
-      "Return #t when DATUM field NAME is present and not #f."
-      (let ((value (field-value/default datum name #f)))
-        (and value #t)))
-
-    (define (redaction-sensitive? record)
-      "Return #t when RECORD carries redacted or local-only content."
-      (or (truthy-field? record 'local-only)
-          (contains-tagged? record 'local-only)
-          (contains-tagged? record 'redaction)))
-
-    (define (lower-trust? trust)
-      "Return #t when TRUST names a lower-trust prompt boundary."
-      (or (eq? trust 'remote)
-          (eq? trust 'public)
-          (eq? trust 'lower-trust)))
-
-    (define (weight-ref weights name default)
-      "Return NAME's weight from WEIGHTS, or DEFAULT."
-      (let ((entry (assq name weights)))
-        (if (and entry (pair? (cdr entry)))
-            (numeric-value (cadr entry))
-            default)))
-
-    (define (policy-field policy name default)
-      "Return POLICY field NAME, or DEFAULT."
-      (field-value/default policy name default))
-
-    (define (context-field context name default)
-      "Return CONTEXT field NAME, or DEFAULT."
-      (field-value/default context name default))
-
-    (define (pow2 exponent)
-      "Return 2 raised to nonnegative integer EXPONENT."
-      (let loop ((remaining exponent) (result 1))
-        (if (<= remaining 0)
-            result
-            (loop (- remaining 1) (* result 2)))))
-
-    (define (record-access-sequence records record)
-      "Return highest memory-access sequence for RECORD in RECORDS."
-      (let loop ((rest records) (highest 0))
-        (cond
-         ((null? rest) highest)
-         ((and (memory-record-access? (car rest))
-               (eq? (field-value (car rest) 'scope)
-                    (field-value record 'scope))
-               (equal? (field-value (car rest) 'accessed)
-                       (memory-record-id record)))
-          (loop (cdr rest)
-                (max highest (memory-record-sequence (car rest)))))
-         (else (loop (cdr rest) highest)))))
-
-    (define (recency-score records logical-clock record)
-      "Return exact recency score for RECORD at LOGICAL-CLOCK."
-      (let* ((record-sequence (memory-record-sequence record))
-             (access-sequence
-              (record-access-sequence records record))
-             (latest (max record-sequence access-sequence))
-             (age (max 0 (- logical-clock latest))))
-        (/ 1 (pow2 age))))
-
-    (define (importance-score record)
-      "Return RECORD's effective importance score."
-      (let ((importance (field-value/default record 'importance 1)))
-        (cond
-         ((memory-number? importance)
-          (numeric-value importance))
-         ((pair? importance)
-          (numeric-value
-           (field-value/default importance
-                                'effective
-                                (field-value/default importance 'proposed 1))))
-         (else 1))))
-
-    (define (query-terms query)
-      "Return QUERY as a list of relevance terms."
-      (if (list? query) query (list query)))
-
-    (define (term-relevant? term record)
-      "Return #t when TERM overlaps RECORD tags, key, kind, or text."
-      (cond
-       ((member-equal? term (memory-record-tags record)) #t)
-       ((equal? term (memory-record-key record)) #t)
-       ((eq? term (memory-record-kind record)) #t)
-       ((string? term) (string-contains? (datum->string record) term))
-       ((symbol? term)
-        (string-contains? (datum->string record) (symbol->string term)))
-       (else #f)))
-
-    (define (relevance-score query record)
-      "Return tag/keyword overlap score for QUERY against RECORD."
-      (let loop ((terms (query-terms query)) (score 0))
-        (cond
-         ((null? terms) score)
-         ((term-relevant? (car terms) record)
-          (loop (cdr terms) (+ score 1)))
-         (else (loop (cdr terms) score)))))
-
-    (define (candidate-field candidate name)
-      "Return CANDIDATE field NAME."
-      (field-value candidate name))
-
-    (define (candidate-score candidate)
-      "Return CANDIDATE's score."
-      (candidate-field candidate 'score))
-
-    (define (candidate-id candidate)
-      "Return CANDIDATE's id."
-      (candidate-field candidate 'id))
-
-    (define (score> left right)
-      "Return #t when LEFT should sort before RIGHT."
-      (let ((left-score (candidate-score left))
-            (right-score (candidate-score right)))
-        (cond
-         ((> left-score right-score) #t)
-         ((< left-score right-score) #f)
-         (else
-          (string<? (symbol->string (candidate-id left))
-                    (symbol->string (candidate-id right)))))))
-
-    (define (insert-candidate candidate candidates)
-      "Insert CANDIDATE into sorted CANDIDATES."
-      (cond
-       ((null? candidates) (list candidate))
-       ((score> candidate (car candidates))
-        (cons candidate candidates))
-       (else
-        (cons (car candidates)
-              (insert-candidate candidate (cdr candidates))))))
-
-    (define (sort-candidates candidates)
-      "Return CANDIDATES sorted by score descending, then id."
-      (let loop ((rest candidates) (sorted '()))
-        (if (null? rest)
-            sorted
-            (loop (cdr rest) (insert-candidate (car rest) sorted)))))
-
-    (define (candidate-selected? candidate selected)
-      "Return #t when CANDIDATE appears in SELECTED."
-      (let loop ((rest selected))
-        (cond
-         ((null? rest) #f)
-         ((equal? candidate (car rest)) #t)
-         (else (loop (cdr rest))))))
-
-    (define (make-filtered-candidate record reason)
-      "Return a filtered memory-selection candidate for RECORD."
-      (list 'memory-candidate
-            (list 'id (memory-record-id record))
-            (list 'status 'filtered)
-            (list 'reason reason)
-            (list 'score 'not-ranked)
-            (list 'subscores '())))
-
-    (define (make-ranked-candidate records query weights logical-clock record)
-      "Return a ranked memory-selection candidate for RECORD."
-      (let* ((recency (recency-score records logical-clock record))
-             (importance (importance-score record))
-             (relevance (relevance-score query record))
-             (score (+ (* (weight-ref weights 'recency 1) recency)
-                       (* (weight-ref weights 'importance 1) importance)
-                       (* (weight-ref weights 'relevance 1) relevance))))
-        (list 'memory-candidate
-              (list 'id (memory-record-id record))
-              (list 'record record)
-              (list 'status 'ranked)
-              (list 'score score)
-              (list 'subscores
-                    (list (list 'recency recency)
-                          (list 'importance importance)
-                          (list 'relevance relevance))))))
-
-    (define (finalize-candidate candidate selected)
-      "Mark ranked CANDIDATE as selected or below-cutoff."
-      (if (not (eq? (candidate-field candidate 'status) 'ranked))
-          candidate
-          (append
-           (list 'memory-candidate
-                 (list 'id (candidate-id candidate))
-                 (list 'record (candidate-field candidate 'record))
-                 (list 'status
-                       (if (candidate-selected? candidate selected)
-                           'selected
-                           'not-selected))
-                 (list 'score (candidate-score candidate))
-                 (list 'subscores (candidate-field candidate 'subscores)))
-           (if (candidate-selected? candidate selected)
-               '()
-               (list (list 'reason 'below-cutoff-or-limit))))))
+        (call-with-memory-index-key-session
+         (lambda (prepare)
+           (let ((ordered-key
+                  (prepare normalized-scope (memory-record-key record))))
+             (append-memory-record!
+              store
+              record
+              ordered-key
+              (make-memory-key-sidecar/prepared
+               prepare
+               normalized-scope
+               record
+               ordered-key
+               ordered-key
+               #f)))))))
 
     (define (memory-store-select store query policy context)
       "Return a deterministic memory-selection receipt for QUERY."
@@ -852,57 +1427,28 @@ t."
           ("A replayable selection receipt with selected records,"
             "per-candidate scores, filter reasons, and the cutoff.")))
         (effects state-read error))
-      (let* ((records (store-records store))
-             (live (all-live-records store))
-             (weights (policy-field policy 'weights '()))
-             (cutoff (numeric-value (policy-field policy 'cutoff 0)))
-             (limit (integer-value (policy-field policy 'limit (length live))))
-             (context-scope (context-field context 'scope 'project))
-             (trust (context-field context 'trust 'local))
-             (logical-clock
-              (integer-value
-               (context-field context
-                              'logical-clock
-                              (memory-records-next-id records))))
-             (allowed-scopes
-              (context-field context 'allowed-scopes (list context-scope)))
-             (candidates
-              (map
-               (lambda (record)
-                 (cond
-                  ((not (member-equal? (field-value record 'scope)
-                                       allowed-scopes))
-                   (make-filtered-candidate record 'scope-mismatch))
-                  ((and (lower-trust? trust) (redaction-sensitive? record))
-                   (make-filtered-candidate record 'redaction-or-local-only))
-                  (else
-                   (make-ranked-candidate
-                    records query weights logical-clock record))))
-               live))
-             (eligible
-              (filter
-               (lambda (candidate)
-                 (and (eq? (candidate-field candidate 'status) 'ranked)
-                      (>= (candidate-score candidate) cutoff)))
-               candidates))
-             (selected (take (sort-candidates eligible)
-                             (min limit (length eligible))))
-             (final-candidates
-              (map
-               (lambda (candidate)
-                 (finalize-candidate candidate selected))
-               candidates)))
-        (list 'memory-selection
-              (list 'query query)
-              (list 'policy policy)
-              (list 'context context)
-              (list 'cutoff cutoff)
-              (list 'selected (map candidate-id selected))
-              (list 'records
-                    (map (lambda (candidate)
-                           (candidate-field candidate 'record))
-                         selected))
-              (list 'candidates final-candidates))))
+      (let* ((trust (field-value/default context 'trust 'local))
+             (refresh-security?
+              (or (eq? trust 'remote)
+                  (eq? trust 'public)
+                  (eq? trust 'lower-trust)))
+             (snapshot
+             (memory-live-snapshot
+              store
+              (memory-all-live-entries store)
+              #t
+              refresh-security?)))
+        (memory-query-select
+         (vector-ref snapshot 0)
+         (vector-ref snapshot 1)
+         (store-next-id store)
+         (memory-select-query-projection store query)
+         policy
+         context)))
+
+    (define (tagged-record? datum tag)
+      "Return #t when DATUM is a tagged list with TAG."
+      (and (pair? datum) (eq? (car datum) tag)))
 
     (define (memory-selection? datum)
       "Return #t when DATUM is a memory-selection receipt."

@@ -743,9 +743,11 @@
     (should source-file)
     (should (string-suffix-p "scheme/agent/memory.sld" source-file))
     (should (file-readable-p source-file)))
+  ;; This direct ERT cold-loads the internal reader/query source graph in one
+  ;; evaluator context, so its explicit budget covers that bounded bootstrap.
   (should
    (equal
-    (consent-library-test--external
+    (consent-library-test--external/options
      "(import (scheme base) (agent memory))
       (define store (consent-make-memory-store))
       (define kept
@@ -770,13 +772,38 @@
             (memory-store-find store 'project \"generated memory\"))
        (memory-record-id generated)
        (memory-store-delete! store 'instance 'source-alpha)
-       (memory-store-ref store 'instance 'source-alpha))")
+       (memory-store-ref store 'instance 'source-alpha))"
+     '(:max-steps 500000
+       :max-host-callbacks 50000))
     (concat
      "(source-alpha source-alpha (source-alpha) (m-2) m-2 "
      "(memory (id source-alpha) (scope instance) (key source-alpha) "
      "(kind datum) (memory-class semantic) (tags (source fact)) "
      "(value \"source-backed memory\") (source ()) (confidence high) "
      "(importance 1) (created-at 1) (updated-at 1)) #f)"))))
+
+(ert-deftest
+    consent-library-test-agent-memory-query-is-internal-source-backed ()
+  "Keep the native memory query kernel internal and source-backed."
+  (let* ((key "(agent memory-query)")
+         (entry (consent--library-collection-manifest-entry key))
+         (source-file (consent-library-test--manifest-source-file key)))
+    (should entry)
+    (should (eq (plist-get entry :provider) 'repo-source))
+    (should (eq (plist-get entry :visibility) 'internal-runtime))
+    (should (eq (plist-get entry :source-kind) 'portable-source))
+    (should (eq (plist-get entry :realization) 'portable-source))
+    (should
+     (equal
+      (plist-get entry :exports)
+      '("memory-query-find"
+        "memory-query-by-tag"
+        "memory-query-recent"
+        "memory-query-select")))
+    (should source-file)
+    (should
+     (string-suffix-p "scheme/agent/memory-query.sld" source-file))
+    (should (file-readable-p source-file))))
 
 (ert-deftest consent-library-test-agent-models-openai-is-source-backed ()
   "Load `(agent models openai)' from the shared portable source library."
@@ -794,6 +821,60 @@
        \"{\\\"choices\\\":[{\\\"message\\\":{\\\"content\\\":\\\"source\
  completion\\\"}}]}\")")
     "\"source completion\"")))
+
+(ert-deftest
+    consent-library-test-agent-models-openai-codec-is-internal-source-backed
+    ()
+  "Keep the native codec an internal source-backed agent library."
+  (let* ((key "(agent models openai-codec)")
+         (entry (consent--library-collection-manifest-entry key))
+         (source-file (consent-library-test--manifest-source-file key)))
+    (should entry)
+    (should (eq (plist-get entry :provider) 'repo-source))
+    (should (eq (plist-get entry :visibility) 'internal-agent-model))
+    (should (eq (plist-get entry :source-kind) 'portable-source))
+    (should (eq (plist-get entry :realization) 'portable-source))
+    (should source-file)
+    (should (string-suffix-p
+             "scheme/agent/models/openai-codec.sld"
+             source-file))
+    (should (file-readable-p source-file))))
+
+(ert-deftest
+    consent-library-test-agent-redaction-kernel-is-internal-source-backed
+    ()
+  "Keep the native redaction scanner internal and source-backed."
+  (let* ((key "(agent redaction-kernel)")
+         (entry (consent--library-collection-manifest-entry key))
+         (source-file (consent-library-test--manifest-source-file key)))
+    (should entry)
+    (should (eq (plist-get entry :provider) 'repo-source))
+    (should (eq (plist-get entry :visibility) 'internal-runtime))
+    (should (eq (plist-get entry :source-kind) 'portable-source))
+    (should (eq (plist-get entry :realization) 'portable-source))
+    (should
+     (equal
+      (plist-get entry :exports)
+      '("redaction-kernel-secret-string?")))
+    (should source-file)
+    (should
+     (string-suffix-p "scheme/agent/redaction-kernel.sld" source-file))
+    (should (file-readable-p source-file))
+    (let ((error
+           (should-error
+            (consent-library-test--external
+             "(import (agent redaction-kernel))
+              (redaction-kernel-secret-string? \"sk-x\")")
+            :type 'consent-eval-error)))
+      (should
+       (string-match-p
+        (regexp-quote
+         "internal library import requires internal-libraries-allowed")
+        (error-message-string error)))
+      (should
+       (string-match-p
+        (regexp-quote key)
+        (error-message-string error))))))
 
 (ert-deftest consent-library-test-public-import-and-alias-remain-available ()
   "Keep public and alias imports stable while internal tiers are gated."
