@@ -67,6 +67,184 @@
                 consent-identity-map-ref
                 consent-identity-map-set!))
   (begin
+    ;; Small memory stores dominate interactive agent work.  Keep at most this
+    ;; many sorted associations inline, then upgrade permanently to the
+    ;; persistent AVL representation.  The hard cap preserves logarithmic
+    ;; asymptotics while avoiding generic tree machinery for tiny stores.
+    (define memory-inline-index-limit 16)
+
+    ;; Distinguishes a bounded inline index from its persistent AVL successor.
+    (define memory-inline-index-marker (vector #f))
+
+    (define (make-memory-index ordering)
+      "Return an empty bounded-inline persistent index."
+      (vector memory-inline-index-marker ordering '() 0))
+
+    (define (memory-inline-index? index)
+      "Return #t when INDEX still uses its bounded inline representation."
+      (and (vector? index)
+           (= (vector-length index) 4)
+           (eq? (vector-ref index 0) memory-inline-index-marker)))
+
+    (define (memory-inline-index-ordering index)
+      "Return inline INDEX's strict key ordering."
+      (vector-ref index 1))
+
+    (define (memory-inline-index-entries index)
+      "Return inline INDEX's ascending association list."
+      (vector-ref index 2))
+
+    (define (memory-inline-index-size index)
+      "Return inline INDEX's association count."
+      (vector-ref index 3))
+
+    (define (memory-index-ref/key index key failure success)
+      "Locate KEY in adaptive INDEX and call FAILURE or SUCCESS."
+      (if (not (memory-inline-index? index))
+          (avl-tree-ref/key index key failure success)
+          (let ((ordering (memory-inline-index-ordering index)))
+            (let loop ((rest (memory-inline-index-entries index)))
+              (cond
+               ((null? rest) (failure))
+               ((ordering key (caar rest)) (failure))
+               ((ordering (caar rest) key) (loop (cdr rest)))
+               (else (success (caar rest) (cdar rest))))))))
+
+    (define (memory-index-ref index key . handlers)
+      "Return KEY's value from adaptive INDEX through optional handlers."
+      (let ((failure
+             (if (null? handlers)
+                 (lambda () (error "memory index key not found" key))
+                 (car handlers)))
+            (success
+             (if (or (null? handlers) (null? (cdr handlers)))
+                 (lambda (value) value)
+                 (cadr handlers))))
+        (memory-index-ref/key index key failure
+                              (lambda (stored-key value) (success value)))))
+
+    (define (memory-inline-index-set index key value)
+      "Return inline INDEX with KEY associated with VALUE."
+      (let ((ordering (memory-inline-index-ordering index)))
+        (let loop ((rest (memory-inline-index-entries index))
+                   (reversed '()))
+          (cond
+           ((null? rest)
+            (values
+             (append (reverse reversed) (list (cons key value)))
+             #t))
+           ((ordering key (caar rest))
+            (values
+             (append (reverse reversed) (cons (cons key value) rest))
+             #t))
+           ((ordering (caar rest) key)
+            (loop (cdr rest) (cons (car rest) reversed)))
+           (else
+            (values
+             (append
+              (reverse reversed)
+              (cons (cons (caar rest) value) (cdr rest)))
+             #f))))))
+
+    (define (memory-inline-index->avl ordering entries)
+      "Upgrade sorted inline ENTRIES to a persistent AVL index."
+      (let loop ((tree (make-avl-tree ordering)) (rest entries))
+        (if (null? rest)
+            tree
+            (loop
+             (avl-tree-set tree (caar rest) (cdar rest))
+             (cdr rest)))))
+
+    (define (memory-index-set index key value)
+      "Return adaptive INDEX with KEY associated with VALUE."
+      (if (not (memory-inline-index? index))
+          (avl-tree-set index key value)
+          (call-with-values
+              (lambda () (memory-inline-index-set index key value))
+            (lambda (entries added?)
+              (let ((size (+ (memory-inline-index-size index)
+                             (if added? 1 0))))
+                (if (> size memory-inline-index-limit)
+                    (memory-inline-index->avl
+                     (memory-inline-index-ordering index) entries)
+                    (vector memory-inline-index-marker
+                            (memory-inline-index-ordering index)
+                            entries
+                            size)))))))
+
+    (define (memory-index-delete index key)
+      "Return adaptive INDEX without KEY."
+      (if (not (memory-inline-index? index))
+          (avl-tree-delete index key)
+          (let ((ordering (memory-inline-index-ordering index)))
+            (let loop ((rest (memory-inline-index-entries index))
+                       (reversed '()))
+              (cond
+               ((null? rest) index)
+               ((ordering key (caar rest)) index)
+               ((ordering (caar rest) key)
+                (loop (cdr rest) (cons (car rest) reversed)))
+               (else
+                (vector
+                 memory-inline-index-marker
+                 ordering
+                 (append (reverse reversed) (cdr rest))
+                 (- (memory-inline-index-size index) 1))))))))
+
+    (define (memory-index-empty? index)
+      "Return #t when adaptive INDEX has no associations."
+      (if (memory-inline-index? index)
+          (= (memory-inline-index-size index) 0)
+          (avl-tree-empty? index)))
+
+    (define (memory-index-size index)
+      "Return adaptive INDEX's association count."
+      (if (memory-inline-index? index)
+          (memory-inline-index-size index)
+          (avl-tree-size index)))
+
+    (define (memory-index-fold procedure nil index)
+      "Fold PROCEDURE over adaptive INDEX in ascending order."
+      (if (not (memory-inline-index? index))
+          (avl-tree-fold procedure nil index)
+          (let loop ((rest (memory-inline-index-entries index))
+                     (result nil))
+            (if (null? rest)
+                result
+                (loop (cdr rest)
+                      (procedure (caar rest) (cdar rest) result))))))
+
+    (define (memory-index-max index failure)
+      "Return adaptive INDEX's maximum key and value, or call FAILURE."
+      (if (not (memory-inline-index? index))
+          (avl-tree-max index failure)
+          (let loop ((rest (memory-inline-index-entries index))
+                     (latest #f))
+            (if (null? rest)
+                (if latest
+                    (values (car latest) (cdr latest))
+                    (failure))
+                (loop (cdr rest) (car rest))))))
+
+    (define (memory-index-key-predecessor index key failure)
+      "Return adaptive INDEX's association before KEY, or call FAILURE."
+      (if (not (memory-inline-index? index))
+          (avl-tree-key-predecessor index key failure)
+          (let ((ordering (memory-inline-index-ordering index)))
+            (let loop ((rest (memory-inline-index-entries index))
+                       (previous #f))
+              (cond
+               ((null? rest)
+                (if previous
+                    (values (car previous) (cdr previous))
+                    (failure)))
+               ((ordering (caar rest) key)
+                (loop (cdr rest) (car rest)))
+               (else
+                (if previous
+                    (values (car previous) (cdr previous))
+                    (failure))))))))
+
     (define (integer-datum sequence)
       "Return SEQUENCE as an exact integer datum."
       sequence)
@@ -155,21 +333,22 @@
 (define memory-sidecar-redaction-flag 4)
 
     (define (make-memory-key-sidecar
-             record live-key id-key access-target-key kind-key tag-keys)
-      "Return one detached append-time query sidecar for RECORD."
+             kind redaction-sensitive? live-key id-key access-target-key
+             kind-key tag-keys)
+      "Return one detached append-time query sidecar."
       (vector
        live-key
        id-key
        access-target-key
        kind-key
        (list->vector tag-keys)
-       (+ (if (memory-record-access? record)
+       (+ (if (eq? kind 'memory-access)
               memory-sidecar-access-flag
               0)
-          (if (memory-record-tombstone? record)
+          (if (eq? kind 'memory-tombstone)
               memory-sidecar-tombstone-flag
               0)
-          (if (memory-record-redaction-sensitive? record)
+          (if redaction-sensitive?
               memory-sidecar-redaction-flag
               0))))
 
@@ -197,26 +376,42 @@
   "Return SIDECAR's immutable classification flags."
       (vector-ref sidecar 5))
 
-    (define (prepare-memory-tag-keys prepare scope record)
-      "Return detached descriptors for RECORD's accepted tag list."
-      (let ((tags (memory-record-tags record)))
-        (if (not (finite-proper-list? tags))
-            (error "memory record tags must be a finite proper list" tags))
-        (map (lambda (tag) (prepare scope tag)) tags)))
+    (define (memory-key-sidecar-access? sidecar)
+      "Return #t when SIDECAR describes an access event."
+      (= (modulo (memory-key-sidecar-flags sidecar) 2) 1))
+
+    (define (memory-key-sidecar-tombstone? sidecar)
+      "Return #t when SIDECAR describes a tombstone event."
+      (>= (modulo (memory-key-sidecar-flags sidecar) 4) 2))
+
+    (define (prepare-memory-tag-keys prepare scope tags)
+      "Return detached descriptors for accepted TAGS."
+      (if (not (finite-proper-list? tags))
+          (error "memory record tags must be a finite proper list" tags))
+      (map (lambda (tag) (prepare scope tag)) tags))
 
     (define (make-memory-key-sidecar/prepared
-             prepare scope record live-key id-key access-target-key)
+             prepare scope record live-key id-key access-target-key
+             trusted-canonical?)
       "Build RECORD's complete sidecar with PREPARE."
-      (let ((kind (memory-record-kind record)))
+      (let* ((selected
+              (select-record-fields record '(kind tags local-only)))
+             (kind (selected-field selected 'kind #f))
+             (tags (selected-field selected 'tags '()))
+             (redaction-sensitive?
+              (if trusted-canonical?
+                  (canonical-memory-record-redaction-sensitive? record)
+                  (memory-record-redaction-sensitive? record))))
         (if (not (symbol? kind))
             (error "memory record kind must be a symbol" kind))
         (make-memory-key-sidecar
-         record
+         kind
+         redaction-sensitive?
          live-key
          id-key
          access-target-key
          (prepare scope kind)
-         (prepare-memory-tag-keys prepare scope record))))
+         (prepare-memory-tag-keys prepare scope tags))))
 
     (define (memory-key-sidecar-with-keys
              sidecar live-key id-key access-target-key)
@@ -256,11 +451,11 @@
 
     (define (make-memory-ordered-index)
       "Return an empty private common scope/key index."
-      (make-avl-tree memory-index-key<?))
+      (make-memory-index memory-index-key<?))
 
     (define (make-memory-order-index)
       "Return an empty private sequence-ordered live index."
-      (make-avl-tree <))
+      (make-memory-index <))
 
     (define (make-memory-order-indexes)
       "Return empty live order indexes for the three public scopes."
@@ -358,6 +553,35 @@
                  (eq? (caar rest) name))
             (cadr (car rest)))
            (else (loop (cdr rest)))))))
+
+    (define (select-finite-fields fields names)
+      "Return the first values named by NAMES from finite FIELDS."
+      (let loop ((rest fields) (selected '()))
+        (if (null? rest)
+            selected
+            (let ((field (car rest)))
+              (if (and (pair? field)
+                       (memq (car field) names)
+                       (not (assq (car field) selected)))
+                  (loop
+                   (cdr rest)
+                   (cons (cons (car field) (cadr field)) selected))
+                  (loop (cdr rest) selected))))))
+
+    (define (selected-field selected name default)
+      "Return NAME from SELECTED, or DEFAULT when absent or false."
+      (let ((entry (assq name selected)))
+        (if (and entry (cdr entry)) (cdr entry) default)))
+
+    (define (select-record-fields record names)
+      "Validate RECORD once and return the first fields named by NAMES."
+      (let ((fields
+             (if (and (pair? record) (eq? (car record) 'memory))
+                 (cdr record)
+                 record)))
+        (if (not (finite-proper-list? fields))
+            (error "memory fields must be a finite proper list" record))
+        (select-finite-fields fields names)))
 
     (define (memory-record-field-value record name . maybe-default)
       "Return field NAME from RECORD, or DEFAULT when absent."
@@ -458,8 +682,8 @@
                 (and (not (eq? slow-one fast-two))
                      (loop slow-one fast-two))))))))))
 
-    (define (memory-record-contains-tagged? datum tag . additional-tags)
-      "Return #t when DATUM contains a record headed by a requested tag."
+    (define (memory-values-contain-tagged? values tags irritant)
+      "Return #t when VALUES contain a record headed by one of TAGS."
       ;; Configured products use identity hashing.  Compatibility hosts may
       ;; inspect only a fixed small graph, so the fallback cannot grow into an
       ;; unbounded quadratic identity alist.
@@ -471,13 +695,7 @@
           (and
            (pair? value)
            (let ((candidate (car value)))
-             (or
-              (eq? candidate tag)
-              (let loop ((rest additional-tags))
-                (and
-                 (pair? rest)
-                 (or (eq? candidate (car rest))
-                     (loop (cdr rest)))))))))
+             (memq candidate tags))))
         (define (seen? value)
           (let ((known (consent-identity-map-ref seen value absent)))
             (if (eq? known absent)
@@ -486,11 +704,11 @@
                   (if (and (not fast?) (> seen-count 64))
                       (error
                        "large memory record requires fast identity map"
-                       datum))
+                       irritant))
                   (consent-identity-map-set! seen value #t)
                   #f)
                 #t)))
-        (let walk ((pending (list datum)))
+        (let walk ((pending values))
           (if (null? pending)
               #f
               (let ((value (car pending))
@@ -512,6 +730,24 @@
                              (- index 1)
                              (cons (vector-ref value index) next))))))
                  (else (walk rest))))))))
+
+    (define (memory-record-contains-tagged? datum tag . additional-tags)
+      "Return #t when DATUM contains a record headed by a requested tag."
+      (memory-values-contain-tagged?
+       (list datum) (cons tag additional-tags) datum))
+
+    (define (canonical-memory-record-redaction-sensitive? record)
+      "Classify freshly constructed canonical RECORD without wrapper scans."
+      (let ((fields (cdr record)))
+        (let collect ((rest fields) (values '()))
+          (if (null? rest)
+              (memory-values-contain-tagged?
+               values '(local-only redaction) record)
+              (let ((field (car rest)))
+                (if (or (eq? (car field) 'local-only)
+                        (eq? (car field) 'redaction))
+                    #t
+                    (collect (cdr rest) (cons (cadr field) values))))))))
 
     (define (memory-record-redaction-sensitive? record)
       "Return #t when accepted RECORD carries restricted content."
@@ -559,16 +795,20 @@
 
     (define (memory-descriptor-index-intern index key)
       "Return canonical KEY and INDEX containing it as two values."
-      (avl-tree-ref/key
-       index
-       key
-       (lambda () (values key (avl-tree-set index key key)))
-       (lambda (stored-key value) (values stored-key index))))
+      (if (memory-index-key-bounded-comparison? key)
+          (values key index)
+          (memory-index-ref/key
+           index
+           key
+           (lambda () (values key (memory-index-set index key key)))
+           (lambda (stored-key value) (values stored-key index)))))
 
     (define (memory-descriptor-index-ref index key)
       "Return INDEX's canonical descriptor equal to KEY, or #f."
-      (avl-tree-ref/key
-       index key (lambda () #f) (lambda (stored-key value) stored-key)))
+      (if (memory-index-key-bounded-comparison? key)
+          key
+          (memory-index-ref/key
+           index key (lambda () #f) (lambda (stored-key value) stored-key))))
 
     (define (memory-order-index-remove indexes entry)
       "Return INDEXES without live ENTRY."
@@ -577,7 +817,7 @@
         (memory-order-indexes-set
          indexes
          scope
-         (avl-tree-delete index (memory-live-entry-ordinal entry)))))
+         (memory-index-delete index (memory-live-entry-ordinal entry)))))
 
     (define (memory-order-index-set indexes entry)
       "Return INDEXES containing live ENTRY at its private ordinal."
@@ -586,7 +826,7 @@
         (memory-order-indexes-set
          indexes
          scope
-         (avl-tree-set index (memory-live-entry-ordinal entry) entry))))
+         (memory-index-set index (memory-live-entry-ordinal entry) entry))))
 
     (define (memory-prepared-state-from-records records)
       "Build every derived cache off-root from canonical RECORDS."
@@ -605,11 +845,11 @@
 
     (define (memory-record-sequence record)
       "Return RECORD's highest timestamp sequence, or zero when absent."
-      (max
-       (let ((created-at (field-value record 'created-at)))
-         (if created-at (integer-value created-at) 0))
-       (let ((updated-at (field-value record 'updated-at)))
-         (if updated-at (integer-value updated-at) 0))))
+      (let* ((selected
+              (select-record-fields record '(created-at updated-at)))
+             (created-at (selected-field selected 'created-at 0))
+             (updated-at (selected-field selected 'updated-at 0)))
+        (max (integer-value created-at) (integer-value updated-at))))
 
     (define (memory-store-records store)
       "Return STORE's immutable canonical records, newest first."
@@ -654,7 +894,7 @@
 
     (define (memory-store-entry/prepared store ordered-key)
       "Return STORE's private index entry for ORDERED-KEY, or #f."
-      (avl-tree-ref
+      (memory-index-ref
        (store-ordered-index store)
        ordered-key
        missing-memory-ordered-index-record))
@@ -679,12 +919,12 @@
         (memory-store-ref/prepared
          store (memory-ordered-key normalized-scope key))))
 
-    (define (optional-record-fields datum names)
-      "Return optional fields named by NAMES from DATUM."
+    (define (optional-record-fields selected names)
+      "Return optional fields named by NAMES from SELECTED fields."
       (let loop ((rest names) (fields '()))
         (if (null? rest)
             (reverse fields)
-            (let ((value (field-value datum (car rest))))
+            (let ((value (selected-field selected (car rest) #f)))
               (loop (cdr rest)
                     (if value
                         (cons (list (car rest) value) fields)
@@ -694,26 +934,50 @@
       "Build a canonical Scheme-readable memory record."
       (if (not (finite-proper-list? datum))
           (error "memory payload must be a finite proper list" datum))
-      (let* ((sequence (next-sequence store))
-             (id (if existing (field-value existing 'id) key))
-             (created-at (if existing
-                             (field-value existing 'created-at)
-                             (integer-datum sequence)))
-             (tags (let ((field (field-value datum 'tags)))
-                     (if field field '())))
-             (value (let ((field (field-value datum 'value)))
-                      (if field field datum)))
-             (source (let ((field (field-value datum 'source)))
-                       (if field field '())))
-             (confidence (let ((field (field-value datum 'confidence)))
-                           (if field field 'unknown)))
+      (let* ((datum-fields
+              (if (and (pair? datum) (eq? (car datum) 'memory))
+                  (cdr datum)
+                  datum))
+             (selected
+              (select-finite-fields
+               datum-fields
+               '(tags value source confidence memory-class importance
+                      cites supersedes receipt accessed local-only
+                      disclosure)))
+             (existing-fields
+              (and existing
+                   (if (and (pair? existing)
+                            (eq? (car existing) 'memory))
+                       (cdr existing)
+                       existing)))
+             (existing-selected
+              (if existing-fields
+                  (begin
+                    (if (not (finite-proper-list? existing-fields))
+                        (error
+                         "memory fields must be a finite proper list"
+                         existing))
+                    (select-finite-fields
+                     existing-fields '(id created-at)))
+                  '()))
+             (sequence (next-sequence store))
+             (id (if existing
+                     (selected-field existing-selected 'id #f)
+                     key))
+             (created-at
+              (if existing
+                  (selected-field existing-selected 'created-at #f)
+                  (integer-datum sequence)))
+             (tags (selected-field selected 'tags '()))
+             (value (selected-field selected 'value datum))
+             (source (selected-field selected 'source '()))
+             (confidence (selected-field selected 'confidence 'unknown))
              (memory-class
               (normalize-memory-class
-               (let ((field (field-value datum 'memory-class)))
-                 (if field field (default-memory-class kind)))))
+               (selected-field
+                selected 'memory-class (default-memory-class kind))))
              (importance
-              (let ((field (field-value datum 'importance)))
-                (if field field (integer-datum 1)))))
+              (selected-field selected 'importance (integer-datum 1))))
         (append
          (list 'memory
                (list 'id id)
@@ -729,7 +993,7 @@
                (list 'created-at created-at)
                (list 'updated-at (integer-datum sequence)))
          (optional-record-fields
-          datum
+          selected
           '(cites supersedes receipt accessed local-only disclosure)))))
 
     (define (append-memory-record!
@@ -752,9 +1016,8 @@
                   (begin
                     (vector-set! copy index (intern (vector-ref tags index)))
                     (loop (+ index 1)))))))
-        (define (intern-live-sidecar value)
-          (let* ((live-key (intern (memory-key-sidecar-live-key value)))
-                 (raw-id (memory-key-sidecar-id-key value))
+        (define (intern-live-sidecar value live-key)
+          (let* ((raw-id (memory-key-sidecar-id-key value))
                  (id-key
                   (if (memory-index-key=? live-key raw-id)
                       live-key
@@ -770,24 +1033,22 @@
                     tag-keys
                     (memory-key-sidecar-flags value))))
         (let* ((ordinal (+ (store-next-ordinal store) 1))
-               (next-id
-                (max (store-next-id store)
-                     (memory-record-sequence record)))
+               (sequence (memory-record-sequence record))
+               (next-id (max (store-next-id store) sequence))
                (ordered-index (store-ordered-index store))
                (order-indexes (store-order-indexes store))
                (access-index (store-access-index store)))
           (cond
-           ((memory-record-access? record)
+           ((memory-key-sidecar-access? sidecar)
             (let* ((target-key
                     (intern
                      (memory-key-sidecar-access-target-key sidecar)))
-                   (sequence (memory-record-sequence record))
                    (previous-access
-                    (avl-tree-ref
+                    (memory-index-ref
                      access-index target-key (lambda () 0)))
                    (latest-access (max previous-access sequence))
                    (next-access-index
-                    (avl-tree-set access-index target-key latest-access)))
+                    (memory-index-set access-index target-key latest-access)))
               (replace-memory-store-state!
                store
                (cons record (store-records store))
@@ -804,16 +1065,16 @@
                          ordered-key
                          (memory-key-sidecar-live-key sidecar))))
                    (previous
-                    (avl-tree-ref ordered-index live-key (lambda () #f)))
+                    (memory-index-ref ordered-index live-key (lambda () #f)))
                    (without-ordered
                     (if previous
-                        (avl-tree-delete ordered-index live-key)
+                        (memory-index-delete ordered-index live-key)
                         ordered-index))
                    (without-orders
                     (if previous
                         (memory-order-index-remove order-indexes previous)
                         order-indexes)))
-              (if (memory-record-tombstone? record)
+              (if (memory-key-sidecar-tombstone? sidecar)
                   (replace-memory-store-state!
                    store
                    (cons record (store-records store))
@@ -829,7 +1090,8 @@
                             sidecar
                             live-key
                             (memory-key-sidecar-id-key sidecar)
-                            #f)))
+                            #f)
+                           live-key))
                          (entry
                           (make-memory-live-entry
                            record
@@ -841,7 +1103,7 @@
                      (cons record (store-records store))
                      next-id
                      ordinal
-                     (avl-tree-set without-ordered live-key entry)
+                     (memory-index-set without-ordered live-key entry)
                      (memory-order-index-set without-orders entry)
                      access-index
                      descriptor-index))))))
@@ -863,7 +1125,7 @@
              (sidecar
               (make-memory-key-sidecar/prepared
                prepare
-               scope record live-key id-key access-key)))
+               scope record live-key id-key access-key #f)))
         (append-memory-record!
          store record (and (not access-key) live-key) sidecar)))
 
@@ -913,7 +1175,8 @@
                record
                ordered-key
                id-key
-               #f)))))))
+               #f
+               #t)))))))
 
     (define (make-memory-tombstone store scope key record)
       "Build a tombstone event for RECORD."
@@ -962,7 +1225,8 @@
                      tombstone
                      ordered-key
                      ordered-key
-                     #f))))
+                     #f
+                     #t))))
              record)))))
 
     (define (memory-store-add! store scope kind datum)
@@ -999,11 +1263,12 @@
                record
                ordered-key
                ordered-key
-               #f)))))))
+               #f
+               #t)))))))
 
     (define (memory-order-index-newest index)
       "Return INDEX values in newest-first ordinal order."
-      (avl-tree-fold
+      (memory-index-fold
        (lambda (ordinal entry newest) (cons entry newest))
        '()
        index))
@@ -1017,7 +1282,7 @@
                   (reverse reversed)
                   (call-with-values
                       (lambda ()
-                        (avl-tree-key-predecessor
+                        (memory-index-key-predecessor
                          index key (lambda () (values #f #f))))
                     (lambda (previous-key entry)
                       (if previous-key
@@ -1036,14 +1301,14 @@
             (if (>= power (+ size 1))
                 height
                 (loop (* power 2) (+ height 1)))))
-        (let* ((size (avl-tree-size index))
+        (let* ((size (memory-index-size index))
                (height (ceiling-log2-plus-one size)))
           (cond
            ((<= limit 0) '())
            ((< (* limit height) size)
             (call-with-values
                 (lambda ()
-                  (avl-tree-max index (lambda () (values #f #f))))
+                  (memory-index-max index (lambda () (values #f #f))))
               (lambda (key entry)
                 (if key
                     (cons entry (predecessors key (- limit 1) '()))
@@ -1109,7 +1374,7 @@
               (and fast? (consent-make-identity-map)))
              (access-empty?
               (or (not include-access?)
-                  (avl-tree-empty? (store-access-index store))))
+                  (memory-index-empty? (store-access-index store))))
              (absent (vector 'absent)))
         (define (selection-sidecar entry)
           (let* ((sidecar (memory-live-entry-sidecar entry))
@@ -1137,7 +1402,7 @@
                             known-access id-key absent)))
                       (if (eq? known absent)
                           (let ((sequence
-                                 (avl-tree-ref
+                                 (memory-index-ref
                                   (store-access-index store)
                                   id-key
                                   (lambda () 0))))
@@ -1146,7 +1411,7 @@
                             sequence)
                           known))
                     (if (memory-index-key-bounded-comparison? id-key)
-                        (avl-tree-ref
+                        (memory-index-ref
                          (store-access-index store)
                          id-key
                          (lambda () 0))
@@ -1172,9 +1437,11 @@
 
     (define (memory-store-known-key store scope key)
       "Return STORE's canonical descriptor for SCOPE/KEY, or #f."
-      (memory-descriptor-index-ref
-       (store-descriptor-index store)
-       (memory-ordered-key scope key)))
+      (let ((prepared (memory-ordered-key scope key)))
+        (if (memory-index-key-bounded-comparison? prepared)
+            prepared
+            (memory-descriptor-index-ref
+             (store-descriptor-index store) prepared))))
 
     (define (memory-record-match-flags-in-scope
              records query)
@@ -1375,7 +1642,8 @@
                record
                live-key
                live-key
-               access-key)))))))
+               access-key
+               #t)))))))
 
     (define (memory-store-reflect! store scope kind datum cites receipt
       loop-id)
@@ -1428,7 +1696,8 @@
                record
                ordered-key
                ordered-key
-               #f)))))))
+               #f
+               #t)))))))
 
     (define (memory-store-select store query policy context)
       "Return a deterministic memory-selection receipt for QUERY."

@@ -138,6 +138,7 @@
           memory-query-select))
         (dependencies
          ((library (scheme base))
+          (library (scheme write))
           (library (agent memory-key))
           (library (consent identity-map))
           (library (consent reader))

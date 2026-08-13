@@ -15,6 +15,7 @@
           memory-query-recent
           memory-query-select)
   (import (scheme base)
+          (only (scheme write) write)
           (only (agent memory-key)
                 memory-index-key?
                 memory-index-key-sealed-wrapper?
@@ -344,11 +345,15 @@
     ;; failure function, independently derived from
     ;; https://doi.org/10.1137/0206024.
     (define-record-type <memory-substring-pattern>
-      (make-memory-substring-pattern needle length fallback)
+      (make-memory-substring-pattern
+       text needle length fallback external-fragment?)
       memory-substring-pattern?
+      (text memory-substring-pattern-text)
       (needle memory-substring-pattern-needle)
       (length memory-substring-pattern-length)
-      (fallback memory-substring-pattern-fallback))
+      (fallback memory-substring-pattern-fallback)
+      (external-fragment?
+       memory-substring-pattern-external-fragment?))
 
     (define (memory-substring-fallback-table needle length)
       "Return the linear-time prefix fallback table for NEEDLE."
@@ -371,37 +376,55 @@
       (let* ((needle (memory-string->character-vector needle-text))
              (length (vector-length needle)))
         (make-memory-substring-pattern
+         needle-text
          needle
          length
-         (memory-substring-fallback-table needle length))))
+         (memory-substring-fallback-table needle length)
+         (external-string-fragment? needle-text))))
 
     (define (prepared-memory-substring-occurs? pattern haystack)
       "Return #t when prepared PATTERN occurs in string HAYSTACK."
-      (let ((needle (memory-substring-pattern-needle pattern))
+      (let ((needle-text (memory-substring-pattern-text pattern))
+            (needle (memory-substring-pattern-needle pattern))
             (length (memory-substring-pattern-length pattern))
-            (fallback (memory-substring-pattern-fallback pattern)))
+            (fallback (memory-substring-pattern-fallback pattern))
+            (haystack-length (string-length haystack)))
+        (define (bounded-occurs?)
+          ;; Indexed access can be superlinear on variable-width strings, so
+          ;; use it only inside a constant-size envelope.  This restores the
+          ;; low-overhead common path without changing the unbounded bound.
+          (let starts ((start 0))
+            (and
+             (<= (+ start length) haystack-length)
+             (or
+              (string=?
+               (substring haystack start (+ start length))
+               needle-text)
+              (starts (+ start 1))))))
         (if (= length 0)
             #t
-            (call-with-current-continuation
-             (lambda (return)
-               (let ((matched 0))
-                 (string-for-each
-                  (lambda (character)
-                    (let retreat ((candidate matched))
-                      (cond
-                       ((char=? character
-                                (vector-ref needle candidate))
-                        (let ((next (+ candidate 1)))
-                          (if (= next length)
-                              (return #t)
-                              (set! matched next))))
-                       ((> candidate 0)
-                        (retreat
-                         (vector-ref fallback (- candidate 1))))
-                       (else
-                        (set! matched 0)))))
-                 haystack)
-                 #f))))))
+            (if (and (<= length 128) (<= haystack-length 512))
+                (bounded-occurs?)
+                (call-with-current-continuation
+                 (lambda (return)
+                   (let ((matched 0))
+                     (string-for-each
+                      (lambda (character)
+                        (let retreat ((candidate matched))
+                          (cond
+                           ((char=? character
+                                    (vector-ref needle candidate))
+                            (let ((next (+ candidate 1)))
+                              (if (= next length)
+                                  (return #t)
+                                  (set! matched next))))
+                           ((> candidate 0)
+                            (retreat
+                             (vector-ref fallback (- candidate 1))))
+                           (else
+                            (set! matched 0)))))
+                      haystack)
+                     #f)))))))
 
     ;; Select relevance uses one Aho-Corasick-style automaton for every
     ;; distinct textual term.  Direct transitions and completed fallback
@@ -678,11 +701,14 @@
           query-key (memory-key-sidecar-live-key sidecar))
          (memory-key-vector-member?
           store query-key (memory-key-sidecar-tag-keys sidecar))
+         (record-value-string-match? record pattern)
          (prepared-memory-substring-occurs?
           pattern (record-search-text record))))
        (else
-        (prepared-memory-substring-occurs?
-         pattern (record-search-text record)))))
+        (or
+         (record-value-string-match? record pattern)
+         (prepared-memory-substring-occurs?
+          pattern (record-search-text record))))))
 
     (define (memory-store-find store scope projection)
       "Return SCOPE records matching detached PROJECTION."
@@ -813,7 +839,124 @@
     (define (record-search-text record)
       "Return RECORD's canonical external text for substring search."
       (ensure-bounded-text-record record)
-      (consent-datum->external record))
+      (or (simple-host-record->external record)
+          (consent-datum->external record)))
+
+    (define (simple-host-symbol-name? name)
+      "Report whether NAME has one unambiguous canonical host spelling."
+      (call-with-current-continuation
+       (lambda (reject)
+         (let ((first? #t))
+           (string-for-each
+            (lambda (character)
+              (if (not
+                   (or
+                    (and (char>=? character #\a)
+                         (char<=? character #\z))
+                    (and (not first?)
+                         (char>=? character #\0)
+                         (char<=? character #\9))
+                    (and (not first?)
+                         (or (char=? character #\-)
+                             (char=? character #\?)
+                             (char=? character #\!)))))
+                  (reject #f))
+              (set! first? #f))
+            name)
+           (not first?)))))
+
+    (define (simple-host-string? text)
+      "Report whether host WRITE and the canonical writer agree for TEXT."
+      (call-with-current-continuation
+       (lambda (reject)
+         (string-for-each
+          (lambda (character)
+            (if (or (< (char->integer character) 32)
+                    (> (char->integer character) 126)
+                    (char=? character #\")
+                    (char=? character #\\))
+                (reject #f)))
+          text)
+         #t)))
+
+    (define (simple-host-record->external record)
+      "Render a bounded ordinary host tree, or return #f for exact fallback."
+      ;; Native borrowing projects the overwhelmingly common memory record to
+      ;; ordinary host pairs and scalar values.  R7RS host WRITE is much less
+      ;; expensive than rebuilding the general Consent graph writer for that
+      ;; deliberately narrow intersection.  Validate the complete tree before
+      ;; emitting anything: owned records, cycles, rich numbers, escaped text,
+      ;; unusual identifiers, and large values all retain the canonical path.
+      (call-with-current-continuation
+       (lambda (fallback)
+         (let ((count 0))
+           (define (enter! value ancestors)
+             (set! count (+ count 1))
+             (if (or (> count 128) (memq value ancestors))
+                 (fallback #f))
+             (cons value ancestors))
+           (define (validate value ancestors)
+             (cond
+              ((or (boolean? value) (null? value)) #t)
+              ((symbol? value)
+               (if (simple-host-symbol-name? (symbol->string value))
+                   #t
+                   (fallback #f)))
+              ((string? value)
+               (if (simple-host-string? value) #t (fallback #f)))
+              ((and (integer? value)
+                    (exact? value)
+                    (<= -9007199254740991 value)
+                    (<= value 9007199254740991))
+               #t)
+              ((char? value)
+               (let ((code (char->integer value)))
+                 (if (and (>= code 33) (<= code 126))
+                     #t
+                     (fallback #f))))
+              ((bytevector? value) #t)
+              ((pair? value)
+               (let ((next (enter! value ancestors)))
+                 (validate (car value) next)
+                 (validate (cdr value) next)))
+              ((vector? value)
+               (let ((next (enter! value ancestors)))
+                 (let loop ((index 0))
+                   (if (< index (vector-length value))
+                       (begin
+                         (validate (vector-ref value index) next)
+                         (loop (+ index 1)))))))
+              (else (fallback #f))))
+           (validate record '())
+           (let ((output (open-output-string)))
+             (write record output)
+             (get-output-string output))))))
+
+    (define (external-string-fragment? text)
+      "Report whether TEXT is unchanged by canonical string escaping."
+      (call-with-current-continuation
+       (lambda (reject)
+         (string-for-each
+          (lambda (character)
+            (if (or (char=? character (integer->char 7))
+                    (char=? character (integer->char 8))
+                    (char=? character #\tab)
+                    (char=? character #\newline)
+                    (char=? character #\return)
+                    (char=? character #\")
+                    (char=? character #\\))
+                (reject #f)))
+          text)
+         #t)))
+
+    (define (record-value-string-match? record pattern)
+      "Return #t for a safe direct match in RECORD's string value field."
+      (and
+       (memory-substring-pattern-external-fragment? pattern)
+       (let ((value (field-value record 'value)))
+         (and
+          (string? value)
+          (prepared-memory-substring-occurs? pattern value)))))
 
     (define (redaction-sensitive? sidecar)
       "Return SIDECAR's source-owned restricted-content classification."
@@ -931,6 +1074,71 @@
       (count relevance-count)
       (generation relevance-generation set-relevance-generation!))
 
+    ;; A fixed small query does not need tree/trie construction.  Four direct
+    ;; groups remain a constant-bounded linear path; larger queries use the
+    ;; general Aho-Corasick and descriptor indexes below.
+    (define memory-small-relevance-limit 4)
+
+    ;; Distinguishes the bounded direct relevance representation from the
+    ;; general relevance index without exposing either private layout.
+    (define memory-small-relevance-marker (vector #f))
+
+    (define (memory-small-relevance-index? value)
+      "Return #t when VALUE is the bounded direct relevance representation."
+      (and (vector? value)
+           (= (vector-length value) 3)
+           (eq? (vector-ref value 0) memory-small-relevance-marker)))
+
+    (define (small-normalized-term=? key=? left right)
+      "Return #t when normalized bounded terms LEFT and RIGHT are equal."
+      (let ((left-text (vector-ref left 0))
+            (right-text (vector-ref right 0))
+            (left-keys (vector-ref left 1))
+            (right-keys (vector-ref right 1)))
+        (and
+         (or (and (not left-text) (not right-text))
+             (and left-text right-text (string=? left-text right-text)))
+         (let loop ((index 0))
+           (or
+            (= index (vector-length left-keys))
+            (let ((left-key (vector-ref left-keys index))
+                  (right-key (vector-ref right-keys index)))
+              (and
+               (or (and (not left-key) (not right-key))
+                   (and left-key right-key (key=? left-key right-key)))
+               (loop (+ index 1)))))))))
+
+    (define (normalize-small-query-terms store projections)
+      "Normalize at most four PROJECTIONS into direct relevance groups."
+      (let ((key=? (store-key=? store)))
+        (let loop ((index 0) (groups '()))
+          (if (= index (vector-length projections))
+              (vector memory-small-relevance-marker (reverse groups) key=?)
+              (let* ((normalized
+                      (normalize-query-term
+                       store
+                       (vector-ref projections index)))
+                     (existing
+                      (let find ((rest groups))
+                        (and
+                         (pair? rest)
+                         (if (small-normalized-term=?
+                              key=? normalized (vector-ref (car rest) 0))
+                             (car rest)
+                             (find (cdr rest)))))))
+                (if existing
+                    (vector-set! existing 2 (+ (vector-ref existing 2) 1))
+                    (let ((text (vector-ref normalized 0)))
+                      (set! groups
+                            (cons
+                             (vector
+                              normalized
+                              (and text
+                                   (prepare-memory-substring-pattern text))
+                              1)
+                             groups))))
+                (loop (+ index 1) groups))))))
+
     (define (make-relevance-key-order fast?)
       "Return the exact descriptor order allowed by the active backend."
       (lambda (left right)
@@ -1026,6 +1234,13 @@
       (if (not (vector? projections))
           (error "memory query term projections must be a vector"
                  projections))
+      (let ((count (vector-length projections)))
+        (if (<= count memory-small-relevance-limit)
+            (normalize-small-query-terms store projections)
+            (normalize-general-query-terms store projections))))
+
+    (define (normalize-general-query-terms store projections)
+      "Normalize unbounded PROJECTIONS into indexed relevance groups."
       (let* ((count (vector-length projections))
              (fast? (consent-identity-map-fast-backend?))
              (key<? (make-relevance-key-order fast?))
@@ -1184,7 +1399,52 @@
                          (vector-ref tag-keys index)
                          generation)))))))))
 
-    (define (relevance-score terms record sidecar)
+    (define (small-relevance-key-match? key=? keys sidecar)
+      "Return #t when direct term KEYS match candidate SIDECAR identity."
+      (let* ((live-key (memory-key-sidecar-live-key sidecar))
+             (scope-index
+              (memory-scope-name-index (vector-ref live-key 0)))
+             (term-key (and scope-index (vector-ref keys scope-index))))
+        (and
+         term-key
+         (or
+          (key=? term-key live-key)
+          (key=? term-key (memory-key-sidecar-kind-key sidecar))
+          (let ((tags (memory-key-sidecar-tag-keys sidecar)))
+            (let loop ((index 0))
+              (and
+               (< index (vector-length tags))
+               (or (key=? term-key (vector-ref tags index))
+                   (loop (+ index 1))))))))))
+
+    (define (small-relevance-score terms record sidecar)
+      "Return relevance through the constant-bounded direct term path."
+      (let ((groups (vector-ref terms 1))
+            (key=? (vector-ref terms 2))
+            (record-text #f)
+            (record-text-ready? #f))
+        (define (text-matches? pattern)
+          (if (not record-text-ready?)
+              (begin
+                (set! record-text (record-search-text record))
+                (set! record-text-ready? #t)))
+          (prepared-memory-substring-occurs? pattern record-text))
+        (let loop ((rest groups) (score 0))
+          (if (null? rest)
+              score
+              (let* ((group (car rest))
+                     (normalized (vector-ref group 0))
+                     (pattern (vector-ref group 1))
+                     (matched?
+                      (or
+                       (small-relevance-key-match?
+                        key=? (vector-ref normalized 1) sidecar)
+                       (and pattern (text-matches? pattern)))))
+                (loop
+                 (cdr rest)
+                 (+ score (if matched? (vector-ref group 2) 0))))))))
+
+    (define (indexed-relevance-score terms record sidecar)
       "Return exact key/text relevance using linear-size scratch indexes."
       (let ((generation (+ (relevance-generation terms) 1)))
         (set-relevance-generation! terms generation)
@@ -1239,6 +1499,12 @@
                          (+ score (drain-terminal-chain state))))
                  (record-search-text record))
                 score)))))
+
+    (define (relevance-score terms record sidecar)
+      "Return exact relevance through the bounded or general query path."
+      (if (memory-small-relevance-index? terms)
+          (small-relevance-score terms record sidecar)
+          (indexed-relevance-score terms record sidecar)))
 
     (define (candidate-field candidate name)
       "Return CANDIDATE field NAME."
