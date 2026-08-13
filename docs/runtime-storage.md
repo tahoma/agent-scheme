@@ -8,15 +8,34 @@
 
 ## Summary
 
-`(consent runtime-storage)` is the private, portable storage substrate for
-allocation-sensitive runtime and graph algorithms. It supplies bounded
-growable vectors and reusable scratch arenas without importing a public SRFI,
-calling user code, or depending on an initialized standard-library shelf.
+Two private, portable libraries provide storage for allocation-sensitive
+runtime and graph algorithms:
 
-The library imports only `(scheme base)`. Both the Emacs bootstrap source
-loader and direct or compiled R7RS routes execute the same Scheme source. A
-future native runtime may accelerate the backing storage, but it must preserve
-the bounds, clearing, counters, ownership, and failure behavior described here.
+- `(consent growable-vector)` owns bounded indexed storage and imports only
+  `(scheme base)`; and
+- `(consent scratch-arena)` layers reusable, phase-owned lifetimes over that
+  storage and imports `(consent growable-vector)`.
+
+Neither library imports a public SRFI, calls user code, or depends on an
+initialized standard-library shelf. The Emacs bootstrap source loader and
+direct or compiled R7RS routes execute the same Scheme sources. A future native
+runtime may accelerate the backing storage, but it must preserve the bounds,
+clearing, counters, ownership, and failure behavior described here.
+
+The library boundary follows the behavior each abstraction owns:
+
+```mermaid
+flowchart TB
+  reader["Reader builders"]
+  memory["Memory-key graph capture"] --> grow
+  grow["(consent growable-vector)<br/>bounded indexed storage"]
+  scratch["(consent scratch-arena)<br/>owners, marks, reuse policy"]
+  srfi["Future (srfi 214)<br/>public flexvectors"]
+  reader --> grow
+  scratch --> grow
+  collectors["Collector phases"] --> scratch
+  srfi -. "may reuse compatible storage" .-> grow
+```
 
 ## Choosing the Storage Layer
 
@@ -31,7 +50,7 @@ stale operation must be rejected after cleanup.
 | Collector without heap growth | `pre-reserved` arena | Fails full. |
 | Temporary safe growth | `allow-growth` arena | Grows boundedly. |
 
-Neither layer is a general sequence abstraction. The library is private,
+Neither layer is a general sequence abstraction. Both libraries are private,
 mutable, callback-free, and deliberately narrower than SRFI 214.
 
 ## Storage Shape and Invariants
@@ -66,9 +85,10 @@ describe the object's history, not its current logical contents.
 
 ## Growable Vectors
 
-`consent-make-growable-vector` takes an initial capacity and a maximum
-capacity. Both are exact nonnegative integers, and the initial capacity must
-not exceed the maximum. The maximum is permanent for that storage object.
+`(consent growable-vector)` exports the storage operations in this section.
+`consent-make-growable-vector` takes an initial capacity and a maximum capacity.
+Both are exact nonnegative integers, and the initial capacity must not exceed
+the maximum. The maximum is permanent for that storage object.
 
 The populated prefix is separate from reserved capacity:
 
@@ -78,6 +98,8 @@ The populated prefix is separate from reserved capacity:
 - grow doubles the current capacity, or uses the requested minimum when that
   is larger, without crossing the configured maximum;
 - snapshot returns a fresh fixed vector containing only the populated prefix;
+- truncate clears a populated suffix and publishes the requested shorter
+  prefix; scratch arenas use this operation to reset to an owner mark;
 - reset clears every populated slot to `#f` and retains the capacity; and
 - release clears every populated slot, drops the backing vector, and makes the
   growable vector permanently inactive.
@@ -102,6 +124,7 @@ The table abbreviates the common `consent-growable-vector-` prefix.
 | `append!` | Amortized O(1) | Only when full. |
 | `reserve!`, `grow!` | O(length) when larger | Only when larger. |
 | `snapshot` | O(length) | Always; returns a copy. |
+| `truncate!` | O(removed suffix) | None. |
 | `reset!`, `release!` | O(length) | None. |
 | `unused-slots-cleared?` | O(capacity) | None. |
 | `stats` | O(1) | Allocates the result datum. |
@@ -113,11 +136,12 @@ argument as a minimum and may choose the larger geometric capacity.
 
 ## Scratch Arenas
 
-A scratch arena owns one growable vector and issues at most one active owner at
-a time. `consent-scratch-arena-acquire!` requires a symbolic phase and returns
-a fresh owner lifetime. Every append, ref, set, mark, and reset operation takes
-that owner. Release clears the complete logical prefix before the arena can
-issue another owner.
+`(consent scratch-arena)` imports `(consent growable-vector)`, owns one such
+vector, and issues at most one active owner at a time.
+`consent-scratch-arena-acquire!` requires a symbolic phase and returns a fresh
+owner lifetime. Every append, ref, set, mark, and reset operation takes that
+owner. Release clears the complete logical prefix before the arena can issue
+another owner.
 
 Marks are ownership-stamped exact integers. Each owner receives a library-wide
 monotonic lifetime token, so a mark from another arena or a released lifetime
@@ -379,9 +403,10 @@ compatible primitive storage.
 
 ## Layering and Consumers
 
-The memory-key canonicalizer now uses this library for its dense label, edge,
-and descriptor vectors. Its graph semantics and asymptotic gates remain owned
-by `(agent memory-key)`; only the compatible storage machinery moved.
+The memory-key canonicalizer now uses `(consent growable-vector)` for its dense
+label, edge, and descriptor vectors. Its graph semantics and asymptotic gates
+remain owned by `(agent memory-key)`; only the compatible storage machinery
+moved.
 
 The reader uses per-call growable vectors for line-start and literal-element
 builders. It snapshots before publishing a result and releases the private
@@ -400,16 +425,17 @@ failure, not as permission to allocate from the heap under collection.
 
 ## Verification
 
-`tests/scheme/consent-runtime-storage-test.scm` covers zero and maximum capacity
+`tests/scheme/consent-growable-vector-test.scm` covers zero and maximum capacity
 boundaries, a deterministic capacity/model sweep, no-op transitions, copy
 counters, state preservation after failed operations, reset and release
-clearing, idempotent release, stable representative errors, both arena growth
-policies, active and idle statistics, cross-arena and stale marks, escaped
-owners, exception cleanup, dynamic-wind, continuation re-entry, and a
-pre-reserved synthetic collector workload. The portable test plan runs that
-program on direct and compiled routes. ERT imports the internal library through
-the Emacs source-library loader and exercises bounds and mark ownership, proving
-that the bootstrap uses the same portable implementation.
+clearing, idempotent release, and stable representative errors.
+`tests/scheme/consent-scratch-arena-test.scm` covers both growth policies,
+active and idle statistics, cross-arena and stale marks, escaped owners,
+exception cleanup, dynamic-wind, continuation re-entry, and a pre-reserved
+synthetic collector workload. The portable plan runs both programs on direct
+and compiled routes. ERT imports each internal library independently through
+the Emacs source-library loader, proving that both bootstrap surfaces use their
+portable source implementations.
 
 The portable layer cannot safely force a host `make-vector` out-of-memory
 condition or observe garbage-collector reachability. The suite therefore checks

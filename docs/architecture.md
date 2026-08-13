@@ -431,20 +431,20 @@ copy-on-write or complete session-fork mutation isolation.
 
 #### Bootstrap-safe runtime storage
 
-`(consent runtime-storage)` owns the private callback-free growable-vector and
-scratch-arena substrate used before optional standard libraries are realized.
-Growable vectors separate their populated prefix, reserved capacity, exact
-maximum, high-water usage, growth count, and copied-element count. Reset clears
-the prefix without discarding capacity; terminal release clears the prefix and
-drops the backing vector.
+`(consent growable-vector)` owns private callback-free indexed storage used
+before optional standard libraries are realized. It separates the populated
+prefix, reserved capacity, exact maximum, high-water usage, growth count, and
+copied-element count. Reset clears the prefix without discarding capacity;
+terminal release clears the prefix and drops the backing vector.
 
-Scratch arenas issue one phase-tagged owner lifetime at a time. Marks are
-stamped for that lifetime, reset clears every released slot, and an escaped
-owner remains invalid after release or continuation re-entry. The
-`pre-reserved` policy forbids active growth, giving collectors a route that
-cannot recursively allocate from the heap under collection. `allow-growth`
-remains available for runtime phases in which bounded ordinary allocation is
-permitted. The complete contract is recorded in
+`(consent scratch-arena)` imports that storage library and adds one
+phase-tagged owner lifetime at a time. Marks are stamped for that lifetime,
+reset clears every released slot, and an escaped owner remains invalid after
+release or continuation re-entry. The `pre-reserved` policy forbids active
+growth, giving collectors a route that cannot recursively allocate from the
+heap under collection. `allow-growth` remains available for runtime phases in
+which bounded ordinary allocation is permitted. The complete contract is
+recorded in
 [Bootstrap-Safe Runtime Storage](runtime-storage.md).
 
 #### Portable character ownership

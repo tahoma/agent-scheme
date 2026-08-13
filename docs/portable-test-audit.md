@@ -75,12 +75,14 @@ does; retaining an ERT test does not make it the semantic source of truth.
   and writer labeling through both evaluator bootstraps. Reader tests retain
   multi-element pair and vector datum-label cycles in both direct and
   self-hosted lanes.
-- `(consent runtime-storage)` bounded growth, allocation counters, clearing,
-  arena ownership, reset/release, exception cleanup, continuation re-entry, and
-  pre-reserved collector workloads are canonical in
-  `tests/scheme/consent-runtime-storage-test.scm`. The portable plan runs the
-  same library on direct and compiled hosts, while ERT exercises its Emacs
-  source-library route.
+- `(consent growable-vector)` bounded growth, allocation counters, clearing,
+  reset/release, and failure-state preservation are canonical in
+  `tests/scheme/consent-growable-vector-test.scm`.
+- `(consent scratch-arena)` ownership, marks, exception cleanup, continuation
+  re-entry, and pre-reserved collector workloads are canonical in
+  `tests/scheme/consent-scratch-arena-test.scm`. The portable plan runs both
+  libraries on direct and compiled hosts, while ERT exercises each independent
+  Emacs source-library route.
 - `(consent character)` owned-record construction, the complete Unicode scalar
   boundary, host/native adapter contracts, and NUL-through-maximum nested datum
   round trips are canonical in `tests/scheme/consent-character-test.scm`.
@@ -213,9 +215,9 @@ Scheme-plan shards directly; the aggregate live targets run the Emacs-host
 checks beside them, never as their discovery or process-control parent.
 
 The same plan makes compiled self-host coverage auditable rather than an
-allowlist hidden in shell orchestration. All 65 ordinary `full` programs carry
-exactly one of `compiled` or `self-host-gap`: 44 are compiled and 21 are named
-gaps. The compiled selector contains 45 programs because it also includes the
+allowlist hidden in shell orchestration. All 67 ordinary `full` programs carry
+exactly one of `compiled` or `self-host-gap`: 46 are compiled and 21 are named
+gaps. The compiled selector contains 47 programs because it also includes the
 compiled-only runtime manifest smoke program. The current gaps are acceptance
 inputs to #120, #346, and #432. Their issue comments name the exact registered
 cases or first failing manual checks. As those runtime defects ship, their

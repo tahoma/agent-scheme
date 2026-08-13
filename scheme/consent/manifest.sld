@@ -36,13 +36,13 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
-        (name (consent runtime-storage))
+        (name (consent growable-vector))
         (owner consent-core)
         (provider repo-source)
         (visibility internal-runtime)
         (layer runtime)
         (source-kind source-library)
-        (source (path "runtime-storage.sld"))
+        (source (path "growable-vector.sld"))
         (api-version internal)
         (source-version unknown)
         (realization portable-source)
@@ -59,11 +59,32 @@
           consent-growable-vector-reserve!
           consent-growable-vector-grow!
           consent-growable-vector-snapshot
+          consent-growable-vector-truncate!
           consent-growable-vector-reset!
           consent-growable-vector-release!
           consent-growable-vector-unused-slots-cleared?
-          consent-growable-vector-stats
-          consent-make-scratch-arena
+          consent-growable-vector-stats))
+        (dependencies ((library (scheme base))))
+        (provenance
+         ((origin repo)
+          (allocation-policy bounded-callback-free)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (consent scratch-arena))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "scratch-arena.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-make-scratch-arena
           consent-scratch-arena?
           consent-scratch-arena-reserve!
           consent-scratch-arena-acquire!
@@ -80,10 +101,13 @@
           consent-scratch-owner-release!
           consent-scratch-arena-unused-slots-cleared?
           consent-scratch-arena-stats))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))
+          (library (consent growable-vector))))
         (provenance
          ((origin repo)
-          (allocation-policy bounded-callback-free)))
+          (allocation-policy bounded-callback-free)
+          (ownership phase-scoped)))
         (status internal)
         (canonical #t))
        (manifest-entry
@@ -1808,7 +1832,7 @@
           (library (consent datum))
           (library (consent identity-map))
           (library (consent numeric))
-          (library (consent runtime-storage))
+          (library (consent growable-vector))
           (library (consent symbol))
           (library (consent symbol-boundary))))
         (provenance ((origin repo)))

@@ -83,7 +83,7 @@
           (consent datum)
           (consent identity-map)
           (consent numeric)
-          (only (consent runtime-storage)
+          (only (consent growable-vector)
                 consent-growable-vector-active?
                 consent-growable-vector-append!
                 consent-growable-vector-release!

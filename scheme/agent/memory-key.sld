@@ -59,7 +59,7 @@
         (only (consent reader)
               consent-number-representation-snapshot
               consent-outer-representation-kind)
-        (only (consent runtime-storage)
+        (only (consent growable-vector)
               consent-make-growable-vector
               consent-growable-vector-append!
               consent-growable-vector-ref
