@@ -977,4 +977,29 @@
               (list generic count list-acc vector-acc vector-write string-acc
                     bytevector-acc bytevector-write sum product)))))
 
+(testing-registry-case
+ 'flexvector-backed-vector-collectors/long-input '(portable stdlib stress)
+(test-equal
+ 'flexvector-backed-vector-collectors/long-input
+ '(10000 0 9999 10000 0 9999 9999 0)
+ (let ((generated (generator->vector (make-iota-generator 10000)))
+       (forward (vector-accumulator))
+       (backward (reverse-vector-accumulator)))
+   (let loop ((index 0))
+     (if (< index 10000)
+         (begin
+           (forward index)
+           (backward index)
+           (loop (+ index 1)))))
+   (let ((forward-vector (forward (eof-object)))
+         (backward-vector (backward (eof-object))))
+     (list (vector-length generated)
+           (vector-ref generated 0)
+           (vector-ref generated 9999)
+           (vector-length forward-vector)
+           (vector-ref forward-vector 0)
+           (vector-ref forward-vector 9999)
+           (vector-ref backward-vector 0)
+           (vector-ref backward-vector 9999))))))
+
 (testing-runner-main "Stdlib Generator portable tests" (command-line))

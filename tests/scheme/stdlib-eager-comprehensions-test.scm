@@ -219,5 +219,21 @@
              (list (list-ec (:mygen x '(1 2 3)) x)
              (new-list-ec (: i 5) i))))
 
+(testing-registry-case
+ 'flexvector-backed-collectors/long-input '(portable stdlib stress)
+(test-equal
+ 'flexvector-backed-collectors/long-input
+ '(10000 0 9999 10000 #\a #\p)
+ (let ((vector-result (vector-ec (:range i 10000) i))
+       (string-result
+        (string-ec (:range i 10000)
+                   (integer->char (+ 97 (modulo i 26))))))
+   (list (vector-length vector-result)
+         (vector-ref vector-result 0)
+         (vector-ref vector-result 9999)
+         (string-length string-result)
+         (string-ref string-result 0)
+         (string-ref string-result 9999)))))
+
 (testing-runner-main "Stdlib Eager Comprehensions portable tests"
   (command-line))

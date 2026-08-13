@@ -946,7 +946,8 @@
           product-accumulator))
         (dependencies
          ((library (scheme base))
-          (library (scheme case-lambda))))
+          (library (scheme case-lambda))
+          (library (stdlib flexvectors))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -966,6 +967,9 @@
             (registry-aliases
              (aliases (scheme generator) (srfi 158) (srfi srfi-158)))
             (portable-optional-helpers (source local))
+            (flexvector-collectors
+             (procedures generator->vector vector-accumulator
+                         reverse-vector-accumulator))
             (accumulator-finalization-guards (source local))
             (adapted-tests (file "tests/scheme/stdlib-generator-test.scm"))))))
         (verification
@@ -1573,6 +1577,222 @@ scm"))))))
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (stdlib flexvectors))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility public)
+        (source-kind source-library)
+        (source (path "flexvectors.sld"))
+        (api-version (compat 0))
+        (source-version (upstream-revision
+          "37dc6dd7adebc19e2c58dde618f159ebee741d7e"))
+        (realization portable-source)
+        (aliases
+         ((srfi 214)
+          (srfi srfi-214)
+          (srfi :214)
+          (srfi :214 flexvectors)))
+        (exports
+         (make-flexvector
+          flexvector
+          flexvector-unfold
+          flexvector-unfold-right
+          flexvector-copy
+          flexvector-reverse-copy
+          flexvector-append
+          flexvector-concatenate
+          flexvector-append-subvectors
+          flexvector?
+          flexvector-empty?
+          flexvector=?
+          flexvector-ref
+          flexvector-front
+          flexvector-back
+          flexvector-length
+          flexvector-add!
+          flexvector-add-front!
+          flexvector-add-back!
+          flexvector-add-all!
+          flexvector-append!
+          flexvector-remove!
+          flexvector-remove-front!
+          flexvector-remove-back!
+          flexvector-remove-range!
+          flexvector-clear!
+          flexvector-set!
+          flexvector-swap!
+          flexvector-fill!
+          flexvector-reverse!
+          flexvector-copy!
+          flexvector-reverse-copy!
+          flexvector-fold
+          flexvector-fold-right
+          flexvector-map
+          flexvector-map/index
+          flexvector-map!
+          flexvector-map/index!
+          flexvector-append-map
+          flexvector-append-map/index
+          flexvector-filter
+          flexvector-filter/index
+          flexvector-filter!
+          flexvector-filter/index!
+          flexvector-for-each
+          flexvector-for-each/index
+          flexvector-count
+          flexvector-cumulate
+          flexvector-index
+          flexvector-index-right
+          flexvector-skip
+          flexvector-skip-right
+          flexvector-binary-search
+          flexvector-any
+          flexvector-every
+          flexvector-partition
+          flexvector->vector
+          vector->flexvector
+          flexvector->list
+          reverse-flexvector->list
+          list->flexvector
+          reverse-list->flexvector
+          flexvector->string
+          string->flexvector
+          flexvector->generator
+          generator->flexvector))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme case-lambda))
+          (library (scheme cxr))
+          (library (consent growable-vector))))
+        (provenance
+         ((origin repo)
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-214")
+          (local-reference-documents
+           ((path "reference/srfi-214/srfi-214.md")
+            (role specification)
+            (source srfi)))
+          (upstream-source-files
+           ("implementation/flexvectors.sld"
+            "implementation/flexvectors-body1.scm"
+            "implementation/flexvectors-body2.scm"))
+          (upstream-source-test-file "implementation/tests.scm")
+          (upstream-source-sha256
+           (("implementation/flexvectors.sld"
+             .
+             "a1428021de77e1384f204a3b363ecb490701ffc746b800d202ab22d9e0a4d2e3")
+            ("implementation/flexvectors-body1.scm"
+             .
+             "f53174730ade85938e0f1172affa3b8dfb578cc439e4082a2bf24d60b25c95e6")
+            ("implementation/flexvectors-body2.scm"
+             .
+             "e5c3091c5fcfcb7cb8dc873fbed72f2d4a80ab07b34e96225ae7aa89ada955c0")
+            ("implementation/tests.scm"
+             .
+             "9e70ade72d91c96458530795bddb6b80cd9853b9ed5c65364d0648a7e02\
+04b69")))
+          (upstream-revision
+           "37dc6dd7adebc19e2c58dde618f159ebee741d7e")
+          (upstream-license "MIT")
+          (local-license "MIT")
+          (vendored? #t)
+          (local-patches
+           ((define-library-wrapper (library (stdlib flexvectors)))
+            (private-growable-storage
+             (library (consent growable-vector)))
+            (registry-aliases
+             (aliases
+              (srfi 214)
+              (srfi srfi-214)
+              (srfi :214)
+              (srfi :214 flexvectors)))
+            (adapted-tests
+             (file "tests/scheme/stdlib-flexvectors-test.scm")
+             (file
+              "tests/scheme/stdlib-flexvectors-upstream-test.scm"))))))
+        (verification
+         ((test-status
+           (import-resolution representative-flexvector-behavior
+                              alias-import missing-export-diagnostic
+                              dependency-diagnostic adapted-upstream-tests
+                              long-input portable-host-suite))))
+        (status vendored-adapted-implementation)
+        (canonical #t))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi 214))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib flexvectors)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib flexvectors))
+        (dependencies
+         ((library (stdlib flexvectors))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi srfi-214))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib flexvectors)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib flexvectors))
+        (dependencies
+         ((library (stdlib flexvectors))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi :214))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib flexvectors)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib flexvectors))
+        (dependencies
+         ((library (stdlib flexvectors))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi :214 flexvectors))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib flexvectors)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib flexvectors))
+        (dependencies
+         ((library (stdlib flexvectors))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (stdlib property-testing))
         (owner stdlib)
         (provider repo-source)
@@ -1770,7 +1990,8 @@ scm"))))))
           :-dispatch-set!))
         (dependencies
          ((library (scheme base))
-          (library (scheme read))))
+          (library (scheme read))
+          (library (stdlib flexvectors))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -1801,6 +2022,7 @@ f3")))
             (r7rs-inexact-name (from exact->inexact) (to inexact))
             (gambit-hygiene-friendly-temporaries)
             (gambit-helper-exports)
+            (flexvector-collectors (syntaxes string-ec vector-ec))
             (registry-aliases
              (aliases (srfi 42) (srfi srfi-42)
                       (srfi :42) (srfi :42 eager-comprehensions)))

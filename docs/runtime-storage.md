@@ -30,7 +30,7 @@ flowchart TB
   memory["Memory-key graph capture"] --> grow
   grow["(consent growable-vector)<br/>bounded indexed storage"]
   scratch["(consent scratch-arena)<br/>owners, marks, reuse policy"]
-  srfi["Future (srfi 214)<br/>public flexvectors"]
+  srfi["(srfi 214)<br/>public flexvectors"]
   reader --> grow
   scratch --> grow
   collectors["Collector phases"] --> scratch
@@ -52,6 +52,12 @@ stale operation must be rejected after cleanup.
 
 Neither layer is a general sequence abstraction. Both libraries are private,
 mutable, callback-free, and deliberately narrower than SRFI 214.
+
+Programs that need the public sequence abstraction import `(stdlib
+flexvectors)` or one of its SRFI 214 aliases. That library wraps growable
+storage in a distinct public record and owns SRFI validation, callbacks,
+conversion, search, and mutation semantics without widening the private
+storage API.
 
 ## Storage Shape and Invariants
 
@@ -413,10 +419,11 @@ builders. It snapshots before publishing a result and releases the private
 storage during dynamic cleanup, so capacity and lifecycle policy cannot escape
 through the reader API.
 
-Issue #210 continues to own SRFI 214 names, validation, aliases, documentation,
-and public flexvector semantics. It may reuse the private storage where those
-semantics agree, but it must not expose collector phase, reserve, reset,
-release, maximum-capacity, or allocation-policy details as SRFI behavior.
+SRFI 214 flexvectors reuse the private storage where the semantics agree. The
+public layer does not expose collector phase, reserve, reset, release,
+maximum-capacity, or allocation-policy details as SRFI behavior. SRFI 158
+vector collectors and SRFI 42 vector and string comprehensions use that public
+layer so long collections avoid intermediate reversed lists.
 
 The baseline and incremental collectors in #335 and #966 consume
 `pre-reserved` arenas. They must reserve and acquire outside the no-allocation
@@ -436,6 +443,10 @@ synthetic collector workload. The portable plan runs both programs on direct
 and compiled routes. ERT imports each internal library independently through
 the Emacs source-library loader, proving that both bootstrap surfaces use their
 portable source implementations.
+`tests/scheme/stdlib-flexvectors-test.scm` covers the public storage boundary,
+overlapping edits, parallel operations, searches, errors, and long inputs. The
+adapted upstream SRFI 214 suite exercises the complete public operation set on
+direct and compiled portable hosts.
 
 The portable layer cannot safely force a host `make-vector` out-of-memory
 condition or observe garbage-collector reachability. The suite therefore checks

@@ -37,10 +37,15 @@
      :until-1
      ec-:vector-filter
      :-dispatch
-     ec-guarded-do-ec))
+     ec-guarded-do-ec
+     flexvector
+     flexvector-add-back!
+     flexvector->string
+     flexvector->vector))
    (else))
   (import (scheme base)
-          (scheme read))
+          (scheme read)
+          (stdlib flexvectors))
   (begin
 ;; <PLAINTEXT>
 ;; Eager Comprehensions in [outer..inner|expr]-Convention
@@ -992,13 +997,13 @@
 (define-syntax string-ec
   (syntax-rules ()
     ((string-ec etc1 etc ...)
-     (list->string (list-ec etc1 etc ...)) )))
+     (flexvector->string
+      (fold-ec (flexvector) etc1 etc ...
+               (lambda (value result)
+                 (flexvector-add-back! result value)))) )))
 
-;; Alternative: For very long strings, the intermediate list may be a
-;;   problem. A more space-aware implementation collect the characters 
-;;   in an intermediate list and when this list becomes too large it is
-;;   converted into an intermediate string. At the end, the intermediate
-;;   strings are concatenated with string-append.
+;; Local patch: Collect through a flexvector so long strings do not allocate an
+;; intermediate reversed list before materializing their final representation.
 
 
 (define-syntax string-append-ec
@@ -1010,12 +1015,13 @@
 (define-syntax vector-ec
   (syntax-rules ()
     ((vector-ec etc1 etc ...)
-     (list->vector (list-ec etc1 etc ...)) )))
+     (flexvector->vector
+      (fold-ec (flexvector) etc1 etc ...
+               (lambda (value result)
+                 (flexvector-add-back! result value)))) )))
 
-;; Comment: A similar approach as for string-ec can be used for vector-ec.
-;;   However, the space overhead for the intermediate list is much lower
-;;   than for string-ec and as there is no vector-append, the intermediate
-;;   vectors must be copied explicitly.
+;; Local patch: Use the same flexvector collector for vectors to avoid an
+;; intermediate reversed list and its final spine copy.
 
 (define-syntax vector-of-length-ec
   (syntax-rules (nested)

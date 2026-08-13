@@ -1907,6 +1907,7 @@
     "(stdlib srfi-libraries)"
     "(stdlib and-let-star)"
     "(stdlib list)"
+    "(stdlib flexvectors)"
     "(stdlib generator)"
     "(stdlib testing)"
     "(stdlib random-bits)"
@@ -3344,13 +3345,152 @@
                      '((scheme generator) (srfi 158) (srfi srfi-158)))
              (equal? (manifest-field entry 'dependencies)
                      '((library (scheme base))
-                       (library (scheme case-lambda))))
+                       (library (scheme case-lambda))
+                       (library (stdlib flexvectors))))
              (equal? (manifest-field scheme-alias 'target)
                      '(stdlib generator))
              (equal? (manifest-field alias 'target) '(stdlib generator))
              (equal? (manifest-field portable-alias 'target)
                      '(stdlib generator))))")
     "#t")))
+
+(ert-deftest consent-library-test-srfi-214-imports-and-uses-flexvectors ()
+  "Import SRFI 214 aliases and exercise representative flexvector behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 214))
+      (let ((values (flexvector 'a 'c)))
+        (flexvector-add! values 1 'b)
+        (flexvector-add-back! values 'd)
+        (list (flexvector? values)
+              (flexvector-length values)
+              (flexvector->list values)))")
+    "(#t 4 (a b c d))"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-214))
+      (flexvector->vector
+       (flexvector-map (lambda (value) (* value value))
+                       (flexvector 1 2 3)))")
+    "#(1 4 9)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :214))
+      (flexvector->string (string->flexvector \"flex\"))")
+    "\"flex\""))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :214 flexvectors))
+      (flexvector->list (flexvector-reverse-copy (flexvector 1 2 3)))")
+    "(3 2 1)")))
+
+(ert-deftest consent-library-test-srfi-214-missing-export-diagnostic ()
+  "Report missing SRFI 214 imports through the resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 214) missing-flexvector-helper))
+            missing-flexvector-helper")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-flexvector-helper")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-214 ()
+  "Expose SRFI 214 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib flexvectors)))
+            (alias (stdlib-manifest-ref '(srfi 214)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-214)))
+            (legacy-alias
+             (stdlib-manifest-ref '(srfi :214 flexvectors))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib flexvectors))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (equal? (manifest-subfield entry 'provenance
+                                        'local-reference-documents)
+                     '((path \"reference/srfi-214/srfi-214.md\")
+                       (role specification)
+                       (source srfi)))
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 214)
+                       (srfi srfi-214)
+                       (srfi :214)
+                       (srfi :214 flexvectors)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))
+                       (library (scheme case-lambda))
+                       (library (scheme cxr))
+                       (library (consent growable-vector))))
+             (member 'generator->flexvector (manifest-field entry 'exports))
+             (equal? (manifest-field alias 'target) '(stdlib flexvectors))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib flexvectors))
+             (equal? (manifest-field legacy-alias 'target)
+                     '(stdlib flexvectors))))")
+    "#t")))
+
+(ert-deftest consent-library-test-srfi-214-dependency-diagnostic ()
+  "Report a missing flexvector storage substrate through the alias graph."
+  (unwind-protect
+      (progn
+        (consent--library-catalog-add-manifest
+         'srfi-214-dependency-fixture
+         (consent-read
+          "(library-catalog
+             (manifest-entry
+              (schema-version 1)
+              (kind library)
+              (name (stdlib flexvectors))
+              (owner stdlib)
+              (provider repo-source)
+              (visibility public)
+              (source-kind source-library)
+              (source (path \"flexvectors.sld\"))
+              (api-version (compat 0))
+              (source-version unknown)
+              (realization portable-source)
+              (exports (flexvector))
+              (dependencies
+               ((library (consent missing-growable-vector))))
+              (provenance ((origin test-fixture)))
+              (status available)
+              (canonical #t)))"))
+        (let ((record
+               (consent--library-solve-dependencies-record
+                (consent-read "(srfi 214)"))))
+          (should
+           (equal (consent-library-test--record-field-external
+                   record 'status)
+                  "unsatisfied-dependency"))
+          (should
+           (equal (consent-library-test--record-field-external
+                   record 'reason)
+                  "missing-dependency"))
+          (should
+           (member
+            "(consent missing-growable-vector)"
+            (mapcar #'consent-datum->external
+                    (consent-library-test--record-field
+                     record 'missing-dependencies))))))
+    (consent--library-catalog-remove-manifest
+     'srfi-214-dependency-fixture)))
 
 (ert-deftest consent-library-test-srfi-64-imports-and-runs-tests ()
   "Import SRFI 64 aliases and exercise representative test-runner behavior."
@@ -3972,7 +4112,8 @@
                        (srfi :42 eager-comprehensions)))
              (equal? (manifest-field entry 'dependencies)
                      '((library (scheme base))
-                       (library (scheme read))))
+                       (library (scheme read))
+                       (library (stdlib flexvectors))))
              (member 'list-ec (manifest-field entry 'exports))
              (member ':range (manifest-field entry 'exports))
              (member ':-dispatch-set! (manifest-field entry 'exports))
