@@ -228,11 +228,7 @@
 
     (define (normalization-result status kind source diagnostics)
       "Return an internal normalization result."
-      (list 'normalization
-            (list 'status status)
-            (list 'kind kind)
-            (list 'source source)
-            (list 'diagnostics diagnostics)))
+      (vector status kind source diagnostics))
 
     (define (normalization-rejected reason message . fields)
       "Return an internal rejected normalization result."
@@ -385,18 +381,10 @@ diagnostic)'."
       (if (not (string? text))
           (error "generated-source-candidate expected a string" text))
       (let* ((normalization (normalize-generated-source text))
-             (status
-              (generated-source-record-field-value
-               normalization 'status 'rejected))
-             (kind
-              (generated-source-record-field-value
-               normalization 'kind 'rejected))
-             (source
-              (generated-source-record-field-value
-               normalization 'source #f))
-             (diagnostics
-              (generated-source-record-field-value
-               normalization 'diagnostics '())))
+             (status (vector-ref normalization 0))
+             (kind (vector-ref normalization 1))
+             (source (vector-ref normalization 2))
+             (diagnostics (vector-ref normalization 3)))
         (if (not (eq? status 'ok))
             (make-candidate 'rejected kind text source '() diagnostics)
             (let ((read-result (read-source-forms source)))
@@ -568,41 +556,45 @@ diagnostic)'."
 
     (define (missing-import-diagnostics candidate required-imports)
       "Return diagnostics for REQUIRED-IMPORTS missing from CANDIDATE."
-      (let ((actual (candidate-imports candidate)))
-        (let loop ((required required-imports) (diagnostics '()))
-          (cond
-           ((null? required) (reverse diagnostics))
-           ((member-equal? (car required) actual)
-            (loop (cdr required) diagnostics))
-           (else
-            (loop
-             (cdr required)
-             (cons
-              (generated-source-diagnostic
-               'contract
-               'missing-import
-               "candidate did not import a required library"
-               (list 'import (car required)))
-              diagnostics)))))))
+      (if (null? required-imports)
+          '()
+          (let ((actual (candidate-imports candidate)))
+            (let loop ((required required-imports) (diagnostics '()))
+              (cond
+               ((null? required) (reverse diagnostics))
+               ((member-equal? (car required) actual)
+                (loop (cdr required) diagnostics))
+               (else
+                (loop
+                 (cdr required)
+                 (cons
+                  (generated-source-diagnostic
+                   'contract
+                   'missing-import
+                   "candidate did not import a required library"
+                   (list 'import (car required)))
+                  diagnostics))))))))
 
     (define (missing-binding-diagnostics evaluation required-bindings)
       "Return diagnostics for REQUIRED-BINDINGS absent from EVALUATION."
-      (let ((actual (evaluation-bindings evaluation)))
-        (let loop ((required required-bindings) (diagnostics '()))
-          (cond
-           ((null? required) (reverse diagnostics))
-           ((member-equal? (car required) actual)
-            (loop (cdr required) diagnostics))
-           (else
-            (loop
-             (cdr required)
-             (cons
-              (generated-source-diagnostic
-               'contract
-               'missing-binding
-               "sandbox evaluation did not expose a required binding"
-               (list 'binding (car required)))
-              diagnostics)))))))
+      (if (null? required-bindings)
+          '()
+          (let ((actual (evaluation-bindings evaluation)))
+            (let loop ((required required-bindings) (diagnostics '()))
+              (cond
+               ((null? required) (reverse diagnostics))
+               ((member-equal? (car required) actual)
+                (loop (cdr required) diagnostics))
+               (else
+                (loop
+                 (cdr required)
+                 (cons
+                  (generated-source-diagnostic
+                   'contract
+                   'missing-binding
+                   "sandbox evaluation did not expose a required binding"
+                   (list 'binding (car required)))
+                  diagnostics))))))))
 
     (define (diagnostic? datum)
       "Return #t when DATUM is a generated-source diagnostic."
@@ -633,26 +625,33 @@ diagnostic)'."
 
     (define (evaluation-diagnostics evaluation)
       "Return diagnostics for a sandbox EVALUATION result."
-      (let ((status (evaluation-status evaluation)))
-        (cond
-         ((or (eq? status 'ok) (eq? status 'values)) '())
-         ((eq? (condition-type (evaluation-condition evaluation))
-               'unbound-variable)
+      (if (not (list? evaluation))
           (list
            (generated-source-diagnostic
             'eval
-            'unbound-variable
-            (evaluation-message evaluation)
-            (list 'binding (condition-symbol (evaluation-condition evaluation)
-              ))
-            (list 'condition (evaluation-condition evaluation)))))
-         (else
-          (list
-           (generated-source-diagnostic
-            'eval
-            'evaluation-error
-            (evaluation-message evaluation)
-            (list 'condition (evaluation-condition evaluation))))))))
+            'invalid-evaluation-result
+            "sandbox evaluation result must be a proper list"))
+          (let ((status (evaluation-status evaluation)))
+            (cond
+             ((or (eq? status 'ok) (eq? status 'values)) '())
+             ((eq? (condition-type (evaluation-condition evaluation))
+                   'unbound-variable)
+              (list
+               (generated-source-diagnostic
+                'eval
+                'unbound-variable
+                (evaluation-message evaluation)
+                (list 'binding
+                      (condition-symbol (evaluation-condition evaluation)))
+                (list 'condition (evaluation-condition evaluation)))))
+             (else
+              (list
+               (generated-source-diagnostic
+                'eval
+                'evaluation-error
+                (evaluation-message evaluation)
+                (list 'condition
+                      (evaluation-condition evaluation)))))))))
 
     (define (contract-diagnostics candidate evaluation options)
       "Return contract diagnostics for CANDIDATE and EVALUATION under OPTIONS."
@@ -668,9 +667,9 @@ diagnostic)'."
         evaluation
         (option-ref options 'post-check #f))))
 
-    (define (attempt-diagnostics candidate evaluation options)
+    (define (attempt-diagnostics candidate status evaluation options)
       "Return all diagnostics for CANDIDATE and EVALUATION."
-      (if (not (eq? (generated-source-candidate-status candidate) 'ready))
+      (if (not (eq? status 'ready))
           (generated-source-candidate-diagnostics candidate)
           (let ((eval-diagnostics (evaluation-diagnostics evaluation)))
             (if (null? eval-diagnostics)
@@ -750,22 +749,23 @@ diagnostic)'."
                    (attempts '())
                    (repair-prompts '()))
           (let* ((candidate (generated-source-candidate source))
+                 (candidate-status
+                  (generated-source-candidate-status candidate))
                  (evaluation
-                  (if (and (eq? (generated-source-candidate-status candidate)
-                                'ready)
+                  (if (and (eq? candidate-status 'ready)
                            evaluate)
                       (evaluate candidate)
                       'none))
                  (diagnostics
-                  (if (and (eq? (generated-source-candidate-status candidate)
-                                'ready)
+                  (if (and (eq? candidate-status 'ready)
                            (not evaluate))
                       (list
                        (generated-source-diagnostic
                         'eval
                         'missing-evaluator
                         "no sandbox evaluator was supplied"))
-                      (attempt-diagnostics candidate evaluation options)))
+                      (attempt-diagnostics candidate candidate-status
+                                           evaluation options)))
                  (attempt
                   (make-attempt attempt-index candidate evaluation diagnostics
                     ))

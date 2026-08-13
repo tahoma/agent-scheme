@@ -235,6 +235,8 @@
   (let* ((harness (make-prompt-harness (list (list 'registry registry))))
          (from-agent (prompt harness 'go))
          (from-option (prompt harness 'go (list (list 'max-steps 5)))))
+    (test-assert 'explicit-registry-preserved
+                 (eq? registry (prompt-harness-registry harness)))
     (test-equal 'budget-from-agent
              3
              (task-field-value (prompt-result-budget from-agent) 'max-steps))
@@ -242,6 +244,55 @@
              5
              (task-field-value (prompt-result-budget from-option)
                'max-steps)))))
+
+(testing-registry-case
+ 'explicit-agent-id-unset '(portable agent)
+(let ((registry (make-agent-registry)))
+  (register-agent registry
+                  (make-agent 'unset
+                              '((role reviewer) (model explicit-unset))))
+  (let* ((harness
+          (make-prompt-harness (list (list 'registry registry))))
+         (result
+          (prompt harness
+                  'select-unset
+                  '((agent unset)
+                    (provider ((finish done)))
+                    (verifier passed)))))
+    (test-equal 'explicit-agent-id-unset
+                'unset
+                (prompt-result-agent-id result)))))
+
+;;;; Explicit runner options do not traverse unused harness defaults
+
+(testing-registry-case
+ 'explicit-options-skip-defaults '(portable agent)
+(let* ((registry (make-agent-registry))
+       ;; The improper tail is never consulted because every runner option is
+       ;; explicit.  This makes eager default lookup fail deterministically.
+       (defaults
+        (cons (list 'registry registry)
+              (cons (list 'session 'project-main)
+                    (cons (list 'authority #t) 'unused-default-tail))))
+       (harness (make-prompt-harness defaults))
+       (result
+        (prompt
+         harness
+         'explicit-runner-options
+         '((scope project)
+           (provider ((finish done)))
+           (policy ())
+           (effects ())
+           (verifier passed)
+           (operations ())
+           (control ())
+           (observation (observation (kind read-only) (value clean)))
+           (max-steps 8)
+           (max-pure-cost 100000)
+           (id-prefix prompt)))))
+  (test-equal 'explicit-options-skip-defaults
+              'complete
+              (prompt-result-state result))))
 
 ;;;; Discovery helpers list agents, distinct roles, and distinct models
 
