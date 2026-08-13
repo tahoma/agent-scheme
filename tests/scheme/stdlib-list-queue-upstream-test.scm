@@ -137,5 +137,3 @@
     (error "SRFI 117 upstream tests failed"
            (test-runner-fail-count upstream-runner)
            (test-runner-xpass-count upstream-runner)))
-
-(exit)
