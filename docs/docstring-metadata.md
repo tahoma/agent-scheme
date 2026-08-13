@@ -158,6 +158,11 @@ non-tail metadata position. This follows Guile's procedure-property style as an
 influence, but the fields and reflection shape below are Consent Scheme public
 behavior.
 
+For exported runtime procedures, every expanded parameter and return
+descriptor includes both `(type ...)` and a non-empty `(description ...)`.
+Neither field substitutes for the other: the type supports machine-readable
+reflection, while the description explains the value's role in the contract.
+
 ```scheme
 (define (open-agent-log path)
   "Open PATH as an Consent Scheme log input port."
