@@ -57,6 +57,8 @@
           consent-growable-vector-append!
           consent-growable-vector-ref
           consent-growable-vector-set!
+          consent-growable-vector-unsafe-ref
+          consent-growable-vector-unsafe-set!
           consent-growable-vector-copy!
           consent-growable-vector-fill!
           consent-growable-vector-reserve!
@@ -122,6 +124,57 @@
          ((origin repo)
           (allocation-policy bounded-callback-free)
           (ownership phase-scoped)))
+       (status internal)
+       (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (consent worklist))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "worklist.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-make-worklist
+          consent-worklist?
+          consent-worklist-active?
+          consent-worklist-empty?
+          consent-worklist-size
+          consent-worklist-capacity
+          consent-worklist-maximum-capacity
+          consent-worklist-growth-policy
+          consent-worklist-reserve!
+          consent-worklist-push-front!
+          consent-worklist-push-back!
+          consent-worklist-front
+          consent-worklist-back
+          consent-worklist-pop-front!
+          consent-worklist-pop-back!
+          consent-worklist-snapshot
+          consent-worklist-clear!
+          consent-worklist-reset!
+          consent-worklist-release!
+          consent-worklist-work-units
+          consent-worklist-unused-slots-cleared?
+          consent-worklist-stats))
+        (dependencies
+         ((library (scheme base))
+          (library (consent growable-vector))))
+        (provenance
+         ((origin repo)
+          (representation bounded-ring-buffer)
+          (allocation-policy bounded-callback-free)
+          (growth-policies (allow-growth pre-reserved))
+          (work-accounting successful-pushes-and-pops)
+          (memory-lifecycle
+           (clear reset-to-initial-capacity)
+           (reset retain-capacity)
+           (release terminal))))
         (status internal)
         (canonical #t))
        (manifest-entry

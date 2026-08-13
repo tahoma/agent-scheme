@@ -1,22 +1,24 @@
 # Bootstrap-Safe Runtime Storage
 
-**Issue:** #968
+**Issues:** #968 and #969
 
-**Roadmap version:** 0.18.39
+**Roadmap versions:** 0.18.39 and 0.18.41
 
 **Status:** Implemented
 
 ## Summary
 
-Two private, portable libraries provide storage for allocation-sensitive
+Three private, portable libraries provide storage for allocation-sensitive
 runtime and graph algorithms:
 
 - `(consent growable-vector)` owns bounded indexed storage and imports only
-  `(scheme base)`; and
+  `(scheme base)`;
 - `(consent scratch-arena)` layers reusable, phase-owned lifetimes over that
-  storage and imports `(consent growable-vector)`.
+  storage and imports `(consent growable-vector)`; and
+- `(consent worklist)` layers bounded FIFO and deque ordering over a circular
+  growable-vector backing store.
 
-Neither library imports a public SRFI, calls user code, or depends on an
+None of the libraries imports a public SRFI, calls user code, or depends on an
 initialized standard-library shelf. The Emacs bootstrap source loader and
 direct or compiled R7RS routes execute the same Scheme sources. A future native
 runtime may accelerate the backing storage, but it must preserve the bounds,
@@ -30,9 +32,11 @@ flowchart TB
   memory["Memory-key graph capture"] --> grow
   grow["(consent growable-vector)<br/>bounded indexed storage"]
   scratch["(consent scratch-arena)<br/>owners, marks, reuse policy"]
+  worklist["(consent worklist)<br/>bounded FIFO and deque ring"]
   srfi["(srfi 214)<br/>public flexvectors"]
   reader --> grow
   scratch --> grow
+  worklist --> grow
   collectors["Collector phases"] --> scratch
   srfi -. "may reuse compatible storage" .-> grow
 ```
@@ -42,6 +46,8 @@ flowchart TB
 Use a growable vector when one algorithm directly owns its storage and lifetime.
 Use a scratch arena when storage is reused across calls or runtime phases and a
 stale operation must be rejected after cleanup.
+Use a worklist when logical insertion or removal order, rather than indexed
+storage, is the abstraction the algorithm needs.
 
 | Need | Layer | Why |
 | --- | --- | --- |
@@ -49,9 +55,11 @@ stale operation must be rejected after cleanup.
 | Reuse with explicit phase ownership | Scratch arena | Stale owners fail. |
 | Collector without heap growth | `pre-reserved` arena | Fails full. |
 | Temporary safe growth | `allow-growth` arena | Grows boundedly. |
+| FIFO graph traversal | Worklist | Ring ordering without list reversal. |
+| Double-ended phase work | Worklist | O(1) front and back operations. |
 
-Neither layer is a general sequence abstraction. Both libraries are private,
-mutable, callback-free, and deliberately narrower than SRFI 214.
+None of these layers is a general sequence abstraction. All three libraries are
+private, mutable, callback-free, and deliberately narrower than public SRFIs.
 
 Programs that need the public sequence abstraction import `(stdlib
 flexvectors)` or one of its SRFI 214 aliases. That library wraps growable
@@ -118,6 +126,12 @@ The populated prefix is separate from reserved capacity:
 - release clears every populated slot, drops the backing vector, and makes the
   growable vector permanently inactive.
 
+The private growable-vector library also exposes unchecked slot access for
+trusted runtime substrates that have already validated their own bounds. The
+worklist uses that narrow interface so each queue operation validates once;
+callers still cannot observe the backing vector. Ordinary consumers use the
+checked `ref` and `set!` operations.
+
 These operations are distinct primitive-backend lifetime signals. A native or
 collector-aware backend must not collapse them into aliases: clear abandons the
 high-water allocation for the initial-capacity backing, reset retains the
@@ -159,6 +173,119 @@ For example, repeated append from initial capacity zero and maximum capacity ten
 uses capacities `0, 1, 2, 4, 8, 10`. The next append fails before allocation.
 `reserve!` instead requests an exact larger capacity; `grow!` treats its
 argument as a minimum and may choose the larger geometric capacity.
+
+## FIFO and Deque Worklists
+
+`(consent worklist)` stores its logical sequence in a circular buffer backed by
+`(consent growable-vector)`. The growable vector's populated prefix represents
+addressable ring slots; the worklist alone decides which slots are logically
+occupied. Callers never receive the backing vector or a physical index.
+
+The constructor fixes an initial capacity, exact maximum capacity, and one of
+two growth policies:
+
+- `allow-growth` doubles full storage up to the exact maximum; and
+- `pre-reserved` rejects a push whenever the currently reserved ring is full.
+
+`reserve!` can establish collector scratch capacity before a no-allocation
+phase. It preserves logical order even when the current sequence wraps around.
+Push-front, push-back, front, back, pop-front, and pop-back are constant-time
+when no growth occurs. Automatic growth copies the current logical sequence
+once into a larger ring with its front at physical slot zero, so geometric
+growth preserves amortized constant-time insertion.
+
+Every successful push or pop charges exactly one work unit. Peeks, snapshots,
+capacity changes, clear, reset, and release do not charge work units. Statistics
+report the four directional operation counts, aggregate pushes and pops, total
+work units, capacity changes, automatic growths, copied elements, high-water
+size, clear count, and reset count. Incremental collectors can therefore budget
+logical work independently of elapsed time and backing-store growth.
+
+A pop clears its vacated physical slot before publishing the shorter size.
+Reset clears all active slots while retaining capacity. Clear replaces the ring
+at its immutable initial capacity. Release clears active slots, drops backing
+storage, and permanently rejects further queue operations. The diagnostic
+`consent-worklist-unused-slots-cleared?` verifies that no inactive ring slot
+retains a heap root, including across a wrapped logical range.
+
+Rejected constructor arguments fail before allocating a worklist. Rejected
+reservations, empty-boundary operations, and capacity-exhausted pushes preserve
+logical contents, capacity, and statistics. Failed pushes do not charge work
+units. Clear and reset empty the ring but retain its lifetime counters; release
+also preserves those counters so `consent-worklist-stats` can report the
+completed lifetime. After release, `consent-worklist?`,
+`consent-worklist-active?`, statistics, the cleared-slot diagnostic, and
+idempotent release remain available. All other API operations reject the
+inactive worklist.
+
+### Collector Lifecycle
+
+Reserve storage before entering a no-allocation phase, and keep the worklist in
+explicit phase state so successive slices share the same ring and counters.
+Arrange terminal cleanup with `dynamic-wind`:
+
+```scheme
+(define (call-with-trace-state maximum-capacity roots use-state)
+  (let ((worklist
+         (consent-make-worklist
+          0 maximum-capacity 'pre-reserved)))
+    (consent-worklist-reserve! worklist maximum-capacity)
+    (for-each
+     (lambda (root)
+       (consent-worklist-push-back! worklist root))
+     roots)
+    (let ((state (vector 'trace worklist)))
+      (dynamic-wind
+       (lambda () #t)
+       (lambda () (use-state state))
+       (lambda ()
+         (consent-worklist-release! worklist))))))
+```
+
+A resumable slice can compare the lifetime work counter before and after each
+algorithm step instead of consulting elapsed time:
+
+```scheme
+(define (run-trace-slice! state budget step!)
+  (let* ((worklist (vector-ref state 1))
+         (start (consent-worklist-work-units worklist)))
+    (let loop ()
+      (cond
+       ((consent-worklist-empty? worklist) 'complete)
+       ((>= (- (consent-worklist-work-units worklist) start)
+            budget)
+        'suspended)
+       (else
+        (step! worklist
+               (consent-worklist-pop-front! worklist))
+        (loop))))))
+```
+
+`step!` may enqueue discovered values with `push-back!`; those pushes and the
+pop are all charged. The check occurs between steps, so an algorithm that needs
+a strict ceiling must also bound one step's fan-out or suspend a partially
+enumerated node explicitly. Suspension leaves the worklist active in phase
+state. Normal completion, an exception, or a continuation exit runs the cleanup
+thunk and releases it. Because release is terminal and idempotent, later
+continuation re-entry cannot resume queue operations on the released ring; they
+fail closed instead.
+
+### Worklist Complexity and Allocation
+
+The table abbreviates the common `consent-worklist-` prefix.
+
+| Operation | Time | Backing allocation |
+| --- | --- | --- |
+| `empty?`, `size`, `capacity`, `front`, `back` | O(1) | None. |
+| `push-front!`, `push-back!` | Amortized O(1) | Only when full and allowed. |
+| `pop-front!`, `pop-back!` | O(1) | None. |
+| `reserve!` | O(size) when larger | Only when larger. |
+| `snapshot` | O(size) | Always; returns a copy. |
+| `reset!`, `release!` | O(size) | None. |
+| `clear!` | O(initial capacity) | Always. |
+| `unused-slots-cleared?` | O(capacity) | None. |
+| `work-units` | O(1) | None. |
+| `stats` | O(1) | Allocates the result datum. |
 
 ## Scratch Arenas
 
@@ -397,14 +524,74 @@ standard-library behavior. They therefore must not depend directly on the
 callback-free primitive, even if the SRFI 214 implementation internally reuses
 compatible primitive storage.
 
+### Worklist Candidate Decisions
+
+The worklist audit first distinguished true queue ordering from code that only
+used a variable named `pending` or `work`. A migration also needed a permanent
+bound, bootstrap-safe dependencies, and a lifecycle in which clearing retained
+slots was useful. The resulting decisions are:
+
+| Candidate | Decision |
+| --- | --- |
+| Memory-key partition refinement | Migrate. |
+| Memory-key canonical quotient | Migrate. |
+| Memory-query automaton completion | Migrate. |
+| Memory-query bounded record walk | Keep. |
+| Datum import/export traversals | Keep. |
+| Interpreter ownership/equality traversals | Keep. |
+| Result graph rendering traversals | Keep. |
+| Symbol-boundary graph equality | Keep. |
+| Library egress scan and dirty propagation | Keep. |
+| Test finite-graph bisimulation oracle | Keep. |
+
+- `(agent memory-key)` partition splitters are a deduplicated FIFO bounded by
+  graph state count. The local two-list queue duplicated exactly the worklist
+  contract.
+- Its canonical quotient uses first-discovery BFS order to assign identifiers.
+  A FIFO bounded by quotient block count makes that ordering explicit.
+- `(agent memory-query)` Aho-Corasick failure links require breadth-first parent
+  completion. The call-scoped two-list FIFO retained automaton nodes and
+  duplicated reversal logic.
+- The separate memory-query record walk is a depth-first compatibility guard
+  capped at 64 compound nodes. A preallocated ring would add fixed overhead
+  without adding queue semantics.
+- `(consent datum)` uses vector continuation frames as LIFO stacks. Finish and
+  child order, not FIFO discovery, are the abstraction.
+- `(consent interpreter)` uses LIFO task or comparison stacks charged by
+  evaluator budgets. A deque would not simplify the continuation protocol.
+- `(consent result)` uses lazy LIFO finish/visit stacks. Lists preserve the
+  allocation-free scalar hot path; every call should not allocate a ring.
+- `(consent symbol-boundary)` uses a LIFO pair-comparison stack with no
+  observable FIFO order or deque operation.
+- `(consent library)` uses deduplicated LIFO scan and dirty stacks. Node flags
+  own scheduling, order is unobservable, and no queue duplication is removed.
+- The test-only finite-graph bisimulation oracle stays independent and
+  list-based instead of depending on the runtime abstraction it helps verify.
+
+The three migrated queues now use `push-back!` and `pop-front!`, release their
+ring storage through `dynamic-wind`, and retain their existing algorithm-owned
+bounds and ordering. No stack was migrated merely to reduce consing; a future
+stack abstraction should be justified on its own contract and measurements.
+
+The first memory-key migration exposed validation amplification in the
+interpreted bootstrap: each queue operation revalidated both the worklist and
+its growable-vector slot. Letting the already-validated worklist use trusted
+growable-vector slot operations removes that repeated validation. The backing
+vector remains hidden, checked growable-vector callers retain their original
+contract, and the counted scale gate confirms linear total work.
+
+Absolute wall-clock evidence remains mixed. Successive CI runs of the same
+optimized runtime code took 141.912 and 154.938 seconds in memory-key
+refinement, while the unchanged paired memory-query shard moved in the opposite
+direction from 135.185 to 102.112 seconds. The memory-key results bracketed the
+149.011-second unoptimized worklist run and both remained above the
+117.407-second pre-migration list-queue run. These separate runs do not
+establish a speedup. A trustworthy comparison requires equivalently prepared
+worktrees, identical generated artifacts, and repeated runs summarized by their
+median.
+
 ### Candidates Rejected or Deferred
 
-- Explicit traversal stacks and FIFO worklists in `(consent datum)`,
-  `(consent interpreter)`, `(consent result)`, `(consent symbol-boundary)`,
-  `(consent library)`, `(agent memory-key)`, and `(agent memory-query)` need
-  push/pop or queue/deque semantics. Issue #969 owns that bootstrap worklist
-  abstraction; treating a populated vector prefix as an ad hoc queue would
-  recreate the duplication that the foundation issues are meant to remove.
 - `(data transient-map)` grows an open-addressed hash table. Its sparse slots,
   probing, deletion markers, and rehash threshold are not a growable sequence;
   replacing its backing vector with this primitive would hide rather than
@@ -428,10 +615,14 @@ compatible primitive storage.
 
 ## Layering and Consumers
 
-The memory-key canonicalizer now uses `(consent growable-vector)` for its dense
-label, edge, and descriptor vectors. Its graph semantics and asymptotic gates
-remain owned by `(agent memory-key)`; only the compatible storage machinery
-moved.
+The memory-key canonicalizer uses `(consent growable-vector)` for its dense
+label, edge, and descriptor vectors and `(consent worklist)` for partition and
+canonical-BFS queues. Its graph semantics and asymptotic gates remain owned by
+`(agent memory-key)`; only compatible storage and queue machinery moved.
+
+The memory-query text automaton uses a call-scoped worklist while completing
+failure links breadth-first. It releases the ring after completion; the durable
+automaton owns the nodes and links, not the temporary traversal container.
 
 The reader uses per-call growable vectors for line-start and literal-element
 builders. It snapshots before publishing a result and releases the private
@@ -486,6 +677,11 @@ synthetic collector workload. The portable plan runs both programs on direct
 and compiled routes. ERT imports each internal library independently through
 the Emacs source-library loader, proving that both bootstrap surfaces use their
 portable source implementations.
+`tests/scheme/consent-agent-memory-test.scm` retains the consumer equivalence
+corpus: bounded arbitrary-key quotient oracles and cyclic-key lifecycle cases
+cover both memory-key FIFOs, while overlapping multi-pattern relevance covers
+the memory-query breadth-first failure links. Existing additive scale gates
+continue to guard partition refinement and text-query construction.
 The official SRFI 214 repository provides `implementation/tests.scm`. Consent
 pins that file at the manifest's upstream revision and SHA-256 and carries its
 111 assertions in

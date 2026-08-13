@@ -29,6 +29,12 @@
                 consent-identity-map-ref
                 consent-identity-map-set!)
           (only (consent reader) consent-datum->external)
+          (only (consent worklist)
+                consent-make-worklist
+                consent-worklist-empty?
+                consent-worklist-pop-front!
+                consent-worklist-push-back!
+                consent-worklist-release!)
           (only (data avl-tree)
                 make-avl-tree
                 avl-tree-ref
@@ -432,6 +438,13 @@
     ;; shared rather than copied into every state.  Terminal outputs remain
     ;; direct-only; output links and generation stamps prevent inherited
     ;; matches from producing quadratic storage or repeated reporting.
+(define memory-query-maximum-worklist-capacity 536870911)
+
+(define (make-memory-query-worklist)
+  "Return bounded call-scoped FIFO storage for query automata."
+  (consent-make-worklist
+   16 memory-query-maximum-worklist-capacity 'allow-growth))
+
 (define (make-memory-relevance-text-node)
   "Return one empty private multi-pattern automaton node."
       (vector (make-avl-tree char<?) #f #f '() #f 0))
@@ -514,64 +527,57 @@
 
     (define (complete-memory-relevance-text-automaton! root)
       "Install failure, output, and completed-goto links below ROOT."
-      (let ((front '()) (back '()))
-        (define (enqueue! node)
-          (set! back (cons node back)))
-        (define (dequeue!)
-          (if (null? front)
-              (begin
-                (set! front (reverse back))
-                (set! back '())))
-          (if (null? front)
-              #f
-              (let ((node (car front)))
-                (set! front (cdr front))
-                node)))
-        (set-relevance-text-node-failure! root root)
-        (set-relevance-text-node-goto!
-         root
-         (relevance-text-node-direct root))
-        (avl-tree-fold
-         (lambda (character child ignored)
-           (set-relevance-text-node-failure! child root)
-           (set-relevance-text-node-output-link!
-            child
-            (and
-             (not (null? (relevance-text-node-outputs root)))
-             root))
-           (enqueue! child)
-           ignored)
-         #f
-         (relevance-text-node-direct root))
-        (let loop ((state (dequeue!)))
-          (if state
-              (let* ((failure (relevance-text-node-failure state))
-                     (inherited
-                      (relevance-text-node-goto failure)))
-                (set-relevance-text-node-goto!
-                 state
-                 (relevance-text-completed-goto
-                  (relevance-text-node-direct state)
-                  inherited))
-                (avl-tree-fold
-                 (lambda (character child ignored)
-                   (let ((child-failure
-                          (avl-tree-ref
-                           inherited character (lambda () root))))
-                     (set-relevance-text-node-failure!
-                      child child-failure)
-                     (set-relevance-text-node-output-link!
-                      child
-                      (if (null?
-                           (relevance-text-node-outputs child-failure))
-                          (relevance-text-node-output-link child-failure)
-                          child-failure))
-                     (enqueue! child)
-                     ignored))
-                 #f
-                 (relevance-text-node-direct state))
-                (loop (dequeue!)))))
-        root))
+      (let ((work (make-memory-query-worklist)))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (set-relevance-text-node-failure! root root)
+           (set-relevance-text-node-goto!
+            root
+            (relevance-text-node-direct root))
+           (avl-tree-fold
+            (lambda (character child ignored)
+              (set-relevance-text-node-failure! child root)
+              (set-relevance-text-node-output-link!
+               child
+               (and
+                (not (null? (relevance-text-node-outputs root)))
+                root))
+              (consent-worklist-push-back! work child)
+              ignored)
+            #f
+            (relevance-text-node-direct root))
+           (let loop ()
+             (if (not (consent-worklist-empty? work))
+                 (let* ((state (consent-worklist-pop-front! work))
+                        (failure (relevance-text-node-failure state))
+                        (inherited (relevance-text-node-goto failure)))
+                   (set-relevance-text-node-goto!
+                    state
+                    (relevance-text-completed-goto
+                     (relevance-text-node-direct state)
+                     inherited))
+                   (avl-tree-fold
+                    (lambda (character child ignored)
+                      (let ((child-failure
+                             (avl-tree-ref
+                              inherited character (lambda () root))))
+                        (set-relevance-text-node-failure!
+                         child child-failure)
+                        (set-relevance-text-node-output-link!
+                         child
+                         (if (null?
+                              (relevance-text-node-outputs child-failure))
+                             (relevance-text-node-output-link child-failure)
+                             child-failure))
+                        (consent-worklist-push-back! work child)
+                        ignored))
+                    #f
+                    (relevance-text-node-direct state))
+                   (loop))))
+           root)
+         (lambda ()
+           (consent-worklist-release! work)))))
 
     (define (relevance-text-next root state character)
       "Return STATE's completed transition for CHARACTER."

@@ -18,6 +18,8 @@
           consent-growable-vector-append!
           consent-growable-vector-ref
           consent-growable-vector-set!
+          consent-growable-vector-unsafe-ref
+          consent-growable-vector-unsafe-set!
           consent-growable-vector-copy!
           consent-growable-vector-fill!
           consent-growable-vector-reserve!
@@ -358,6 +360,30 @@
         (effects state-write error))
       (check-growable-vector-index
        "consent-growable-vector-set!" grow index)
+      (vector-set! (growable-vector-data grow) index value)
+      value)
+
+    (define (consent-growable-vector-unsafe-ref grow index)
+      "Return trusted GROW storage at already-validated INDEX."
+      #((parameters
+         (grow (type growable-vector)
+          (description "Trusted active storage."))
+         (index (type exact-non-negative-integer)
+          (description "Already-validated populated index.")))
+        (returns (type any) (description "Stored value."))
+        (effects state-read))
+      (vector-ref (growable-vector-data grow) index))
+
+    (define (consent-growable-vector-unsafe-set! grow index value)
+      "Replace trusted GROW storage at already-validated INDEX."
+      #((parameters
+         (grow (type growable-vector)
+          (description "Trusted active storage."))
+         (index (type exact-non-negative-integer)
+          (description "Already-validated populated index."))
+         (value (type any) (description "Replacement value.")))
+        (returns (type any) (description "The supplied VALUE."))
+        (effects state-write))
       (vector-set! (growable-vector-data grow) index value)
       value)
 

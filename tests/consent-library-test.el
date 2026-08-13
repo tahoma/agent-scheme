@@ -1300,17 +1300,26 @@
     (should source-file)
     (should
      (string-suffix-p "scheme/agent/memory-key.sld" source-file))
-    (should (file-readable-p source-file))))
+    (should (file-readable-p source-file))
+    (with-temp-buffer
+      (insert-file-contents source-file)
+      (should (search-forward "(consent worklist)" nil t))
+      (goto-char (point-min))
+      (should-not (search-forward "<queue>" nil t))
+      (goto-char (point-min))
+      (should-not (search-forward "(make-queue" nil t)))))
 
 (ert-deftest
     consent-library-test-bootstrap-storage-is-source-backed ()
-  "Keep both private bootstrap storage libraries source-backed."
+  "Keep private bootstrap storage libraries source-backed."
   (dolist
       (spec
        '(("(consent growable-vector)"
           . "scheme/consent/growable-vector.sld")
          ("(consent scratch-arena)"
-          . "scheme/consent/scratch-arena.sld")))
+          . "scheme/consent/scratch-arena.sld")
+         ("(consent worklist)"
+          . "scheme/consent/worklist.sld")))
     (let* ((key (car spec))
            (entry (consent--library-collection-manifest-entry key))
            (source-file
@@ -1404,6 +1413,28 @@
      '(:internal-libraries-allowed t))
     "(#t 1 #t #t)")))
 
+(ert-deftest consent-library-test-worklist-runs-source-backed ()
+  "Exercise FIFO and deque work through the Emacs source loader."
+  (should
+   (equal
+    (consent-library-test--external/options
+     "(import (scheme base)
+              (consent worklist))
+      (let ((worklist
+             (consent-make-worklist 2 4 'allow-growth)))
+        (consent-worklist-push-back! worklist 'middle)
+        (consent-worklist-push-front! worklist 'front)
+        (consent-worklist-push-back! worklist 'back)
+        (list
+         (consent-worklist-pop-front! worklist)
+         (consent-worklist-pop-back! worklist)
+         (consent-worklist-pop-front! worklist)
+         (consent-worklist-empty? worklist)
+         (consent-worklist-capacity worklist)
+         (consent-worklist-work-units worklist)))"
+     '(:internal-libraries-allowed t))
+    "(front back middle #t 4 6)")))
+
 (ert-deftest
     consent-library-test-agent-memory-query-is-internal-source-backed ()
   "Keep the native memory query kernel internal and source-backed."
@@ -1428,6 +1459,11 @@
     (should (file-readable-p source-file))
     (with-temp-buffer
       (insert-file-contents source-file)
+      (should (search-forward "(consent worklist)" nil t))
+      (goto-char (point-min))
+      (should-not
+       (search-forward "(let ((front '()) (back '()))" nil t))
+      (goto-char (point-min))
       (should-not (search-forward "(string-ref" nil t))
       (goto-char (point-min))
       (should (search-forward "memory-substring-fallback-table" nil t))

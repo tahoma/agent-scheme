@@ -445,8 +445,16 @@ release or continuation re-entry. The `pre-reserved` policy forbids active
 growth, giving collectors a route that cannot recursively allocate from the
 heap under collection. `allow-growth` remains available for runtime phases in
 which bounded ordinary allocation is permitted. The complete contract is
-recorded in
-[Bootstrap-Safe Runtime Storage](runtime-storage.md).
+recorded in [Bootstrap-Safe Runtime Storage](runtime-storage.md).
+
+`(consent worklist)` imports the same growable storage and owns a bounded ring
+buffer for FIFO traversal and double-ended phase work. Successful pushes and
+pops each charge one deterministic work unit, while growth copies are reported
+separately. Vacated slots are cleared before the shorter logical sequence is
+published, and `pre-reserved` worklists fail closed instead of allocating.
+Memory-key partition refinement and canonical quotient traversal use bounded
+worklists, as does breadth-first failure-link completion in the memory-query
+text automaton; all three release their temporary rings on every dynamic exit.
 
 #### Portable character ownership
 
