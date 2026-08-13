@@ -4392,17 +4392,19 @@ ash))
               (consent-datum-internal-slot-ref object slot)
               (consent-datum-object-revision object)))
        (error "test cell mutation hook abort")))
-    (check
-     'lexical-cell-aborted-write-keeps-cache-and-slot
-     (list
-      (raises?
-       (lambda ()
-         (context-cell-set! context cell 'binding-set! 'aborted)))
-      observed
-      (cell-value cell)
-      (consent-datum-internal-slot-ref owned-slots 0)
-      (consent-datum-object-revision owned-slots))
-     '(#t (binding-set! outer aborted outer outer 2) outer outer 2)))
+    (let ((raised?
+           (raises?
+            (lambda ()
+              (context-cell-set! context cell 'binding-set! 'aborted)))))
+      (check
+       'lexical-cell-aborted-write-keeps-cache-and-slot
+       (list
+        raised?
+        observed
+        (cell-value cell)
+        (consent-datum-internal-slot-ref owned-slots 0)
+        (consent-datum-object-revision owned-slots))
+       '(#t (binding-set! outer aborted outer outer 2) outer outer 2))))
   (let ((other-context (new-eval-context '())))
     (check
      'lexical-cell-cross-heap-write-keeps-cache-and-slot

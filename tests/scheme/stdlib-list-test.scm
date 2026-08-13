@@ -258,29 +258,32 @@
          (pair-for-each (lambda (tail)
                           (set! pair-tails (cons tail pair-tails)))
                         '(a b c))
-         (list (append-map (lambda (x) (list x (- x))) '(1 2 3))
-               (append-map! (lambda (x) (list x (* x x))) '(1 2 3))
-               map-result
-               (eq? map-result map-source)
-               map-source
-               (reverse pair-tails)
-               (filter-map (lambda (x)
-                             (if (even? x)
-                                 (* x x)
-                                 #f))
-                           '(1 2 3 4))
-               (map-in-order (lambda (x)
-                               (set! order-seen (cons x order-seen))
-                               (* x 2))
-                             '(1 2 3))
-               (reverse order-seen)
-               (filter even? '(1 2 3 4))
-               (remove even? '(1 2 3 4))
-               (filter! odd? '(1 2 3 4))
-               (remove! odd? '(1 2 3 4))
-               (call-with-values
-                (lambda () (partition! even? '(1 2 3 4 5)))
-                list)))))
+         (let ((mapped-in-order
+                (map-in-order
+                 (lambda (x)
+                   (set! order-seen (cons x order-seen))
+                   (* x 2))
+                 '(1 2 3))))
+           (list (append-map (lambda (x) (list x (- x))) '(1 2 3))
+                 (append-map! (lambda (x) (list x (* x x))) '(1 2 3))
+                 map-result
+                 (eq? map-result map-source)
+                 map-source
+                 (reverse pair-tails)
+                 (filter-map (lambda (x)
+                               (if (even? x)
+                                   (* x x)
+                                   #f))
+                             '(1 2 3 4))
+                 mapped-in-order
+                 (reverse order-seen)
+                 (filter even? '(1 2 3 4))
+                 (remove even? '(1 2 3 4))
+                 (filter! odd? '(1 2 3 4))
+                 (remove! odd? '(1 2 3 4))
+                 (call-with-values
+                  (lambda () (partition! even? '(1 2 3 4 5)))
+                  list))))))
 
 (testing-registry-case
  'partition '(portable stdlib)

@@ -565,8 +565,10 @@
         (effects state-write error))
       (if (= count 0)
           (values '() lis)
-          (let ((tail (drop lis count))
-                (prefix (take! lis count)))
+          ;; R7RS does not specify `let' initializer order.  Capture the tail
+          ;; before truncating LIS so every host returns the original suffix.
+          (let* ((tail (drop lis count))
+                 (prefix (take! lis count)))
             (values prefix tail))))
 
     (define (append! . lists)
@@ -1045,7 +1047,16 @@
         (returns (type list)
          (description "List of PROC results in traversal order."))
         (effects procedure-call allocation error))
-      (apply map proc lis1 lists))
+      (check-procedure 'map-in-order proc)
+      (let loop ((all-lists (cons lis1 lists)))
+        (if (any-null? all-lists)
+            '()
+            ;; Bind both calls explicitly: R7RS leaves argument evaluation
+            ;; order unspecified, while this procedure promises left-to-right
+            ;; effects.
+            (let* ((value (apply proc (cars all-lists)))
+                   (rest (loop (cdrs all-lists))))
+              (cons value rest)))))
 
     (define (filter pred lis)
       "Return LIS elements satisfying PRED."

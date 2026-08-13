@@ -308,7 +308,12 @@
 (test-equal 'generator-yields-key-value-lists
              '((1 one) (2 two) (3 three) (4 four) #t)
              (let ((gen (tree-generator tree)))
-         (list (gen) (gen) (gen) (gen) (eof-object? (gen))))))
+               (let* ((first (gen))
+                      (second (gen))
+                      (third (gen))
+                      (fourth (gen))
+                      (done? (eof-object? (gen))))
+                 (list first second third fourth done?)))))
 
 (testing-registry-case
  'map-transforms-values '(portable stdlib)

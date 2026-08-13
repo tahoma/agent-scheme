@@ -43,7 +43,10 @@
 (test-equal 'generator/eof-idempotent
              '(x #t #t)
              (let ((gen (generator 'x)))
-         (list (gen) (eof-object? (gen)) (eof-object? (gen))))))
+               (let* ((first (gen))
+                      (done? (eof-object? (gen)))
+                      (still-done? (eof-object? (gen))))
+                 (list first done? still-done?)))))
 
 (testing-registry-case
  'circular-generator/prefix '(portable stdlib)
@@ -112,7 +115,10 @@
              (let ((gen (make-coroutine-generator
                    (lambda (yield)
                      (yield 'only)))))
-         (list (gen) (eof-object? (gen)) (eof-object? (gen))))))
+               (let* ((first (gen))
+                      (done? (eof-object? (gen)))
+                      (still-done? (eof-object? (gen))))
+                 (list first done? still-done?)))))
 
 (testing-registry-case
  'make-coroutine-generator/no-yields '(portable stdlib)
@@ -221,7 +227,9 @@
          (let ((mapped (gmap list
                              (logging-generator 'left '(1 2))
                              (logging-generator 'right '(3 4)))))
-           (list (mapped) (mapped) (reverse log))))))
+           (let* ((first (mapped))
+                  (second (mapped)))
+             (list first second (reverse log)))))))
 
 (testing-registry-case
  'gcombine '(portable stdlib)
@@ -239,15 +247,17 @@
 (test-equal 'gcombine/stops-before-pulling-later-generator
              '(((1 10 seed)) (20))
              (let ((short (generator 1))
-             (long (generator 10 20)))
-         (list (generator->list
-                (gcombine
-                 (lambda (left right state)
-                   (values (list left right state) state))
-                 'seed
-                 short
-                 long))
-               (generator->list long)))))
+                   (long (generator 10 20)))
+               (let* ((combined
+                       (generator->list
+                        (gcombine
+                         (lambda (left right state)
+                           (values (list left right state) state))
+                         'seed
+                         short
+                         long)))
+                      (remainder (generator->list long)))
+                 (list combined remainder)))))
 
 (testing-registry-case
  'gfilter '(portable stdlib)
@@ -266,16 +276,18 @@
 (test-equal 'gtake/source-remainder
              '((1 2 3) (4))
              (let ((source (make-range-generator 1 5)))
-         (list (generator->list (gtake source 3))
-               (generator->list source)))))
+               (let* ((taken (generator->list (gtake source 3)))
+                      (remainder (generator->list source)))
+                 (list taken remainder)))))
 
 (testing-registry-case
  'gtake/zero-does-not-consume '(portable stdlib)
 (test-equal 'gtake/zero-does-not-consume
              '(() (1 2 3))
              (let ((source (make-range-generator 1 4)))
-         (list (generator->list (gtake source 0))
-               (generator->list source)))))
+               (let* ((taken (generator->list (gtake source 0)))
+                      (remainder (generator->list source)))
+                 (list taken remainder)))))
 
 (testing-registry-case
  'gtake/padded '(portable stdlib)
@@ -307,9 +319,11 @@
 (test-equal 'gtake-while/consumes-failing-value
              '((1 2) (4))
              (let ((source (make-range-generator 1 5)))
-         (list (generator->list
-                (gtake-while (lambda (value) (< value 3)) source))
-               (generator->list source)))))
+               (let* ((taken
+                       (generator->list
+                        (gtake-while (lambda (value) (< value 3)) source)))
+                      (remainder (generator->list source)))
+                 (list taken remainder)))))
 
 (testing-registry-case
  'gdrop-while '(portable stdlib)
@@ -381,9 +395,10 @@
 (test-equal 'gmap/stops-before-pulling-later-generator
              '(((a b)) (c))
              (let ((short (generator 'a))
-             (long (generator 'b 'c)))
-         (list (generator->list (gmap list short long))
-               (generator->list long)))))
+                   (long (generator 'b 'c)))
+               (let* ((mapped (generator->list (gmap list short long)))
+                      (remainder (generator->list long)))
+                 (list mapped remainder)))))
 
 (testing-registry-case
  'gstate-filter '(portable stdlib)
@@ -467,10 +482,10 @@
 (test-equal 'generator->vector!/does-not-overconsume
              (list 1 #(0 10) '(20 30))
              (let ((source (generator 10 20 30))
-             (target (vector 0 0)))
-         (list (generator->vector! target 1 source)
-               target
-               (generator->list source)))))
+                   (target (vector 0 0)))
+               (let* ((count (generator->vector! target 1 source))
+                      (remainder (generator->list source)))
+                 (list count target remainder)))))
 
 (testing-registry-case
  'generator->string '(portable stdlib)
@@ -533,14 +548,16 @@
 (test-equal 'generator-fold/stops-before-pulling-later-generator
              '(((a b)) (c))
              (let ((short (generator 'a))
-             (long (generator 'b 'c)))
-         (list (generator-fold
-                (lambda (left right state)
-                  (cons (list left right) state))
-                '()
-                short
-                long)
-               (generator->list long)))))
+                   (long (generator 'b 'c)))
+               (let* ((folded
+                       (generator-fold
+                        (lambda (left right state)
+                          (cons (list left right) state))
+                        '()
+                        short
+                        long))
+                      (remainder (generator->list long)))
+                 (list folded remainder)))))
 
 (testing-registry-case
  'generator-for-each '(portable stdlib)
@@ -668,9 +685,10 @@
 (test-equal 'generator-map->list/stops-before-pulling-later-generator
              '(((a b)) (c))
              (let ((short (generator 'a))
-             (long (generator 'b 'c)))
-         (list (generator-map->list list short long)
-               (generator->list long)))))
+                   (long (generator 'b 'c)))
+               (let* ((mapped (generator-map->list list short long))
+                      (remainder (generator->list long)))
+                 (list mapped remainder)))))
 
 (testing-registry-case
  'generator-map->list/multiple-generator-route '(portable stdlib)
@@ -732,26 +750,30 @@
 (test-equal 'generator-any/source-remainder
              '(#t (4))
              (let ((source (make-range-generator 2 5)))
-         (list (generator-any odd? source)
-               (generator->list source)))))
+               (let* ((result (generator-any odd? source))
+                      (remainder (generator->list source)))
+                 (list result remainder)))))
 
 (testing-registry-case
  'generator-every/false-source-remainder '(portable stdlib)
 (test-equal 'generator-every/false-source-remainder
              '(#f (3 4))
              (let ((source (make-range-generator 2 5)))
-         (list (generator-every odd? source)
-               (generator->list source)))))
+               (let* ((result (generator-every odd? source))
+                      (remainder (generator->list source)))
+                 (list result remainder)))))
 
 (testing-registry-case
  'generator-every/last-true '(portable stdlib)
 (test-equal 'generator-every/last-true
              '(4 ())
              (let ((source (make-range-generator 2 5)))
-         (list (generator-every
-                (lambda (x) (and (> x 1) x))
-                source)
-               (generator->list source)))))
+               (let* ((result
+                       (generator-every
+                        (lambda (x) (and (> x 1) x))
+                        source))
+                      (remainder (generator->list source)))
+                 (list result remainder)))))
 
 (testing-registry-case
  'generator-unfold '(portable stdlib)
