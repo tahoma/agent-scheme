@@ -113,6 +113,7 @@
           (library (consent datum))
           (library (consent identity-map))
           (library (consent reader))
+          (library (consent growable-vector))
           (library (consent symbol))
           (library (data avl-tree))))
         (provenance ((origin repo)))

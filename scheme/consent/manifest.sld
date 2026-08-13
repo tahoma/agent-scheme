@@ -35,6 +35,83 @@
         (canonical #t))
        (manifest-entry
         (schema-version 1)
+        (kind library)
+        (name (consent growable-vector))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "growable-vector.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-make-growable-vector
+          consent-growable-vector?
+          consent-growable-vector-active?
+          consent-growable-vector-length
+          consent-growable-vector-capacity
+          consent-growable-vector-maximum-capacity
+          consent-growable-vector-append!
+          consent-growable-vector-ref
+          consent-growable-vector-set!
+          consent-growable-vector-reserve!
+          consent-growable-vector-grow!
+          consent-growable-vector-snapshot
+          consent-growable-vector-truncate!
+          consent-growable-vector-reset!
+          consent-growable-vector-release!
+          consent-growable-vector-unused-slots-cleared?
+          consent-growable-vector-stats))
+        (dependencies ((library (scheme base))))
+        (provenance
+         ((origin repo)
+          (allocation-policy bounded-callback-free)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (consent scratch-arena))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "scratch-arena.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-make-scratch-arena
+          consent-scratch-arena?
+          consent-scratch-arena-reserve!
+          consent-scratch-arena-acquire!
+          consent-scratch-owner?
+          consent-scratch-owner-active?
+          consent-scratch-owner-phase
+          consent-scratch-owner-length
+          consent-scratch-owner-capacity
+          consent-scratch-owner-append!
+          consent-scratch-owner-ref
+          consent-scratch-owner-set!
+          consent-scratch-owner-mark
+          consent-scratch-owner-reset!
+          consent-scratch-owner-release!
+          consent-scratch-arena-unused-slots-cleared?
+          consent-scratch-arena-stats))
+        (dependencies
+         ((library (scheme base))
+          (library (consent growable-vector))))
+        (provenance
+         ((origin repo)
+          (allocation-policy bounded-callback-free)
+          (ownership phase-scoped)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
         (kind primitive-library)
         (name (consent identity-map primitive))
         (owner consent-core)
@@ -1755,6 +1832,7 @@
           (library (consent datum))
           (library (consent identity-map))
           (library (consent numeric))
+          (library (consent growable-vector))
           (library (consent symbol))
           (library (consent symbol-boundary))))
         (provenance ((origin repo)))

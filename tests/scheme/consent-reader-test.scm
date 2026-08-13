@@ -218,6 +218,19 @@
             (loop (- remaining 1)))))
     (get-output-string output)))
 
+;; Return one bytevector literal containing COUNT repeating byte values.
+(define (reader-bytevector-source count)
+  (let ((output (open-output-string)))
+    (display "#u8(" output)
+    (let loop ((index 0))
+      (if (< index count)
+          (begin
+            (if (> index 0) (display " " output))
+            (display (modulo index 256) output)
+            (loop (+ index 1)))))
+    (display ")" output)
+    (get-output-string output)))
+
 ;; Sum the real fixed location-index probe over COUNT regular source offsets.
 (define (reader-source-location-probes source first stride count)
   (let loop ((index 0) (probes 0))
@@ -897,6 +910,33 @@
  'bytevector '(portable core)
 (check-external 'bytevector "#u8(0 127 255)" "#u8(0 127 255)"))
 
+(testing-registry-case
+ 'growable-bytevector-builder '(portable core boundary performance)
+(let* ((count 4096)
+       (source (reader-bytevector-source count))
+       (value
+        (consent-read
+         source
+         (list (cons 'max-bytevector-length count)
+               (cons 'source-metadata #f)))))
+  (test-equal 'growable-bytevector-builder-length
+              count
+              (bytevector-length value))
+  (test-equal 'growable-bytevector-builder-order
+              '(0 255 0 255)
+              (list (bytevector-u8-ref value 0)
+                    (bytevector-u8-ref value 255)
+                    (bytevector-u8-ref value 256)
+                    (bytevector-u8-ref value (- count 1))))
+  (test-assert
+   'growable-bytevector-builder-limit
+   (raises?
+    (lambda ()
+      (consent-read
+       source
+       (list (cons 'max-bytevector-length (- count 1))
+             (cons 'source-metadata #f))))))))
+
 ;; Return COUNT nested datum-comment prefixes followed by exactly COUNT
 ;; ignored atomic datums and one surviving symbol.
 (define (nested-datum-comment-source count)
@@ -1259,6 +1299,10 @@
     (let* ((heap (consent-make-datum-heap))
            (owned (consent-read-datum heap "#0=(a . #(#0#))"))
            (vector (consent-datum-cdr owned))
+           (ordered-vector
+            (consent-read-datum heap "#(first second third)"))
+           (ordered-bytevector
+            (consent-read-datum heap "#u8(0 127 255)"))
            (incremental
             (consent-read-datum-from-string-at heap "(next) tail" 0))
            (next (car incremental)))
@@ -1274,6 +1318,12 @@
       (test-equal 'owned-reader-writer
                   "#0=(a . #1=#(#0#))"
                   (consent-datum->external owned))
+      (test-equal 'owned-reader-vector-builder-order
+                  "#(first second third)"
+                  (consent-datum->external ordered-vector))
+      (test-equal 'owned-reader-bytevector-builder-order
+                  "#u8(0 127 255)"
+                  (consent-datum->external ordered-bytevector))
       (test-assert 'owned-incremental-reader-pair
                    (consent-datum-pair? next))
       (test-equal 'owned-incremental-reader-position 6 (cdr incremental)))))

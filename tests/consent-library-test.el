@@ -1303,6 +1303,87 @@
     (should (file-readable-p source-file))))
 
 (ert-deftest
+    consent-library-test-bootstrap-storage-is-source-backed ()
+  "Keep both private bootstrap storage libraries source-backed."
+  (dolist
+      (spec
+       '(("(consent growable-vector)"
+          . "scheme/consent/growable-vector.sld")
+         ("(consent scratch-arena)"
+          . "scheme/consent/scratch-arena.sld")))
+    (let* ((key (car spec))
+           (entry (consent--library-collection-manifest-entry key))
+           (source-file
+            (consent-library-test--manifest-source-file key)))
+      (should entry)
+      (should (eq (plist-get entry :provider) 'repo-source))
+      (should (eq (plist-get entry :visibility) 'internal-runtime))
+      (should (eq (plist-get entry :source-kind) 'portable-source))
+      (should (eq (plist-get entry :realization) 'portable-source))
+      (should-not (plist-get entry :primitive-overlay-library))
+      (should-not (plist-get entry :primitive-exports))
+      (should source-file)
+      (should (string-suffix-p (cdr spec) source-file))
+      (should (file-readable-p source-file)))))
+
+(ert-deftest consent-library-test-growable-vector-runs-source-backed ()
+  "Exercise growable-vector bounds through the Emacs source loader."
+  (should
+   (equal
+    (consent-library-test--external/options
+     "(import (scheme base)
+              (consent growable-vector))
+      (let ((grow (consent-make-growable-vector 0 2)))
+        (consent-growable-vector-append! grow 'left)
+        (consent-growable-vector-append! grow 'right)
+        (let ((overflow-rejected?
+               (guard (condition (else #t))
+                 (consent-growable-vector-append! grow 'overflow)
+                 #f)))
+          (list
+           (consent-growable-vector-length grow)
+           (consent-growable-vector-capacity grow)
+           (consent-growable-vector-ref grow 0)
+           (consent-growable-vector-ref grow 1)
+           overflow-rejected?)))"
+     '(:internal-libraries-allowed t))
+    "(2 2 left right #t)")))
+
+(ert-deftest consent-library-test-scratch-arena-runs-source-backed ()
+  "Exercise scratch ownership and marks through the Emacs source loader."
+  (should
+   (equal
+    (consent-library-test--external/options
+     "(import (scheme base)
+              (consent scratch-arena))
+      (let* ((left-arena
+              (consent-make-scratch-arena 2 2 'pre-reserved))
+             (right-arena
+              (consent-make-scratch-arena 2 2 'pre-reserved))
+             (left-owner
+              (consent-scratch-arena-acquire! left-arena 'left))
+             (right-owner
+              (consent-scratch-arena-acquire! right-arena 'right)))
+        (consent-scratch-owner-append! right-owner 'temporary)
+        (let ((cross-mark-rejected?
+               (guard (condition (else #t))
+                 (consent-scratch-owner-reset!
+                  right-owner
+                  (consent-scratch-owner-mark left-owner))
+                 #f))
+              (right-length
+               (consent-scratch-owner-length right-owner)))
+          (consent-scratch-owner-release! left-owner)
+          (consent-scratch-owner-release! right-owner)
+          (list
+           cross-mark-rejected?
+           right-length
+           (consent-scratch-arena-unused-slots-cleared? left-arena)
+           (consent-scratch-arena-unused-slots-cleared? right-arena))))"
+     '(:internal-libraries-allowed t))
+    "(#t 1 #t #t)")))
+
+(ert-deftest
     consent-library-test-agent-memory-query-is-internal-source-backed ()
   "Keep the native memory query kernel internal and source-backed."
   (let* ((key "(agent memory-query)")
