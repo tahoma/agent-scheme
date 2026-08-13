@@ -125,6 +125,10 @@
           (rename (agent registry)
                   (agents registry-agents)))
   (begin
+    ;; A private identity sentinel distinguishes an absent option from every
+    ;; Scheme value a caller can supply, including symbols used as data.
+    (define missing-option (vector 'missing-option))
+
     (define (option-ref options key default)
       "Return KEY from OPTIONS, or DEFAULT when KEY is absent.  Cells may be"
       "dotted pairs or two-element `(key value)' lists."
@@ -295,9 +299,12 @@ t."
          (description "A `prompt-harness' the REPL verbs dispatch through."))
         (effects allocation)
         (see-also prompt current-prompt-harness make-agent-registry))
-      (let ((options (tail-option maybe-options)))
+      (let* ((options (tail-option maybe-options))
+             (registry (option-ref options 'registry missing-option)))
         (make-harness-record
-         (option-ref options 'registry (make-agent-registry))
+         (if (eq? registry missing-option)
+             (make-agent-registry)
+             registry)
          (option-ref options 'session 'project-main)
          ;; Absent authority defaults to the interactive session posture; an
          ;; explicit `(authority #f)' or unauthorized bundle arms fail-closed.
@@ -433,8 +440,10 @@ t."
 
     (define (merged-option harness options key default)
       "Return KEY from per-call OPTIONS, then HARNESS defaults, then DEFAULT."
-      (option-ref options key
-                  (option-ref (harness-defaults harness) key default)))
+      (let ((value (option-ref options key missing-option)))
+        (if (eq? value missing-option)
+            (option-ref (harness-defaults harness) key default)
+            value)))
 
     (define (budget-field budget name default)
       "Return NAME from a `(budget ...)' datum BUDGET, or DEFAULT otherwise."
@@ -442,12 +451,12 @@ t."
           (record-field-value budget name default)
           default))
 
-    (define (resolve-budget harness agent options key budget-name default)
+    (define (resolve-budget harness options budget key budget-name default)
       "Resolve a runner budget from per-call OPTIONS, the agent budget, or DEF\
 AULT."
-      (let ((explicit (merged-option harness options key 'unset)))
-        (if (eq? explicit 'unset)
-            (budget-field (agent-budget agent) budget-name default)
+      (let ((explicit (merged-option harness options key missing-option)))
+        (if (eq? explicit missing-option)
+            (budget-field budget budget-name default)
             explicit)))
 
     (define (make-audit kind fields)
@@ -510,32 +519,37 @@ S."
 t'"
       "reads the first matching cell."
       (append extra
-              (let ((agent (option-ref options 'agent 'unset)))
-                (if (eq? agent 'unset) '() (list (list 'agent agent))))
+              (let ((agent (option-ref options 'agent missing-option)))
+                (if (eq? agent missing-option)
+                    '()
+                    (list (list 'agent agent))))
               (list (list 'goal goal) (list 'session session))))
 
     (define (runner-options harness agent session options)
       "Assemble the `run-task' options for AGENT in SESSION under OPTIONS."
-      (list (list 'session session)
-            (list 'scope (merged-option harness options 'scope 'project))
-            (list 'provider (merged-option harness options 'provider '()))
-            (list 'policy (merged-option harness options 'policy '()))
-            (list 'effects (merged-option harness options 'effects '()))
-            (list 'verifier (merged-option harness options 'verifier
-              'insufficient))
-            (list 'operations (merged-option harness options 'operations '()))
-            (list 'control (merged-option harness options 'control '()))
-            (list 'observation
-                  (merged-option harness options 'observation
-                                 '(observation (kind read-only)
-                                               (value project-clean))))
-            (list 'max-steps (resolve-budget harness agent options
-                                             'max-steps 'max-steps 8))
-            (list 'max-pure-cost (resolve-budget harness agent options
-                                                 'max-pure-cost 'max-pure-cost
-                                                 100000))
-            (list 'id-prefix (merged-option harness options 'id-prefix
-              'prompt))))
+      (let ((budget (agent-budget agent)))
+        (list (list 'session session)
+              (list 'scope (merged-option harness options 'scope 'project))
+              (list 'provider (merged-option harness options 'provider '()))
+              (list 'policy (merged-option harness options 'policy '()))
+              (list 'effects (merged-option harness options 'effects '()))
+              (list 'verifier (merged-option harness options 'verifier
+                'insufficient))
+              (list 'operations
+                    (merged-option harness options 'operations '()))
+              (list 'control (merged-option harness options 'control '()))
+              (list 'observation
+                    (merged-option harness options 'observation
+                                   '(observation (kind read-only)
+                                                 (value project-clean))))
+              (list 'max-steps
+                    (resolve-budget harness options budget
+                                    'max-steps 'max-steps 8))
+              (list 'max-pure-cost
+                    (resolve-budget harness options budget
+                                    'max-pure-cost 'max-pure-cost 100000))
+              (list 'id-prefix
+                    (merged-option harness options 'id-prefix 'prompt)))))
 
     (define (make-prompt-result status agent selection session run receipt
                                 state completion transcript observations

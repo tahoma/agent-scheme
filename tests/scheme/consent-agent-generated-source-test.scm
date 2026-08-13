@@ -211,6 +211,24 @@
              (field diagnostic 'binding))))
 
 (testing-registry-case
+ 'improper-evaluation-result-rejected '(portable agent)
+(let* ((loop
+        (generated-source-run
+         "(define deriv 1)\n"
+         (list (cons 'evaluate
+                     (lambda (candidate)
+                       '(evaluation-result
+                         (status ok)
+                         . malformed-tail))))))
+       (diagnostic (car (generated-source-run-diagnostics loop))))
+  (test-equal 'improper-evaluation-result-status
+              'rejected
+              (generated-source-run-status loop))
+  (test-equal 'improper-evaluation-result-reason
+              'invalid-evaluation-result
+              (field diagnostic 'reason))))
+
+(testing-registry-case
  'import-contract-status '(portable agent)
 (let* ((loop
         (generated-source-run
