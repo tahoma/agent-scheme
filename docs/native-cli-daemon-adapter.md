@@ -426,10 +426,11 @@ implementation (`tools/consent-native-cli.el`, selected with
 
 The portable lane `tests/scheme/consent-native-cli-daemon-process-test.scm`
 runs under every R7RS host shard (registered in the shared host file list, with
-a Chibi bridge for the optional Chibi shard). It drives `(cli native-cli)` and,
-on hosts whose process module is available, spawns, streams, waits for, signals,
-and reaps a real child: it asserts spawn/stdout/stderr/exit, a host-backed stdin
-port that reaches the child while the prompt stays on the diagnostic stream, cwd
+a Chibi bridge for the required Chibi CI host). It drives `(cli native-cli)`
+and, on hosts whose process module is available, spawns, streams, waits for,
+signals, and reaps a real child: it asserts spawn/stdout/stderr/exit, a
+host-backed stdin port that reaches the child while the prompt stays on the
+diagnostic stream, cwd
 and environment grants observed in a child, a real signal-and-reap, the
 fail-closed noninteractive/stale-handle/stdin denials with Scheme-readable audit
 and error records, fixture-vocabulary consistency, and interpreted/compiled

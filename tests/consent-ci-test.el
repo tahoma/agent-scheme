@@ -787,16 +787,22 @@ reflection 6.800\n"
     (should-not (string-match-p "## Paired Validation Surfaces" markdown))
     (should (string-match-p "## Test Shard Timing" markdown))))
 
-(ert-deftest consent-ci-test-default-ci-omits-chibi-shards ()
-  "Keep Chibi as an explicit optional target, not a default CI shard."
+(ert-deftest consent-ci-test-default-ci-includes-chibi-host ()
+  "Run the portable Chibi host suite in the default CI matrix."
   (let ((workflow (consent-ci-test--repo-file-string
                    ".github/workflows/test.yml"))
         (makefile (consent-ci-test--repo-file-string "Makefile")))
-    (should-not (string-match-p "name: portable R7RS / Chibi" workflow))
-    (should-not (string-match-p "[[:space:]]+- test-portable\n" workflow))
-    ;; Chibi runs the same aggregate host suite as its peers but stays out of
-    ;; the default/CI portable shard set, reachable only through its own
-    ;; target.
+    (should (string-match-p
+             (concat "- host: chibi\n"
+                     "[[:space:]]+host_name: Chibi\n"
+                     "[[:space:]]+apt_package: chibi-scheme\n"
+                     "[[:space:]]+make_target: test-portable-chibi")
+             workflow))
+    (should (string-match-p
+             "chibi-scheme -m scheme.base -m scheme.write"
+             workflow))
+    ;; The required CI matrix uses the explicit host target; the trimmed local
+    ;; default remains focused on its representative portable host.
     (should-not (string-match-p
                  "CONSENT_PORTABLE_TEST_SHARD_TARGETS\
  \\?=.*test-portable-chibi"

@@ -450,7 +450,7 @@ flowchart TD
 
   emacs["Emacs-hosted runtime path<br/>ERT shards"]
   portable["Portable R7RS runtime path"]
-  external["External Scheme host shards<br/>Gambit, Racket, Guile, Gauche,<br/>optional Chibi"]
+  external["External Scheme host shards<br/>Gambit, Racket, Guile, Gauche,<br/>Chibi"]
 
   dual["Parity scope<br/>irreducible dual core:<br/>reader, evaluator, macro,<br/>runtime, base primitives,<br/>host-effect adapter semantics"]
   shared["Single-sourced .sld libraries<br/>loaded by both hosts<br/>not duplicated for parity"]
