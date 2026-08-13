@@ -15,6 +15,7 @@
           consent-redaction-clear!)
   (import (scheme base)
           (scheme char)
+          (prefix (agent redaction-kernel) redaction-kernel:)
           (prefix (stdlib generator) gen:))
   (begin
     ;; Text used in place of secret values.
@@ -107,31 +108,8 @@
 
     (define (secret-string? text)
       "Return #t when TEXT contains a recognizable secret spelling."
-      (and
-       (string? text)
-       (let ((length (string-length text)))
-         (let scan ((index 0))
-           (if (= index length)
-               #f
-               (let ((first (string-ref text index)))
-                 (or
-                  (cond
-                   ((char=? first #\s)
-                    (string-prefix-at? text index "sk-"))
-                   ((char=? first #\g)
-                    (or (string-prefix-at? text index "ghp_")
-                        (string-prefix-at? text index "gho_")
-                        (string-prefix-at? text index "ghu_")
-                        (string-prefix-at? text index "ghs_")
-                        (string-prefix-at? text index "ghr_")))
-                   ((char=? first #\x)
-                    (string-prefix-at? text index "xox"))
-                   ((char=? first #\A)
-                    (string-prefix-at? text index "AKIA"))
-                   ((char=? first #\P)
-                    (string-prefix-at? text index "PRIVATE KEY"))
-                   (else #f))
-                  (scan (+ index 1)))))))))
+      (and (string? text)
+           (redaction-kernel:redaction-kernel-secret-string? text)))
 
     (define (record-head datum)
       "Return DATUM's record head or #f for association-list payloads."

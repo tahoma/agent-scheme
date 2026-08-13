@@ -5,6 +5,7 @@
 (import (scheme base)
         (scheme process-context)
         (agent redaction)
+        (prefix (agent redaction-kernel) redaction-kernel:)
         (testing harness)
         (testing registry)
         (testing runner)
@@ -89,6 +90,53 @@
               (safe-for-provider? '((answer 42)) 'openai))
  (test-assert "redaction log records decisions"
               (pair? (cdr (redaction-log)))))
+
+(testing-registry-case
+ 'redaction-string-kernel '(agent redaction security boundary)
+ (consent-redaction-clear!)
+ (let* ((long-prefix (make-string 4096 #\z))
+        (positives
+         (list
+          "sk-"
+          "prefix sk-x"
+          "ghp_" "gho_x" "ghu_x" "ghs_x" "ghr_x"
+          "xox" "AKIA" "PRIVATE KEY"
+          (string-append long-prefix "sk-")
+          (string-append "before"
+                         (string (integer->char 0))
+                         "PRIVATE KEY")))
+        (negatives
+         (list
+          "" "s" "sk" "SK-" "Sk-" "ghp" "ghq_x" "Xox"
+          "akia" "PRIVATE KE" "private key"
+          (string-append long-prefix "sk"))))
+   (test-equal
+    "kernel recognizes every exact secret spelling"
+    (make-list (length positives) #t)
+    (map redaction-kernel:redaction-kernel-secret-string? positives))
+   (test-equal
+    "kernel rejects partial and case-shifted near misses"
+    (make-list (length negatives) #f)
+    (map redaction-kernel:redaction-kernel-secret-string? negatives))
+   (test-equal
+    "pure kernel calls do not write the redaction log"
+    '()
+    (field-value (redaction-log) 'records))
+   (test-equal
+    "source policy still chooses the replacement"
+    "[redacted]"
+    (redact "prefix sk-x" 'model-diagnostics))
+   (test-equal
+    "source policy logs exactly one matching decision"
+    1
+    (length (field-value (redaction-log) 'records)))
+   (let ((callback-called? #f))
+     (test-assert
+      "kernel rejects a procedure without invoking it"
+      (guard (condition (else (not callback-called?)))
+        (redaction-kernel:redaction-kernel-secret-string?
+         (lambda () (set! callback-called? #t)))
+        #f)))))
 
 (testing-registry-case
  'redaction-properties '(agent redaction property)
