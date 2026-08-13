@@ -56,6 +56,8 @@
           consent-growable-vector-append!
           consent-growable-vector-ref
           consent-growable-vector-set!
+          consent-growable-vector-copy!
+          consent-growable-vector-fill!
           consent-growable-vector-reserve!
           consent-growable-vector-grow!
           consent-growable-vector-snapshot
@@ -67,7 +69,10 @@
         (dependencies ((library (scheme base))))
         (provenance
          ((origin repo)
-          (allocation-policy bounded-callback-free)))
+          (allocation-policy bounded-callback-free)
+          (bulk-operations
+           (copy overlap-safe)
+           (fill populated-prefix))))
         (status internal)
         (canonical #t))
        (manifest-entry

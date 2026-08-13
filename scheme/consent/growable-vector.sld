@@ -17,6 +17,8 @@
           consent-growable-vector-append!
           consent-growable-vector-ref
           consent-growable-vector-set!
+          consent-growable-vector-copy!
+          consent-growable-vector-fill!
           consent-growable-vector-reserve!
           consent-growable-vector-grow!
           consent-growable-vector-snapshot
@@ -92,6 +94,30 @@
            (growable-vector-length grow)))
       index)
 
+    (define (check-growable-vector-boundary operation grow index)
+      "Validate populated-prefix boundary INDEX in active GROW."
+      (check-growable-vector operation grow)
+      (if (not (and (exact-nonnegative-integer? index)
+                    (<= index (growable-vector-length grow))))
+          (error
+           (string-append operation ": boundary outside populated prefix")
+           index
+           (growable-vector-length grow)))
+      index)
+
+    (define (check-growable-vector-slice operation grow start end)
+      "Validate populated START through END in active GROW."
+      (check-growable-vector operation grow)
+      (if (not (and (exact-nonnegative-integer? start)
+                    (exact-nonnegative-integer? end)
+                    (<= start end (growable-vector-length grow))))
+          (error
+           (string-append operation ": invalid populated-prefix slice")
+           start
+           end
+           (growable-vector-length grow)))
+      grow)
+
     (define (check-requested-capacity operation grow requested)
       "Validate REQUESTED against GROW's exact maximum for OPERATION."
       (check-capacity operation requested)
@@ -107,11 +133,7 @@
       (let* ((length (growable-vector-length grow))
              (old (growable-vector-data grow))
              (larger (allocate-storage operation requested)))
-        (let copy ((index 0))
-          (if (< index length)
-              (begin
-                (vector-set! larger index (vector-ref old index))
-                (copy (+ index 1)))))
+        (vector-copy! larger 0 old 0 length)
         (set-growable-vector-data! grow larger)
         (set-growable-vector-growth-count!
          grow (+ (growable-vector-growth-count grow) 1))
@@ -129,11 +151,7 @@
            requested
            (growable-vector-length grow)))
       (let ((data (growable-vector-data grow)))
-        (let clear ((index requested))
-          (if (< index (growable-vector-length grow))
-              (begin
-                (vector-set! data index #f)
-                (clear (+ index 1))))))
+        (vector-fill! data #f requested (growable-vector-length grow)))
       (set-growable-vector-length! grow requested)
       (set-growable-vector-reset-count!
        grow (+ (growable-vector-reset-count grow) 1))
@@ -295,6 +313,64 @@
       (vector-set! (growable-vector-data grow) index value)
       value)
 
+    (define (consent-growable-vector-copy!
+             destination at source start end)
+      "Copy SOURCE slice into DESTINATION, extending it without gaps."
+      #((parameters
+         (destination (type growable-vector)
+          (description "Storage receiving copied elements."))
+         (at (type exact-non-negative-integer)
+          (description "Destination populated-prefix boundary."))
+         (source (type growable-vector)
+          (description "Storage supplying copied elements."))
+         (start (type exact-non-negative-integer)
+          (description "Inclusive source index."))
+         (end (type exact-non-negative-integer)
+          (description "Exclusive source index.")))
+        (returns (type growable-vector)
+         (description "The supplied DESTINATION."))
+        (effects allocation state-read state-write error))
+      (check-growable-vector-boundary
+       "consent-growable-vector-copy!" destination at)
+      (check-growable-vector-slice
+       "consent-growable-vector-copy!" source start end)
+      (let* ((old-length (growable-vector-length destination))
+             (count (- end start))
+             (required (+ at count)))
+        (check-requested-capacity
+         "consent-growable-vector-copy!" destination required)
+        (consent-growable-vector-grow! destination required)
+        (vector-copy!
+         (growable-vector-data destination)
+         at
+         (growable-vector-data source)
+         start
+         end)
+        (if (> required old-length)
+            (begin
+              (set-growable-vector-length! destination required)
+              (if (> required (growable-vector-high-water destination))
+                  (set-growable-vector-high-water!
+                   destination required))))
+        destination))
+
+    (define (consent-growable-vector-fill! grow fill start end)
+      "Fill populated GROW elements from START through END."
+      #((parameters
+         (grow (type growable-vector) (description "Storage to mutate."))
+         (fill (type any) (description "Value to store."))
+         (start (type exact-non-negative-integer)
+          (description "Inclusive populated index."))
+         (end (type exact-non-negative-integer)
+          (description "Exclusive populated index.")))
+        (returns (type growable-vector)
+         (description "The supplied GROW."))
+        (effects state-write error))
+      (check-growable-vector-slice
+       "consent-growable-vector-fill!" grow start end)
+      (vector-fill! (growable-vector-data grow) fill start end)
+      grow)
+
     (define (consent-growable-vector-snapshot grow)
       "Return a fresh fixed vector containing GROW's populated prefix."
       #((parameters
@@ -307,13 +383,8 @@
              (snapshot
               (allocate-storage
                "consent-growable-vector-snapshot" length)))
-        (let copy ((index 0))
-          (if (< index length)
-              (begin
-                (vector-set!
-                 snapshot index
-                 (vector-ref (growable-vector-data grow) index))
-                (copy (+ index 1)))))
+        (vector-copy!
+         snapshot 0 (growable-vector-data grow) 0 length)
         snapshot))
 
     (define (consent-growable-vector-truncate! grow requested)

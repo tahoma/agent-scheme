@@ -1700,6 +1700,13 @@ scm"))))))
            ((define-library-wrapper (library (stdlib flexvectors)))
             (private-growable-storage
              (library (consent growable-vector)))
+            (private-bulk-storage
+             (copy overlap-safe)
+             (fill populated-prefix))
+            (capacity-policy
+             (growth-factor 2)
+             (clear retain-capacity)
+             (copy minimum-four-or-logical-length))
             (registry-aliases
              (aliases
               (srfi 214)

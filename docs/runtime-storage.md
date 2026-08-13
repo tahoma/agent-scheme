@@ -103,6 +103,9 @@ The populated prefix is separate from reserved capacity:
 - reserve allocates an exact requested capacity when it is larger;
 - grow doubles the current capacity, or uses the requested minimum when that
   is larger, without crossing the configured maximum;
+- copy performs an overlap-safe populated-prefix move between growable vectors
+  and extends the destination prefix when required;
+- fill replaces a populated slice without exposing the backing vector;
 - snapshot returns a fresh fixed vector containing only the populated prefix;
 - truncate clears a populated suffix and publishes the requested shorter
   prefix; scratch arenas use this operation to reset to an owner mark;
@@ -129,6 +132,8 @@ The table abbreviates the common `consent-growable-vector-` prefix.
 | `length`, `capacity`, `ref`, `set!` | O(1) | None. |
 | `append!` | Amortized O(1) | Only when full. |
 | `reserve!`, `grow!` | O(length) when larger | Only when larger. |
+| `copy!` | O(copied slice) | Only when extending past capacity. |
+| `fill!` | O(filled slice) | None. |
 | `snapshot` | O(length) | Always; returns a copy. |
 | `truncate!` | O(removed suffix) | None. |
 | `reset!`, `release!` | O(length) | None. |
@@ -425,6 +430,20 @@ maximum-capacity, or allocation-policy details as SRFI behavior. SRFI 158
 vector collectors and SRFI 42 vector and string comprehensions use that public
 layer so long collections avoid intermediate reversed lists.
 
+The backing policy intentionally differs from the official SRFI 214 sample in
+three non-semantic details. Consent doubles capacity on geometric growth rather
+than growing by one half, favoring fewer reallocations over lower spare
+capacity. `flexvector-clear!` clears references but retains capacity for reuse
+rather than replacing the backing vector. `flexvector-copy` right-sizes new
+storage to the copied length, subject to the four-slot minimum, instead of
+preserving spare source capacity. These are implementation policies, not SRFI
+guarantees, and may be retuned from benchmark evidence.
+
+Bulk flexvector insertion, removal, copying, and filling use private
+`vector-copy!` and `vector-fill!` operations owned by `(consent
+growable-vector)`. Copying is overlap-safe, including self-copy, while the raw
+backing vector remains outside both the SRFI and internal-library interfaces.
+
 The baseline and incremental collectors in #335 and #966 consume
 `pre-reserved` arenas. They must reserve and acquire outside the no-allocation
 trace section and treat capacity exhaustion as a Scheme-readable collection
@@ -434,8 +453,9 @@ failure, not as permission to allocate from the heap under collection.
 
 `tests/scheme/consent-growable-vector-test.scm` covers zero and maximum capacity
 boundaries, a deterministic capacity/model sweep, no-op transitions, copy
-counters, state preservation after failed operations, reset and release
-clearing, idempotent release, and stable representative errors.
+counters, overlap-safe bulk copy and fill, state preservation after failed
+operations, reset and release clearing, idempotent release, and stable
+representative errors.
 `tests/scheme/consent-scratch-arena-test.scm` covers both growth policies,
 active and idle statistics, cross-arena and stale marks, escaped owners,
 exception cleanup, dynamic-wind, continuation re-entry, and a pre-reserved

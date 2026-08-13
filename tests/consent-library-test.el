@@ -1333,21 +1333,26 @@
     (consent-library-test--external/options
      "(import (scheme base)
               (consent growable-vector))
-      (let ((grow (consent-make-growable-vector 0 2)))
-        (consent-growable-vector-append! grow 'left)
-        (consent-growable-vector-append! grow 'right)
+      (let ((grow (consent-make-growable-vector 0 4))
+            (source (consent-make-growable-vector 2 2)))
+        (consent-growable-vector-append! grow 'seed)
+        (consent-growable-vector-append! source 'left)
+        (consent-growable-vector-append! source 'right)
+        (consent-growable-vector-copy! grow 1 source 0 2)
+        (consent-growable-vector-fill! grow 'filled 0 1)
         (let ((overflow-rejected?
                (guard (condition (else #t))
-                 (consent-growable-vector-append! grow 'overflow)
+                 (consent-growable-vector-copy! grow 3 source 0 2)
                  #f)))
           (list
            (consent-growable-vector-length grow)
            (consent-growable-vector-capacity grow)
            (consent-growable-vector-ref grow 0)
            (consent-growable-vector-ref grow 1)
+           (consent-growable-vector-ref grow 2)
            overflow-rejected?)))"
      '(:internal-libraries-allowed t))
-    "(2 2 left right #t)")))
+    "(3 3 filled left right #t)")))
 
 (ert-deftest consent-library-test-scratch-arena-runs-source-backed ()
   "Exercise scratch ownership and marks through the Emacs source loader."

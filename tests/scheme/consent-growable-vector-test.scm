@@ -314,6 +314,66 @@
  '((0 1) (0 3) (1 5) (2 7) (4 4))))
 
 (testing-registry-case
+ 'growable-vector-bulk-copy-and-fill
+ '(portable runtime storage copy overlap boundary state)
+(let ((source (consent-make-growable-vector 4 4))
+      (destination (consent-make-growable-vector 1 4)))
+  (for-each
+   (lambda (value)
+     (consent-growable-vector-append! source value))
+   '(a b c d))
+  (consent-growable-vector-append! destination 'seed)
+  (test-assert
+   'growable-vector-copy-returns-destination
+   (eq? destination
+        (consent-growable-vector-copy! destination 1 source 1 4)))
+  (test-equal 'growable-vector-copy-extends-prefix
+              '#(seed b c d)
+              (consent-growable-vector-snapshot destination))
+  (test-equal 'growable-vector-copy-updates-high-water
+              4
+              (stats-ref
+               (consent-growable-vector-stats destination) 'high-water))
+  (test-assert
+   'growable-vector-fill-returns-self
+   (eq? destination
+        (consent-growable-vector-fill! destination 'filled 1 3)))
+  (test-equal 'growable-vector-fill-populated-slice
+              '#(seed filled filled d)
+              (consent-growable-vector-snapshot destination))
+  (consent-growable-vector-copy! destination 1 destination 0 3)
+  (test-equal 'growable-vector-copy-overlap-right
+              '#(seed seed filled filled)
+              (consent-growable-vector-snapshot destination))
+  (consent-growable-vector-copy! destination 0 destination 1 4)
+  (test-equal 'growable-vector-copy-overlap-left
+              '#(seed filled filled filled)
+              (consent-growable-vector-snapshot destination))
+  (let ((before-stats (consent-growable-vector-stats destination))
+        (before-values (consent-growable-vector-snapshot destination)))
+    (test-assert
+     'growable-vector-copy-over-maximum-rejected
+     (raises?
+      (lambda ()
+        (consent-growable-vector-copy! destination 3 source 0 2))))
+    (test-assert
+     'growable-vector-copy-invalid-boundary-rejected
+     (raises?
+      (lambda ()
+        (consent-growable-vector-copy! destination 5 source 0 0))))
+    (test-assert
+     'growable-vector-fill-invalid-slice-rejected
+     (raises?
+      (lambda ()
+        (consent-growable-vector-fill! destination 'bad 2 5))))
+    (test-equal 'growable-vector-bulk-failures-preserve-values
+                before-values
+                (consent-growable-vector-snapshot destination))
+    (test-equal 'growable-vector-bulk-failures-preserve-stats
+                before-stats
+                (consent-growable-vector-stats destination)))))
+
+(testing-registry-case
  'growable-vector-reset-release-and-errors
  '(portable runtime storage error)
 (let ((grow (consent-make-growable-vector 8 8)))

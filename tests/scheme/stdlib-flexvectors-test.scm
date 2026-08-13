@@ -54,22 +54,29 @@
  'flexvectors/destructive-editing '(portable stdlib)
  (test-equal
   'flexvectors/destructive-editing
-  '(head a x y c tail)
+  '(front-1 front-2 x y head a c tail-1 tail-2)
   (let ((values (flexvector 'a 'b 'c)))
     (flexvector-add-front! values 'head)
+    (flexvector-add-front! values 'front-1 'front-2)
     (flexvector-add-all! values 2 '(x y))
-    (flexvector-remove! values 4)
-    (flexvector-add-back! values 'tail)
+    (flexvector-remove! values 6)
+    (flexvector-add-back! values 'tail-1 'tail-2)
     (flexvector->list values))))
 
 (testing-registry-case
  'flexvectors/overlapping-copy '(portable stdlib)
  (test-equal
   'flexvectors/overlapping-copy
-  '#(0 0 1 2 3)
+  '(#(0 0 1 2 3) #(0 1 2 3 3) #(3 2 1 0 3) #(3 x x 0 3))
   (let ((values (flexvector 0 1 2 3 4)))
     (flexvector-copy! values 1 values 0 4)
-    (flexvector->vector values))))
+    (let ((right (flexvector->vector values)))
+      (flexvector-copy! values 0 values 1 5)
+      (let ((left (flexvector->vector values)))
+        (flexvector-reverse-copy! values 0 values 0 4)
+        (let ((reversed (flexvector->vector values)))
+          (flexvector-fill! values 'x 1 3)
+          (list right left reversed (flexvector->vector values))))))))
 
 (testing-registry-case
  'flexvectors/parallel-operations '(portable stdlib)

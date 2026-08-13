@@ -56,7 +56,8 @@
 (test-equal "flexvector=? 1 argument" #t
   (flexvector=? eq? (flexvector 'a)))
 
-(test-equal "make-flexvector" #(a a a) (flexvector->vector (make-flexvector 3 'a)))
+(test-equal "make-flexvector" #(a a a)
+  (flexvector->vector (make-flexvector 3 'a)))
 
 (test-equal "flexvector-unfold"
   #(1 4 9 16 25 36 49 64 81 100)
@@ -76,7 +77,8 @@
 
 (test-equal "string->flexvector" #(#\a #\b #\c)
   (flexvector->vector (string->flexvector "abc")))
-(test-equal "flexvector->string" "abc" (flexvector->string (flexvector #\a #\b #\c)))
+(test-equal "flexvector->string" "abc"
+  (flexvector->string (flexvector #\a #\b #\c)))
 
 ;; Mutable source list used by the upstream mock generator.
 (define genlist '(a b c))
@@ -105,7 +107,8 @@
   (test-equal "flexvector->list sublist" '(10 20) (flexvector->list fv 0 2))
   (test-equal "flexvector->list omitted end" '(20 30) (flexvector->list fv 1))
   (test-equal "flexvector->list same index" '() (flexvector->list fv 1 1))
-  (test-equal "reverse-flexvector->list" '(30 20 10) (reverse-flexvector->list fv))
+  (test-equal "reverse-flexvector->list" '(30 20 10)
+    (reverse-flexvector->list fv))
   (test-equal "flexvector-copy" #t
     (let ((copy (flexvector-copy fv)))
       (and (= (flexvector-length fv) (flexvector-length copy))
@@ -141,7 +144,8 @@
   (test-equal "flexvector-filter" #(10)
     (flexvector->vector (flexvector-filter (lambda (x) (< x 15)) fv)))
   (test-equal "flexvector-filter/index" #(10 30)
-    (flexvector->vector (flexvector-filter/index (lambda (i x) (not (= i 1))) fv)))
+    (flexvector->vector
+      (flexvector-filter/index (lambda (i x) (not (= i 1))) fv)))
   (test-equal "flexvector-fold" '(30 20 10)
     (flexvector-fold (lambda (x y) (cons y x)) '() fv))
   (test-equal "flexvector-fold-right" '(10 20 30)
@@ -260,7 +264,8 @@
 (test-equal "flexvector-append!" '#(foo bar baz qux)
   (mutate-as x '#(foo bar) (flexvector-append! x (flexvector 'baz 'qux))))
 (test-equal "flexvector-append! multiple" '#(foo bar baz qux quux)
-  (mutate-as x '#(foo bar) (flexvector-append! x (flexvector 'baz 'qux) (flexvector 'quux))))
+  (mutate-as x '#(foo bar)
+    (flexvector-append! x (flexvector 'baz 'qux) (flexvector 'quux))))
 
 (test-equal "flexvector-remove!" '#(foo baz)
   (mutate-as x '#(foo bar baz) (flexvector-remove! x 1)))
@@ -289,11 +294,13 @@
 (test-equal "flexvector-map!" '#(100 200 300)
   (mutate-as fv '#(10 20 30) (flexvector-map! (lambda (x) (* x 10)) fv)))
 (test-equal "flexvector-map/index!" '#(10 22 34)
-  (mutate-as fv '#(10 20 30) (flexvector-map/index! (lambda (i x) (+ x (* i 2))) fv)))
+  (mutate-as fv '#(10 20 30)
+    (flexvector-map/index! (lambda (i x) (+ x (* i 2))) fv)))
 (test-equal "flexvector-filter!" '#(10)
   (mutate-as fv '#(10 20 30) (flexvector-filter! (lambda (x) (< x 15)) fv)))
 (test-equal "flexvector-filter/index!" '#(10 30)
-  (mutate-as fv '#(10 20 30) (flexvector-filter/index! (lambda (i x) (not (= i 1))) fv)))
+  (mutate-as fv '#(10 20 30)
+    (flexvector-filter/index! (lambda (i x) (not (= i 1))) fv)))
 
 (test-equal "flexvector-swap!" #(10 30 20)
   (mutate-as fv '#(10 20 30) (flexvector-swap! fv 1 2)))
@@ -301,17 +308,23 @@
   (mutate-as fv '#(10 20 30) (flexvector-reverse! fv)))
 
 (test-equal "flexvector-copy!" #(1 20 30 40 5)
-  (mutate-as fv '#(1 2 3 4 5) (flexvector-copy! fv 1 (flexvector 20 30 40))))
+  (mutate-as fv '#(1 2 3 4 5)
+    (flexvector-copy! fv 1 (flexvector 20 30 40))))
 (test-equal "flexvector-copy! bounded" #(1 20 30 40 5)
-  (mutate-as fv '#(1 2 3 4 5) (flexvector-copy! fv 1 (flexvector 10 20 30 40 50) 1 4)))
+  (mutate-as fv '#(1 2 3 4 5)
+    (flexvector-copy! fv 1 (flexvector 10 20 30 40 50) 1 4)))
 (test-equal "flexvector-copy! overflow" #(1 2 30 40 50)
   (mutate-as fv '#(1 2 3) (flexvector-copy! fv 2 (flexvector 30 40 50))))
 (test-equal "flexvector-reverse-copy!" #(1 40 30 20 5)
-  (mutate-as fv '#(1 2 3 4 5) (flexvector-reverse-copy! fv 1 (flexvector 20 30 40))))
+  (mutate-as fv '#(1 2 3 4 5)
+    (flexvector-reverse-copy! fv 1 (flexvector 20 30 40))))
 (test-equal "flexvector-reverse-copy! bounded" #(1 40 30 20 5)
-  (mutate-as fv '#(1 2 3 4 5) (flexvector-reverse-copy! fv 1 (flexvector 10 20 30 40 50) 1 4)))
+  (mutate-as fv '#(1 2 3 4 5)
+    (flexvector-reverse-copy!
+      fv 1 (flexvector 10 20 30 40 50) 1 4)))
 (test-equal "flexvector-reverse-copy! overflow" #(1 2 50 40 30)
-  (mutate-as fv '#(1 2 3) (flexvector-reverse-copy! fv 2 (flexvector 30 40 50))))
+  (mutate-as fv '#(1 2 3)
+    (flexvector-reverse-copy! fv 2 (flexvector 30 40 50))))
 
 (test-equal "flexvector-fill!" '#(foo foo foo)
   (mutate-as x '#(1 2 3) (flexvector-fill! x 'foo)))

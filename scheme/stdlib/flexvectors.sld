@@ -271,55 +271,100 @@
       (let* ((size (flexvector-length fv))
              (count (length values))
              (new-length (+ size count)))
-        (reserve-length! fv new-length)
-        (let extend ((rest values))
-          (if (pair? rest)
-              (begin
-                (append-one! fv #f)
-                (extend (cdr rest)))))
-        (let shift ((source (- size 1)))
-          (if (>= source index)
-              (begin
-                (consent-growable-vector-set!
-                 (flexvector-storage fv)
-                 (+ source count)
-                 (flexvector-ref fv source))
-                (shift (- source 1)))))
-        (let insert ((target index) (rest values))
-          (if (pair? rest)
-              (begin
-                (consent-growable-vector-set!
-                 (flexvector-storage fv) target (car rest))
-                (insert (+ target 1) (cdr rest)))))
+        (if (> count 0)
+            (if (= index size)
+                (begin
+                  (reserve-length! fv new-length)
+                  (for-each (lambda (value) (append-one! fv value))
+                            values))
+                (begin
+                  (reserve-length! fv new-length)
+                  (let extend ((rest values))
+                    (if (pair? rest)
+                        (begin
+                          (append-one! fv #f)
+                          (extend (cdr rest)))))
+                  (consent-growable-vector-copy!
+                   (flexvector-storage fv)
+                   (+ index count)
+                   (flexvector-storage fv)
+                   index
+                   size)
+                  (let insert ((target index) (rest values))
+                    (if (pair? rest)
+                        (begin
+                          (consent-growable-vector-set!
+                           (flexvector-storage fv) target (car rest))
+                          (insert (+ target 1) (cdr rest))))))))
         fv))
 
+    (define (insert-one! operation fv index value)
+      "Insert VALUE into FV at INDEX without constructing a value list."
+      (check-index operation fv index #t)
+      (let ((size (flexvector-length fv)))
+        (if (= index size)
+            (append-one! fv value)
+            (begin
+              (append-one! fv #f)
+              (consent-growable-vector-copy!
+               (flexvector-storage fv)
+               (+ index 1)
+               (flexvector-storage fv)
+               index
+               size)
+              (consent-growable-vector-set!
+               (flexvector-storage fv) index value))))
+      fv)
+
     (define (flexvector-add! fv index . values)
-      "Insert VALUES into FV at INDEX and return FV."
+      "Insert VALUES at INDEX, specializing the one-value body path."
       #((parameters
          (fv (type flexvector))
          (index (type exact-integer))
          (values (type list)))
         (returns (type flexvector)))
-      (flexvector-add-all! fv index values))
+      (cond
+       ((null? values)
+        (check-index "flexvector-add!" fv index #t)
+        fv)
+       ((null? (cdr values))
+        (insert-one! "flexvector-add!" fv index (car values)))
+       (else
+        (flexvector-add-all! fv index values))))
 
     (define (flexvector-add-front! fv . values)
-      "Insert VALUES at the front of FV and return FV."
+      "Insert VALUES at the front, specializing the one-value body path."
       #((parameters
          (fv (type flexvector))
          (values (type list)))
         (returns (type flexvector)))
-      (flexvector-add-all! fv 0 values))
+      (cond
+       ((null? values)
+        (check-flexvector "flexvector-add-front!" fv)
+        fv)
+       ((null? (cdr values))
+        (insert-one!
+         "flexvector-add-front!" fv 0 (car values)))
+       (else
+        (flexvector-add-all! fv 0 values))))
 
     (define (flexvector-add-back! fv . values)
-      "Append VALUES to FV and return FV."
+      "Append VALUES, specializing the one-value body path."
       #((parameters
          (fv (type flexvector))
          (values (type list)))
         (returns (type flexvector)))
       (check-flexvector "flexvector-add-back!" fv)
-      (reserve-length! fv (+ (flexvector-length fv) (length values)))
-      (for-each (lambda (value) (append-one! fv value)) values)
-      fv)
+      (cond
+       ((null? values)
+        fv)
+       ((null? (cdr values))
+        (append-one! fv (car values)))
+       (else
+        (reserve-length!
+         fv (+ (flexvector-length fv) (length values)))
+        (for-each (lambda (value) (append-one! fv value)) values)
+        fv)))
 
     (define (flexvector-remove-range! fv start end)
       "Remove FV elements from clamped START through END and return FV."
@@ -336,14 +381,13 @@
              (actual-start (car slice))
              (actual-end (cdr slice))
              (count (- actual-end actual-start)))
-        (let shift ((source actual-end))
-          (if (< source length)
-              (begin
-                (consent-growable-vector-set!
-                 (flexvector-storage fv)
-                 (- source count)
-                 (flexvector-ref fv source))
-                (shift (+ source 1)))))
+        (if (> count 0)
+            (consent-growable-vector-copy!
+             (flexvector-storage fv)
+             actual-start
+             (flexvector-storage fv)
+             actual-end
+             length))
         (consent-growable-vector-truncate!
          (flexvector-storage fv) (- length count))
         fv))
@@ -404,25 +448,13 @@
         (let* ((slice
                 (normalize-slice "flexvector-copy!" from-length start end))
                (actual-start (car slice))
-               (actual-end (cdr slice))
-               (values
-                (flexvector->vector from actual-start actual-end))
-               (count (vector-length values))
-               (required (+ at count)))
-          (reserve-length! to required)
-          (let extend ()
-            (if (< (flexvector-length to) required)
-                (begin
-                  (append-one! to #f)
-                  (extend))))
-          (let copy ((index 0))
-            (if (< index count)
-                (begin
-                  (consent-growable-vector-set!
-                   (flexvector-storage to)
-                   (+ at index)
-                   (vector-ref values index))
-                  (copy (+ index 1)))))
+               (actual-end (cdr slice)))
+          (consent-growable-vector-copy!
+           (flexvector-storage to)
+           at
+           (flexvector-storage from)
+           actual-start
+           actual-end)
           to)))
 
     (define (flexvector-reverse-copy! to at from . maybe-bounds)
@@ -433,6 +465,8 @@
          (from (type flexvector))
          (maybe-bounds (type list)))
         (returns (type flexvector)))
+      (check-index "flexvector-reverse-copy!" to at #t)
+      (check-flexvector "flexvector-reverse-copy!" from)
       (let* ((from-length (flexvector-length from))
              (start (if (null? maybe-bounds) 0 (car maybe-bounds)))
              (end
@@ -445,10 +479,17 @@
         (let* ((slice
                 (normalize-slice
                  "flexvector-reverse-copy!" from-length start end))
-               (copy
-                (flexvector-reverse-copy
-                 from (car slice) (cdr slice))))
-          (flexvector-copy! to at copy))))
+               (actual-start (car slice))
+               (actual-end (cdr slice))
+               (count (- actual-end actual-start)))
+          (consent-growable-vector-copy!
+           (flexvector-storage to)
+           at
+           (flexvector-storage from)
+           actual-start
+           actual-end)
+          (flexvector-reverse! to at (+ at count))
+          to)))
 
     (define (flexvector-append! fv . fvs)
       "Append FVS to FV and return FV."
@@ -494,14 +535,10 @@
                   (cadr maybe-bounds))))
         (if (> (length maybe-bounds) 2)
             (error "flexvector-fill!: too many bounds"))
-        (let* ((slice
-                (normalize-slice "flexvector-fill!" size start end))
-               (actual-end (cdr slice)))
-          (let loop ((index (car slice)))
-            (if (< index actual-end)
-                (begin
-                  (flexvector-set! fv index fill)
-                  (loop (+ index 1)))))))
+        (let ((slice
+               (normalize-slice "flexvector-fill!" size start end)))
+          (consent-growable-vector-fill!
+           (flexvector-storage fv) fill (car slice) (cdr slice))))
       fv)
 
     (define (flexvector-reverse! fv . maybe-bounds)
@@ -647,8 +684,30 @@
          (fv (type flexvector))
          (maybe-bounds (type list)))
         (returns (type flexvector)))
-      (vector->flexvector
-       (apply flexvector->vector fv maybe-bounds)))
+      (check-flexvector "flexvector-copy" fv)
+      (let* ((size (flexvector-length fv))
+             (start (if (null? maybe-bounds) 0 (car maybe-bounds)))
+             (end
+              (if (or (null? maybe-bounds)
+                      (null? (cdr maybe-bounds)))
+                  size
+                  (cadr maybe-bounds))))
+        (if (> (length maybe-bounds) 2)
+            (error "flexvector-copy: too many bounds"))
+        (let* ((slice
+                (normalize-slice "flexvector-copy" size start end))
+               (actual-start (car slice))
+               (actual-end (cdr slice))
+               (result
+                (new-flexvector
+                 (max 4 (- actual-end actual-start)))))
+          (consent-growable-vector-copy!
+           (flexvector-storage result)
+           0
+           (flexvector-storage fv)
+           actual-start
+           actual-end)
+          result)))
 
     (define (flexvector-reverse-copy fv . maybe-bounds)
       "Return a reversed copy of a clamped FV slice."
