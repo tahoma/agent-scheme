@@ -62,6 +62,7 @@
           consent-growable-vector-grow!
           consent-growable-vector-snapshot
           consent-growable-vector-truncate!
+          consent-growable-vector-clear!
           consent-growable-vector-reset!
           consent-growable-vector-release!
           consent-growable-vector-unused-slots-cleared?
@@ -72,7 +73,11 @@
           (allocation-policy bounded-callback-free)
           (bulk-operations
            (copy overlap-safe)
-           (fill populated-prefix))))
+           (fill populated-prefix))
+          (memory-lifecycle
+           (clear reset-to-initial-capacity)
+           (reset retain-capacity)
+           (release terminal))))
         (status internal)
         (canonical #t))
        (manifest-entry

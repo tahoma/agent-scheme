@@ -374,6 +374,30 @@
                 (consent-growable-vector-stats destination)))))
 
 (testing-registry-case
+ 'growable-vector-clear-and-reset-memory
+ '(portable runtime storage memory state)
+(let ((grow (consent-make-growable-vector 2 16)))
+  (append-integers! grow 9)
+  (test-equal 'growable-vector-clear-grown-capacity
+              16
+              (consent-growable-vector-capacity grow))
+  (test-assert 'growable-vector-clear-returns-self
+               (eq? grow (consent-growable-vector-clear! grow)))
+  (test-equal 'growable-vector-clear-restores-initial-capacity
+              2
+              (consent-growable-vector-capacity grow))
+  (test-equal 'growable-vector-clear-preserves-high-water
+              9
+              (stats-ref (consent-growable-vector-stats grow) 'high-water))
+  (test-assert 'growable-vector-clear-clears-unused-slots
+               (consent-growable-vector-unused-slots-cleared? grow))
+  (append-integers! grow 3)
+  (consent-growable-vector-reset! grow)
+  (test-equal 'growable-vector-explicit-reset-always-retains-capacity
+              4
+              (consent-growable-vector-capacity grow))))
+
+(testing-registry-case
  'growable-vector-reset-release-and-errors
  '(portable runtime storage error)
 (let ((grow (consent-make-growable-vector 8 8)))
@@ -429,7 +453,15 @@
   (test-assert 'growable-vector-released-operation-rejected
                (raises?
                 (lambda ()
-                  (consent-growable-vector-append! grow 'stale)))))
+                  (consent-growable-vector-append! grow 'stale))))
+  (test-assert 'growable-vector-clear-after-release-rejected
+               (raises?
+                (lambda ()
+                  (consent-growable-vector-clear! grow))))
+  (test-assert 'growable-vector-reset-after-release-rejected
+               (raises?
+                (lambda ()
+                  (consent-growable-vector-reset! grow)))))
 (test-assert 'growable-vector-malformed-initial-capacity-rejected
              (raises?
               (lambda ()

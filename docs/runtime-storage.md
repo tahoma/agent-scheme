@@ -82,6 +82,7 @@ At every active-vector boundary:
 - `0 <= length <= capacity <= maximum-capacity`;
 - only indexes below `length` are populated and addressable;
 - every reserved slot at or above `length` contains `#f`;
+- clear replaces the backing vector at the immutable initial capacity;
 - reset moves `length` to zero without reducing `capacity`; and
 - release clears the prefix, replaces the backing vector with an empty vector,
   and permanently makes the growable vector inactive.
@@ -94,7 +95,7 @@ describe the object's history, not its current logical contents.
 `(consent growable-vector)` exports the storage operations in this section.
 `consent-make-growable-vector` takes an initial capacity and a maximum capacity.
 Both are exact nonnegative integers, and the initial capacity must not exceed
-the maximum. The maximum is permanent for that storage object.
+the maximum. Both capacity bounds are immutable for that storage object.
 
 The populated prefix is separate from reserved capacity:
 
@@ -109,9 +110,17 @@ The populated prefix is separate from reserved capacity:
 - snapshot returns a fresh fixed vector containing only the populated prefix;
 - truncate clears a populated suffix and publishes the requested shorter
   prefix; scratch arenas use this operation to reset to an owner mark;
+- clear atomically replaces the backing vector at the initial capacity;
 - reset clears every populated slot to `#f` and retains the capacity; and
 - release clears every populated slot, drops the backing vector, and makes the
   growable vector permanently inactive.
+
+These operations are distinct primitive-backend lifetime signals. A native or
+collector-aware backend must not collapse them into aliases: clear abandons the
+high-water allocation for the initial-capacity backing, reset retains the
+allocation for reuse after removing live references, and release relinquishes
+the backing and invalidates the object. This contract lets a future Consent
+collector apply different heap policies without changing callers.
 
 Append uses geometric growth. For a vector beginning with one slot, appending
 `n` elements copies fewer than `2n` existing elements across all growths.
@@ -136,6 +145,7 @@ The table abbreviates the common `consent-growable-vector-` prefix.
 | `fill!` | O(filled slice) | None. |
 | `snapshot` | O(length) | Always; returns a copy. |
 | `truncate!` | O(removed suffix) | None. |
+| `clear!` | O(initial capacity) | Always. |
 | `reset!`, `release!` | O(length) | None. |
 | `unused-slots-cleared?` | O(capacity) | None. |
 | `stats` | O(1) | Allocates the result datum. |
@@ -431,13 +441,22 @@ vector collectors and SRFI 42 vector and string comprehensions use that public
 layer so long collections avoid intermediate reversed lists.
 
 The backing policy intentionally differs from the official SRFI 214 sample in
-three non-semantic details. Consent doubles capacity on geometric growth rather
+two non-semantic details. Consent doubles capacity on geometric growth rather
 than growing by one half, favoring fewer reallocations over lower spare
-capacity. `flexvector-clear!` clears references but retains capacity for reuse
-rather than replacing the backing vector. `flexvector-copy` right-sizes new
-storage to the copied length, subject to the four-slot minimum, instead of
-preserving spare source capacity. These are implementation policies, not SRFI
-guarantees, and may be retuned from benchmark evidence.
+capacity. `flexvector-copy` right-sizes new storage to the copied length,
+subject to the four-slot minimum, instead of preserving spare source capacity.
+These are implementation policies, not SRFI guarantees, and may be retuned
+from benchmark evidence.
+
+`flexvector-clear!` follows the official sample by invoking private clear on
+storage whose immutable initial capacity is four slots. Constructors reserve
+more storage when needed without changing that clear floor. The private
+operation allocates replacement storage before mutation, so the old value
+survives allocation failure. On success, the high-water backing vector becomes
+unreachable and eligible for collection, so repeated grow-and-clear cycles do
+not permanently retain their largest historical allocation. Explicit
+`consent-growable-vector-reset!` instead retains capacity for scratch storage
+whose caller intends reuse.
 
 Bulk flexvector insertion, removal, copying, and filling use private
 `vector-copy!` and `vector-fill!` operations owned by `(consent

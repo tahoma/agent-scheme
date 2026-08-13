@@ -23,6 +23,7 @@
           consent-growable-vector-grow!
           consent-growable-vector-snapshot
           consent-growable-vector-truncate!
+          consent-growable-vector-clear!
           consent-growable-vector-reset!
           consent-growable-vector-release!
           consent-growable-vector-unused-slots-cleared?
@@ -35,11 +36,12 @@
     ;; Mutable bounded vector state and deterministic lifetime counters.
     (define-record-type <consent-growable-vector>
       (make-growable-vector-record
-       length data maximum-capacity high-water growth-count copied-elements
-       reset-count active?)
+       length data initial-capacity maximum-capacity high-water growth-count
+       copied-elements reset-count active?)
       consent-growable-vector?
       (length growable-vector-length set-growable-vector-length!)
       (data growable-vector-data set-growable-vector-data!)
+      (initial-capacity growable-vector-initial-capacity)
       (maximum-capacity growable-vector-maximum-capacity)
       (high-water growable-vector-high-water set-growable-vector-high-water!)
       (growth-count
@@ -181,6 +183,7 @@
        0
        (allocate-storage
         "consent-make-growable-vector" initial-capacity)
+       initial-capacity
        maximum-capacity
        0
        0
@@ -398,6 +401,25 @@
         (effects state-write error))
       (growable-vector-truncate-internal!
        "consent-growable-vector-truncate!" grow requested))
+
+    (define (consent-growable-vector-clear! grow)
+      "Clear GROW and restore its immutable initial capacity."
+      #((parameters
+         (grow (type growable-vector) (description "Storage to clear.")))
+        (returns (type growable-vector)
+         (description "The empty active GROW."))
+        (effects allocation state-write error))
+      (check-growable-vector "consent-growable-vector-clear!" grow)
+      (let ((replacement
+             (allocate-storage
+              "consent-growable-vector-clear!"
+              (growable-vector-initial-capacity grow))))
+        ;; Allocate before mutation so failure preserves GROW exactly.
+        (set-growable-vector-data! grow replacement)
+        (set-growable-vector-length! grow 0)
+        (set-growable-vector-reset-count!
+         grow (+ (growable-vector-reset-count grow) 1))
+        grow))
 
     (define (consent-growable-vector-reset! grow)
       "Clear GROW's populated prefix while retaining reserved storage."

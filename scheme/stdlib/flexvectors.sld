@@ -145,11 +145,19 @@
                    end))
         (cons actual-start actual-end)))
 
+    (define (new-flexvector-storage initial-capacity)
+      "Return storage reserving INITIAL-CAPACITY with a four-slot clear floor."
+      (let ((storage
+             (consent-make-growable-vector
+              4
+              flexvector-maximum-capacity)))
+        (consent-growable-vector-reserve! storage initial-capacity)
+        storage))
+
     (define (new-flexvector initial-capacity)
       "Return an empty flexvector with INITIAL-CAPACITY reserved slots."
       (make-flexvector-record
-       (consent-make-growable-vector
-        initial-capacity flexvector-maximum-capacity)))
+       (new-flexvector-storage initial-capacity)))
 
     (define (storage-length fv)
       "Return FV's private populated-prefix length."
@@ -418,12 +426,12 @@
       (flexvector-remove! fv (- (flexvector-length fv) 1)))
 
     (define (flexvector-clear! fv)
-      "Remove every element from FV and return FV."
+      "Remove every element and release FV's high-water storage."
       #((parameters
          (fv (type flexvector)))
         (returns (type flexvector)))
       (check-flexvector "flexvector-clear!" fv)
-      (consent-growable-vector-reset! (flexvector-storage fv))
+      (consent-growable-vector-clear! (flexvector-storage fv))
       fv)
 
     (define (flexvector-copy! to at from . maybe-bounds)

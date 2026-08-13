@@ -1705,7 +1705,7 @@ scm"))))))
              (fill populated-prefix))
             (capacity-policy
              (growth-factor 2)
-             (clear retain-capacity)
+             (clear reset-to-four)
              (copy minimum-four-or-logical-length))
             (registry-aliases
              (aliases
