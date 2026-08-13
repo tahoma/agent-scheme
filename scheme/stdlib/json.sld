@@ -188,8 +188,10 @@
       (let ((code (json-read-hex4 port)))
         (cond
          ((and (<= #xd800 code) (<= code #xdbff))
-          (let ((slash (json-read-char port))
-                (u (json-read-char port)))
+          ;; Port reads must be sequenced explicitly: R7RS leaves ordinary
+          ;; `let' initializer order unspecified.
+          (let* ((slash (json-read-char port))
+                 (u (json-read-char port)))
             (if (or (eof-object? slash)
                     (eof-object? u)
                     (not (char=? slash #\\))

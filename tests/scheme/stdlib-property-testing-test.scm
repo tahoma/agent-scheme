@@ -200,8 +200,11 @@
 (test-equal 'pair-generator-of-uses-both-generators
              '((a . 1) (b . 2) (c . 3))
              (let ((pairs (pair-generator-of (generator 'a 'b 'c)
-                                       (generator 1 2 3))))
-         (list (pairs) (pairs) (pairs)))))
+                                             (generator 1 2 3))))
+               (let* ((first (pairs))
+                      (second (pairs))
+                      (third (pairs)))
+                 (list first second third)))))
 
 (testing-registry-case
  'basic-generators-produce-expected-types '(portable stdlib)
@@ -234,8 +237,10 @@
 (test-equal 'procedure-generator-of-values
              '(first second)
              (let ((procedures (procedure-generator-of (generator 'first
-               'second))))
-         (list ((procedures)) ((procedures) 'ignored)))))
+                                                                   'second))))
+               (let* ((first ((procedures)))
+                      (second ((procedures) 'ignored)))
+                 (list first second)))))
 
 (testing-registry-case
  'deterministic-random-source-replays-generated-numbers '(portable stdlib)

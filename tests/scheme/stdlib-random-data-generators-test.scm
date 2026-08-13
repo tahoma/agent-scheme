@@ -307,8 +307,11 @@
 (test-equal 'gsampling-single-generator
              '(a b #t #t)
              (let ((sample (gsampling (generator 'a 'b))))
-         (list (sample) (sample) (eof-object? (sample)) (eof-object?
-           (sample))))))
+               (let* ((first (sample))
+                      (second (sample))
+                      (third (eof-object? (sample)))
+                      (fourth (eof-object? (sample))))
+                 (list first second third fourth)))))
 
 (testing-registry-case
  'invalid-range-raises '(portable stdlib)
