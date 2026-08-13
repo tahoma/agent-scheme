@@ -1189,9 +1189,11 @@ reflection 6.800\n"
          (workflow (consent-ci-test--repo-file-string
                     ".github/workflows/test.yml"))
          (make-targets
-          '("test-emacs-reflect-documentation-stress"
+          '("test-emacs-library-memory-refinement-performance"
+            "test-emacs-reflect-documentation-stress"
             "test-emacs-agent-state"
             "test-emacs-integration"
+            "test-emacs-library-memory-query-performance"
             "test-emacs-agent-reliability"
             "test-emacs-agent-control"
             "test-emacs-reflect"
@@ -1207,9 +1209,11 @@ reflection 6.800\n"
             "test-emacs-reflect-catalog-stress"
             "test-emacs-reflect-binding-crosswalk-stress"))
          (workflow-shards
-          '("shard: emacs-reflect-documentation-stress"
+          '("shard: emacs-library-memory-refinement-performance"
+            "shard: emacs-reflect-documentation-stress"
             "shard: emacs-agent-state"
             "shard: emacs-integration"
+            "shard: emacs-library-memory-query-performance"
             "shard: emacs-agent-reliability"
             "shard: emacs-agent-control"
             "shard: emacs-reflect"
@@ -1235,7 +1239,7 @@ reflection 6.800\n"
 
 (ert-deftest consent-ci-test-emacs-library-shards-exactly-partition-aggregate
   ()
-  "Keep the five library shards disjoint and coverage-equivalent to aggregate."
+  "Keep seven disjoint library shards coverage-equivalent to the aggregate."
   (let* ((makefile (consent-ci-test--repo-file-string "Makefile"))
          (aggregate-selector
           (consent-ci-test--make-variable-datum
@@ -1246,6 +1250,8 @@ reflection 6.800\n"
              (consent-ci-test--make-variable-datum name makefile))
            '("CONSENT_EMACS_CONFORMANCE_TEST_SELECTOR"
              "CONSENT_EMACS_LIBRARY_RUNTIME_TEST_SELECTOR"
+             "CONSENT_EMACS_LIBRARY_MEMORY_QUERY_PERFORMANCE_TEST_SELECTOR"
+             "CONSENT_EMACS_LIBRARY_MEMORY_REFINEMENT_PERFORMANCE_TEST_SELECTOR"
              "CONSENT_EMACS_LIBRARY_STDLIB_CORE_TEST_SELECTOR"
              "CONSENT_EMACS_LIBRARY_STDLIB_PROPERTY_TEST_SELECTOR"
              "CONSENT_EMACS_LIBRARY_STDLIB_MANIFEST_TEST_SELECTOR")))
@@ -1257,7 +1263,7 @@ reflection 6.800\n"
              (mapcar #'ert-test-name (ert-select-tests selector t)))
            partition-selectors))
          (flattened (apply #'append parts)))
-    (should (= (length aggregate) 234))
+    (should (= (length aggregate) 236))
     (should (= (length flattened)
                (length (delete-dups (copy-sequence flattened)))))
     (should (equal (sort aggregate #'string-lessp)

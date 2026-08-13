@@ -98,7 +98,15 @@ CONSENT_EMACS_CONFORMANCE_TEST_SELECTOR ?= (or "consent-conformance.*" \
   "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-oracle.*")
 CONSENT_EMACS_LIBRARY_RUNTIME_TEST_SELECTOR ?= (and "consent-library.*" (not \
   (or "consent-library-test-srfi-.*" "consent-library-test-stdlib-.*" \
-  "consent-library-test-vendored-srfi.*")))
+  "consent-library-test-vendored-srfi.*" \
+  "consent-library-test-agent-memory-.*scale.*-additively")))
+CONSENT_EMACS_LIBRARY_MEMORY_QUERY_PERFORMANCE_TEST_SELECTOR ?= (or \
+  "consent-library-test-agent-memory-shared-query-terms-scale-additively" \
+  "consent-library-test-agent-memory-text-terms-scale-additively" \
+  "consent-library-test-agent-memory-shared-append-scales-additively" \
+  "consent-library-test-agent-memory-host-number-scales-additively")
+CONSENT_EMACS_LIBRARY_MEMORY_REFINEMENT_PERFORMANCE_TEST_SELECTOR ?= \
+  "consent-library-test-agent-memory-key-refinement-scales-additively"
 CONSENT_EMACS_LIBRARY_STDLIB_CORE_TEST_SELECTOR ?= (or (and \
   "consent-library-test-srfi-.*" (not \
   "consent-library-test-srfi-\\(27\\|194\\|252\\)-.*")) (and \
@@ -219,6 +227,10 @@ CONSENT_LIVE_MODEL_LARGE_SMOKE_ID ?= $(if $(strip \
 CONSENT_LIVE_MODEL_SMOKE_ID ?= $(CONSENT_LIVE_MODEL_RECOMMENDED_SMOKE_ID)
 PROPERTY_SELECTOR = $(CONSENT_EMACS_LIBRARY_STDLIB_PROPERTY_TEST_SELECTOR)
 MANIFEST_SELECTOR = $(CONSENT_EMACS_LIBRARY_STDLIB_MANIFEST_TEST_SELECTOR)
+MEMORY_QUERY_SELECTOR = \
+  $(CONSENT_EMACS_LIBRARY_MEMORY_QUERY_PERFORMANCE_TEST_SELECTOR)
+MEMORY_REFINEMENT_SELECTOR = \
+  $(CONSENT_EMACS_LIBRARY_MEMORY_REFINEMENT_PERFORMANCE_TEST_SELECTOR)
 REFLECT_DOCS_SELECTOR = \
   $(CONSENT_EMACS_REFLECT_DOCUMENTATION_STRESS_TEST_SELECTOR)
 REFLECT_CROSSWALK_SELECTOR = \
@@ -234,8 +246,11 @@ CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= \
   test-portable-compiled test-portable-guile test-portable-guile-reflect \
   test-portable-guile-reflect-stress test-portable-gauche \
   test-portable-gauche-reflect test-portable-gauche-reflect-stress
-CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-reflect-documentation-stress \
-  test-emacs-agent-state test-emacs-integration test-emacs-agent-reliability \
+CONSENT_EMACS_TEST_SHARD_TARGETS ?= \
+  test-emacs-library-memory-refinement-performance \
+  test-emacs-reflect-documentation-stress \
+  test-emacs-agent-state test-emacs-integration \
+  test-emacs-library-memory-query-performance test-emacs-agent-reliability \
   test-emacs-agent-control test-emacs-reflect test-emacs-core \
   test-emacs-library-runtime test-emacs-tools \
   test-emacs-library-stdlib-manifest test-emacs-library-stdlib-core \
@@ -302,6 +317,8 @@ CONSENT_FULL_TEST_JOBS ?= 16
   test-portable-gauche-support test-portable-gauche-reflect \
   test-portable-gauche-reflect-stress test-emacs-hosted test-emacs-core \
   test-emacs-library test-emacs-conformance test-emacs-library-runtime \
+  test-emacs-library-memory-query-performance \
+  test-emacs-library-memory-refinement-performance \
   test-emacs-library-stdlib-core test-emacs-library-stdlib-property \
   test-emacs-library-stdlib-manifest test-emacs-agent-control \
   test-emacs-agent-reliability test-emacs-capability-boundary \
@@ -985,6 +1002,14 @@ test-emacs-conformance:
 
 test-emacs-library-runtime:
 	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_LIBRARY_RUNTIME_TEST_SELECTOR)' \
+	  $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-library-memory-query-performance:
+	CONSENT_TEST_SELECTOR='$(MEMORY_QUERY_SELECTOR)' \
+	  $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-library-memory-refinement-performance:
+	CONSENT_TEST_SELECTOR='$(MEMORY_REFINEMENT_SELECTOR)' \
 	  $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-emacs-library-stdlib-core:
