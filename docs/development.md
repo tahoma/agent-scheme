@@ -280,6 +280,9 @@ expanded `(type any)` when descriptor prose names an obvious primitive type;
 use explicit types in those cases. Custom type names should normally follow
 local predicates by dropping the trailing `?`, while tagged datums without
 predicates should use structural types such as `list`.
+The `effects` field is also required and must contain at least one symbol. Use
+`pure` when the procedure has no observable effect; otherwise name allocation,
+state access, callback invocation, errors, or host effects explicitly.
 Expanded descriptors should keep `(type ...)` on the same line as the
 parameter or `returns` head when the line fits within the soft line limit, with
 the description on the following line. Keep longer type forms on their own line.

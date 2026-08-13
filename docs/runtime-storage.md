@@ -381,16 +381,15 @@ and discard their private capacity after producing a detached result. They
 remove intermediate cons cells and reverse passes without changing reader
 limits, element order, source metadata, or owned-datum construction.
 
-### SRFI 214 Follow-Ups
+### Public Flexvector Collector Refactors
 
-Two optional standard-library modules should use the public flexvector surface
-after #210 lands:
+Two optional standard-library modules now use the public flexvector surface:
 
-- SRFI 42 `vector-ec` and `string-ec` can collect unknown comprehension output
+- SRFI 42 `vector-ec` and `string-ec` collect unknown comprehension output
   with `flexvector-add-back!`, then use `flexvector->vector` or
   `flexvector->string`; and
 - SRFI 158 `generator->vector`, `vector-accumulator`, and
-  `reverse-vector-accumulator` can avoid intermediate lists through
+  `reverse-vector-accumulator` avoid intermediate lists through
   `generator->flexvector`, back insertion, conversion, and reversal.
 
 These paths execute user expressions or generator procedures and expose

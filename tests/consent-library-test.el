@@ -3480,6 +3480,11 @@
                 (copy minimum-four-or-logical-length))
               (manifest-subfield entry 'provenance 'local-patches))
              (member
+              '(documentation-metadata
+                (scope exported-procedures)
+                (fields parameters returns effects))
+              (manifest-subfield entry 'provenance 'local-patches))
+             (member
               '(adapted-tests
                 (file \"tests/scheme/stdlib-flexvectors-test.scm\")
                 (file

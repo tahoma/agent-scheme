@@ -874,6 +874,13 @@ Each result has the form (NAME START END FORMAL-NAMES)."
                 (cdr entry))))
         parameters)))
 
+(defun consent--scheme-documentation-effects-present-p (effects)
+  "Return non-nil when EFFECTS is a non-empty list of effect symbols."
+  (and effects
+       (consent--scheme-documentation-proper-list-p (cdr effects))
+       (consp (cdr effects))
+       (cl-every #'consent-symbol-p (cdr effects))))
+
 (defun consent--scheme-documentation-parameter-names (parameters)
   "Return parameter names documented by PARAMETERS metadata."
   (and (consent--scheme-documentation-proper-list-p parameters)
@@ -899,13 +906,16 @@ Each result has the form (NAME START END FORMAL-NAMES)."
      (let ((parameters
             (consent--scheme-documentation-vector-field vector "parameters"))
            (returns
-            (consent--scheme-documentation-vector-field vector "returns")))
+            (consent--scheme-documentation-vector-field vector "returns"))
+           (effects
+            (consent--scheme-documentation-vector-field vector "effects")))
        (and parameters
             returns
             (consent--scheme-documentation-complete-parameters-p
              (cdr parameters))
             (consent--scheme-documentation-complete-descriptor-p
-             (cdr returns)))))
+             (cdr returns))
+            (consent--scheme-documentation-effects-present-p effects))))
    (consent--scheme-documentation-rich-vectors definition-text)))
 
 (defun consent--scheme-documentation-rich-vector-p (definition-text)
@@ -933,7 +943,8 @@ Each result has the form (NAME START END FORMAL-NAMES)."
           (if (not vector)
               (push
                (format "%s:%d exported procedure %s missing rich metadata
-                 vector with typed and described parameters and returns"
+                 vector with typed and described parameters and returns plus
+                 non-empty effects"
                        relative-file
                        (consent--scheme-documentation-source-line text start)
                        name)
@@ -1283,6 +1294,59 @@ Each result has the form (NAME START END FORMAL-NAMES)."
             errors)))
       (delete-file file))))
 
+(ert-deftest consent-scheme-documentation-test-public-rich-requires-effects ()
+  "Reject public procedure metadata without a non-empty symbol effect list."
+  (let ((file
+         (make-temp-file
+          "consent-doc-effects" nil ".sld"
+          (concat
+           ";;; scratch.sld --- documentation fixture\n"
+           "(define-library\n"
+           "  (scratch docs)\n"
+           "  (export missing empty malformed complete)\n"
+           "  (import (scheme base))\n"
+           "  (begin\n"
+           "    (define (missing value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters (value . \"Value to return.\"))\n"
+           "        (returns . \"The supplied value.\"))\n"
+           "      value)\n"
+           "    (define (empty value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters (value . \"Value to return.\"))\n"
+           "        (returns . \"The supplied value.\")\n"
+           "        (effects))\n"
+           "      value)\n"
+           "    (define (malformed value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters (value . \"Value to return.\"))\n"
+           "        (returns . \"The supplied value.\")\n"
+           "        (effects \"pure\"))\n"
+           "      value)\n"
+           "    (define (complete value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters (value . \"Value to return.\"))\n"
+           "        (returns . \"The supplied value.\")\n"
+           "        (effects pure))\n"
+           "      value)))"))))
+    (unwind-protect
+        (let ((errors
+               (consent--scheme-documentation-public-rich-errors file)))
+          (dolist (name '("missing" "empty" "malformed"))
+            (should
+             (cl-some
+              (lambda (error)
+                (string-match-p
+                 (format "exported procedure %s " name)
+                 error))
+              errors)))
+          (should-not
+           (cl-some
+            (lambda (error)
+              (string-match-p "exported procedure complete " error))
+            errors)))
+      (delete-file file))))
+
 (ert-deftest consent-scheme-documentation-test-public-rich-covers-rest-formals
   ()
   "Require public metadata to cover dotted and rest-only formals."
@@ -1453,8 +1517,7 @@ Each result has the form (NAME START END FORMAL-NAMES)."
       (ert-fail (mapconcat #'identity (nreverse missing) "\n")))))
 
 (ert-deftest consent-scheme-documentation-test-public-rich-docstrings ()
-  "Ensure every exported Scheme procedure carries rich parameter and return\
- metadata.
+  "Ensure every exported procedure documents parameters, returns, and effects.
 Runs fail-closed over every runtime `scheme/' source file, so a new file is
 covered automatically. A file with no exported procedures produces no errors."
   (let ((errors

@@ -162,6 +162,9 @@ For exported runtime procedures, every expanded parameter and return
 descriptor includes both `(type ...)` and a non-empty `(description ...)`.
 Neither field substitutes for the other: the type supports machine-readable
 reflection, while the description explains the value's role in the contract.
+Every exported procedure also includes a non-empty `effects` field made only of
+symbols. `pure` states the absence of observable effects; omission is not an
+implicit purity claim.
 
 ```scheme
 (define (open-agent-log path)

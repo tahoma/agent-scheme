@@ -1717,6 +1717,9 @@ scm"))))))
               (srfi srfi-214)
               (srfi :214)
               (srfi :214 flexvectors)))
+            (documentation-metadata
+             (scope exported-procedures)
+             (fields parameters returns effects))
             (adapted-tests
              (file "tests/scheme/stdlib-flexvectors-test.scm")
              (file
