@@ -452,6 +452,9 @@ buffer for FIFO traversal and double-ended phase work. Successful pushes and
 pops each charge one deterministic work unit, while growth copies are reported
 separately. Vacated slots are cleared before the shorter logical sequence is
 published, and `pre-reserved` worklists fail closed instead of allocating.
+Memory-key partition refinement and canonical quotient traversal use bounded
+worklists, as does breadth-first failure-link completion in the memory-query
+text automaton; all three release their temporary rings on every dynamic exit.
 
 #### Portable character ownership
 

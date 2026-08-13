@@ -63,8 +63,15 @@
               consent-make-growable-vector
               consent-growable-vector-append!
               consent-growable-vector-ref
+              consent-growable-vector-release!
               consent-growable-vector-set!
               consent-growable-vector-snapshot)
+        (only (consent worklist)
+              consent-make-worklist
+              consent-worklist-empty?
+              consent-worklist-pop-front!
+              consent-worklist-push-back!
+              consent-worklist-release!)
         (only (consent symbol)
               consent-symbol?
               consent-symbol-name)
@@ -87,35 +94,10 @@
   (consent-make-growable-vector
    16 memory-key-maximum-growable-capacity))
 
-;; Private two-list FIFO queue used by iterative graph traversals.
-(define-record-type <queue>
-  (make-queue-record front back)
-  queue?
-  (front queue-front set-queue-front!)
-  (back queue-back set-queue-back!))
-
-(define (make-queue)
-  "Return an empty private FIFO queue."
-  (make-queue-record '() '()))
-
-(define (queue-empty? queue)
-  "Return #t when QUEUE has no pending values."
-  (and (null? (queue-front queue))
-       (null? (queue-back queue))))
-
-(define (enqueue! queue value)
-  "Append VALUE to QUEUE."
-  (set-queue-back! queue (cons value (queue-back queue))))
-
-(define (dequeue! queue)
-  "Remove and return QUEUE's oldest value."
-  (if (null? (queue-front queue))
-      (begin
-        (set-queue-front! queue (reverse (queue-back queue)))
-        (set-queue-back! queue '())))
-  (let ((value (car (queue-front queue))))
-    (set-queue-front! queue (cdr (queue-front queue)))
-    value))
+(define (make-memory-key-worklist maximum-capacity)
+  "Return a bounded FIFO for at most MAXIMUM-CAPACITY graph states."
+  (consent-make-worklist
+   (min 16 maximum-capacity) maximum-capacity 'allow-growth))
 
 ;;;; Exact observable labels.
 
@@ -1076,13 +1058,13 @@
          (marked-count (make-vector state-count 0))
          (generation 0)
          (block-count 0)
-         (work (make-queue)))
+         (work (make-memory-key-worklist state-count)))
     (define (enqueue-block! block)
       "Enqueue BLOCK once as a pending partition splitter."
       (if (not (vector-ref block-pending? block))
           (begin
             (vector-set! block-pending? block #t)
-            (enqueue! work block))))
+            (consent-worklist-push-back! work block))))
     (define (link-state! state block)
       "Insert STATE into BLOCK's intrusive member list."
       (let ((head (vector-ref block-head block)))
@@ -1177,70 +1159,79 @@
                              (if (= count 0)
                                  (cons block touched)
                                  touched))))))))
-    ;; Build reverse edge lists before any partition mutation.
-    (let reverse-edges ((state 0))
-      (if (< state state-count)
-          (begin
-            (let ((target (vector-ref edge-0 state)))
-              (if (>= target 0)
-                  (vector-set! pred-0 target
-                               (cons state (vector-ref pred-0 target)))))
-            (let ((target (vector-ref edge-1 state)))
-              (if (>= target 0)
-                  (vector-set! pred-1 target
-                               (cons state (vector-ref pred-1 target)))))
-            (reverse-edges (+ state 1)))))
-    ;; Initial partitioning uses observable labels only.
-    (let ((groups (make-avl-tree label<?)))
-      (let group ((state 0) (tree groups))
-        (if (= state state-count)
-            (avl-tree-fold
-             (lambda (label members ignored)
-               (let ((block block-count))
-                 (set! block-count (+ block-count 1))
-                 (let add ((rest members))
-                   (if (not (null? rest))
-                       (begin
-                         (link-state! (car rest) block)
-                         (add (cdr rest)))))
-                 (enqueue-block! block)
-                 ignored))
-             #f
-             tree)
-            (let* ((label (vector-ref labels state))
-                   (members (avl-tree-ref tree label (lambda () '()))))
-              (group (+ state 1)
-                     (avl-tree-set tree label (cons state members)))))))
-    ;; Snapshot both predecessor relations before any splitter-induced block
-    ;; mutation, then refine each relation independently.
-    (let refine ()
-      (if (not (queue-empty? work))
-          (let ((splitter (dequeue! work))
-                (sources-0 '())
-                (sources-1 '()))
-            (vector-set! block-pending? splitter #f)
-            (let snapshot ((state (vector-ref block-head splitter)))
-              (if (>= state 0)
-                  (begin
-                    ;; Count and collect each incoming edge in the same pass.
-                    ;; Do not repeatedly append or rescan predecessor lists.
-                    (let collect-0 ((incoming (vector-ref pred-0 state)))
-                      (if (not (null? incoming))
+    (dynamic-wind
+     (lambda () #t)
+     (lambda ()
+       ;; Build reverse edge lists before any partition mutation.
+       (let reverse-edges ((state 0))
+         (if (< state state-count)
+             (begin
+               (let ((target (vector-ref edge-0 state)))
+                 (if (>= target 0)
+                     (vector-set!
+                      pred-0 target
+                      (cons state (vector-ref pred-0 target)))))
+               (let ((target (vector-ref edge-1 state)))
+                 (if (>= target 0)
+                     (vector-set!
+                      pred-1 target
+                      (cons state (vector-ref pred-1 target)))))
+               (reverse-edges (+ state 1)))))
+       ;; Initial partitioning uses observable labels only.
+       (let ((groups (make-avl-tree label<?)))
+         (let group ((state 0) (tree groups))
+           (if (= state state-count)
+               (avl-tree-fold
+                (lambda (label members ignored)
+                  (let ((block block-count))
+                    (set! block-count (+ block-count 1))
+                    (let add ((rest members))
+                      (if (not (null? rest))
                           (begin
-                            (set! sources-0
-                                  (cons (car incoming) sources-0))
-                            (collect-0 (cdr incoming)))))
-                    (let collect-1 ((incoming (vector-ref pred-1 state)))
-                      (if (not (null? incoming))
-                          (begin
-                            (set! sources-1
-                                  (cons (car incoming) sources-1))
-                            (collect-1 (cdr incoming)))))
-                    (snapshot (vector-ref state-next state)))))
-            (split-by-predecessors! sources-0)
-            (split-by-predecessors! sources-1)
-            (refine))))
-    (vector state-block block-head block-size block-count)))
+                            (link-state! (car rest) block)
+                            (add (cdr rest)))))
+                    (enqueue-block! block)
+                    ignored))
+                #f
+                tree)
+               (let* ((label (vector-ref labels state))
+                      (members
+                       (avl-tree-ref tree label (lambda () '()))))
+                 (group
+                  (+ state 1)
+                  (avl-tree-set tree label (cons state members)))))))
+       ;; Snapshot both predecessor relations before any splitter-induced block
+       ;; mutation, then refine each relation independently.
+       (let refine ()
+         (if (not (consent-worklist-empty? work))
+             (let ((splitter (consent-worklist-pop-front! work))
+                   (sources-0 '())
+                   (sources-1 '()))
+               (vector-set! block-pending? splitter #f)
+               (let snapshot ((state (vector-ref block-head splitter)))
+                 (if (>= state 0)
+                     (begin
+                       ;; Count and collect each incoming edge in one pass.
+                       ;; Do not repeatedly append or rescan predecessor lists.
+                       (let collect-0 ((incoming (vector-ref pred-0 state)))
+                         (if (not (null? incoming))
+                             (begin
+                               (set! sources-0
+                                     (cons (car incoming) sources-0))
+                               (collect-0 (cdr incoming)))))
+                       (let collect-1 ((incoming (vector-ref pred-1 state)))
+                         (if (not (null? incoming))
+                             (begin
+                               (set! sources-1
+                                     (cons (car incoming) sources-1))
+                               (collect-1 (cdr incoming)))))
+                       (snapshot (vector-ref state-next state)))))
+               (split-by-predecessors! sources-0)
+               (split-by-predecessors! sources-1)
+               (refine))))
+       (vector state-block block-head block-size block-count))
+     (lambda ()
+       (consent-worklist-release! work)))))
 
 ;;;; Canonical rooted quotient encoding.
 
@@ -1254,7 +1245,7 @@
          (block-count (vector-ref partition 3))
          (canonical-id (make-vector block-count -1))
          (descriptor (make-memory-key-growable-vector))
-         (pending (make-queue))
+         (pending (make-memory-key-worklist block-count))
          (next-id 1)
          (output-id 0)
          (root-block (vector-ref state-block root)))
@@ -1268,7 +1259,7 @@
                 (let ((assigned next-id))
                   (set! next-id (+ next-id 1))
                   (vector-set! canonical-id block assigned)
-                  (enqueue! pending block)
+                  (consent-worklist-push-back! pending block)
                   assigned)
                 known))))
     (define (emit-number! number)
@@ -1315,30 +1306,37 @@
                     (consent-growable-vector-append!
                      descriptor (vector-ref bytes index))
                     (loop (+ index 1))))))))))
-    (vector-set! canonical-id root-block 0)
-    (enqueue! pending root-block)
-    (consent-growable-vector-append! descriptor block-count)
-    (let encode ()
-      (if (not (queue-empty? pending))
-          (let* ((block (dequeue! pending))
-                 (id (vector-ref canonical-id block))
-                 (state (vector-ref block-head block))
-                 (label (vector-ref labels state))
-                 (first (target-id (vector-ref edge-0 state)))
-                 (second (target-id (vector-ref edge-1 state))))
-            (if (not (= id output-id))
-                ;; Queue order and first-discovery ids are both BFS order.
-                (error "canonical quotient id order mismatch" id output-id))
-            (set! output-id (+ output-id 1))
-            (emit-label! label)
-            (if (>= first 0)
-                (consent-growable-vector-append! descriptor first))
-            (if (>= second 0)
-                (consent-growable-vector-append! descriptor second))
-            (encode))))
-    (if (not (= next-id block-count))
-        (error "unreachable quotient block" next-id block-count))
-    (consent-growable-vector-snapshot descriptor)))
+    (dynamic-wind
+     (lambda () #t)
+     (lambda ()
+       (vector-set! canonical-id root-block 0)
+       (consent-worklist-push-back! pending root-block)
+       (consent-growable-vector-append! descriptor block-count)
+       (let encode ()
+         (if (not (consent-worklist-empty? pending))
+             (let* ((block (consent-worklist-pop-front! pending))
+                    (id (vector-ref canonical-id block))
+                    (state (vector-ref block-head block))
+                    (label (vector-ref labels state))
+                    (first (target-id (vector-ref edge-0 state)))
+                    (second (target-id (vector-ref edge-1 state))))
+               (if (not (= id output-id))
+                   ;; Queue order and first-discovery ids are both BFS order.
+                   (error
+                    "canonical quotient id order mismatch" id output-id))
+               (set! output-id (+ output-id 1))
+               (emit-label! label)
+               (if (>= first 0)
+                   (consent-growable-vector-append! descriptor first))
+               (if (>= second 0)
+                   (consent-growable-vector-append! descriptor second))
+               (encode))))
+       (if (not (= next-id block-count))
+           (error "unreachable quotient block" next-id block-count))
+       (consent-growable-vector-snapshot descriptor))
+     (lambda ()
+       (consent-worklist-release! pending)
+       (consent-growable-vector-release! descriptor)))))
 
 (define (normalize-general-key value persistent?)
   "Return VALUE's canonical general-key quotient descriptor."

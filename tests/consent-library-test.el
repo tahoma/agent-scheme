@@ -1300,7 +1300,14 @@
     (should source-file)
     (should
      (string-suffix-p "scheme/agent/memory-key.sld" source-file))
-    (should (file-readable-p source-file))))
+    (should (file-readable-p source-file))
+    (with-temp-buffer
+      (insert-file-contents source-file)
+      (should (search-forward "(consent worklist)" nil t))
+      (goto-char (point-min))
+      (should-not (search-forward "<queue>" nil t))
+      (goto-char (point-min))
+      (should-not (search-forward "(make-queue" nil t)))))
 
 (ert-deftest
     consent-library-test-bootstrap-storage-is-source-backed ()
@@ -1452,6 +1459,11 @@
     (should (file-readable-p source-file))
     (with-temp-buffer
       (insert-file-contents source-file)
+      (should (search-forward "(consent worklist)" nil t))
+      (goto-char (point-min))
+      (should-not
+       (search-forward "(let ((front '()) (back '()))" nil t))
+      (goto-char (point-min))
       (should-not (search-forward "(string-ref" nil t))
       (goto-char (point-min))
       (should (search-forward "memory-substring-fallback-table" nil t))

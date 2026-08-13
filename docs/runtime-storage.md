@@ -456,14 +456,57 @@ standard-library behavior. They therefore must not depend directly on the
 callback-free primitive, even if the SRFI 214 implementation internally reuses
 compatible primitive storage.
 
+### Worklist Candidate Decisions
+
+The worklist audit first distinguished true queue ordering from code that only
+used a variable named `pending` or `work`. A migration also needed a permanent
+bound, bootstrap-safe dependencies, and a lifecycle in which clearing retained
+slots was useful. The resulting decisions are:
+
+| Candidate | Decision |
+| --- | --- |
+| Memory-key partition refinement | Migrate. |
+| Memory-key canonical quotient | Migrate. |
+| Memory-query automaton completion | Migrate. |
+| Memory-query bounded record walk | Keep. |
+| Datum import/export traversals | Keep. |
+| Interpreter ownership/equality traversals | Keep. |
+| Result graph rendering traversals | Keep. |
+| Symbol-boundary graph equality | Keep. |
+| Library egress scan and dirty propagation | Keep. |
+| Test finite-graph bisimulation oracle | Keep. |
+
+- `(agent memory-key)` partition splitters are a deduplicated FIFO bounded by
+  graph state count. The local two-list queue duplicated exactly the worklist
+  contract.
+- Its canonical quotient uses first-discovery BFS order to assign identifiers.
+  A FIFO bounded by quotient block count makes that ordering explicit.
+- `(agent memory-query)` Aho-Corasick failure links require breadth-first parent
+  completion. The call-scoped two-list FIFO retained automaton nodes and
+  duplicated reversal logic.
+- The separate memory-query record walk is a depth-first compatibility guard
+  capped at 64 compound nodes. A preallocated ring would add fixed overhead
+  without adding queue semantics.
+- `(consent datum)` uses vector continuation frames as LIFO stacks. Finish and
+  child order, not FIFO discovery, are the abstraction.
+- `(consent interpreter)` uses LIFO task or comparison stacks charged by
+  evaluator budgets. A deque would not simplify the continuation protocol.
+- `(consent result)` uses lazy LIFO finish/visit stacks. Lists preserve the
+  allocation-free scalar hot path; every call should not allocate a ring.
+- `(consent symbol-boundary)` uses a LIFO pair-comparison stack with no
+  observable FIFO order or deque operation.
+- `(consent library)` uses deduplicated LIFO scan and dirty stacks. Node flags
+  own scheduling, order is unobservable, and no queue duplication is removed.
+- The test-only finite-graph bisimulation oracle stays independent and
+  list-based instead of depending on the runtime abstraction it helps verify.
+
+The three migrated queues now use `push-back!` and `pop-front!`, release their
+ring storage through `dynamic-wind`, and retain their existing algorithm-owned
+bounds and ordering. No stack was migrated merely to reduce consing; a future
+stack abstraction should be justified on its own contract and measurements.
+
 ### Candidates Rejected or Deferred
 
-- Explicit traversal stacks and FIFO worklists in `(consent datum)`,
-  `(consent interpreter)`, `(consent result)`, `(consent symbol-boundary)`,
-  `(consent library)`, `(agent memory-key)`, and `(agent memory-query)` need
-  push/pop or queue/deque semantics. Issue #969 owns that bootstrap worklist
-  abstraction; treating a populated vector prefix as an ad hoc queue would
-  recreate the duplication that the foundation issues are meant to remove.
 - `(data transient-map)` grows an open-addressed hash table. Its sparse slots,
   probing, deletion markers, and rehash threshold are not a growable sequence;
   replacing its backing vector with this primitive would hide rather than
@@ -487,10 +530,14 @@ compatible primitive storage.
 
 ## Layering and Consumers
 
-The memory-key canonicalizer now uses `(consent growable-vector)` for its dense
-label, edge, and descriptor vectors. Its graph semantics and asymptotic gates
-remain owned by `(agent memory-key)`; only the compatible storage machinery
-moved.
+The memory-key canonicalizer uses `(consent growable-vector)` for its dense
+label, edge, and descriptor vectors and `(consent worklist)` for partition and
+canonical-BFS queues. Its graph semantics and asymptotic gates remain owned by
+`(agent memory-key)`; only compatible storage and queue machinery moved.
+
+The memory-query text automaton uses a call-scoped worklist while completing
+failure links breadth-first. It releases the ring after completion; the durable
+automaton owns the nodes and links, not the temporary traversal container.
 
 The reader uses per-call growable vectors for line-start and literal-element
 builders. It snapshots before publishing a result and releases the private
@@ -545,6 +592,11 @@ synthetic collector workload. The portable plan runs both programs on direct
 and compiled routes. ERT imports each internal library independently through
 the Emacs source-library loader, proving that both bootstrap surfaces use their
 portable source implementations.
+`tests/scheme/consent-agent-memory-test.scm` retains the consumer equivalence
+corpus: bounded arbitrary-key quotient oracles and cyclic-key lifecycle cases
+cover both memory-key FIFOs, while overlapping multi-pattern relevance covers
+the memory-query breadth-first failure links. Existing additive scale gates
+continue to guard partition refinement and text-query construction.
 The official SRFI 214 repository provides `implementation/tests.scm`. Consent
 pins that file at the manifest's upstream revision and SHA-256 and carries its
 111 assertions in
