@@ -1704,7 +1704,8 @@ scm"))))))
              (copy overlap-safe)
              (fill populated-prefix))
             (capacity-policy
-             (growth-factor 2)
+             (growth-factor 3/2)
+             (private-default-growth-factor 2)
              (clear reset-to-four)
              (copy minimum-four-or-logical-length))
             (specification-repairs

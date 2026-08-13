@@ -56,6 +56,9 @@
   (test-equal 'growable-vector-initial-capacity
               2
               (consent-growable-vector-capacity grow))
+  (test-equal 'growable-vector-default-growth-factor
+              2
+              (consent-growable-vector-growth-factor grow))
   (test-equal 'growable-vector-first-index
               0
               (consent-growable-vector-append! grow 'first))
@@ -116,6 +119,38 @@
                     (* 2 (stats-ref stats 'length)))))))
 
 (testing-registry-case
+ 'growable-vector-configurable-growth-factor
+ '(portable runtime storage performance)
+(let ((grow (consent-make-growable-vector 4 32 3/2))
+      (bounded
+       (consent-make-growable-vector
+        4 5 1000000000000000000000000)))
+  (test-equal 'configured-growth-factor
+              3/2
+              (consent-growable-vector-growth-factor grow))
+  (append-integers! grow 5)
+  (test-equal 'configured-growth-first-capacity
+              6
+              (consent-growable-vector-capacity grow))
+  (append-integers! grow 2)
+  (test-equal 'configured-growth-second-capacity
+              9
+              (consent-growable-vector-capacity grow))
+  (append-integers! grow 3)
+  (test-equal 'configured-growth-reference-capacity
+              13
+              (consent-growable-vector-capacity grow))
+  (test-equal 'configured-growth-stats
+              3/2
+              (stats-ref
+               (consent-growable-vector-stats grow)
+               'growth-factor))
+  (append-integers! bounded 5)
+  (test-equal 'configured-growth-stays-bounded
+              5
+              (consent-growable-vector-capacity bounded))))
+
+(testing-registry-case
  'growable-vector-zero-capacity-and-idempotence
  '(portable runtime storage boundary error)
 (test-assert 'growable-vector-predicate-rejects-other-values
@@ -129,6 +164,7 @@
      (length 0)
      (capacity 0)
      (maximum-capacity 0)
+     (growth-factor 2)
      (high-water 0)
      (growths 0)
      (copied-elements 0)
@@ -160,6 +196,7 @@
        (length 0)
        (capacity 0)
        (maximum-capacity 0)
+       (growth-factor 2)
        (high-water 0)
        (growths 0)
        (copied-elements 0)
@@ -238,6 +275,7 @@
      (length 0)
      (capacity 4)
      (maximum-capacity 4)
+     (growth-factor 2)
      (high-water 4)
      (growths 2)
      (copied-elements 4)
@@ -473,7 +511,23 @@
 (test-assert 'growable-vector-inverted-capacity-rejected
              (raises?
               (lambda ()
-                (consent-make-growable-vector 9 8)))))
+                (consent-make-growable-vector 9 8))))
+(test-assert 'growable-vector-unit-growth-factor-rejected
+             (raises?
+              (lambda ()
+                (consent-make-growable-vector 0 8 1))))
+(test-assert 'growable-vector-inexact-growth-factor-rejected
+             (raises?
+              (lambda ()
+                (consent-make-growable-vector 0 8 1.5))))
+(test-assert 'growable-vector-nonnumeric-growth-factor-rejected
+             (raises?
+              (lambda ()
+                (consent-make-growable-vector 0 8 'fast))))
+(test-assert 'growable-vector-extra-growth-factor-rejected
+             (raises?
+              (lambda ()
+                (consent-make-growable-vector 0 8 3/2 2)))))
 
 
 (testing-runner-main "Consent growable vector" (command-line))

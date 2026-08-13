@@ -14,6 +14,7 @@
           consent-growable-vector-length
           consent-growable-vector-capacity
           consent-growable-vector-maximum-capacity
+          consent-growable-vector-growth-factor
           consent-growable-vector-append!
           consent-growable-vector-ref
           consent-growable-vector-set!
@@ -36,13 +37,14 @@
     ;; Mutable bounded vector state and deterministic lifetime counters.
     (define-record-type <consent-growable-vector>
       (make-growable-vector-record
-       length data initial-capacity maximum-capacity high-water growth-count
-       copied-elements reset-count active?)
+       length data initial-capacity maximum-capacity growth-factor high-water
+       growth-count copied-elements reset-count active?)
       consent-growable-vector?
       (length growable-vector-length set-growable-vector-length!)
       (data growable-vector-data set-growable-vector-data!)
       (initial-capacity growable-vector-initial-capacity)
       (maximum-capacity growable-vector-maximum-capacity)
+      (growth-factor growable-vector-growth-factor)
       (high-water growable-vector-high-water set-growable-vector-high-water!)
       (growth-count
        growable-vector-growth-count
@@ -65,6 +67,18 @@
           (error
            (string-append operation ": expected exact nonnegative capacity")
            capacity)))
+
+    (define (check-growth-factor operation growth-factor)
+      "Validate GROWTH-FACTOR as an exact real greater than one."
+      (if (not (and (number? growth-factor)
+                    (real? growth-factor)
+                    (exact? growth-factor)
+                    (> growth-factor 1)))
+          (error
+           (string-append operation
+                          ": expected exact growth factor greater than one")
+           growth-factor))
+      growth-factor)
 
     (define (allocate-storage operation capacity)
       "Allocate CAPACITY cleared slots or fail with a normalized condition."
@@ -160,13 +174,15 @@
       grow)
 
     (define (consent-make-growable-vector
-             initial-capacity maximum-capacity)
+             initial-capacity maximum-capacity . maybe-growth-factor)
       "Return empty growable storage within the supplied capacity bounds."
       #((parameters
          (initial-capacity (type exact-non-negative-integer)
           (description "Initially reserved slots."))
          (maximum-capacity (type exact-non-negative-integer)
-          (description "Largest permitted reserved capacity.")))
+          (description "Largest permitted reserved capacity."))
+         (maybe-growth-factor (type list)
+          (description "Optional immutable exact growth factor.")))
         (returns (type growable-vector)
          (description "Fresh active private growable storage."))
         (effects allocation error))
@@ -174,22 +190,32 @@
        "consent-make-growable-vector initial" initial-capacity)
       (check-capacity
        "consent-make-growable-vector maximum" maximum-capacity)
+      (if (> (length maybe-growth-factor) 1)
+          (error
+           "consent-make-growable-vector: too many growth factors"))
       (if (> initial-capacity maximum-capacity)
           (error
            "consent-make-growable-vector: initial capacity exceeds maximum"
            initial-capacity
            maximum-capacity))
-      (make-growable-vector-record
-       0
-       (allocate-storage
-        "consent-make-growable-vector" initial-capacity)
-       initial-capacity
-       maximum-capacity
-       0
-       0
-       0
-       0
-       #t))
+      (let ((growth-factor
+             (if (null? maybe-growth-factor)
+                 2
+                 (car maybe-growth-factor))))
+        (check-growth-factor
+         "consent-make-growable-vector" growth-factor)
+        (make-growable-vector-record
+         0
+         (allocate-storage
+          "consent-make-growable-vector" initial-capacity)
+         initial-capacity
+         maximum-capacity
+         growth-factor
+         0
+         0
+         0
+         0
+         #t)))
 
     (define (consent-growable-vector-active? grow)
       "Return whether GROW is an active growable vector."
@@ -232,6 +258,17 @@
        "consent-growable-vector-maximum-capacity" grow)
       (growable-vector-maximum-capacity grow))
 
+    (define (consent-growable-vector-growth-factor grow)
+      "Return GROW's immutable geometric growth factor."
+      #((parameters
+         (grow (type growable-vector) (description "Storage to inspect.")))
+        (returns (type exact-real)
+         (description "Configured capacity growth factor."))
+        (effects state-read error))
+      (check-growable-vector
+       "consent-growable-vector-growth-factor" grow)
+      (growable-vector-growth-factor grow))
+
     (define (consent-growable-vector-reserve! grow requested)
       "Reserve exactly REQUESTED slots when GROW is currently smaller."
       #((parameters
@@ -261,13 +298,21 @@
       (check-growable-vector "consent-growable-vector-grow!" grow)
       (check-requested-capacity
        "consent-growable-vector-grow!" grow minimum-capacity)
-      (let ((capacity (vector-length (growable-vector-data grow))))
+      (let ((capacity (vector-length (growable-vector-data grow)))
+            (maximum (growable-vector-maximum-capacity grow))
+            (growth-factor (growable-vector-growth-factor grow)))
         (if (> minimum-capacity capacity)
-            (let* ((doubled (if (= capacity 0) 1 (* capacity 2)))
-                   (candidate (max minimum-capacity doubled))
-                   (bounded
-                    (min candidate
-                         (growable-vector-maximum-capacity grow))))
+            (let* ((geometric
+                    (if (= capacity 0)
+                        1
+                        (max (+ capacity 1)
+                             (if (>= growth-factor
+                                     (/ maximum capacity))
+                                 maximum
+                                 (floor
+                                  (* capacity growth-factor))))))
+                   (candidate (max minimum-capacity geometric))
+                   (bounded (min candidate maximum)))
               (replace-growable-vector-capacity!
                "consent-growable-vector-grow!" grow bounded))))
       grow)
@@ -482,6 +527,7 @@
        (list 'capacity (vector-length (growable-vector-data grow)))
        (list 'maximum-capacity
              (growable-vector-maximum-capacity grow))
+       (list 'growth-factor (growable-vector-growth-factor grow))
        (list 'high-water (growable-vector-high-water grow))
        (list 'growths (growable-vector-growth-count grow))
        (list 'copied-elements (growable-vector-copied-elements grow))

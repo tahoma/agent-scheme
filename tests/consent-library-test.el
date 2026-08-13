@@ -1335,11 +1335,17 @@
               (consent growable-vector))
       (let ((grow (consent-make-growable-vector 0 4))
             (source (consent-make-growable-vector 2 2))
+            (tuned (consent-make-growable-vector 4 16 3/2))
             (resetting
              (consent-make-growable-vector 1 4)))
         (consent-growable-vector-append! grow 'seed)
         (consent-growable-vector-append! source 'left)
         (consent-growable-vector-append! source 'right)
+        (consent-growable-vector-append! tuned 0)
+        (consent-growable-vector-append! tuned 1)
+        (consent-growable-vector-append! tuned 2)
+        (consent-growable-vector-append! tuned 3)
+        (consent-growable-vector-append! tuned 4)
         (consent-growable-vector-append! resetting 'a)
         (consent-growable-vector-append! resetting 'b)
         (consent-growable-vector-append! resetting 'c)
@@ -1357,9 +1363,12 @@
            (consent-growable-vector-ref grow 1)
            (consent-growable-vector-ref grow 2)
            overflow-rejected?
-           (consent-growable-vector-capacity resetting))))"
+           (consent-growable-vector-capacity resetting)
+           (consent-growable-vector-growth-factor grow)
+           (consent-growable-vector-growth-factor tuned)
+           (consent-growable-vector-capacity tuned))))"
      '(:internal-libraries-allowed t))
-    "(3 3 filled left right #t 1)")))
+    "(3 3 filled left right #t 1 2 3/2 6)")))
 
 (ert-deftest consent-library-test-scratch-arena-runs-source-backed ()
   "Exercise scratch ownership and marks through the Emacs source loader."
@@ -3462,6 +3471,13 @@
               '(specification-repairs
                 (set-at-length append)
                 (remove-range-end optional))
+              (manifest-subfield entry 'provenance 'local-patches))
+             (member
+              '(capacity-policy
+                (growth-factor 3/2)
+                (private-default-growth-factor 2)
+                (clear reset-to-four)
+                (copy minimum-four-or-logical-length))
               (manifest-subfield entry 'provenance 'local-patches))
              (member
               '(adapted-tests

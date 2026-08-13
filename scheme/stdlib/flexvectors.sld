@@ -150,7 +150,8 @@
       (let ((storage
              (consent-make-growable-vector
               4
-              flexvector-maximum-capacity)))
+              flexvector-maximum-capacity
+              3/2)))
         (consent-growable-vector-reserve! storage initial-capacity)
         storage))
 

@@ -93,17 +93,20 @@ describe the object's history, not its current logical contents.
 ## Growable Vectors
 
 `(consent growable-vector)` exports the storage operations in this section.
-`consent-make-growable-vector` takes an initial capacity and a maximum capacity.
-Both are exact nonnegative integers, and the initial capacity must not exceed
-the maximum. Both capacity bounds are immutable for that storage object.
+`consent-make-growable-vector` takes an initial capacity, a maximum capacity,
+and an optional growth factor that defaults to 2. Capacity bounds are exact
+nonnegative integers, the initial capacity must not exceed the maximum, and
+the growth factor must be an exact real greater than one. All three policy
+values are immutable for that storage object.
 
 The populated prefix is separate from reserved capacity:
 
 - append returns the new element's zero-based index;
 - indexed ref and set accept only populated indexes;
 - reserve allocates an exact requested capacity when it is larger;
-- grow doubles the current capacity, or uses the requested minimum when that
-  is larger, without crossing the configured maximum;
+- grow takes the floor of current capacity times the object's growth factor,
+  advances by at least one slot, or uses the requested minimum when that is
+  larger, without crossing the configured maximum;
 - copy performs an overlap-safe populated-prefix move between growable vectors
   and extends the destination prefix when required;
 - fill replaces a populated slice without exposing the backing vector;
@@ -122,11 +125,13 @@ allocation for reuse after removing live references, and release relinquishes
 the backing and invalidates the object. This contract lets a future Consent
 collector apply different heap policies without changing callers.
 
-Append uses geometric growth. For a vector beginning with one slot, appending
-`n` elements copies fewer than `2n` existing elements across all growths.
+Append uses geometric growth. With the default factor of 2 and one initial
+slot, appending `n` elements copies fewer than `2n` existing elements across
+all growths. Every fixed factor greater than one preserves amortized constant
+append time; smaller factors trade more copying for less spare capacity.
 `consent-growable-vector-stats` exposes logical length, reserved capacity,
-maximum capacity, high-water length, growth count, copied-element count, reset
-count, and released state as Scheme-readable data.
+maximum capacity, growth factor, high-water length, growth count,
+copied-element count, reset count, and released state as Scheme-readable data.
 
 `consent-growable-vector-unused-slots-cleared?` is a private diagnostic for the
 garbage-collector root invariant. It scans reserved slots outside the logical
@@ -441,12 +446,12 @@ vector collectors and SRFI 42 vector and string comprehensions use that public
 layer so long collections avoid intermediate reversed lists.
 
 The backing policy intentionally differs from the official SRFI 214 sample in
-two non-semantic details. Consent doubles capacity on geometric growth rather
-than growing by one half, favoring fewer reallocations over lower spare
-capacity. `flexvector-copy` right-sizes new storage to the copied length,
-subject to the four-slot minimum, instead of preserving spare source capacity.
-These are implementation policies, not SRFI guarantees, and may be retuned
-from benchmark evidence.
+one non-semantic detail: `flexvector-copy` right-sizes new storage to the copied
+length, subject to the four-slot minimum, instead of preserving spare source
+capacity. Flexvector storage selects the sample's 3/2 growth factor through the
+private per-object policy, while other primitive consumers retain the private
+constructor's default factor of 2. These are implementation policies, not SRFI
+guarantees, and may be retuned from benchmark evidence.
 
 `flexvector-clear!` follows the official sample by invoking private clear on
 storage whose immutable initial capacity is four slots. Constructors reserve
