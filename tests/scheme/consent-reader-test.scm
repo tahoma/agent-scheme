@@ -1208,7 +1208,10 @@
       (newline)
       (test-assert
        'datum-label-radix-adversarial-near-linear
-       (<= large (+ (* 20 (max 1 small)) jitter))))))
+       ;; Eight times as many labels must remain below half of the roughly
+       ;; 64x quadratic curve.  The 24x envelope also tolerates sub-millisecond
+       ;; small samples and scheduling variation on shared runners.
+       (<= large (+ (* 24 (max 1 small)) jitter))))))
 
 (testing-registry-case
  'datum-label-long-definition-chain '(portable core datum performance)

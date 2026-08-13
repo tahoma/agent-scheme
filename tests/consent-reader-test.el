@@ -53,6 +53,23 @@
   (should (equal (consent-reader-test--external "|left\\|right|")
                  "|left\\|right|")))
 
+(ert-deftest consent-reader-test-identifiers-bypass-full-number-parser ()
+  "Keep ordinary source identifiers out of numeric-token parsing."
+  (let ((parse-number (symbol-function 'consent--parse-number-token))
+        (parse-count 0))
+    (cl-letf
+        (((symbol-function 'consent--parse-number-token)
+          (lambda (reader token)
+            (setq parse-count (1+ parse-count))
+            (funcall parse-number reader token))))
+      (consent-read-all
+       "(define (ordinary-identifier source-value) source-value)")
+      (should
+       (equal
+        (consent--write-symbol-name "ordinary-identifier")
+        "ordinary-identifier"))
+      (should (= parse-count 0)))))
+
 (ert-deftest consent-reader-test-explicit-symbol-table-handles ()
   "Intern reads through the selected hash-backed symbol-table handle."
   (let* ((left-table (consent--make-symbol-table))

@@ -4389,13 +4389,43 @@ e"
     (define (symbol-needs-bars? name)
       "Report whether NAME requires vertical bars in external syntax."
       (or (not (identifier-token? name))
-          (parse-number-token (reader-from-source "" '()) name)))
+          (and
+           (number-token-candidate? name)
+           (parse-number-token (reader-from-source "" '()) name))))
 
     (define (write-symbol-name name)
       "Render a symbol name with escaping when the token grammar requires it."
       (if (symbol-needs-bars? name)
           (string-append "|" (escape-symbol-name name) "|")
           name))
+
+    ;; Symbols are interned and immutable.  Retaining a small bounded set of
+    ;; their canonical spellings avoids reparsing the same runtime field names
+    ;; on every diagnostic, memory search, and prompt projection.  The bound
+    ;; also makes the plain-R7RS identity-map compatibility backend constant
+    ;; space and constant-bounded lookup work.
+    (define writer-symbol-cache '())
+    ;; Number of canonical spellings currently retained in the cache.
+    (define writer-symbol-cache-count 0)
+    ;; Fixed upper bound keeps the compatibility lookup cost bounded.
+    (define writer-symbol-cache-limit 256)
+
+    (define (write-symbol-datum symbol)
+      "Return interned SYMBOL's cached canonical external spelling."
+      (let ((known (assq symbol writer-symbol-cache)))
+        (if known
+            (cdr known)
+            (let ((rendered
+                   (write-symbol-name
+                    (reader-datum-symbol-name symbol))))
+              (if (< writer-symbol-cache-count writer-symbol-cache-limit)
+                  (begin
+                    (set! writer-symbol-cache
+                          (cons (cons symbol rendered)
+                                writer-symbol-cache))
+                    (set! writer-symbol-cache-count
+                          (+ writer-symbol-cache-count 1))))
+              rendered))))
 
     (define (write-character-datum char)
       "Render a character in canonical R7RS external syntax."
@@ -4434,6 +4464,133 @@ e"
       "Report whether DATUM can participate in shared or circular structure."
       (or (reader-pair? datum) (reader-vector? datum)))
 
+    (define (writer-tree->external datum mode display?)
+      "Render tree-shaped DATUM quickly, or return #f for a graph."
+      ;; The general writer below must retain per-node DFS state so it can
+      ;; label cycles and write-shared aliases.  Most values are trees.  Prove
+      ;; that bounded case while rendering, then fall back before publishing
+      ;; any partial output when sharing, a cycle, or a large graph appears.
+
+      (let ()
+        (define (record-name->external name)
+          (cond
+           ((reader-datum-symbol? name) (reader-datum-symbol-name name))
+           ((reader-string? name) (reader-string->host name))
+           (else
+            (error "consent reader error: invalid record name" name))))
+
+        (define (render-fast root)
+          "Render a bounded acyclic value, or return #f for graph fallback."
+          (call-with-current-continuation
+           (lambda (fallback)
+             (let ((output (open-output-string))
+                   (seen '())
+                   (count 0))
+               (define (emit! text)
+                 (display text output))
+               (define (enter-compound value ancestors)
+                 (set! count (+ count 1))
+                 (if (or (> count 128) (memq value ancestors))
+                     (fallback #f))
+                 (if (and (eq? mode 'shared) (memq value seen))
+                     (fallback #f))
+                 (set! seen (cons value seen))
+                 (cons value ancestors))
+               (define (write-pair cursor first? ancestors)
+                 (cond
+                  ((reader-pair? cursor)
+                   (let ((next-ancestors
+                          (enter-compound cursor ancestors)))
+                     (if (not first?) (emit! " "))
+                     (write-value
+                      (reader-car cursor) next-ancestors)
+                     (write-pair
+                      (reader-cdr cursor) #f next-ancestors)))
+                  ((null? cursor) (emit! ")"))
+                  (else
+                   (emit! (if first? ". " " . "))
+                   (write-value cursor ancestors)
+                   (emit! ")"))))
+               (define (write-value value ancestors)
+                 (cond
+                  ((boolean? value) (emit! (if value "#t" "#f")))
+                  ((null? value) (emit! "()"))
+                  ((reader-datum-symbol? value)
+                   (emit!
+                    (if display?
+                        (reader-datum-symbol-name value)
+                        (write-symbol-datum value))))
+                  ((or (consent-character? value) (char? value))
+                   (let ((character
+                          (if (consent-character? value)
+                              value
+                              (consent-host-character->character value))))
+                     (emit!
+                      (if display?
+                          (string
+                           (consent-character->host-character character))
+                          (write-character-datum character)))))
+                  ((or (consent-number? value) (number? value))
+                   (emit! (consent-number->external value)))
+                  ((reader-string? value)
+                   (let ((text (reader-string->host value)))
+                     (if display?
+                         (emit! text)
+                         (begin
+                           (emit! "\"")
+                           (emit! (escape-string text))
+                           (emit! "\"")))))
+                  ((reader-bytevector? value)
+                   (emit! "#u8(")
+                   (let loop ((index 0))
+                     (if (= index (reader-bytevector-length value))
+                         (emit! ")")
+                         (begin
+                           (if (> index 0) (emit! " "))
+                           (emit!
+                            (consent-integer->radix-string
+                             (reader-bytevector-u8-ref value index)
+                             10))
+                           (loop (+ index 1))))))
+                  ((reader-pair? value)
+                   (emit! "(")
+                   (write-pair value #t ancestors))
+                  ((reader-vector? value)
+                   (let ((next-ancestors
+                          (enter-compound value ancestors)))
+                     (emit! "#(")
+                     (let loop ((index 0))
+                       (if (= index (reader-vector-length value))
+                           (emit! ")")
+                           (begin
+                             (if (> index 0) (emit! " "))
+                             (write-value
+                              (reader-vector-ref value index)
+                              next-ancestors)
+                             (loop (+ index 1)))))))
+                  ((consent-record? value)
+                   (emit! "#<record ")
+                   (emit!
+                    (record-name->external
+                     (consent-record-type-name
+                      (consent-record-type value))))
+                   (emit! ">"))
+                  ((consent-record-type? value)
+                   (emit! "#<record-type ")
+                   (emit!
+                    (record-name->external
+                     (consent-record-type-name value)))
+                   (emit! ">"))
+                  (else
+                   (error
+                    (string-append
+                     "consent reader error: cannot write unsupported datum")
+                    value))))
+               (write-value root '())
+               (get-output-string output)))))
+
+        (render-fast datum)))
+
     (define (consent-datum->external datum . maybe-options)
       "Render Consent Scheme datums with stable external syntax, including"
       "shared and circular structure labels for write/shared mode."
@@ -4449,17 +4606,21 @@ e"
           ("A string holding the datum's external representation,"
             "emitting `#N=`/`#N#` datum labels for shared and circular"
             "structure in write/shared mode.")))
-        (effects allocation))
-      (let ((mode (if (null? maybe-options) 'write (car maybe-options)))
-            (display? (if (or (null? maybe-options)
-                              (null? (cdr maybe-options)))
-                          #f
-                          (cadr maybe-options)))
-            (nodes (make-reader-identity-map))
-            (node-absent (vector 'writer-node-absent))
-            (cyclic-found? #f)
-            (next-label 0)
-            (parts '()))
+        (effects allocation state-read state-write))
+      (let* ((mode (if (null? maybe-options) 'write (car maybe-options)))
+             (display? (if (or (null? maybe-options)
+                               (null? (cdr maybe-options)))
+                           #f
+                           (cadr maybe-options)))
+             (tree-output
+              (writer-tree->external datum mode display?)))
+        (if tree-output
+            tree-output
+            (let ((nodes (make-reader-identity-map))
+                  (node-absent (vector 'writer-node-absent))
+                  (cyclic-found? #f)
+                  (next-label 0)
+                  (parts '()))
 
         (define (emit! text)
           "Append TEXT to the reverse writer fragment accumulator."
@@ -4656,8 +4817,7 @@ e"
                          (emit!
                           (if display?
                               (reader-datum-symbol-name value)
-                              (write-symbol-name
-                               (reader-datum-symbol-name value))))
+                              (write-symbol-datum value)))
                          (loop rest))
                         ((or (consent-character? value) (char? value))
                          (let ((character
@@ -4780,7 +4940,7 @@ e"
            (render datum)
            (join (reverse parts) ""))
          (lambda ()
-           (reader-identity-map-release! nodes)))))
+           (reader-identity-map-release! nodes)))))))
 
     (define (consent--render-limit-ref limits key)
       "Return the host-integer ceiling for KEY in the LIMITS alist, or #f when\

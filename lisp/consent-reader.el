@@ -1288,6 +1288,21 @@ The return value is (BODY EXACTNESS RADIX), or nil."
           (consent--parse-complex-number-body
            reader token lower-body exactness radix)))))
 
+(defun consent--number-token-candidate-p (token)
+  "Return non-nil when TOKEN can begin an R7RS numeric literal.
+This constant-time gate keeps ordinary identifiers out of the full radix,
+exactness, real, rational, decimal, and complex-number parser."
+  (let ((length (length token)))
+    (and (> length 0)
+         (let ((first (aref token 0)))
+           (or (and (>= first ?0) (<= first ?9))
+               (= first ?#)
+               (and (memq first '(?+ ?-)) (> length 1))
+               (and (= first ?.)
+                    (> length 1)
+                    (let ((second (aref token 1)))
+                      (and (>= second ?0) (<= second ?9)))))))))
+
 (defun consent--character-name-start-p (char)
   "Report whether CHAR (an ASCII letter) can begin a named or #\\x hex
     literal."
@@ -1505,7 +1520,8 @@ Signal if the sequence exceeds MAXIMUM-LENGTH."
     consent-true)
    ((member token '("#f" "#false"))
     consent-false)
-   ((consent--parse-number-token reader token))
+   ((and (consent--number-token-candidate-p token)
+         (consent--parse-number-token reader token)))
    ((consent--identifier-token-p token)
     (consent--intern-symbol
      (if (consent--reader-fold-case reader)
@@ -2049,7 +2065,10 @@ failures."
 (defun consent--symbol-needs-bars-p (name)
   "Return non-nil if NAME should be written with vertical bars."
   (or (not (consent--identifier-token-p name))
-      (consent--parse-number-token (consent--new-reader "" nil) name)))
+      (and (consent--number-token-candidate-p name)
+           (consent--parse-number-token
+            (consent--new-reader "" nil)
+            name))))
 
 (defun consent--write-symbol-name (name)
   "Return external representation of Scheme symbol NAME."
