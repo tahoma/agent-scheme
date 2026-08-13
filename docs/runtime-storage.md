@@ -204,9 +204,71 @@ logical work independently of elapsed time and backing-store growth.
 A pop clears its vacated physical slot before publishing the shorter size.
 Reset clears all active slots while retaining capacity. Clear replaces the ring
 at its immutable initial capacity. Release clears active slots, drops backing
-storage, and permanently rejects further operations. The diagnostic
+storage, and permanently rejects further queue operations. The diagnostic
 `consent-worklist-unused-slots-cleared?` verifies that no inactive ring slot
 retains a heap root, including across a wrapped logical range.
+
+Rejected constructor arguments fail before allocating a worklist. Rejected
+reservations, empty-boundary operations, and capacity-exhausted pushes preserve
+logical contents, capacity, and statistics. Failed pushes do not charge work
+units. Clear and reset empty the ring but retain its lifetime counters; release
+also preserves those counters so `consent-worklist-stats` can report the
+completed lifetime. After release, `consent-worklist?`,
+`consent-worklist-active?`, statistics, the cleared-slot diagnostic, and
+idempotent release remain available. All other API operations reject the
+inactive worklist.
+
+### Collector Lifecycle
+
+Reserve storage before entering a no-allocation phase, and keep the worklist in
+explicit phase state so successive slices share the same ring and counters.
+Arrange terminal cleanup with `dynamic-wind`:
+
+```scheme
+(define (call-with-trace-state maximum-capacity roots use-state)
+  (let ((worklist
+         (consent-make-worklist
+          0 maximum-capacity 'pre-reserved)))
+    (consent-worklist-reserve! worklist maximum-capacity)
+    (for-each
+     (lambda (root)
+       (consent-worklist-push-back! worklist root))
+     roots)
+    (let ((state (vector 'trace worklist)))
+      (dynamic-wind
+       (lambda () #t)
+       (lambda () (use-state state))
+       (lambda ()
+         (consent-worklist-release! worklist))))))
+```
+
+A resumable slice can compare the lifetime work counter before and after each
+algorithm step instead of consulting elapsed time:
+
+```scheme
+(define (run-trace-slice! state budget step!)
+  (let* ((worklist (vector-ref state 1))
+         (start (consent-worklist-work-units worklist)))
+    (let loop ()
+      (cond
+       ((consent-worklist-empty? worklist) 'complete)
+       ((>= (- (consent-worklist-work-units worklist) start)
+            budget)
+        'suspended)
+       (else
+        (step! worklist
+               (consent-worklist-pop-front! worklist))
+        (loop))))))
+```
+
+`step!` may enqueue discovered values with `push-back!`; those pushes and the
+pop are all charged. The check occurs between steps, so an algorithm that needs
+a strict ceiling must also bound one step's fan-out or suspend a partially
+enumerated node explicitly. Suspension leaves the worklist active in phase
+state. Normal completion, an exception, or a continuation exit runs the cleanup
+thunk and releases it. Because release is terminal and idempotent, later
+continuation re-entry cannot resume queue operations on the released ring; they
+fail closed instead.
 
 ### Worklist Complexity and Allocation
 
@@ -513,12 +575,18 @@ stack abstraction should be justified on its own contract and measurements.
 
 The first memory-key migration exposed validation amplification in the
 interpreted bootstrap: each queue operation revalidated both the worklist and
-its growable-vector slot. On one same-machine run of the exact high-indegree
-scale gate, the list queue took 87.393 seconds and the layered checked path took
-106.618 seconds. Letting the already-validated worklist use the growable
-vector's trusted slot operations reduced the same gate to 7.350 seconds. The
-backing vector remains hidden, while checked growable-vector callers retain
-their original contract.
+its growable-vector slot. Letting the already-validated worklist use trusted
+growable-vector slot operations removes that repeated validation. The backing
+vector remains hidden, checked growable-vector callers retain their original
+contract, and the counted scale gate confirms linear total work.
+
+Absolute wall-clock evidence remains mixed. The final CI memory-key refinement
+run took 141.912 seconds, down 4.8% from 149.011 seconds on the unoptimized
+worklist head but still 20.9% above the 117.407-second pre-migration list-queue
+run. These separate CI runs, together with opposing movement in unaffected
+shards, do not establish a speedup. A trustworthy comparison requires
+equivalently prepared worktrees, identical generated artifacts, and repeated
+runs summarized by their median.
 
 ### Candidates Rejected or Deferred
 
