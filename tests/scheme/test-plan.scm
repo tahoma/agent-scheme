@@ -152,6 +152,9 @@
     (path "tests/scheme/consent-scratch-arena-test.scm")
     (tags (full direct compiled core runtime registered)))
    (program
+    (path "tests/scheme/consent-worklist-test.scm")
+    (tags (full direct compiled core runtime registered)))
+   (program
     (path "tests/scheme/consent-compiler-plan-test.scm")
     (tags (full direct compiled compiler registered)))
    (program

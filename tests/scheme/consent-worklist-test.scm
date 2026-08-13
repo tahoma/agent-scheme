@@ -1,0 +1,248 @@
+;;; Portable bootstrap-safe FIFO and deque worklist tests.
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+
+(import (scheme base)
+        (scheme process-context)
+        (consent worklist)
+        (testing registry)
+        (testing runner)
+        (stdlib testing))
+
+(define (raised-condition thunk)
+  "Return THUNK's raised condition, or false when it returns normally."
+  (guard (condition
+          (else condition))
+    (thunk)
+    #f))
+
+(define (raises? thunk)
+  "Return whether THUNK raises a Scheme condition."
+  (if (raised-condition thunk) #t #f))
+
+(define (stats-ref stats name)
+  "Return NAME's value from private worklist STATS."
+  (let ((field (assq name (cdr stats))))
+    (if field (cadr field) #f)))
+
+(define (push-integers! worklist count)
+  "Push ascending integers below COUNT onto WORKLIST's back."
+  (let loop ((index 0))
+    (if (< index count)
+        (begin
+          (consent-worklist-push-back! worklist index)
+          (loop (+ index 1))))))
+
+(testing-registry-case
+ 'worklist-fifo-and-deque-contract '(portable runtime storage worklist)
+(let ((worklist (consent-make-worklist 4 16 'allow-growth)))
+  (test-assert 'worklist-predicate (consent-worklist? worklist))
+  (test-assert 'worklist-active (consent-worklist-active? worklist))
+  (test-assert 'worklist-initially-empty
+               (consent-worklist-empty? worklist))
+  (test-equal 'worklist-initial-size 0
+              (consent-worklist-size worklist))
+  (test-equal 'worklist-initial-capacity 4
+              (consent-worklist-capacity worklist))
+  (test-equal 'worklist-maximum-capacity 16
+              (consent-worklist-maximum-capacity worklist))
+  (test-equal 'worklist-growth-policy 'allow-growth
+              (consent-worklist-growth-policy worklist))
+  (test-assert 'worklist-push-back-returns-self
+               (eq? worklist
+                    (consent-worklist-push-back! worklist 'middle)))
+  (test-assert 'worklist-push-front-returns-self
+               (eq? worklist
+                    (consent-worklist-push-front! worklist 'front)))
+  (consent-worklist-push-back! worklist 'back)
+  (test-equal 'worklist-front-peek 'front
+              (consent-worklist-front worklist))
+  (test-equal 'worklist-back-peek 'back
+              (consent-worklist-back worklist))
+  (test-equal 'worklist-deque-order '#(front middle back)
+              (consent-worklist-snapshot worklist))
+  (test-equal 'worklist-pop-front 'front
+              (consent-worklist-pop-front! worklist))
+  (test-equal 'worklist-pop-back 'back
+              (consent-worklist-pop-back! worklist))
+  (test-equal 'worklist-fifo-last-value 'middle
+              (consent-worklist-pop-front! worklist))
+  (test-assert 'worklist-empty-after-pops
+               (consent-worklist-empty? worklist))
+  (test-assert 'worklist-front-empty-rejected
+               (raises? (lambda () (consent-worklist-front worklist))))
+  (test-assert 'worklist-pop-empty-rejected
+               (raises?
+                (lambda ()
+                  (consent-worklist-pop-front! worklist))))
+  (test-equal 'worklist-successful-operation-units 6
+              (consent-worklist-work-units worklist))
+  (test-assert 'worklist-pops-clear-slots
+               (consent-worklist-unused-slots-cleared? worklist))))
+
+(testing-registry-case
+ 'worklist-wraparound-growth-and-linear-work
+ '(portable runtime storage worklist performance)
+(let ((worklist (consent-make-worklist 4 64 'allow-growth)))
+  (push-integers! worklist 4)
+  (test-equal 'worklist-wrap-pop-zero 0
+              (consent-worklist-pop-front! worklist))
+  (test-equal 'worklist-wrap-pop-one 1
+              (consent-worklist-pop-front! worklist))
+  (consent-worklist-push-back! worklist 4)
+  (consent-worklist-push-back! worklist 5)
+  (test-equal 'worklist-wrapped-order '#(2 3 4 5)
+              (consent-worklist-snapshot worklist))
+  (test-assert 'worklist-wrap-moves-front-index
+               (> (stats-ref
+                   (consent-worklist-stats worklist) 'front-index)
+                  0))
+  (consent-worklist-push-back! worklist 6)
+  (test-equal 'worklist-growth-linearizes-order '#(2 3 4 5 6)
+              (consent-worklist-snapshot worklist))
+  (let fill ((value 7))
+    (if (< value 40)
+        (begin
+          (consent-worklist-push-back! worklist value)
+          (fill (+ value 1)))))
+  (let drain ((expected 2))
+    (if (< expected 40)
+        (begin
+          (test-equal 'worklist-fifo-drain
+                      expected
+                      (consent-worklist-pop-front! worklist))
+          (drain (+ expected 1)))))
+  (let ((stats (consent-worklist-stats worklist)))
+    (test-equal 'worklist-linear-work-units 80
+                (stats-ref stats 'work-units))
+    (test-assert 'worklist-geometric-copy-bound
+                 (< (stats-ref stats 'copied-elements) 80))
+    (test-equal 'worklist-high-water 38
+                (stats-ref stats 'high-water))
+    (test-assert 'worklist-drain-clears-storage
+                 (consent-worklist-unused-slots-cleared? worklist)))))
+
+(testing-registry-case
+ 'worklist-bounded-reserve-and-failure-atomicity
+ '(portable runtime storage worklist collector error)
+(let ((worklist (consent-make-worklist 2 8 'pre-reserved)))
+  (consent-worklist-reserve! worklist 4)
+  (push-integers! worklist 4)
+  (let ((before-values (consent-worklist-snapshot worklist))
+        (before-stats (consent-worklist-stats worklist)))
+    (test-assert 'worklist-pre-reserved-overflow-rejected
+                 (raises?
+                  (lambda ()
+                    (consent-worklist-push-back! worklist 'overflow))))
+    (test-equal 'worklist-overflow-preserves-values
+                before-values
+                (consent-worklist-snapshot worklist))
+    (test-equal 'worklist-overflow-preserves-stats
+                before-stats
+                (consent-worklist-stats worklist)))
+  (test-equal 'worklist-reserve-capacity 4
+              (consent-worklist-capacity worklist))
+  (test-assert 'worklist-reserve-over-maximum-rejected
+               (raises?
+                (lambda ()
+                  (consent-worklist-reserve! worklist 9))))
+  (test-equal 'worklist-reserve-preserves-order '#(0 1 2 3)
+              (consent-worklist-snapshot worklist))))
+
+(testing-registry-case
+ 'worklist-clear-reset-release-and-reentry
+ '(portable runtime storage worklist continuation error)
+(let ((worklist (consent-make-worklist 2 8 'allow-growth))
+      (condition #f)
+      (reentry-condition #f)
+      (continuation #f)
+      (first-return? #t)
+      (reentered? #f))
+  (push-integers! worklist 5)
+  (test-equal 'worklist-grown-capacity 8
+              (consent-worklist-capacity worklist))
+  (consent-worklist-reset! worklist)
+  (test-equal 'worklist-reset-retains-capacity 8
+              (consent-worklist-capacity worklist))
+  (test-assert 'worklist-reset-clears-roots
+               (consent-worklist-unused-slots-cleared? worklist))
+  (push-integers! worklist 3)
+  (consent-worklist-clear! worklist)
+  (test-equal 'worklist-clear-restores-initial-capacity 2
+              (consent-worklist-capacity worklist))
+  (guard (caught
+          (else (set! condition caught)))
+    (dynamic-wind
+     (lambda ()
+       (if (not (consent-worklist-active? worklist))
+           (error "worklist is not active")))
+     (lambda ()
+       (consent-worklist-push-back! worklist (vector 'temporary))
+       (error "forced worklist unwind"))
+     (lambda ()
+       (consent-worklist-release! worklist))))
+  (test-assert 'worklist-exception-observed condition)
+  (test-assert 'worklist-exception-releases-lifetime
+               (not (consent-worklist-active? worklist)))
+  (test-assert 'worklist-release-clears-roots
+               (consent-worklist-unused-slots-cleared? worklist))
+  (let ((saved-runner (test-runner-current))
+        (reentry-worklist
+         (consent-make-worklist 1 1 'pre-reserved)))
+    (set!
+     reentry-condition
+     (call/cc
+      (lambda (finish)
+        (guard
+         (caught (else (finish caught)))
+         (let ((value
+                (dynamic-wind
+                 (lambda ()
+                   (if (not (consent-worklist-active? reentry-worklist))
+                       (set! reentered? #t)))
+                 (lambda ()
+                   (if reentered?
+                       (error
+                        "worklist continuation cannot be re-entered")
+                       (begin
+                         (consent-worklist-push-back!
+                          reentry-worklist 'temporary)
+                         (call/cc
+                          (lambda (return)
+                            (set! continuation return)
+                            'initial-return)))))
+                 (lambda ()
+                   (consent-worklist-release! reentry-worklist)))))
+           (if first-return?
+               (begin
+                 (set! first-return? #f)
+                 (continuation 'reentered))
+               (finish value)))))))
+    (test-runner-current saved-runner)
+    (test-assert 'worklist-continuation-reentry-fails-closed
+                 reentry-condition)
+    (test-assert 'worklist-reentry-keeps-storage-cleared
+                 (consent-worklist-unused-slots-cleared?
+                  reentry-worklist)))
+  (test-assert 'worklist-released-operation-rejected
+               (raises?
+                (lambda ()
+                  (consent-worklist-push-back! worklist 'stale))))))
+
+(testing-registry-case
+ 'worklist-explicit-suspend-and-resume-state
+ '(portable runtime storage worklist collector)
+(let* ((worklist (consent-make-worklist 4 4 'pre-reserved))
+       (phase-state (list 'trace-phase worklist 0)))
+  (consent-worklist-push-back! worklist 'root)
+  (consent-worklist-push-back! worklist 'child)
+  (test-equal 'worklist-suspended-front 'root
+              (consent-worklist-pop-front! (cadr phase-state)))
+  (set-car! (cddr phase-state) 1)
+  (test-equal 'worklist-resumed-front 'child
+              (consent-worklist-pop-front! (cadr phase-state)))
+  (test-equal 'worklist-resumed-progress 1 (car (cddr phase-state)))
+  (test-assert 'worklist-resumed-empty
+               (consent-worklist-empty? worklist))))
+
+(testing-runner-main "Consent worklist" (command-line))

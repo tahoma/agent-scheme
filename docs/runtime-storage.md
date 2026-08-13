@@ -1,22 +1,24 @@
 # Bootstrap-Safe Runtime Storage
 
-**Issue:** #968
+**Issues:** #968 and #969
 
-**Roadmap version:** 0.18.39
+**Roadmap versions:** 0.18.39 and 0.18.41
 
 **Status:** Implemented
 
 ## Summary
 
-Two private, portable libraries provide storage for allocation-sensitive
+Three private, portable libraries provide storage for allocation-sensitive
 runtime and graph algorithms:
 
 - `(consent growable-vector)` owns bounded indexed storage and imports only
-  `(scheme base)`; and
+  `(scheme base)`;
 - `(consent scratch-arena)` layers reusable, phase-owned lifetimes over that
-  storage and imports `(consent growable-vector)`.
+  storage and imports `(consent growable-vector)`; and
+- `(consent worklist)` layers bounded FIFO and deque ordering over a circular
+  growable-vector backing store.
 
-Neither library imports a public SRFI, calls user code, or depends on an
+None of the libraries imports a public SRFI, calls user code, or depends on an
 initialized standard-library shelf. The Emacs bootstrap source loader and
 direct or compiled R7RS routes execute the same Scheme sources. A future native
 runtime may accelerate the backing storage, but it must preserve the bounds,
@@ -30,9 +32,11 @@ flowchart TB
   memory["Memory-key graph capture"] --> grow
   grow["(consent growable-vector)<br/>bounded indexed storage"]
   scratch["(consent scratch-arena)<br/>owners, marks, reuse policy"]
+  worklist["(consent worklist)<br/>bounded FIFO and deque ring"]
   srfi["(srfi 214)<br/>public flexvectors"]
   reader --> grow
   scratch --> grow
+  worklist --> grow
   collectors["Collector phases"] --> scratch
   srfi -. "may reuse compatible storage" .-> grow
 ```
@@ -42,6 +46,8 @@ flowchart TB
 Use a growable vector when one algorithm directly owns its storage and lifetime.
 Use a scratch arena when storage is reused across calls or runtime phases and a
 stale operation must be rejected after cleanup.
+Use a worklist when logical insertion or removal order, rather than indexed
+storage, is the abstraction the algorithm needs.
 
 | Need | Layer | Why |
 | --- | --- | --- |
@@ -49,9 +55,11 @@ stale operation must be rejected after cleanup.
 | Reuse with explicit phase ownership | Scratch arena | Stale owners fail. |
 | Collector without heap growth | `pre-reserved` arena | Fails full. |
 | Temporary safe growth | `allow-growth` arena | Grows boundedly. |
+| FIFO graph traversal | Worklist | Ring ordering without list reversal. |
+| Double-ended phase work | Worklist | O(1) front and back operations. |
 
-Neither layer is a general sequence abstraction. Both libraries are private,
-mutable, callback-free, and deliberately narrower than SRFI 214.
+None of these layers is a general sequence abstraction. All three libraries are
+private, mutable, callback-free, and deliberately narrower than public SRFIs.
 
 Programs that need the public sequence abstraction import `(stdlib
 flexvectors)` or one of its SRFI 214 aliases. That library wraps growable
@@ -159,6 +167,57 @@ For example, repeated append from initial capacity zero and maximum capacity ten
 uses capacities `0, 1, 2, 4, 8, 10`. The next append fails before allocation.
 `reserve!` instead requests an exact larger capacity; `grow!` treats its
 argument as a minimum and may choose the larger geometric capacity.
+
+## FIFO and Deque Worklists
+
+`(consent worklist)` stores its logical sequence in a circular buffer backed by
+`(consent growable-vector)`. The growable vector's populated prefix represents
+addressable ring slots; the worklist alone decides which slots are logically
+occupied. Callers never receive the backing vector or a physical index.
+
+The constructor fixes an initial capacity, exact maximum capacity, and one of
+two growth policies:
+
+- `allow-growth` doubles full storage up to the exact maximum; and
+- `pre-reserved` rejects a push whenever the currently reserved ring is full.
+
+`reserve!` can establish collector scratch capacity before a no-allocation
+phase. It preserves logical order even when the current sequence wraps around.
+Push-front, push-back, front, back, pop-front, and pop-back are constant-time
+when no growth occurs. Automatic growth copies the current logical sequence
+once into a larger ring with its front at physical slot zero, so geometric
+growth preserves amortized constant-time insertion.
+
+Every successful push or pop charges exactly one work unit. Peeks, snapshots,
+capacity changes, clear, reset, and release do not charge work units. Statistics
+report the four directional operation counts, aggregate pushes and pops, total
+work units, capacity changes, automatic growths, copied elements, high-water
+size, clear count, and reset count. Incremental collectors can therefore budget
+logical work independently of elapsed time and backing-store growth.
+
+A pop clears its vacated physical slot before publishing the shorter size.
+Reset clears all active slots while retaining capacity. Clear replaces the ring
+at its immutable initial capacity. Release clears active slots, drops backing
+storage, and permanently rejects further operations. The diagnostic
+`consent-worklist-unused-slots-cleared?` verifies that no inactive ring slot
+retains a heap root, including across a wrapped logical range.
+
+### Worklist Complexity and Allocation
+
+The table abbreviates the common `consent-worklist-` prefix.
+
+| Operation | Time | Backing allocation |
+| --- | --- | --- |
+| `empty?`, `size`, `capacity`, `front`, `back` | O(1) | None. |
+| `push-front!`, `push-back!` | Amortized O(1) | Only when full and allowed. |
+| `pop-front!`, `pop-back!` | O(1) | None. |
+| `reserve!` | O(size) when larger | Only when larger. |
+| `snapshot` | O(size) | Always; returns a copy. |
+| `reset!`, `release!` | O(size) | None. |
+| `clear!` | O(initial capacity) | Always. |
+| `unused-slots-cleared?` | O(capacity) | None. |
+| `work-units` | O(1) | None. |
+| `stats` | O(1) | Allocates the result datum. |
 
 ## Scratch Arenas
 

@@ -83,6 +83,11 @@ does; retaining an ERT test does not make it the semantic source of truth.
   `tests/scheme/consent-scratch-arena-test.scm`. The portable plan runs both
   libraries on direct and compiled hosts, while ERT exercises each independent
   Emacs source-library route.
+- `(consent worklist)` FIFO/deque ordering, wraparound, bounded growth,
+  deterministic work accounting, stale-slot clearing, suspension, exception
+  cleanup, and continuation re-entry are canonical in
+  `tests/scheme/consent-worklist-test.scm`. The program runs on direct and
+  compiled hosts; ERT retains one Emacs source-loader integration route.
 - `(consent character)` owned-record construction, the complete Unicode scalar
   boundary, host/native adapter contracts, and NUL-through-maximum nested datum
   round trips are canonical in `tests/scheme/consent-character-test.scm`.
@@ -215,9 +220,9 @@ Scheme-plan shards directly; the aggregate live targets run the Emacs-host
 checks beside them, never as their discovery or process-control parent.
 
 The same plan makes compiled self-host coverage auditable rather than an
-allowlist hidden in shell orchestration. All 67 ordinary `full` programs carry
-exactly one of `compiled` or `self-host-gap`: 46 are compiled and 21 are named
-gaps. The compiled selector contains 47 programs because it also includes the
+allowlist hidden in shell orchestration. All 70 ordinary `full` programs carry
+exactly one of `compiled` or `self-host-gap`: 49 are compiled and 21 are named
+gaps. The compiled selector contains 50 programs because it also includes the
 compiled-only runtime manifest smoke program. The current gaps are acceptance
 inputs to #120, #346, and #432. Their issue comments name the exact registered
 cases or first failing manual checks. As those runtime defects ship, their
@@ -240,9 +245,9 @@ verifies its canonical `write-shared` representation. Compiled standard-library
 random and property programs exercise public numeric semantics without crossing
 the private numeric dispatcher boundary.
 
-The plan also partitions the 65 direct programs exactly once across seven
+The plan also partitions the 70 direct programs exactly once across seven
 behavior surfaces (`runtime`, `evaluator`, `integration`, `agent`, `library`,
-`random`, and `property`) and the 45 compiled programs exactly once across six
+`random`, and `property`) and the 50 compiled programs exactly once across six
 parallel counterparts. CI uses those names as first-class Guile, Gauche,
 Gambit-compiled, and Racket-compiled jobs; aggregate local and exhaustive-lane
 runs launch the same selectors through `tools/run-portable-test-set.sh` and
