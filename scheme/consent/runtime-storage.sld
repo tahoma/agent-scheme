@@ -427,6 +427,11 @@
       (phase scratch-owner-phase-value)
       (active? scratch-owner-active? set-scratch-owner-active!))
 
+    ;; Marks carry a library-wide lifetime token, not an arena-local generation.
+    ;; That prevents equal-capacity arenas acquired in the same ordinal lifetime
+    ;; from accepting one another's marks.
+    (define scratch-owner-next-token 0)
+
     (define (check-scratch-arena operation arena)
       "Validate scratch ARENA for OPERATION."
       (if (not (consent-scratch-arena? arena))
@@ -510,12 +515,14 @@
           (error
            "consent-scratch-arena-acquire!: arena storage is not empty"
            arena))
-      (let* ((generation (+ (scratch-arena-acquisitions arena) 1))
+      (let* ((acquisition (+ (scratch-arena-acquisitions arena) 1))
+             (token (+ scratch-owner-next-token 1))
              (owner
               (make-scratch-owner-record
-               arena generation phase #t)))
+               arena token phase #t)))
+        (set! scratch-owner-next-token token)
         (set-scratch-arena-owner! arena owner)
-        (set-scratch-arena-acquisitions! arena generation)
+        (set-scratch-arena-acquisitions! arena acquisition)
         owner))
 
     (define (consent-scratch-owner-active? owner)
@@ -642,13 +649,13 @@
               (+ (growable-vector-maximum-capacity
                   (scratch-arena-storage arena))
                  1))
-             (generation
+             (token
               (and (exact-nonnegative-integer? mark)
                    (quotient mark radix)))
              (length
-              (and generation (remainder mark radix))))
-        (if (not (and generation
-                      (= generation (scratch-owner-token owner))))
+              (and token (remainder mark radix))))
+        (if (not (and token
+                      (= token (scratch-owner-token owner))))
             (error
              "consent-scratch-owner-reset!: mark belongs to other lifetime"
              mark))

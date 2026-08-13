@@ -54,9 +54,12 @@ a fresh owner lifetime. Every append, ref, set, mark, and reset operation takes
 that owner. Release clears the complete logical prefix before the arena can
 issue another owner.
 
-Marks are ownership-stamped exact integers. A mark from a released lifetime is
-rejected even if a later owner has a compatible logical length. Reset clears
-the suffix back to the marked length before publishing the shorter prefix.
+Marks are ownership-stamped exact integers. Each owner receives a library-wide
+monotonic lifetime token, so a mark from another arena or a released lifetime
+is rejected even when the arenas share a capacity and acquisition ordinal.
+Reset clears the suffix back to the marked length before publishing the shorter
+prefix. A mark beyond the current prefix cannot extend storage after an earlier
+reset.
 
 Arena statistics distinguish:
 
@@ -158,10 +161,20 @@ failure, not as permission to allocate from the heap under collection.
 
 ## Verification
 
-`tests/scheme/consent-runtime-storage-test.scm` covers capacity boundaries,
-copy counters, reset and release clearing, malformed operations, both arena
-growth policies, stale marks and owners, exception cleanup, dynamic-wind,
-continuation re-entry, and a pre-reserved synthetic collector workload. The
-portable test plan runs that program on direct and compiled routes. ERT also
-imports the internal library through the Emacs source-library loader, proving
+`tests/scheme/consent-runtime-storage-test.scm` covers zero and maximum capacity
+boundaries, a deterministic capacity/model sweep, no-op transitions, copy
+counters, state preservation after failed operations, reset and release
+clearing, idempotent release, stable representative errors, both arena growth
+policies, active and idle statistics, cross-arena and stale marks, escaped
+owners, exception cleanup, dynamic-wind, continuation re-entry, and a
+pre-reserved synthetic collector workload. The portable test plan runs that
+program on direct and compiled routes. ERT imports the internal library through
+the Emacs source-library loader and exercises bounds and mark ownership, proving
 that the bootstrap uses the same portable implementation.
+
+The portable layer cannot safely force a host `make-vector` out-of-memory
+condition or observe garbage-collector reachability. The suite therefore checks
+every deterministic pre-allocation failure for state preservation and uses the
+unused-slot diagnostics as its root-clearing oracle. A future native allocator
+adapter must provide deterministic fault injection for its allocation-failure
+normalization path rather than attempting a process-level exhaustion test.

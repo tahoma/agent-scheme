@@ -1322,28 +1322,52 @@
     (should (file-readable-p source-file))))
 
 (ert-deftest consent-library-test-runtime-storage-runs-source-backed ()
-  "Exercise growable and arena storage through the Emacs source loader."
+  "Exercise storage bounds and owner marks through the Emacs source loader."
   (should
    (equal
     (consent-library-test--external/options
      "(import (scheme base)
               (consent runtime-storage))
-      (let* ((grow (consent-make-growable-vector 1 4))
-             (arena (consent-make-scratch-arena 4 4 'pre-reserved))
-             (owner (consent-scratch-arena-acquire! arena 'trace)))
+      (let* ((grow (consent-make-growable-vector 0 2))
+             (left-arena
+              (consent-make-scratch-arena 2 2 'pre-reserved))
+             (right-arena
+              (consent-make-scratch-arena 2 2 'pre-reserved))
+             (left-owner
+              (consent-scratch-arena-acquire! left-arena 'left))
+             (right-owner
+              (consent-scratch-arena-acquire! right-arena 'right)))
         (consent-growable-vector-append! grow 'left)
         (consent-growable-vector-append! grow 'right)
-        (consent-scratch-owner-append! owner 'temporary)
-        (consent-scratch-owner-release! owner)
-        (list (consent-growable-vector-length grow)
-              (consent-growable-vector-capacity grow)
-              (cadr (assq 'length
-                          (cdr (consent-scratch-arena-stats arena))))
-              (cadr (assq 'capacity
-                          (cdr (consent-scratch-arena-stats arena))))
-              (consent-scratch-arena-unused-slots-cleared? arena)))"
+        (consent-scratch-owner-append! right-owner 'temporary)
+        (let ((overflow-rejected?
+               (guard (condition (else #t))
+                 (consent-growable-vector-append! grow 'overflow)
+                 #f))
+              (cross-mark-rejected?
+               (guard (condition (else #t))
+                 (consent-scratch-owner-reset!
+                  right-owner
+                  (consent-scratch-owner-mark left-owner))
+                 #f)))
+          (let ((right-length
+                 (consent-scratch-owner-length right-owner)))
+            (consent-scratch-owner-release! left-owner)
+            (consent-scratch-owner-release! right-owner)
+            (list
+             (consent-growable-vector-length grow)
+             (consent-growable-vector-capacity grow)
+             (consent-growable-vector-ref grow 0)
+             (consent-growable-vector-ref grow 1)
+             overflow-rejected?
+             cross-mark-rejected?
+             right-length
+             (consent-scratch-arena-unused-slots-cleared?
+              left-arena)
+             (consent-scratch-arena-unused-slots-cleared?
+              right-arena)))))"
      '(:internal-libraries-allowed t))
-    "(2 2 0 4 #t)")))
+    "(2 2 left right #t #t 1 #t #t)")))
 
 (ert-deftest
     consent-library-test-agent-memory-query-is-internal-source-backed ()
