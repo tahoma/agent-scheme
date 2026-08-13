@@ -1079,6 +1079,13 @@ jobs:
           'workflow_dispatch') && fromJSON('["full", "simple", "none"]') ||
           fromJSON('["full"]') }}
         host:
+          - host: chibi
+            host_name: Chibi
+            apt_package: chibi-scheme
+            make_target: test-portable-chibi
+            group_set: direct
+            log_prefix: portable-chibi
+            shard_prefix: Portable R7RS Chibi
           - host: racket
             host_name: Racket
             apt_package: racket
@@ -1161,6 +1168,10 @@ jobs:
           scheme_smoke='(import (scheme base) (scheme write))'
           scheme_smoke="${scheme_smoke} (write (+ 1 2)) (newline)"
           case "${{ matrix.host.host }}" in
+            chibi)
+              chibi-scheme -m scheme.base -m scheme.write \
+                -e '(begin (write (+ 1 2)) (newline))'
+              ;;
             racket|racket-reflect|racket-reflect-stress)
               raco pkg install --batch --auto --skip-installed --no-docs r7rs
               racket -I r7rs -e "$scheme_smoke"

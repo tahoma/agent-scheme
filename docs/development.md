@@ -312,14 +312,13 @@ test command instead of adding a second top-level verification path.
 Portable R7RS tests live under `tests/scheme/` and are launched directly by
 `tools/run-portable-tests.sh`; ERT is not part of their execution path. The
 aggregate local targets run the full suite under Gambit, Racket with its `r7rs`
-package, Guile, and Gauche. CI schedules the longest direct and compiled hosts
-as first-class semantic plan shards (`runtime`, `evaluator`, `integration`,
-`agent`, `library`, `random`, and `property`, or their compiled counterparts),
-so failures and timings compare the same behavior surfaces instead of one
-host-sized total. Chibi runs the same aggregate host suite as its peers but
-stays opt-in through `make test-portable-chibi`; that target uses `chibi-scheme`
-on `PATH`, or the command named by `CONSENT_CHIBI`, and skips when Chibi is
-unavailable.
+package, Guile, Gauche, and Chibi. CI schedules Chibi as a required aggregate
+host and the longest direct and compiled hosts as first-class semantic plan
+shards (`runtime`, `evaluator`, `integration`, `agent`, `library`, `random`,
+and `property`, or their compiled counterparts), so failures and timings
+compare the same behavior surfaces instead of one host-sized total. The local
+`make test-portable-chibi` target uses `chibi-scheme` on `PATH`, or the command
+named by `CONSENT_CHIBI`, and skips when Chibi is unavailable.
 
 Portable test bodies use SRFI 64 through `(stdlib testing)` as their result
 engine, with SRFI 252 property tests and SRFI 78/SRFI 42 table checks where
@@ -470,7 +469,7 @@ not affect the default `make test` command.
 
 | Adapter | Role | Environment override | Discovered command | Notes |
 | --- | --- | --- | --- | --- |
-| Chibi Scheme | default | `CONSENT_CHIBI` | `chibi-scheme` | Also used by optional portable Chibi checks when available. |
+| Chibi Scheme | default | `CONSENT_CHIBI` | `chibi-scheme` | Required CI host. |
 | Sagittarius | default | `CONSENT_SAGITTARIUS` | `sagittarius` | Runs with `-r 7` for R7RS mode. |
 | Gauche | opt-in comparison | `CONSENT_GAUCHE` | `gosh` | Useful for library and writer behavior comparisons. |
 | Guile | opt-in comparison | `CONSENT_GUILE` | `guile` | Runs with `--no-auto-compile --r7rs`. |
@@ -1096,8 +1095,8 @@ historically longest Guile, Gauche, Gambit-compiled, and Racket-compiled suites;
 the compiled group jobs consume product binaries built earlier in the workflow.
 Gambit and Racket direct-host aggregates emit the same per-group logs, allowing
 the timing summary to compare equivalent plan selectors even where the CI job
-remains host-aggregated. Optional Chibi shard targets remain available for
-manual timing and compatibility checks:
+remains host-aggregated. The required Chibi CI host uses the same aggregate
+target that remains available for local timing and compatibility checks:
 
 ```sh
 CONSENT_CHIBI=chibi-scheme make test-portable-chibi
