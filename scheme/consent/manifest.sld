@@ -53,13 +53,17 @@
           consent-growable-vector-length
           consent-growable-vector-capacity
           consent-growable-vector-maximum-capacity
+          consent-growable-vector-growth-factor
           consent-growable-vector-append!
           consent-growable-vector-ref
           consent-growable-vector-set!
+          consent-growable-vector-copy!
+          consent-growable-vector-fill!
           consent-growable-vector-reserve!
           consent-growable-vector-grow!
           consent-growable-vector-snapshot
           consent-growable-vector-truncate!
+          consent-growable-vector-clear!
           consent-growable-vector-reset!
           consent-growable-vector-release!
           consent-growable-vector-unused-slots-cleared?
@@ -67,7 +71,17 @@
         (dependencies ((library (scheme base))))
         (provenance
          ((origin repo)
-          (allocation-policy bounded-callback-free)))
+          (allocation-policy bounded-callback-free)
+          (growth-policy
+           (default-factor 2)
+           (factor per-object-immutable))
+          (bulk-operations
+           (copy overlap-safe)
+           (fill populated-prefix))
+          (memory-lifecycle
+           (clear reset-to-initial-capacity)
+           (reset retain-capacity)
+           (release terminal))))
         (status internal)
         (canonical #t))
        (manifest-entry

@@ -271,14 +271,18 @@ property record described in
 [Docstring Metadata Convention](docstring-metadata.md): a
 `#((parameters ...) (returns ...) (effects ...))` vector following the simple
 string docstring. Public parameter and return descriptors must either use the
-dotted string/string-list shorthand for intentional `any` or include explicit
-`(type ...)` metadata in expanded descriptors. Missing type metadata still
-normalizes to `any` at read time, but the project lint treats expanded public
-API descriptors without a type as incomplete documentation. The lint also
-rejects shorthand or expanded `(type any)` when descriptor prose names an
-obvious primitive type; use explicit types in those cases. Custom type names
-should normally follow local predicates by dropping the trailing `?`, while
-tagged datums without predicates should use structural types such as `list`.
+dotted string/string-list shorthand for intentional `any` or include both
+explicit `(type ...)` metadata and a non-empty `(description ...)` in expanded
+descriptors. Missing type metadata still normalizes to `any` at read time, but
+the project lint treats expanded public API descriptors without a type or
+description as incomplete documentation. The lint also rejects shorthand or
+expanded `(type any)` when descriptor prose names an obvious primitive type;
+use explicit types in those cases. Custom type names should normally follow
+local predicates by dropping the trailing `?`, while tagged datums without
+predicates should use structural types such as `list`.
+The `effects` field is also required and must contain at least one symbol. Use
+`pure` when the procedure has no observable effect; otherwise name allocation,
+state access, callback invocation, errors, or host effects explicitly.
 Expanded descriptors should keep `(type ...)` on the same line as the
 parameter or `returns` head when the line fits within the soft line limit, with
 the description on the following line. Keep longer type forms on their own line.

@@ -434,7 +434,8 @@ copy-on-write or complete session-fork mutation isolation.
 `(consent growable-vector)` owns private callback-free indexed storage used
 before optional standard libraries are realized. It separates the populated
 prefix, reserved capacity, exact maximum, high-water usage, growth count, and
-copied-element count. Reset clears the prefix without discarding capacity;
+copied-element count. Clear replaces the backing vector at its immutable
+initial capacity, reset clears the prefix without discarding capacity, and
 terminal release clears the prefix and drops the backing vector.
 
 `(consent scratch-arena)` imports that storage library and adds one

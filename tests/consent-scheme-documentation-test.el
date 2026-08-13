@@ -788,6 +788,16 @@ Each result has the form (NAME START END FORMAL-NAMES)."
            (consent--scheme-documentation-string-fragments (cadr entry)))))
       nil)))
 
+(defun consent--scheme-documentation-description-present-p (descriptor)
+  "Return non-nil when DESCRIPTOR carries non-empty description prose."
+  (let ((fragments
+         (consent--scheme-documentation-description-fragments descriptor)))
+    (and fragments
+         (cl-some
+          (lambda (fragment)
+            (not (string-empty-p (string-trim fragment))))
+          fragments))))
+
 (defun consent--scheme-documentation-type-any-entry-p (entry)
   "Return non-nil when ENTRY is exactly `(type any)'."
   (and (consp entry)
@@ -838,16 +848,38 @@ Each result has the form (NAME START END FORMAL-NAMES)."
                     (consent--scheme-documentation-obvious-type-prose-p
                      description)))))))))
 
-(defun consent--scheme-documentation-typed-parameters-p (parameters)
-  "Return non-nil when PARAMETERS carries explicit descriptor types."
+(defun consent--scheme-documentation-complete-descriptor-p (descriptor)
+  "Return non-nil when DESCRIPTOR carries type and description metadata."
+  (let ((shorthand
+         (consent--scheme-documentation-string-fragments descriptor)))
+    (if shorthand
+        (and
+         (cl-some
+          (lambda (fragment)
+            (not (string-empty-p (string-trim fragment))))
+          shorthand)
+         (consent--scheme-documentation-descriptor-has-type-p descriptor))
+      (and
+       (consent--scheme-documentation-descriptor-has-type-p descriptor)
+       (consent--scheme-documentation-description-present-p descriptor)))))
+
+(defun consent--scheme-documentation-complete-parameters-p (parameters)
+  "Return non-nil when PARAMETERS carries complete descriptors."
   (and (consent--scheme-documentation-proper-list-p parameters)
        (cl-every
         (lambda (entry)
           (and (consp entry)
                (consent-symbol-p (car entry))
-               (consent--scheme-documentation-descriptor-has-type-p
+               (consent--scheme-documentation-complete-descriptor-p
                 (cdr entry))))
         parameters)))
+
+(defun consent--scheme-documentation-effects-present-p (effects)
+  "Return non-nil when EFFECTS is a non-empty list of effect symbols."
+  (and effects
+       (consent--scheme-documentation-proper-list-p (cdr effects))
+       (consp (cdr effects))
+       (cl-every #'consent-symbol-p (cdr effects))))
 
 (defun consent--scheme-documentation-parameter-names (parameters)
   "Return parameter names documented by PARAMETERS metadata."
@@ -867,25 +899,29 @@ Each result has the form (NAME START END FORMAL-NAMES)."
        (member name parameter-names))
      formal-names)))
 
-(defun consent--scheme-documentation-typed-rich-vector (definition-text)
-  "Return a typed rich metadata vector from DEFINITION-TEXT, or nil."
+(defun consent--scheme-documentation-complete-rich-vector (definition-text)
+  "Return complete rich metadata from DEFINITION-TEXT, or nil."
   (cl-find-if
    (lambda (vector)
      (let ((parameters
             (consent--scheme-documentation-vector-field vector "parameters"))
            (returns
-            (consent--scheme-documentation-vector-field vector "returns")))
+            (consent--scheme-documentation-vector-field vector "returns"))
+           (effects
+            (consent--scheme-documentation-vector-field vector "effects")))
        (and parameters
             returns
-            (consent--scheme-documentation-typed-parameters-p
+            (consent--scheme-documentation-complete-parameters-p
              (cdr parameters))
-            (consent--scheme-documentation-descriptor-has-type-p
-             (cdr returns)))))
+            (consent--scheme-documentation-complete-descriptor-p
+             (cdr returns))
+            (consent--scheme-documentation-effects-present-p effects))))
    (consent--scheme-documentation-rich-vectors definition-text)))
 
 (defun consent--scheme-documentation-rich-vector-p (definition-text)
-  "Return non-nil when DEFINITION-TEXT has typed rich procedure metadata."
-  (and (consent--scheme-documentation-typed-rich-vector definition-text) t))
+  "Return non-nil when DEFINITION-TEXT has complete procedure metadata."
+  (and (consent--scheme-documentation-complete-rich-vector definition-text)
+       t))
 
 (defun consent--scheme-documentation-public-rich-errors (file)
   "Return rich-docstring errors for exported procedures in FILE."
@@ -902,12 +938,13 @@ Each result has the form (NAME START END FORMAL-NAMES)."
             (formal-names (nth 3 procedure)))
         (let* ((definition-text (substring text start end))
                (vector
-                (consent--scheme-documentation-typed-rich-vector
+                (consent--scheme-documentation-complete-rich-vector
                  definition-text)))
           (if (not vector)
               (push
                (format "%s:%d exported procedure %s missing rich metadata
-                 vector with typed parameters and returns"
+                 vector with typed and described parameters and returns plus
+                 non-empty effects"
                        relative-file
                        (consent--scheme-documentation-source-line text start)
                        name)
@@ -1077,7 +1114,7 @@ Each result has the form (NAME START END FORMAL-NAMES)."
     (nreverse errors)))
 
 (ert-deftest consent-scheme-documentation-test-rich-type-shorthand ()
-  "Treat dotted descriptor shorthand as intentional `any' metadata."
+  "Require prose in expanded descriptors and intentional `any' shorthand."
   (let ((shorthand
          "(define (example name values)
             \"Return a diagnostic field pair.\"
@@ -1087,7 +1124,7 @@ Each result has the form (NAME START END FORMAL-NAMES)."
               (returns . \"Opaque field representation.\")
               (effects . (pure)))
             (cons name values))")
-        (expanded-missing
+        (expanded-missing-type
          "(define (example name values)
             \"Return a diagnostic field pair.\"
             #((parameters
@@ -1097,10 +1134,39 @@ Each result has the form (NAME START END FORMAL-NAMES)."
                    (description \"Zero or more field values.\"))))
               (returns . ((description \"A field pair.\")))
               (effects . (pure)))
-            (cons name values))"))
+            (cons name values))")
+        (expanded-missing-description
+         "(define (example name values)
+            \"Return a diagnostic field pair.\"
+            #((parameters
+               . ((name (type symbol))
+                  (values
+                   (type list)
+                   (description \"Zero or more field values.\"))))
+              (returns . ((type pair)))
+              (effects . (pure)))
+            (cons name values))")
+        (expanded-empty-description
+         "(define (example name)
+            \"Return NAME.\"
+            #((parameters
+               . ((name
+                   (type symbol)
+                   (description \"  \"))))
+              (returns
+               . ((type symbol)
+                  (description \"A symbol.\")))
+              (effects . (pure)))
+            name)"))
     (should (consent--scheme-documentation-rich-vector-p shorthand))
     (should-not
-     (consent--scheme-documentation-rich-vector-p expanded-missing))))
+     (consent--scheme-documentation-rich-vector-p expanded-missing-type))
+    (should-not
+     (consent--scheme-documentation-rich-vector-p
+      expanded-missing-description))
+    (should-not
+     (consent--scheme-documentation-rich-vector-p
+      expanded-empty-description))))
 
 (ert-deftest consent-scheme-documentation-test-obvious-types-need-expansion ()
   "Reject shorthand when descriptor prose names an obvious non-any type."
@@ -1168,6 +1234,116 @@ Each result has the form (NAME START END FORMAL-NAMES)."
               (string-match-p
                "value-case-lambda missing rich metadata"
                error))
+            errors)))
+      (delete-file file))))
+
+(ert-deftest
+  consent-scheme-documentation-test-public-rich-requires-descriptions ()
+  "Reject typed public parameters or returns without description prose."
+  (let ((file
+         (make-temp-file
+          "consent-doc-descriptions" nil ".sld"
+          (concat
+           ";;; scratch.sld --- documentation fixture\n"
+           "(define-library\n"
+           "  (scratch docs)\n"
+           "  (export missing-parameter-prose missing-return-prose complete)\n"
+           "  (import (scheme base))\n"
+           "  (begin\n"
+           "    (define (missing-parameter-prose value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters (value (type symbol)))\n"
+           "        (returns (type symbol)\n"
+           "         (description \"The supplied symbol.\"))\n"
+           "        (effects pure))\n"
+           "      value)\n"
+           "    (define (missing-return-prose value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters\n"
+           "         (value (type symbol)\n"
+           "          (description \"Symbol to return.\")))\n"
+           "        (returns (type symbol))\n"
+           "        (effects pure))\n"
+           "      value)\n"
+           "    (define (complete value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters\n"
+           "         (value (type symbol)\n"
+           "          (description \"Symbol to return.\")))\n"
+           "        (returns (type symbol)\n"
+           "         (description \"The supplied symbol.\"))\n"
+           "        (effects pure))\n"
+           "      value)))"))))
+    (unwind-protect
+        (let ((errors
+               (consent--scheme-documentation-public-rich-errors file)))
+          (should
+           (cl-some
+            (lambda (error)
+              (string-match-p "missing-parameter-prose" error))
+            errors))
+          (should
+           (cl-some
+            (lambda (error)
+              (string-match-p "missing-return-prose" error))
+            errors))
+          (should-not
+           (cl-some
+            (lambda (error)
+              (string-match-p "exported procedure complete" error))
+            errors)))
+      (delete-file file))))
+
+(ert-deftest consent-scheme-documentation-test-public-rich-requires-effects ()
+  "Reject public procedure metadata without a non-empty symbol effect list."
+  (let ((file
+         (make-temp-file
+          "consent-doc-effects" nil ".sld"
+          (concat
+           ";;; scratch.sld --- documentation fixture\n"
+           "(define-library\n"
+           "  (scratch docs)\n"
+           "  (export missing empty malformed complete)\n"
+           "  (import (scheme base))\n"
+           "  (begin\n"
+           "    (define (missing value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters (value . \"Value to return.\"))\n"
+           "        (returns . \"The supplied value.\"))\n"
+           "      value)\n"
+           "    (define (empty value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters (value . \"Value to return.\"))\n"
+           "        (returns . \"The supplied value.\")\n"
+           "        (effects))\n"
+           "      value)\n"
+           "    (define (malformed value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters (value . \"Value to return.\"))\n"
+           "        (returns . \"The supplied value.\")\n"
+           "        (effects \"pure\"))\n"
+           "      value)\n"
+           "    (define (complete value)\n"
+           "      \"Return VALUE.\"\n"
+           "      #((parameters (value . \"Value to return.\"))\n"
+           "        (returns . \"The supplied value.\")\n"
+           "        (effects pure))\n"
+           "      value)))"))))
+    (unwind-protect
+        (let ((errors
+               (consent--scheme-documentation-public-rich-errors file)))
+          (dolist (name '("missing" "empty" "malformed"))
+            (should
+             (cl-some
+              (lambda (error)
+                (string-match-p
+                 (format "exported procedure %s " name)
+                 error))
+              errors)))
+          (should-not
+           (cl-some
+            (lambda (error)
+              (string-match-p "exported procedure complete " error))
             errors)))
       (delete-file file))))
 
@@ -1341,8 +1517,7 @@ Each result has the form (NAME START END FORMAL-NAMES)."
       (ert-fail (mapconcat #'identity (nreverse missing) "\n")))))
 
 (ert-deftest consent-scheme-documentation-test-public-rich-docstrings ()
-  "Ensure every exported Scheme procedure carries rich parameter and return\
- metadata.
+  "Ensure every exported procedure documents parameters, returns, and effects.
 Runs fail-closed over every runtime `scheme/' source file, so a new file is
 covered automatically. A file with no exported procedures produces no errors."
   (let ((errors

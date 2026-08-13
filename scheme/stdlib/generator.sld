@@ -30,7 +30,8 @@
           string-accumulator bytevector-accumulator bytevector-accumulator!
           sum-accumulator product-accumulator)
   (import (scheme base)
-          (scheme case-lambda))
+          (scheme case-lambda)
+          (stdlib flexvectors))
   (begin
     ;; Return an unspecified value portably.
     (define (unspecified)
@@ -924,9 +925,9 @@
       (apply
        (case-lambda
         ((gen)
-         (list->vector (generator->list gen)))
+         (flexvector->vector (generator->flexvector gen)))
         ((gen k)
-         (list->vector (generator->list gen k))))
+         (flexvector->vector (generator->flexvector (gtake gen k)))))
        gen
        rest))
 
@@ -1205,9 +1206,11 @@
          (description "Accumulator returning a vector at EOF."))
         (effects allocation state-write))
       (make-accumulator
-       cons
-       '()
-       (lambda (state) (list->vector (reverse state)))))
+       (lambda (obj state)
+         (flexvector-add-back! state obj)
+         state)
+       (flexvector)
+       flexvector->vector))
 
     ;; Accumulate values into a vector in reverse arrival order.
     (define (reverse-vector-accumulator)
@@ -1216,7 +1219,13 @@
         (returns (type procedure)
          (description "Accumulator returning a reverse-order vector at EOF."))
         (effects allocation state-write))
-      (make-accumulator cons '() list->vector))
+      (make-accumulator
+       (lambda (obj state)
+         (flexvector-add-back! state obj)
+         state)
+       (flexvector)
+       (lambda (state)
+         (flexvector->vector (flexvector-reverse-copy state)))))
 
     ;; Accumulate values into VECTOR starting at AT.
     (define (vector-accumulator! vector at)

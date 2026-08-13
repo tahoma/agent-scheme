@@ -30,7 +30,7 @@ flowchart TB
   memory["Memory-key graph capture"] --> grow
   grow["(consent growable-vector)<br/>bounded indexed storage"]
   scratch["(consent scratch-arena)<br/>owners, marks, reuse policy"]
-  srfi["Future (srfi 214)<br/>public flexvectors"]
+  srfi["(srfi 214)<br/>public flexvectors"]
   reader --> grow
   scratch --> grow
   collectors["Collector phases"] --> scratch
@@ -52,6 +52,12 @@ stale operation must be rejected after cleanup.
 
 Neither layer is a general sequence abstraction. Both libraries are private,
 mutable, callback-free, and deliberately narrower than SRFI 214.
+
+Programs that need the public sequence abstraction import `(stdlib
+flexvectors)` or one of its SRFI 214 aliases. That library wraps growable
+storage in a distinct public record and owns SRFI validation, callbacks,
+conversion, search, and mutation semantics without widening the private
+storage API.
 
 ## Storage Shape and Invariants
 
@@ -76,6 +82,7 @@ At every active-vector boundary:
 - `0 <= length <= capacity <= maximum-capacity`;
 - only indexes below `length` are populated and addressable;
 - every reserved slot at or above `length` contains `#f`;
+- clear replaces the backing vector at the immutable initial capacity;
 - reset moves `length` to zero without reducing `capacity`; and
 - release clears the prefix, replaces the backing vector with an empty vector,
   and permanently makes the growable vector inactive.
@@ -86,29 +93,45 @@ describe the object's history, not its current logical contents.
 ## Growable Vectors
 
 `(consent growable-vector)` exports the storage operations in this section.
-`consent-make-growable-vector` takes an initial capacity and a maximum capacity.
-Both are exact nonnegative integers, and the initial capacity must not exceed
-the maximum. The maximum is permanent for that storage object.
+`consent-make-growable-vector` takes an initial capacity, a maximum capacity,
+and an optional growth factor that defaults to 2. Capacity bounds are exact
+nonnegative integers, the initial capacity must not exceed the maximum, and
+the growth factor must be an exact real greater than one. All three policy
+values are immutable for that storage object.
 
 The populated prefix is separate from reserved capacity:
 
 - append returns the new element's zero-based index;
 - indexed ref and set accept only populated indexes;
 - reserve allocates an exact requested capacity when it is larger;
-- grow doubles the current capacity, or uses the requested minimum when that
-  is larger, without crossing the configured maximum;
+- grow takes the floor of current capacity times the object's growth factor,
+  advances by at least one slot, or uses the requested minimum when that is
+  larger, without crossing the configured maximum;
+- copy performs an overlap-safe populated-prefix move between growable vectors
+  and extends the destination prefix when required;
+- fill replaces a populated slice without exposing the backing vector;
 - snapshot returns a fresh fixed vector containing only the populated prefix;
 - truncate clears a populated suffix and publishes the requested shorter
   prefix; scratch arenas use this operation to reset to an owner mark;
+- clear atomically replaces the backing vector at the initial capacity;
 - reset clears every populated slot to `#f` and retains the capacity; and
 - release clears every populated slot, drops the backing vector, and makes the
   growable vector permanently inactive.
 
-Append uses geometric growth. For a vector beginning with one slot, appending
-`n` elements copies fewer than `2n` existing elements across all growths.
+These operations are distinct primitive-backend lifetime signals. A native or
+collector-aware backend must not collapse them into aliases: clear abandons the
+high-water allocation for the initial-capacity backing, reset retains the
+allocation for reuse after removing live references, and release relinquishes
+the backing and invalidates the object. This contract lets a future Consent
+collector apply different heap policies without changing callers.
+
+Append uses geometric growth. With the default factor of 2 and one initial
+slot, appending `n` elements copies fewer than `2n` existing elements across
+all growths. Every fixed factor greater than one preserves amortized constant
+append time; smaller factors trade more copying for less spare capacity.
 `consent-growable-vector-stats` exposes logical length, reserved capacity,
-maximum capacity, high-water length, growth count, copied-element count, reset
-count, and released state as Scheme-readable data.
+maximum capacity, growth factor, high-water length, growth count,
+copied-element count, reset count, and released state as Scheme-readable data.
 
 `consent-growable-vector-unused-slots-cleared?` is a private diagnostic for the
 garbage-collector root invariant. It scans reserved slots outside the logical
@@ -123,8 +146,11 @@ The table abbreviates the common `consent-growable-vector-` prefix.
 | `length`, `capacity`, `ref`, `set!` | O(1) | None. |
 | `append!` | Amortized O(1) | Only when full. |
 | `reserve!`, `grow!` | O(length) when larger | Only when larger. |
+| `copy!` | O(copied slice) | Only when extending past capacity. |
+| `fill!` | O(filled slice) | None. |
 | `snapshot` | O(length) | Always; returns a copy. |
 | `truncate!` | O(removed suffix) | None. |
+| `clear!` | O(initial capacity) | Always. |
 | `reset!`, `release!` | O(length) | None. |
 | `unused-slots-cleared?` | O(capacity) | None. |
 | `stats` | O(1) | Allocates the result datum. |
@@ -355,16 +381,15 @@ and discard their private capacity after producing a detached result. They
 remove intermediate cons cells and reverse passes without changing reader
 limits, element order, source metadata, or owned-datum construction.
 
-### SRFI 214 Follow-Ups
+### Public Flexvector Collector Refactors
 
-Two optional standard-library modules should use the public flexvector surface
-after #210 lands:
+Two optional standard-library modules now use the public flexvector surface:
 
-- SRFI 42 `vector-ec` and `string-ec` can collect unknown comprehension output
+- SRFI 42 `vector-ec` and `string-ec` collect unknown comprehension output
   with `flexvector-add-back!`, then use `flexvector->vector` or
   `flexvector->string`; and
 - SRFI 158 `generator->vector`, `vector-accumulator`, and
-  `reverse-vector-accumulator` can avoid intermediate lists through
+  `reverse-vector-accumulator` avoid intermediate lists through
   `generator->flexvector`, back insertion, conversion, and reversal.
 
 These paths execute user expressions or generator procedures and expose
@@ -413,10 +438,34 @@ builders. It snapshots before publishing a result and releases the private
 storage during dynamic cleanup, so capacity and lifecycle policy cannot escape
 through the reader API.
 
-Issue #210 continues to own SRFI 214 names, validation, aliases, documentation,
-and public flexvector semantics. It may reuse the private storage where those
-semantics agree, but it must not expose collector phase, reserve, reset,
-release, maximum-capacity, or allocation-policy details as SRFI behavior.
+SRFI 214 flexvectors reuse the private storage where the semantics agree. The
+public layer does not expose collector phase, reserve, reset, release,
+maximum-capacity, or allocation-policy details as SRFI behavior. SRFI 158
+vector collectors and SRFI 42 vector and string comprehensions use that public
+layer so long collections avoid intermediate reversed lists.
+
+The backing policy intentionally differs from the official SRFI 214 sample in
+one non-semantic detail: `flexvector-copy` right-sizes new storage to the copied
+length, subject to the four-slot minimum, instead of preserving spare source
+capacity. Flexvector storage selects the sample's 3/2 growth factor through the
+private per-object policy, while other primitive consumers retain the private
+constructor's default factor of 2. These are implementation policies, not SRFI
+guarantees, and may be retuned from benchmark evidence.
+
+`flexvector-clear!` follows the official sample by invoking private clear on
+storage whose immutable initial capacity is four slots. Constructors reserve
+more storage when needed without changing that clear floor. The private
+operation allocates replacement storage before mutation, so the old value
+survives allocation failure. On success, the high-water backing vector becomes
+unreachable and eligible for collection, so repeated grow-and-clear cycles do
+not permanently retain their largest historical allocation. Explicit
+`consent-growable-vector-reset!` instead retains capacity for scratch storage
+whose caller intends reuse.
+
+Bulk flexvector insertion, removal, copying, and filling use private
+`vector-copy!` and `vector-fill!` operations owned by `(consent
+growable-vector)`. Copying is overlap-safe, including self-copy, while the raw
+backing vector remains outside both the SRFI and internal-library interfaces.
 
 The baseline and incremental collectors in #335 and #966 consume
 `pre-reserved` arenas. They must reserve and acquire outside the no-allocation
@@ -427,8 +476,9 @@ failure, not as permission to allocate from the heap under collection.
 
 `tests/scheme/consent-growable-vector-test.scm` covers zero and maximum capacity
 boundaries, a deterministic capacity/model sweep, no-op transitions, copy
-counters, state preservation after failed operations, reset and release
-clearing, idempotent release, and stable representative errors.
+counters, overlap-safe bulk copy and fill, state preservation after failed
+operations, reset and release clearing, idempotent release, and stable
+representative errors.
 `tests/scheme/consent-scratch-arena-test.scm` covers both growth policies,
 active and idle statistics, cross-arena and stale marks, escaped owners,
 exception cleanup, dynamic-wind, continuation re-entry, and a pre-reserved
@@ -436,6 +486,26 @@ synthetic collector workload. The portable plan runs both programs on direct
 and compiled routes. ERT imports each internal library independently through
 the Emacs source-library loader, proving that both bootstrap surfaces use their
 portable source implementations.
+The official SRFI 214 repository provides `implementation/tests.scm`. Consent
+pins that file at the manifest's upstream revision and SHA-256 and carries its
+111 assertions in
+`tests/scheme/stdlib-flexvectors-upstream-test.scm`, adapted only to use the
+local library imports, SRFI 64 implementation, and fail-closed runner. The
+upstream assertions mention 64 of the 66 exported procedures; they omit
+`list->flexvector` and `reverse-list->flexvector`. They also do not exercise
+every optional argument, specified error boundary, mutator return contract, or
+short-circuit rule.
+
+`tests/scheme/stdlib-flexvectors-test.scm` closes those gaps with 17 registered
+cases and 35 assertions for list and sliced conversions, clamping,
+multiple-seed unfolds, every mutator return category, append-at-length
+`flexvector-set!`, the optional
+`flexvector-remove-range!` end, empty and reversed-range errors, shortest-input
+parallel iteration, strict short-circuiting, self-aliasing, overlapping edits,
+searches, and long inputs. Together, the two portable programs exercise all 66
+exports. The exact 66-name manifest export list and all four import aliases are
+asserted through the Emacs source loader. Both portable programs run on every
+direct and compiled host route selected by the portable test plan.
 
 The portable layer cannot safely force a host `make-vector` out-of-memory
 condition or observe garbage-collector reachability. The suite therefore checks

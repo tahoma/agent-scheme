@@ -3178,7 +3178,8 @@ ged "
                                   (srfi :42 eager-comprehensions)))
                         (equal? (manifest-field entry 'dependencies)
                                 '((library (scheme base))
-                                  (library (scheme read))))
+                                  (library (scheme read))
+                                  (library (stdlib flexvectors))))
                         (equal? (manifest-field alias 'target)
                                 '(stdlib eager-comprehensions))
                         (equal? (manifest-field portable-alias 'target)
@@ -3512,7 +3513,8 @@ ged "
                                   (srfi srfi-158)))
                         (equal? (manifest-field entry 'dependencies)
                                 '((library (scheme base))
-                                  (library (scheme case-lambda))))
+                                  (library (scheme case-lambda))
+                                  (library (stdlib flexvectors))))
                         (equal? (manifest-field scheme-alias 'target)
                                 '(stdlib generator))
                         (equal? (manifest-field alias 'target)
@@ -3520,6 +3522,84 @@ ged "
                         (equal? (manifest-field portable-alias 'target)
                                 '(stdlib generator))))")
                 "#t"))
+
+(testing-registry-case
+ 'srfi-214-flexvector-behavior '(portable core)
+(check-external 'srfi-214-flexvector-behavior
+                "(import (scheme base) (srfi 214))
+                 (let ((values (flexvector 'a 'c)))
+                   (flexvector-add! values 1 'b)
+                   (flexvector-add-back! values 'd)
+                   (list (flexvector? values)
+                         (flexvector-length values)
+                         (flexvector->list values)))"
+                "(#t 4 (a b c d))"))
+
+(testing-registry-case
+ 'srfi-214-portable-alias-import '(portable core)
+(check-external 'srfi-214-portable-alias-import
+                "(import (scheme base) (srfi srfi-214))
+                 (flexvector->vector
+                  (flexvector-map (lambda (value) (* value value))
+                                  (flexvector 1 2 3)))"
+                "#(1 4 9)"))
+
+(testing-registry-case
+ 'srfi-214-legacy-number-alias-import '(portable core)
+(check-external 'srfi-214-legacy-number-alias-import
+                "(import (scheme base) (srfi :214))
+                 (flexvector->string (string->flexvector \"flex\"))"
+                "\"flex\""))
+
+(testing-registry-case
+ 'srfi-214-legacy-named-alias-import '(portable core)
+(check-external 'srfi-214-legacy-named-alias-import
+                "(import (scheme base) (srfi :214 flexvectors))
+                 (flexvector->list
+                  (flexvector-reverse-copy (flexvector 1 2 3)))"
+                "(3 2 1)"))
+
+(testing-registry-case
+ 'srfi-214-missing-export-diagnostic '(portable core)
+(check 'srfi-214-missing-export-diagnostic
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base)
+                    (only (srfi 214) missing-flexvector-helper))
+            missing-flexvector-helper")))
+       #t))
+
+(testing-registry-case
+ 'stdlib-srfi-214-manifest '(portable core)
+(check-external
+ 'stdlib-srfi-214-manifest
+ (stdlib-manifest-source
+  "(let ((entry (stdlib-manifest-ref '(stdlib flexvectors)))
+         (alias (stdlib-manifest-ref '(srfi 214)))
+         (portable-alias (stdlib-manifest-ref '(srfi srfi-214)))
+         (legacy-alias (stdlib-manifest-ref '(srfi :214 flexvectors))))
+     (and (eq? (car entry) 'manifest-entry)
+          (equal? (manifest-field entry 'status)
+                  'vendored-adapted-implementation)
+          (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                  \"MIT\")
+          (equal? (manifest-field entry 'aliases)
+                  '((srfi 214)
+                    (srfi srfi-214)
+                    (srfi :214)
+                    (srfi :214 flexvectors)))
+          (equal? (manifest-field entry 'dependencies)
+                  '((library (scheme base))
+                    (library (scheme case-lambda))
+                    (library (scheme cxr))
+                    (library (consent growable-vector))))
+          (equal? (manifest-field alias 'target) '(stdlib flexvectors))
+          (equal? (manifest-field portable-alias 'target)
+                  '(stdlib flexvectors))
+          (equal? (manifest-field legacy-alias 'target)
+                  '(stdlib flexvectors))))")
+ "#t"))
 
 (testing-registry-case
  'srfi-180-json-read '(portable core)

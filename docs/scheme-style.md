@@ -129,7 +129,10 @@ docstring followed by the rich metadata vector:
 Document every formal parameter by its binding name, including rest parameters
 and dotted formals. For dispatcher procedures, the metadata must describe the
 outer public signature, not only the names used in individual `case-lambda`
-clauses.
+clauses. Every expanded public parameter and return descriptor must carry both
+an explicit type and a non-empty description; a type annotation alone does not
+document the API contract. Every public procedure must also carry a non-empty
+`effects` list; use `pure` rather than omitting the field when no effect occurs.
 
 For expanded metadata descriptors, keep `(type ...)` on the same line as the
 parameter or `returns` head when the line fits within the soft line limit. Put
