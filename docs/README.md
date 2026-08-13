@@ -30,6 +30,7 @@ project pitch and examples, see the top-level [README](../README.md).
 - [R7RS-Small Conformance Matrix](r7rs-conformance.md) — the source of truth for Consent Scheme's R7RS-small surface and its status.
 - [Stdlib Libraries](stdlib.md) — optional SRFI and R7RS-large library support outside the R7RS-small conformance contract.
 - [Flexvectors (SRFI 214)](flexvectors.md) — imports, mutation contracts, traversal rules, and storage boundaries for extensible vectors.
+- [List Queues (SRFI 117)](list-queues.md) — list identity, mutation, complexity, and private-worklist boundaries for mutable queues.
 - [R7RS Implementation Test Mining](r7rs-implementation-mining.md) — a survey of external R7RS and near-R7RS test suites mined for fixtures.
 - [Docstring Metadata Convention](docstring-metadata.md) — carrying documentation metadata as ordinary R7RS data in source.
 - [Scheme Style Guidelines](scheme-style.md) — portable Scheme source layout, docstrings, and rich metadata style.

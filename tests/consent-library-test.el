@@ -23,9 +23,11 @@
 
 (defun consent-library-test--stdlib-manifest-external (source)
   "Evaluate SOURCE with stdlib manifest field helpers in scope."
-  (consent-library-test--external
-   (concat
-    "(import (scheme base) (stdlib manifest))
+  ;; Manifest contract tests intentionally perform several bounded index scans.
+  (consent-value->external
+   (consent-eval-source
+    (concat
+     "(import (scheme base) (stdlib manifest))
      (define (manifest-field entry name)
        (let ((cell (assq name (cdr entry))))
          (and cell (cadr cell))))
@@ -34,7 +36,9 @@
          (let ((cell (and fields (assq name fields))))
            (and cell (cadr cell)))))
      "
-    source)))
+     source)
+    nil
+    '(:max-host-callbacks 20000))))
 
 (defconst consent-library-test--srfi-97-library-references
   '((1 "(srfi :1)" "(srfi :1 lists)")
@@ -1965,6 +1969,7 @@
     "(stdlib and-let-star)"
     "(stdlib list)"
     "(stdlib flexvectors)"
+    "(stdlib list-queue)"
     "(stdlib generator)"
     "(stdlib testing)"
     "(stdlib random-bits)"
@@ -3656,6 +3661,140 @@
                      record 'missing-dependencies))))))
     (consent--library-catalog-remove-manifest
      'srfi-214-dependency-fixture)))
+
+(ert-deftest consent-library-test-srfi-117-imports-and-uses-list-queues ()
+  "Import SRFI 117 aliases and exercise list identity and queue mutation."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (scheme list-queue))
+      (let* ((items (list 'a 'b))
+             (queue (make-list-queue items (cdr items))))
+        (list-queue-add-back! queue 'c)
+        (let* ((suffix (list-queue 'd))
+               (result (list-queue-append! queue suffix)))
+          (list-queue-add-back! result 'e)
+          (list (eq? items (list-queue-list result))
+                (list-queue-front result)
+                (list-queue-back result)
+                (list-queue-list result))))")
+    "(#t a e (a b c d e))"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 117))
+      (list-queue-list
+       (list-queue-map (lambda (value) (* value value))
+                       (list-queue 1 2 3)))")
+    "(1 4 9)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-117))
+      (list-queue-list
+       (list-queue-unfold (lambda (value) (> value 3))
+                          (lambda (value) value)
+                          (lambda (value) (+ value 1))
+                          0))")
+    "(0 1 2 3)")))
+
+(ert-deftest consent-library-test-srfi-117-missing-export-diagnostic ()
+  "Report missing SRFI 117 imports through the resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 117) missing-list-queue-helper))
+            missing-list-queue-helper")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-list-queue-helper")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-117 ()
+  "Expose SRFI 117 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib list-queue)))
+            (scheme-alias (stdlib-manifest-ref '(scheme list-queue)))
+            (alias (stdlib-manifest-ref '(srfi 117)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-117))))
+        (define documents
+          (cdr
+           (assq 'local-reference-documents
+                 (manifest-field entry 'provenance))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib list-queue))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"BSD-3-Clause\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"BSD-3-Clause\")
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (equal? documents
+                     '(((path \"reference/srfi-117/srfi-117.md\")
+                        (role specification)
+                        (source srfi))
+                       ((path
+                         \"reference/r7rs-large/2016-07-red-edition-report.md\")
+                        (role docket-report)
+                        (source r7rs-large))))
+             (member
+              '(append-repairs
+                (empty-queue-join)
+                (tail-pointer-update))
+              (manifest-subfield entry 'provenance 'local-patches))
+             (member
+              '(adapted-tests
+                (file \"tests/scheme/stdlib-list-queue-test.scm\")
+                (file
+                 \"tests/scheme/stdlib-list-queue-upstream-test.scm\"))
+              (manifest-subfield entry 'provenance 'local-patches))
+             (equal? (manifest-field entry 'aliases)
+                     '((scheme list-queue)
+                       (srfi 117)
+                       (srfi srfi-117)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))
+                       (library (scheme case-lambda))))
+             (equal?
+              (manifest-field entry 'exports)
+              '(make-list-queue
+                list-queue
+                list-queue-copy
+                list-queue-unfold
+                list-queue-unfold-right
+                list-queue?
+                list-queue-empty?
+                list-queue-front
+                list-queue-back
+                list-queue-list
+                list-queue-first-last
+                list-queue-add-front!
+                list-queue-add-back!
+                list-queue-remove-front!
+                list-queue-remove-back!
+                list-queue-remove-all!
+                list-queue-set-list!
+                list-queue-append
+                list-queue-append!
+                list-queue-concatenate
+                list-queue-map
+                list-queue-map!
+                list-queue-for-each))
+             (equal? (manifest-field scheme-alias 'target)
+                     '(stdlib list-queue))
+             (equal? (manifest-field alias 'target) '(stdlib list-queue))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib list-queue))))")
+    "#t")))
 
 (ert-deftest consent-library-test-srfi-64-imports-and-runs-tests ()
   "Import SRFI 64 aliases and exercise representative test-runner behavior."

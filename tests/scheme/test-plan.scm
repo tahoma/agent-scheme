@@ -167,6 +167,12 @@
    (path "tests/scheme/stdlib-flexvectors-upstream-test.scm")
     (tags (full direct compiled stdlib upstream registered)))
    (program
+   (path "tests/scheme/stdlib-list-queue-test.scm")
+    (tags (full direct compiled stdlib registered)))
+   (program
+   (path "tests/scheme/stdlib-list-queue-upstream-test.scm")
+    (tags (full direct compiled stdlib upstream registered)))
+   (program
    (path "tests/scheme/stdlib-comparator-test.scm")
     (tags (full direct compiled stdlib registered)))
    (program

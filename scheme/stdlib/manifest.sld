@@ -1577,6 +1577,167 @@ scm"))))))
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (stdlib list-queue))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility public)
+        (source-kind source-library)
+        (source (path "list-queue.sld"))
+        (api-version (compat 0))
+        (source-version (upstream-revision
+          "544dfba159ced777bb2447e73dff67dfed30d76a"))
+        (realization portable-source)
+        (aliases
+         ((scheme list-queue)
+          (srfi 117)
+          (srfi srfi-117)))
+        (exports
+         (make-list-queue
+          list-queue
+          list-queue-copy
+          list-queue-unfold
+          list-queue-unfold-right
+          list-queue?
+          list-queue-empty?
+          list-queue-front
+          list-queue-back
+          list-queue-list
+          list-queue-first-last
+          list-queue-add-front!
+          list-queue-add-back!
+          list-queue-remove-front!
+          list-queue-remove-back!
+          list-queue-remove-all!
+          list-queue-set-list!
+          list-queue-append
+          list-queue-append!
+          list-queue-concatenate
+          list-queue-map
+          list-queue-map!
+          list-queue-for-each))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme case-lambda))))
+        (provenance
+         ((origin repo)
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-117")
+          (local-reference-documents
+           ((path "reference/srfi-117/srfi-117.md")
+            (role specification)
+            (source srfi))
+           ((path "reference/r7rs-large/2016-07-red-edition-report.md")
+            (role docket-report)
+            (source r7rs-large)))
+          (upstream-source-files
+           ("list-queues/list-queues-impl.scm"
+            "list-queues/list-queues-test.scm"))
+          (upstream-source-test-file
+           "list-queues/list-queues-test.scm")
+          (upstream-source-sha256
+           (("list-queues/list-queues-impl.scm"
+             .
+             "a9fa6fcbd055d7697b0c7892eb0f0cb5ed6c018a120d07083805ea0c3d66b742")
+            ("list-queues/list-queues-test.scm"
+             .
+             ;; readability-allow: contiguous-datum -- Checksum stays whole.
+             "52fd05e080c4707b8de52a74cf62fb01700688962a6852364bbf533749edb16d")))
+          (upstream-source-blobs
+           (("list-queues/list-queues-impl.scm"
+             . "6292921291091a99fdd7603f8c3fd02d6fc96509")
+            ("list-queues/list-queues-test.scm"
+             . "05e8775aa76854e4b1e015eae8170bd0ef5eda76")))
+          (upstream-revision
+           "544dfba159ced777bb2447e73dff67dfed30d76a")
+          (upstream-license "BSD-3-Clause")
+          (local-license "BSD-3-Clause")
+          (vendored? #t)
+          (local-patches
+           ((define-library-wrapper (library (stdlib list-queue)))
+            (r7rs-base-procedures (remove compatibility-shims))
+            (registry-aliases
+             (aliases
+              (scheme list-queue)
+              (srfi 117)
+              (srfi srfi-117)))
+            (append-repairs
+             (empty-queue-join)
+             (tail-pointer-update))
+            (unfold-callback-order (source local-portable-iteration))
+            (documentation-metadata
+             (scope exported-procedures)
+             (fields parameters returns effects))
+            (adapted-tests
+             (file "tests/scheme/stdlib-list-queue-test.scm")
+             (file
+              "tests/scheme/stdlib-list-queue-upstream-test.scm"))))))
+        (verification
+         ((test-status
+           (import-resolution exact-export-surface
+                              representative-list-queue-behavior alias-import
+                              missing-export-diagnostic adapted-upstream-tests
+                              list-identity endpoint-aliasing empty-boundaries
+                              destructive-append-tail-update callback-order
+                              portable-host-suite))))
+        (status vendored-adapted-implementation)
+        (canonical #t))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (scheme list-queue))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib list-queue)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib list-queue))
+        (dependencies
+         ((library (stdlib list-queue))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi 117))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib list-queue)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib list-queue))
+        (dependencies
+         ((library (stdlib list-queue))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi srfi-117))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib list-queue)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib list-queue))
+        (dependencies
+         ((library (stdlib list-queue))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (stdlib flexvectors))
         (owner stdlib)
         (provider repo-source)
@@ -2939,8 +3100,14 @@ f3")))
         (returns (type (or list boolean))
          (description "Manifest entry for LIBRARY, or #f."))
         (effects pure))
-      (let loop ((rest stdlib-manifest))
-        (cond
-         ((null? rest) #f)
-         ((equal? (cadr (assq 'name (cdr (car rest)))) library) (car rest))
-         (else (loop (cdr rest))))))))
+      (let ((namespace (and (pair? library) (car library))))
+        (let loop ((rest stdlib-manifest))
+          (if (null? rest)
+              #f
+              (let* ((entry (car rest))
+                     (name (cadr (assq 'name (cdr entry)))))
+                (if (and (pair? name)
+                         (eq? (car name) namespace)
+                         (equal? name library))
+                    entry
+                    (loop (cdr rest))))))))))
