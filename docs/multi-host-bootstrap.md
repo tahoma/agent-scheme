@@ -148,8 +148,12 @@ R7RS pairs, strings, vectors, and bytevectors may appear only in private parser,
 control, or ABI adapter state. A call-scoped native graph bridge preserves
 aliases, returned subobject identity, cycles, raised conditions, and mutation
 writeback while one compiled host call temporarily observes such containers.
-Raw mirrors cannot outlive that outer call. Shared conformance fixtures keep
-this owned portable behavior aligned with the Emacs bootstrap.
+Raw mirrors cannot outlive that outer call. Fresh result and writeback topology
+is charged once after reconciliation, while borrowed identities reused from the
+call are not allocated again. Hash-backed hosts retain linear foreign-graph
+copying; the plain-R7RS compatibility route accepts at most 64 distinct foreign
+identities and then fails closed. Shared conformance fixtures keep this owned
+portable behavior aligned with the Emacs bootstrap.
 
 ## Emacs as the First Host
 

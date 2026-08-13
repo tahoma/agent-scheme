@@ -83,6 +83,13 @@ only the case-sensitive scan for its fixed secret spellings. Each kernel is
 pure, callback-free, and non-retaining, and declares an explicit zero-data
 inventory.
 
+The native result boundary charges every genuinely fresh result, condition, or
+writeback compound once at the same value-node cost as its source constructor.
+Borrowed mirrors that resolve to an existing owned identity are uncharged.
+Without an active bridge, scalars and same-context owned compounds remain
+available, but importing a fresh host or cross-heap compound requires a
+hash-backed identity adapter and otherwise fails closed.
+
 General project roots whose exports can retain a compound value in a closure,
 record, parameter, or module state are omitted. An interpreted import then
 resolves the canonical embedded source realization, even though the borrowed

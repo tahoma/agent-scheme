@@ -69,9 +69,14 @@ exhausted.
 **Steps** are charged once per evaluation step (this also covers macro
 expansion, which runs through the same step counter).  **Host callbacks** count
 primitive invocations.  **Events** bound the yield/audit channel.  **Allocation**
-is charged at construction time and is measured in value-graph *nodes*, a
-host-independent unit, rather than host bytes; the spec accepts `allocation-bytes`
-as an alias for the same node budget.  **Interned symbols** are charged once per
+is measured in value-graph *nodes*, a host-independent unit, rather than host
+bytes; the spec accepts `allocation-bytes` as an alias for the same node budget.
+Owned constructors charge as they allocate. Fresh native result, condition, and
+writeback compounds charge once at the source-equivalent node cost after import
+and reconciliation; reused borrowed identities and same-context owned values do
+not allocate or charge again. Reconciliation publishes native mutations before
+an aggregate budget stop so the boundary cannot fail half-applied. **Interned
+symbols** are charged once per
 evaluated `string->symbol` call, before the name is interned; because each call
 interns at most one new symbol, the ceiling bounds how many symbols a run can add
 to the process-global intern table, closing a resource-exhaustion vector where
