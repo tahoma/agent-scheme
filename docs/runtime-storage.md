@@ -580,13 +580,15 @@ growable-vector slot operations removes that repeated validation. The backing
 vector remains hidden, checked growable-vector callers retain their original
 contract, and the counted scale gate confirms linear total work.
 
-Absolute wall-clock evidence remains mixed. The final CI memory-key refinement
-run took 141.912 seconds, down 4.8% from 149.011 seconds on the unoptimized
-worklist head but still 20.9% above the 117.407-second pre-migration list-queue
-run. These separate CI runs, together with opposing movement in unaffected
-shards, do not establish a speedup. A trustworthy comparison requires
-equivalently prepared worktrees, identical generated artifacts, and repeated
-runs summarized by their median.
+Absolute wall-clock evidence remains mixed. Successive CI runs of the same
+optimized runtime code took 141.912 and 154.938 seconds in memory-key
+refinement, while the unchanged paired memory-query shard moved in the opposite
+direction from 135.185 to 102.112 seconds. The memory-key results bracketed the
+149.011-second unoptimized worklist run and both remained above the
+117.407-second pre-migration list-queue run. These separate runs do not
+establish a speedup. A trustworthy comparison requires equivalently prepared
+worktrees, identical generated artifacts, and repeated runs summarized by their
+median.
 
 ### Candidates Rejected or Deferred
 
