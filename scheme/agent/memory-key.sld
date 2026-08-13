@@ -59,6 +59,12 @@
         (only (consent reader)
               consent-number-representation-snapshot
               consent-outer-representation-kind)
+        (only (consent runtime-storage)
+              consent-make-growable-vector
+              consent-growable-vector-append!
+              consent-growable-vector-ref
+              consent-growable-vector-set!
+              consent-growable-vector-snapshot)
         (only (consent symbol)
               consent-symbol?
               consent-symbol-name)
@@ -71,52 +77,15 @@
 
 ;;;; Small mutable utilities used only while preparing an immutable key.
 
-(define-record-type <grow-vector>
-  (make-grow-vector-record length data)
-  grow-vector?
-  (length grow-vector-length set-grow-vector-length!)
-  (data grow-vector-data set-grow-vector-data!))
+;; A single key preparation is already bounded by evaluator work budgets. This
+;; exact ceiling additionally prevents an unbounded host-vector request when
+;; the kernel runs directly on an R7RS bootstrap host.
+(define memory-key-maximum-growable-capacity 536870911)
 
-(define (make-grow-vector)
-  "Return an empty private growable vector."
-  (make-grow-vector-record 0 (make-vector 16 #f)))
-
-(define (grow-vector-push! grow value)
-  "Append VALUE to GROW and return its assigned index."
-  (let ((length (grow-vector-length grow))
-        (data (grow-vector-data grow)))
-    (if (= length (vector-length data))
-        (let ((larger (make-vector (* 2 length) #f)))
-          (let copy ((index 0))
-            (if (< index length)
-                (begin
-                  (vector-set! larger index (vector-ref data index))
-                  (copy (+ index 1)))))
-          (set-grow-vector-data! grow larger)
-          (set! data larger)))
-    (vector-set! data length value)
-    (set-grow-vector-length! grow (+ length 1))
-    length))
-
-(define (grow-vector-set! grow index value)
-  "Set GROW's element at INDEX to VALUE."
-  (vector-set! (grow-vector-data grow) index value))
-
-(define (grow-vector-ref grow index)
-  "Return GROW's element at INDEX."
-  (vector-ref (grow-vector-data grow) index))
-
-(define (grow-vector->vector grow)
-  "Return GROW's populated prefix as a fixed vector."
-  (let* ((length (grow-vector-length grow))
-         (result (make-vector length #f))
-         (data (grow-vector-data grow)))
-    (let copy ((index 0))
-      (if (< index length)
-          (begin
-            (vector-set! result index (vector-ref data index))
-            (copy (+ index 1)))))
-    result))
+(define (make-memory-key-growable-vector)
+  "Return bounded growable storage for one memory-key preparation."
+  (consent-make-growable-vector
+   16 memory-key-maximum-growable-capacity))
 
 ;; Private two-list FIFO queue used by iterative graph traversals.
 (define-record-type <queue>
@@ -919,15 +888,15 @@
   (let ((absent (vector 'absent))
         (owned-objects #f)
         (host-objects #f)
-        (labels (make-grow-vector))
-        (edge-0 (make-grow-vector))
-        (edge-1 (make-grow-vector))
+        (labels (make-memory-key-growable-vector))
+        (edge-0 (make-memory-key-growable-vector))
+        (edge-1 (make-memory-key-growable-vector))
         (pending '()))
     (define (add-node! label first second)
       "Append one labelled graph node and return its dense identifier."
-      (let ((id (grow-vector-push! labels label)))
-        (grow-vector-push! edge-0 first)
-        (grow-vector-push! edge-1 second)
+      (let ((id (consent-growable-vector-append! labels label)))
+        (consent-growable-vector-append! edge-0 first)
+        (consent-growable-vector-append! edge-1 second)
         id))
     (define (object-ref value)
       "Return VALUE's discovered graph node, or #f when absent."
@@ -1058,23 +1027,23 @@
                        (set! pending (cdr pending))
                        (if (let ((tag
                                   (vector-ref
-                                   (grow-vector-ref labels id) 0)))
+                                   (consent-growable-vector-ref labels id) 0)))
                              (or (= tag label-local-pair)
                                  (= tag label-outer-pair)
                                  (= tag label-host-pair)))
                            (begin
-                             (grow-vector-set!
+                             (consent-growable-vector-set!
                               edge-0 id (intern! (memory-pair-car value)))
-                             (grow-vector-set!
+                             (consent-growable-vector-set!
                               edge-1 id (intern! (memory-pair-cdr value)))
                              #t)
-                           (grow-vector-set!
+                           (consent-growable-vector-set!
                             edge-0 id (make-vector-chain! value)))
                        (process))))
                (vector root-id
-                       (grow-vector->vector labels)
-                       (grow-vector->vector edge-0)
-                       (grow-vector->vector edge-1))))))
+                       (consent-growable-vector-snapshot labels)
+                       (consent-growable-vector-snapshot edge-0)
+                       (consent-growable-vector-snapshot edge-1))))))
      (lambda ()
        (if owned-objects
            (consent-datum-object-map-release! owned-objects))))))
@@ -1284,7 +1253,7 @@
          (block-head (vector-ref partition 1))
          (block-count (vector-ref partition 3))
          (canonical-id (make-vector block-count -1))
-         (descriptor (make-grow-vector))
+         (descriptor (make-memory-key-growable-vector))
          (pending (make-queue))
          (next-id 1)
          (output-id 0)
@@ -1305,17 +1274,21 @@
     (define (emit-number! number)
       "Append NUMBER's flat descriptor tokens."
       (let ((representation (vector-ref number 0)))
-        (grow-vector-push! descriptor representation)
+        (consent-growable-vector-append! descriptor representation)
         (if (= representation number-representation-owned)
-            (grow-vector-push! descriptor (vector-ref number 1))
+            (consent-growable-vector-append!
+             descriptor (vector-ref number 1))
             (begin
-              (grow-vector-push! descriptor (vector-ref number 1))
-              (grow-vector-push! descriptor (vector-ref number 2))
-              (grow-vector-push! descriptor (vector-ref number 3))))))
+              (consent-growable-vector-append!
+               descriptor (vector-ref number 1))
+              (consent-growable-vector-append!
+               descriptor (vector-ref number 2))
+              (consent-growable-vector-append!
+               descriptor (vector-ref number 3))))))
     (define (emit-label! label)
       "Append observable LABEL's flat descriptor tokens."
       (let ((tag (vector-ref label 0)))
-        (grow-vector-push! descriptor tag)
+        (consent-growable-vector-append! descriptor tag)
         (cond
          ((= tag label-number) (emit-number! (vector-ref label 1)))
          ((or (= tag label-boolean)
@@ -1328,21 +1301,23 @@
               (= tag label-local-string)
               (= tag label-outer-string)
               (= tag label-host-string))
-          (grow-vector-push! descriptor (vector-ref label 1)))
+          (consent-growable-vector-append!
+           descriptor (vector-ref label 1)))
          ((or (= tag label-local-bytevector)
               (= tag label-outer-bytevector)
               (= tag label-host-bytevector))
           (let ((bytes (vector-ref label 1)))
-            (grow-vector-push! descriptor (vector-length bytes))
+            (consent-growable-vector-append!
+             descriptor (vector-length bytes))
             (let loop ((index 0))
               (if (< index (vector-length bytes))
                   (begin
-                    (grow-vector-push! descriptor
-                                       (vector-ref bytes index))
+                    (consent-growable-vector-append!
+                     descriptor (vector-ref bytes index))
                     (loop (+ index 1))))))))))
     (vector-set! canonical-id root-block 0)
     (enqueue! pending root-block)
-    (grow-vector-push! descriptor block-count)
+    (consent-growable-vector-append! descriptor block-count)
     (let encode ()
       (if (not (queue-empty? pending))
           (let* ((block (dequeue! pending))
@@ -1356,12 +1331,14 @@
                 (error "canonical quotient id order mismatch" id output-id))
             (set! output-id (+ output-id 1))
             (emit-label! label)
-            (if (>= first 0) (grow-vector-push! descriptor first))
-            (if (>= second 0) (grow-vector-push! descriptor second))
+            (if (>= first 0)
+                (consent-growable-vector-append! descriptor first))
+            (if (>= second 0)
+                (consent-growable-vector-append! descriptor second))
             (encode))))
     (if (not (= next-id block-count))
         (error "unreachable quotient block" next-id block-count))
-    (grow-vector->vector descriptor)))
+    (consent-growable-vector-snapshot descriptor)))
 
 (define (normalize-general-key value persistent?)
   "Return VALUE's canonical general-key quotient descriptor."

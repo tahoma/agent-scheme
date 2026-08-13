@@ -1303,6 +1303,49 @@
     (should (file-readable-p source-file))))
 
 (ert-deftest
+    consent-library-test-runtime-storage-is-internal-source-backed ()
+  "Keep private runtime storage on one portable source realization."
+  (let* ((key "(consent runtime-storage)")
+         (entry (consent--library-collection-manifest-entry key))
+         (source-file (consent-library-test--manifest-source-file key)))
+    (should entry)
+    (should (eq (plist-get entry :provider) 'repo-source))
+    (should (eq (plist-get entry :visibility) 'internal-runtime))
+    (should (eq (plist-get entry :source-kind) 'portable-source))
+    (should (eq (plist-get entry :realization) 'portable-source))
+    (should-not (plist-get entry :primitive-overlay-library))
+    (should-not (plist-get entry :primitive-exports))
+    (should source-file)
+    (should
+     (string-suffix-p
+      "scheme/consent/runtime-storage.sld" source-file))
+    (should (file-readable-p source-file))))
+
+(ert-deftest consent-library-test-runtime-storage-runs-source-backed ()
+  "Exercise growable and arena storage through the Emacs source loader."
+  (should
+   (equal
+    (consent-library-test--external/options
+     "(import (scheme base)
+              (consent runtime-storage))
+      (let* ((grow (consent-make-growable-vector 1 4))
+             (arena (consent-make-scratch-arena 4 4 'pre-reserved))
+             (owner (consent-scratch-arena-acquire! arena 'trace)))
+        (consent-growable-vector-append! grow 'left)
+        (consent-growable-vector-append! grow 'right)
+        (consent-scratch-owner-append! owner 'temporary)
+        (consent-scratch-owner-release! owner)
+        (list (consent-growable-vector-length grow)
+              (consent-growable-vector-capacity grow)
+              (cadr (assq 'length
+                          (cdr (consent-scratch-arena-stats arena))))
+              (cadr (assq 'capacity
+                          (cdr (consent-scratch-arena-stats arena))))
+              (consent-scratch-arena-unused-slots-cleared? arena)))"
+     '(:internal-libraries-allowed t))
+    "(2 2 0 4 #t)")))
+
+(ert-deftest
     consent-library-test-agent-memory-query-is-internal-source-backed ()
   "Keep the native memory query kernel internal and source-backed."
   (let* ((key "(agent memory-query)")

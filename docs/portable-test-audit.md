@@ -75,6 +75,12 @@ does; retaining an ERT test does not make it the semantic source of truth.
   and writer labeling through both evaluator bootstraps. Reader tests retain
   multi-element pair and vector datum-label cycles in both direct and
   self-hosted lanes.
+- `(consent runtime-storage)` bounded growth, allocation counters, clearing,
+  arena ownership, reset/release, exception cleanup, continuation re-entry, and
+  pre-reserved collector workloads are canonical in
+  `tests/scheme/consent-runtime-storage-test.scm`. The portable plan runs the
+  same library on direct and compiled hosts, while ERT exercises its Emacs
+  source-library route.
 - `(consent character)` owned-record construction, the complete Unicode scalar
   boundary, host/native adapter contracts, and NUL-through-maximum nested datum
   round trips are canonical in `tests/scheme/consent-character-test.scm`.

@@ -146,6 +146,9 @@
     (path "tests/scheme/consent-datum-test.scm")
     (tags (full direct core runtime self-host-gap registered)))
    (program
+    (path "tests/scheme/consent-runtime-storage-test.scm")
+    (tags (full direct compiled core runtime registered)))
+   (program
     (path "tests/scheme/consent-compiler-plan-test.scm")
     (tags (full direct compiled compiler registered)))
    (program

@@ -429,6 +429,24 @@ The heap exposes the metadata and mutation seam needed by #721, but its current
 private storage mutates in place. It does not yet claim branch-local
 copy-on-write or complete session-fork mutation isolation.
 
+#### Bootstrap-safe runtime storage
+
+`(consent runtime-storage)` owns the private callback-free growable-vector and
+scratch-arena substrate used before optional standard libraries are realized.
+Growable vectors separate their populated prefix, reserved capacity, exact
+maximum, high-water usage, growth count, and copied-element count. Reset clears
+the prefix without discarding capacity; terminal release clears the prefix and
+drops the backing vector.
+
+Scratch arenas issue one phase-tagged owner lifetime at a time. Marks are
+stamped for that lifetime, reset clears every released slot, and an escaped
+owner remains invalid after release or continuation re-entry. The
+`pre-reserved` policy forbids active growth, giving collectors a route that
+cannot recursively allocate from the heap under collection. `allow-growth`
+remains available for runtime phases in which bounded ordinary allocation is
+permitted. The complete contract is recorded in
+[Bootstrap-Safe Runtime Storage](runtime-storage.md).
+
 #### Portable character ownership
 
 Language-visible characters are Consent-owned Unicode scalar values. Reader,
