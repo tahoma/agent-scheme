@@ -264,9 +264,10 @@ the local tests passed. Use only ASCII text.")
      (let ((tool (model-tool-spec 'local-echo)))
        (model-complete
         'scheme-scripter
-        \"Call the local-echo tool with text exactly portable-ci-tool-call.\"
+        \"Call local-echo with text exactly CONSENT_SMOKE_OK.\"
         (list (list 'tools (list tool))
-              (list 'tool-choice tool))))"
+              (list 'tool-choice tool)
+              (list 'temperature 0))))"
     (consent-models-test--live-endpoint)
     (consent-models-test--live-model))))
 
@@ -772,11 +773,13 @@ the local tests passed. Use only ASCII text.")
                    (roles (scheme-scripter code))
                    (privacy local))))))
              (model-complete 'scheme-scripter
-                             \"What is 2 plus 3? Reply with only the numeral.\"
-                             '())"
+                             (string-append
+                              \"Reply with exactly CONSENT_SMOKE_OK \"
+                              \"and nothing else.\")
+                             '((temperature 0)))"
             endpoint
             model))))
-    (should (string-match-p "5" external))))
+    (should (string-match-p "CONSENT_SMOKE_OK" external))))
 
 (ert-deftest consent-models-test-live-local-openai-compatible-tool-call ()
   "Opt-in live proof that the Emacs host receives model tool calls."
@@ -786,7 +789,10 @@ the local tests passed. Use only ASCII text.")
     (should (string-match-p "(model-message" external))
     (should (string-match-p "(tool-calls" external))
     (should (string-match-p "(name local-echo)" external))
-    (should (string-match-p "(arguments ((text \"" external))))
+    (should
+     (string-match-p
+      "(arguments ((text \"CONSENT_SMOKE_OK\")))"
+      external))))
 
 (ert-deftest consent-models-test-live-local-quick-start-model-matrix ()
   "Opt-in live proof across the selected quick-start role/model matrix."

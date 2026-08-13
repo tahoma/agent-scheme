@@ -50,7 +50,9 @@
                              datum)))
         (cond
          ((not (pair? fields)) #f)
-         ((eq? (car (car fields)) name) (cadr (car fields)))
+         ((and (pair? (car fields))
+               (eq? (car (car fields)) name))
+          (cadr (car fields)))
          (else (loop (cdr fields))))))
     (define (local-echo text)
       \"Echo TEXT through a pure local helper.\"
@@ -79,10 +81,10 @@
            (response
             (model-complete
              'scheme-scripter
-             \"Call the local-echo tool with text exactly portable-ci-tool-cal\
-l.\"
+             \"Call local-echo with text exactly CONSENT_SMOKE_OK.\"
              (list (list 'tools (list tool))
-                   (list 'tool-choice tool))))
+                   (list 'tool-choice tool)
+                   (list 'temperature 0))))
            (tool-calls (field response 'tool-calls))
            (call (if (and (pair? tool-calls) (pair? (car tool-calls)))
                      (car tool-calls)
@@ -93,7 +95,8 @@ l.\"
             (let ((name (field call 'name)))
               (and (symbol? name)
                    (string=? (symbol->string name) \"local-echo\")))
-            (string? text)))"))
+            (and (string? text)
+                 (string=? text \"CONSENT_SMOKE_OK\"))))"))
 
 (define (run-live-tool-call-check)
   "Run the live portable model tool-call check against the configured endpoint\
@@ -119,7 +122,7 @@ l.\"
                        (and (pair? value)
                             (pair? (cdr value))
                             (cadr value)))
-          (test-assert "portable live model tool argument string"
+          (test-assert "portable live model exact tool argument"
                        (and (pair? value)
                             (pair? (cdr value))
                             (pair? (cddr value))
