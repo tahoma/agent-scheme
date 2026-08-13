@@ -1707,6 +1707,9 @@ scm"))))))
              (growth-factor 2)
              (clear reset-to-four)
              (copy minimum-four-or-logical-length))
+            (specification-repairs
+             (set-at-length append)
+             (remove-range-end optional))
             (registry-aliases
              (aliases
               (srfi 214)
@@ -1719,10 +1722,13 @@ scm"))))))
               "tests/scheme/stdlib-flexvectors-upstream-test.scm"))))))
         (verification
          ((test-status
-           (import-resolution representative-flexvector-behavior
-                              alias-import missing-export-diagnostic
-                              dependency-diagnostic adapted-upstream-tests
-                              long-input portable-host-suite))))
+           (import-resolution exact-export-surface
+                              representative-flexvector-behavior alias-import
+                              missing-export-diagnostic dependency-diagnostic
+                              adapted-upstream-tests conversion-slices
+                              mutator-return-contracts optional-boundaries
+                              short-circuiting self-aliasing long-input
+                              portable-host-suite))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-index-entry

@@ -482,10 +482,26 @@ synthetic collector workload. The portable plan runs both programs on direct
 and compiled routes. ERT imports each internal library independently through
 the Emacs source-library loader, proving that both bootstrap surfaces use their
 portable source implementations.
-`tests/scheme/stdlib-flexvectors-test.scm` covers the public storage boundary,
-overlapping edits, parallel operations, searches, errors, and long inputs. The
-adapted upstream SRFI 214 suite exercises the complete public operation set on
-direct and compiled portable hosts.
+The official SRFI 214 repository provides `implementation/tests.scm`. Consent
+pins that file at the manifest's upstream revision and SHA-256 and carries its
+111 assertions in
+`tests/scheme/stdlib-flexvectors-upstream-test.scm`, adapted only to use the
+local library imports, SRFI 64 implementation, and fail-closed runner. The
+upstream assertions mention 64 of the 66 exported procedures; they omit
+`list->flexvector` and `reverse-list->flexvector`. They also do not exercise
+every optional argument, specified error boundary, mutator return contract, or
+short-circuit rule.
+
+`tests/scheme/stdlib-flexvectors-test.scm` closes those gaps with 17 registered
+cases and 35 assertions for list and sliced conversions, clamping,
+multiple-seed unfolds, every mutator return category, append-at-length
+`flexvector-set!`, the optional
+`flexvector-remove-range!` end, empty and reversed-range errors, shortest-input
+parallel iteration, strict short-circuiting, self-aliasing, overlapping edits,
+searches, and long inputs. Together, the two portable programs exercise all 66
+exports. The exact 66-name manifest export list and all four import aliases are
+asserted through the Emacs source loader. Both portable programs run on every
+direct and compiled host route selected by the portable test plan.
 
 The portable layer cannot safely force a host `make-vector` out-of-memory
 condition or observe garbage-collector reachability. The suite therefore checks

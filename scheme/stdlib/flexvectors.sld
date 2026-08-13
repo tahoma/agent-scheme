@@ -240,17 +240,21 @@
       (consent-growable-vector-ref (flexvector-storage fv) index))
 
     (define (flexvector-set! fv index value)
-      "Replace FV's element at INDEX and return its previous value."
+      "Set FV at INDEX, appending at its length; return old or unspecified."
       #((parameters
          (fv (type flexvector))
          (index (type exact-integer))
          (value (type object)))
         (returns (type object)))
-      (check-index "flexvector-set!" fv index #f)
-      (let ((previous (flexvector-ref fv index)))
-        (consent-growable-vector-set!
-         (flexvector-storage fv) index value)
-        previous))
+      (check-index "flexvector-set!" fv index #t)
+      (if (= index (flexvector-length fv))
+          (begin
+            (append-one! fv value)
+            (unspecified))
+          (let ((previous (flexvector-ref fv index)))
+            (consent-growable-vector-set!
+             (flexvector-storage fv) index value)
+            previous)))
 
     (define (flexvector-front fv)
       "Return FV's first element."
@@ -374,18 +378,21 @@
         (for-each (lambda (value) (append-one! fv value)) values)
         fv)))
 
-    (define (flexvector-remove-range! fv start end)
-      "Remove FV elements from clamped START through END and return FV."
+    (define (flexvector-remove-range! fv start . maybe-end)
+      "Remove FV's clamped slice; END defaults to its length."
       #((parameters
          (fv (type flexvector))
          (start (type exact-integer))
-         (end (type exact-integer)))
+         (maybe-end (type list)))
         (returns (type flexvector)))
       (check-flexvector "flexvector-remove-range!" fv)
-      (let* ((length (flexvector-length fv))
+      (if (> (length maybe-end) 1)
+          (error "flexvector-remove-range!: too many end arguments"))
+      (let* ((size (flexvector-length fv))
+             (end (if (null? maybe-end) size (car maybe-end)))
              (slice
               (normalize-slice
-               "flexvector-remove-range!" length start end))
+               "flexvector-remove-range!" size start end))
              (actual-start (car slice))
              (actual-end (cdr slice))
              (count (- actual-end actual-start)))
@@ -395,9 +402,9 @@
              actual-start
              (flexvector-storage fv)
              actual-end
-             length))
+             size))
         (consent-growable-vector-truncate!
-         (flexvector-storage fv) (- length count))
+         (flexvector-storage fv) (- size count))
         fv))
 
     (define (flexvector-remove! fv index)

@@ -3375,10 +3375,15 @@
       (let ((values (flexvector 'a 'c)))
         (flexvector-add! values 1 'b)
         (flexvector-add-back! values 'd)
-        (list (flexvector? values)
-              (flexvector-length values)
-              (flexvector->list values)))")
-    "(#t 4 (a b c d))"))
+        (flexvector-set! values (flexvector-length values) 'e)
+        (let ((before-remove (flexvector->list values))
+              (remove-result (flexvector-remove-range! values 3)))
+          (list (flexvector? values)
+                (length before-remove)
+                before-remove
+                (eq? values remove-result)
+                (flexvector->list values))))")
+    "(#t 5 (a b c d e) #t (a b c))"))
   (should
    (equal
     (consent-library-test--external
@@ -3434,12 +3439,36 @@
                      'vendored-adapted-implementation)
              (equal? (manifest-subfield entry 'provenance 'upstream-license)
                      \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
              (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (equal? (manifest-subfield entry 'provenance
+                                        'upstream-source-test-file)
+                     \"implementation/tests.scm\")
+             (equal?
+              (cdr
+               (assoc
+                \"implementation/tests.scm\"
+                (manifest-subfield entry 'provenance
+                                   'upstream-source-sha256)))
+              \"9e70ade72d91c96458530795bddb6b80cd9853b9ed5c65364d0648a7e02\
+04b69\")
              (equal? (manifest-subfield entry 'provenance
                                         'local-reference-documents)
                      '((path \"reference/srfi-214/srfi-214.md\")
                        (role specification)
                        (source srfi)))
+             (member
+              '(specification-repairs
+                (set-at-length append)
+                (remove-range-end optional))
+              (manifest-subfield entry 'provenance 'local-patches))
+             (member
+              '(adapted-tests
+                (file \"tests/scheme/stdlib-flexvectors-test.scm\")
+                (file
+                 \"tests/scheme/stdlib-flexvectors-upstream-test.scm\"))
+              (manifest-subfield entry 'provenance 'local-patches))
              (equal? (manifest-field entry 'aliases)
                      '((srfi 214)
                        (srfi srfi-214)
@@ -3450,7 +3479,74 @@
                        (library (scheme case-lambda))
                        (library (scheme cxr))
                        (library (consent growable-vector))))
-             (member 'generator->flexvector (manifest-field entry 'exports))
+             (equal?
+              (manifest-field entry 'exports)
+              '(make-flexvector
+                flexvector
+                flexvector-unfold
+                flexvector-unfold-right
+                flexvector-copy
+                flexvector-reverse-copy
+                flexvector-append
+                flexvector-concatenate
+                flexvector-append-subvectors
+                flexvector?
+                flexvector-empty?
+                flexvector=?
+                flexvector-ref
+                flexvector-front
+                flexvector-back
+                flexvector-length
+                flexvector-add!
+                flexvector-add-front!
+                flexvector-add-back!
+                flexvector-add-all!
+                flexvector-append!
+                flexvector-remove!
+                flexvector-remove-front!
+                flexvector-remove-back!
+                flexvector-remove-range!
+                flexvector-clear!
+                flexvector-set!
+                flexvector-swap!
+                flexvector-fill!
+                flexvector-reverse!
+                flexvector-copy!
+                flexvector-reverse-copy!
+                flexvector-fold
+                flexvector-fold-right
+                flexvector-map
+                flexvector-map/index
+                flexvector-map!
+                flexvector-map/index!
+                flexvector-append-map
+                flexvector-append-map/index
+                flexvector-filter
+                flexvector-filter/index
+                flexvector-filter!
+                flexvector-filter/index!
+                flexvector-for-each
+                flexvector-for-each/index
+                flexvector-count
+                flexvector-cumulate
+                flexvector-index
+                flexvector-index-right
+                flexvector-skip
+                flexvector-skip-right
+                flexvector-binary-search
+                flexvector-any
+                flexvector-every
+                flexvector-partition
+                flexvector->vector
+                vector->flexvector
+                flexvector->list
+                reverse-flexvector->list
+                list->flexvector
+                reverse-list->flexvector
+                flexvector->string
+                string->flexvector
+                flexvector->generator
+                generator->flexvector))
              (equal? (manifest-field alias 'target) '(stdlib flexvectors))
              (equal? (manifest-field portable-alias 'target)
                      '(stdlib flexvectors))
