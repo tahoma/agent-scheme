@@ -281,8 +281,11 @@ releasing the inner map restores the outer entry's visibility.
 The borrowed host's identity adapter is reserved for host objects. Gambit uses
 its native identity table; other configured performance hosts provide SRFI 69
 identity hashing. The plain R7RS identity-alist fallback preserves correctness
-for legacy private reader syntax and other compatibility paths only; it carries
-no owned-heap asymptotic claim. Canonical heap-taking reads never call it.
+for legacy private reader syntax and other bounded compatibility paths only.
+Foreign datum import and export reserve at most 64 distinct host identities on
+that fallback and fail closed before a 65th identity could make association-list
+lookup quadratic. It carries no unbounded owned-heap asymptotic claim.
+Canonical heap-taking reads never call it.
 Cached source libraries with shared-datum labels use the fast identity adapter;
 on a compatibility host without one, realization reparses that source instead
 of routing the graph copy through the identity alist.
@@ -305,9 +308,19 @@ a public datum representation.
 - Copying an owned string range is O(output length) and does not project or
   index the unselected prefix and suffix through a host string.
 - Owned-to-owned import and export are O(V + E) in the visited graph and
-  allocate O(V); foreign-host import has that bound with the hash adapter.
+  allocate O(V); foreign-host import and export have that bound with the hash
+  adapter. Without it, the 64-identity compatibility envelope fails closed.
 - A scalar native call with no compound arguments performs no historical-heap
   synchronization.
+- Fresh native result, condition, and writeback compounds are charged once at
+  the source-equivalent value-node cost when import and reconciliation finish.
+  Reused borrowed identities are not allocated or charged again. Reconciliation
+  publishes native mutations before an aggregate budget stop, avoiding a
+  half-applied boundary transaction.
+- A no-bridge native result may return scalars and compounds already owned by
+  the active context without an identity map. Importing any fresh host or
+  cross-heap compound requires the hash-backed adapter and otherwise fails
+  closed.
 - Borrowed-host reconciliation is O(B) in the active call's graph, independent
   of heap age, earlier calls, and unrelated values.
 - Scalar callbacks and re-entrant calls are O(1) boundary work and cannot add a

@@ -299,7 +299,7 @@ whole chunk ships and its remaining entries can be migrated together.
   begin; link-only, no vendoring/copying
 - 0.18.2 — #692 Fix REPL agent quickstart scheme-scripter failure path
   Roadmap rationale: documentation/tutorial repair immediately after the
-  R7RS-large taxonomyslice; requires the local-model quickstart to make the
+  R7RS-large taxonomy slice; requires the local-model quickstart to make the
   `scheme-scripter` role produce executable R7RS Scheme, gate reviewer and
   memory prompts on evaluated facts, and provide paste-ready provider
   registrations for the small, recommended, and large local model profiles
@@ -350,10 +350,10 @@ whole chunk ships and its remaining entries can be migrated together.
   [#703](/tahoma/consent/issues/703)
 - 0.18.9 — #483 Document and enforce the public vs internal library surface
   Roadmap rationale: pulled forward before package/library resolution; marks
-  the three de-facto tiers indistinguishable to an importer today — public
+  the three de facto tiers indistinguishable to an importer today — public
   `(agent ...)`/`(scheme ...)`, internal evaluator passes, and internal model
   libraries — and records/enforces the boundary before the resolver can make
-  evaluator internalsde-facto API; blocks [#709](/tahoma/consent/issues/709),
+  evaluator internals de facto API; blocks [#709](/tahoma/consent/issues/709),
   [#484](/tahoma/consent/issues/484), [#682](/tahoma/consent/issues/682),
   [#681](/tahoma/consent/issues/681), and [#50](/tahoma/consent/issues/50)
 - 0.18.10 — #709 Quick-start generated-source gate imports unavailable (consent
@@ -361,7 +361,7 @@ whole chunk ships and its remaining entries can be migrated together.
   Roadmap rationale: quick-start import-boundary repair after public/internal
   library surface; resolves whether the documented generated-source tutorial
   should import `(consent eval)` or use a supported public sandbox wrapper
-  before agent-domainlayering and resolver expansion freeze the user import
+  before agent-domain layering and resolver expansion freeze the user import
   surface; follows [#483](/tahoma/consent/issues/483) and the generated-source
   loop [#700](/tahoma/consent/issues/700)
 - 0.18.11 — #711 REPL chrome: comment-only ready input should reprompt before
@@ -369,14 +369,14 @@ whole chunk ships and its remaining entries can be migrated together.
   Roadmap rationale: comment-only ready-prompt repair after the quick-start
   generated-source import repair; extends the #698 blank-ready-prompt invariant
   to R7RS line-comment atmosphere so default/comment and classic chrome do not
-  leave the next formvisually promptless; follows
+  leave the next form visually promptless; follows
   [#709](/tahoma/consent/issues/709)
 - 0.18.12 — #713 REPL imports do not persist reflection library registry state
   Roadmap rationale: reflection tutorial import-registry repair after the
   comment-only ready-prompt slice; makes incremental REPL submissions preserve
   imported-library registry state so `current-imports` and `library-bindings`
   agree with the imported `(agent reflect)` surface, and adds deterministic
-  tutorial-level REPLtests for the actual user context; follows
+  tutorial-level REPL tests for the actual user context; follows
   [#711](/tahoma/consent/issues/711)
 - 0.18.13 — #484 Make agent-domain library layering consistent (model vs API;
   stop overloading the consent namespace)
@@ -452,7 +452,7 @@ whole chunk ships and its remaining entries can be migrated together.
 - 0.18.28 — #870 test(stdlib): harden (stdlib testing) coverage
   Roadmap rationale: coverage-hardening slice after the portable
   testing-library shelf and before the portable-first harness correction;
-  adapts the officialSRFI 64 meta-test suite, adds Consent-specific regressions
+  adapts the official SRFI 64 meta-test suite, adds Consent-specific regressions
   for local patches, verifies specifier semantics, result properties, runner
   state, failure reporting, and compiled/self-hosted smoke coverage, and
   updates manifest test status before #659 depends on SRFI 64 as
@@ -471,7 +471,7 @@ whole chunk ships and its remaining entries can be migrated together.
   reference Markdown conversion; establishes portable Scheme tests as the
   canonical home for host-neutral semantics, migrates SRFI 180 reference-corpus
   coverage including `y_foundationdb_status.json` into the portable path, and
-  leaves Emacs ERT asrunner/adapter coverage unless a test is genuinely
+  leaves Emacs ERT as runner/adapter coverage unless a test is genuinely
   host-specific; blocked by [#614](/tahoma/consent/issues/614),
   [#870](/tahoma/consent/issues/870), [#187](/tahoma/consent/issues/187),
   [#195](/tahoma/consent/issues/195), [#196](/tahoma/consent/issues/196),
@@ -499,17 +499,17 @@ whole chunk ships and its remaining entries can be migrated together.
 - 0.18.34 — #350 Define self-hostable portable numeric backend
   Roadmap rationale: compiled-self-host conformance repair for the inexact
   special-value fixture and the owned exact/inexact representation needed by
-  later Tangerine andcompiled-runtime work; follows shipped numeric-tower,
+  later Tangerine and compiled-runtime work; follows shipped numeric-tower,
   inexact-ownership, and multi-host bootstrap work
 - 0.18.35 — #349 Own portable character model and Unicode semantics
   Roadmap rationale: owned-value prerequisite for metacircular self-host
-  validation; followsshipped core-data, multi-host bootstrap, and
+  validation; follows shipped core-data, multi-host bootstrap, and
   character-externalization work
 - 0.18.36 — #962 style: enforce narrow-width readability for source and
   conformance cases
   Roadmap rationale: repository-wide readability correction after the
   character-model slice exposes the fixture problem; replaces opaque
-  string-only fixtureprograms and expectations with structured or file-backed
+  string-only fixture programs and expectations with structured or file-backed
   forms, remediates existing first-party code, adopts a 79-column limit, and
   adds format-aware required CI enforcement before more conformance cases
   accumulate

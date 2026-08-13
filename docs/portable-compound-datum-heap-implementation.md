@@ -1,4 +1,4 @@
-# Portable Compound Datum Heap Implementation Plan
+# Portable Compound Datum Heap Implementation Record
 
 > Keep Scheme-visible compound semantics in `(consent datum)`. Treat every
 > host container outside the parser, evaluator control domain, or explicit ABI
@@ -187,40 +187,61 @@ that call's identity registry.
 6. Run direct parity, both self-hosted compiled lanes, readability/lint gates,
    and the full test suite before publication.
 
+## Task 8: Close the measured integration blast radius
+
+The owned representation made several pre-existing linearity and ownership
+boundaries material in product paths. The final branch retains the completed
+fixes because they are covered behavior, not speculative benchmark prototypes:
+
+1. `(agent memory-key)` prepares exact detached keys for arbitrary finite
+   cyclic or shared datums by minimizing their deterministic term graph and
+   numbering the quotient canonically. Repeated roots share descriptors through
+   dynamic preparation sessions and a store-lifetime interner.
+2. `(agent memory)` keeps canonical records as the source of truth while
+   maintaining rebuildable live-key, per-scope live-order, latest-access, and
+   descriptor indexes. Small indexes remain inline up to a fixed limit of 16
+   entries and then upgrade permanently to persistent AVL trees.
+3. Append-time sidecars detach identity-sensitive key, id, kind, tag, and
+   classification projections. `(agent memory-query)` receives only current live
+   records, those sidecars, access maxima, and the scalar next-id clock; it does
+   not recover equality from borrowed mutable record fields.
+4. Single-pattern find uses prepared KMP state over sequential host-string
+   traversal. Selection uses one Aho-Corasick-style automaton for all distinct
+   text terms, preserving multiplicity without scanning every record once per
+   term. Canonical key identity and bounded content fallbacks avoid an all-pairs
+   comparison cache.
+5. The OpenAI codec validates pair/vector request graphs with an iterative
+   active-color traversal, permits shared acyclic graphs, rejects cycles, and
+   bounds plain-R7RS compatibility depth at 64. Provider-error URL extraction is
+   sequential rather than repeatedly indexing variable-width host strings.
+6. The redaction kernel uses one sequential fixed-state scanner and escapes on
+   the first exact marker. Traversal, replacement, logs, trust, and policy stay
+   in the source facade.
+7. Foreign datum import and export reserve at most 64 distinct host identities
+   without hash-backed identity maps. Bulk memory-key compatibility sessions
+   use the same fixed 64-entry ceiling. These envelopes fail closed before a
+   linear identity alist can become a quadratic heap algorithm.
+8. Fresh native result, condition, and writeback topology is charged once at
+   source-equivalent value-node cost after reconciliation. Reused borrowed
+   identities are not charged again; no-bridge fresh host or cross-heap
+   compounds require hash-backed identity maps.
+
 ## Objective performance verification
 
 The first frozen end-to-end comparison used one local machine and Gambit. `A`
 was the unowned `origin/main` implementation at `722e301e7073`; `B` was the
-initial owned-heap snapshot, before the source-realization follow-up described
-below. The SHA-256 of the complete `scheme/` file digest for that `B`, both
-before and after the run sequence, was:
+initial owned-heap snapshot, before the source-realization and performance work
+described below. The SHA-256 of the complete `scheme/` file digest for that `B`,
+both before and after the run sequence, was:
 
 `64e154c7ff89c34c3fe35d1a111616cb2ab26ca0a098d31ac9a571ef9381f021`
 
-Both targets ran the same frozen evaluator test file, whose SHA-256 was:
-
-`c9431a67aabd123cce5d93788019006c58f56fdd2f30dd4c40fcb71b085d8c8c`
-
-The command template used the baseline wrapper for both targets:
-
-```sh
-BASE=/private/tmp/consent-347-base-bench
-BRANCH=/Users/tahoma/src/consent
-COMMON=/private/tmp/consent-347-ab-common.TXho9H
-PROGRAM="$COMMON/consent-eval-common-test.scm"
-RUNNER="$BASE/tools/run-portable-tests.sh"
-/usr/bin/time -p -l -o "$OUT/$LABEL.time" \
-  env CONSENT_GAMBIT=/opt/homebrew/bin/gsi \
-  CONSENT_TEST_SOURCE_METADATA=on \
-  CONSENT_TEST_DOCSTRING_RETENTION=full \
-  CONSENT_TEST_MAX_SOURCE_METADATA=250000 \
-  CONSENT_PORTABLE_HOST=gambit \
-  CONSENT_PORTABLE_PROGRAM="$PROGRAM" \
-  CONSENT_TEST_TARGET_ROOT="$TARGET" \
-  "$RUNNER" >"$OUT/$LABEL.out" 2>"$OUT/$LABEL.err"
-```
-
-`TARGET` alternated between `BASE` and `BRANCH` in the sequence
+Both targets ran the same frozen evaluator workload through the baseline
+wrapper. Its transient copy was not retained as a durable repository artifact,
+so this table records historical development evidence rather than a current
+reproduction recipe. New matched comparisons must use durable Git worktrees and
+checked-in programs. The target alternated between baseline and branch in the
+sequence
 `A1-B1-A2-B2-A3`. The raw results were:
 
 | Run | Wall seconds | Peak RSS bytes | Cases | Passes |
@@ -268,17 +289,16 @@ near-4x doubling became near-2x linear scaling. Deterministic probe-count and
 allocation tests enforce that structural bound without making wall-clock
 timing a correctness gate.
 
-### Final frozen implementation and compiled verification
+### Current implementation and verification
 
-The final performance work kept the fast source-copy registry, compact source
-notes, native host identity tables, and allocation-free fixed-marker matching.
-The complete final `scheme/` digest is:
+The current implementation keeps the fast source-copy registry, compact source
+notes, native host identity tables, bounded compatibility envelopes, and the
+final memory, codec, redaction, and native-result work described above. Its
+path-sensitive `scheme/` digest is:
 
-`1796921d50d9c0de86e99e466401c81b5fa90c33b20d21d57e67c99e8048e9d1`
+`b24f7ca558cc50555b14cacba5031b00666e550d212bb1a915219f14feb9a76d`
 
-It remained unchanged through both final builds and every A/B run. The digest
-is path-sensitive because its inner records contain relative file names. It was
-produced from the repository root with:
+It was produced from the repository root with:
 
 ```sh
 find scheme -type f -print0 |
@@ -287,30 +307,28 @@ find scheme -type f -print0 |
   shasum -a 256
 ```
 
-Fresh final artifacts reported Consent Scheme 0.18.38. Their compiler image
-had 51 declared roots, 53 resolved compilation units, 90 embedded or installed
-source files, and 19 exact native-registration roots. The matched artifact
-hashes were:
+The runtime reports Consent Scheme 0.18.38. Its compiler image has 51 declared
+roots, 54 resolved compilation units, 91 embedded or installed source files,
+and 19 exact native-registration roots. The selective native inventories remain
+54 procedures and 10 constants.
 
-- Baseline Gambit 0.18.37:
-  `92840b80377dfad2e2530e5033eed27f674929c3208ac41103eb508a96c289a5`
-- Final Gambit 0.18.38:
-  `979aa986e8272a3a42e81ec5131099bcce2e060befd45af3494cf0691d4f6f83`
-- Baseline Racket 0.18.37:
-  `0154596da29abef978845f6b5d2d2fb8ffa0994d27bc6b960b456e081dc53780`
-- Final Racket 0.18.38:
-  `f0b7d7ac62614a4bc5a0f196ae3785874b503f6f78a2a3fdb26769c7593d9eaf`
+Binary hashes are intentionally not recorded here. The binaries present in the
+development checkout predate the final source graph; assigning their hashes to
+this digest would create false provenance. The required CI build jobs compiled
+and exercised fresh Gambit and Racket products from the current commit. A future
+release artifact ledger should record hashes only from the final rebuilt and
+published artifacts.
 
 #### Selective native kernels
 
 The final image does not native-register retaining source facades merely to
-make the benchmark green. It registers three new pure, callback-free,
-non-retaining kernels, each with a fail-closed procedure inventory and zero
-data bindings:
+make a benchmark green. It registers three pure, callback-free, non-retaining
+kernels, each with a fail-closed procedure inventory and zero data bindings:
 
 - `(agent memory-query)` has four procedures for find, tag, recent, and
   selection queries. `(agent memory)` retains the sole mutable store,
-  persistent indexes, and every mutation and replacement operation.
+  persistent indexes, append-time sidecars, interner, and every mutation and
+  replacement operation.
 - `(agent models openai-codec)` has three procedures for request projection,
   response parsing, and provider-error record projection. `(agent models
   openai)` retains endpoint choice, transport, retry, callbacks, redaction,
@@ -319,8 +337,9 @@ data bindings:
   redaction)` retains traversal, policy, replacement, logs, local-only state,
   provider safety, and pass ordering.
 
-Each isolated compiled prototype used an unchanged workload and binary except
-for the named candidate:
+The following isolated compiled prototypes are historical candidate evidence.
+Each used an unchanged workload and binary except for the named candidate; none
+is an additive prediction or a substitute for a final product comparison.
 
 | Isolated compiled prototype | Before | After | Change |
 | --- | ---: | ---: | ---: |
@@ -331,103 +350,60 @@ for the named candidate:
 | Redaction scanner, exact corpus | 1.47s | 1.25s | -0.22s (-15.0%) |
 | Redaction scanner, expanded corpus | 3.77s | 3.18s | -0.59s (-15.6%) |
 
-The redaction diagnostic also records the algorithmic cause rather than only
-wall time. The allocation-free source scanner was already linear, but its
-interpreted work grew once per input character. Moving only that pure scan into
-the stateless compiled kernel made evaluator work essentially independent of
-diagnostic length while the source facade retained policy and logging:
+A generated-source codec was rejected after 0.58s to 0.57s proved to be noise.
+An inline-pair prototype produced no product improvement. An environment
+identity index recovered only 1.7% to 4.9% in product runs and did not justify
+its additional cache-coherence surface.
 
-| Diagnostic length | Before steps | Final steps |
-| ---: | ---: | ---: |
-| 1 | 12,420 | 11,630 |
-| 240 | 41,648 | 11,630 |
-| 1,000 | 134,368 | 11,630 |
-| 4,096 | 512,090 | 11,640 |
+#### Superseded matched comparisons
 
-These prototype results establish the effect of each candidate; they are not
-treated as additive predictions. The final product comparisons below remain
-the authority. A generated-source codec was rejected after 0.58s to 0.57s
-proved to be noise. An inline-pair prototype produced no product improvement.
-An environment identity index recovered only 1.7% to 4.9% in product runs and
-did not justify its additional cache-coherence surface.
+An earlier revision of this record called an intermediate matched A/B table
+"final." It measured the tree before the memory-key canonicalizer, live indexes,
+multi-pattern matcher, bounded graph compatibility, final codec and redaction
+algorithms, native-result charging, and CI restoration landed. Its digest,
+artifact hashes, per-program timings, and percentage conclusions therefore do
+not describe the current implementation and have been removed.
 
-#### Final matched A/B
+The complete current-code matrix used for this record is
+[GitHub Actions run 31663367899](https://github.com/tahoma/consent/actions/runs/31663367899).
+Every required check passed. Representative current-commit wall times include:
 
-The compiled comparisons used clean `origin/main` at `722e301e7073`, the same
-machine and environment, and `/usr/bin/time -p`. Every program ran three times
-in the balanced order base/current, current/base, base/current. The agent
-comparison ran the frozen baseline test files against both libraries; the
-random and property files were byte-identical between the two trees. Source
-metadata was enabled, docstrings were retained in full, and the source-metadata
-limit was 250,000.
+| Current final-tree CI surface | Wall time |
+| --- | ---: |
+| Chibi direct evaluator | 447s |
+| Guile direct evaluator | 358s |
+| Racket-compiled agent shard | 244s |
+| Gambit-compiled agent shard | 227s |
+| Racket-compiled memory program | 210s |
+| Gambit-compiled memory program | 201s |
+| Emacs memory query performance shard | 123s |
+| Emacs memory-key refinement performance shard | 117s |
 
-The Gambit agent corpus exposed every remaining program-level residual. Times
-are median real seconds:
+These CI values prove final-tree execution and expose current hot paths; they do
+not constitute a same-machine baseline comparison. A release-level percentage
+claim requires a new balanced baseline/current run over the current checked-in
+programs and this exact `scheme/` digest. This record makes no such claim from
+the superseded measurements.
 
-| Program | Baseline | Final | Change |
-| --- | ---: | ---: | ---: |
-| Transcript | 0.32 | 0.26 | -0.06 (-18.8%) |
-| Session store | 0.31 | 0.28 | -0.03 (-9.7%) |
-| Context | 0.45 | 0.41 | -0.04 (-8.9%) |
-| Network | 0.33 | 0.28 | -0.05 (-15.2%) |
-| Plan | 0.49 | 0.51 | +0.02 (+4.1%) |
-| VCS | 0.98 | 0.92 | -0.06 (-6.1%) |
-| Memory | 0.52 | 0.74 | +0.22 (+42.3%) |
-| Registry | 0.44 | 0.47 | +0.03 (+6.8%) |
-| Proposal | 0.44 | 0.46 | +0.02 (+4.5%) |
-| Runner | 0.55 | 0.63 | +0.08 (+14.5%) |
-| Reliability | 0.91 | 0.92 | +0.01 (+1.1%) |
-| Prompt | 0.58 | 0.78 | +0.20 (+34.5%) |
-| Generated source | 0.41 | 0.54 | +0.13 (+31.7%) |
-| OpenAI | 1.16 | 1.24 | +0.08 (+6.9%) |
+#### Final semantic and scaling gates
 
-All timed program executions exited successfully and retained result parity.
-The aggregate medians were:
+Focused current-tree direct Gambit runs report:
 
-| Host and workload | Executions | Baseline | Final | Real-time change |
-| --- | ---: | ---: | ---: | ---: |
-| Gambit agent | 84/84 | 7.90s | 8.45s | +0.55s (+7.0%) |
-| Gambit random | 30/30 | 82.13s | 86.61s | +4.48s (+5.5%) |
-| Gambit property | 12/12 | 33.79s | 28.19s | -5.60s (-16.6%) |
-| Racket property | 12/12 | 40.18s | 32.42s | -7.76s (-19.3%) |
+- `(agent memory)`: 44 cases and 224 assertions;
+- `(consent datum)`: 60 cases and 295 assertions;
+- `(consent reader)`: 111 cases and 318 assertions; and
+- compiler-plan and testing-plan invariants covering 51 roots, 54 units,
+  19 native roots, and the 65-program direct/45-program compiled partitions.
 
-Median user time moved 7.74s to 8.26s for the agent corpus (+6.7%),
-81.61s to 86.09s for random (+5.5%), 33.63s to 28.04s for Gambit property
-(-16.6%), and 38.74s to 31.27s for Racket property (-19.3%).
+The complete CI matrix additionally passes Emacs/portable parity, the five
+direct portable hosts including required Chibi, both compiled self-hosts,
+readability, SPDX/REUSE, branding, and the deterministic memory scaling shards.
+The no-hash poison gate covers the owned reader plus foreign native-result
+rejection without invoking the quadratic identity-list adapter.
 
-The random per-program real medians were 0.39s to 0.35s for random bits,
-13.15s to 13.91s for the upstream SRFI 27 corpus, 0.40s to 0.35s for
-distributions, 1.68s to 1.46s for data generators, and 66.47s to 70.53s for
-the upstream generator corpus. Gambit property moved 21.07s to 16.88s for the
-main corpus and 12.74s to 11.36s upstream. Racket property moved 24.83s to
-19.27s for the main corpus and 15.40s to 13.15s upstream.
-
-The compiled agent aggregate therefore still has a measured 7.0% real-time
-regression, with memory, prompt, and generated source the largest remaining
-program residuals. This is an optimization target, not a result dismissed by
-the release threshold. The random aggregate likewise remains 5.5% slower.
-Conversely, the property workloads are materially faster on both compiled
-hosts.
-
-Both complete compiled selectors passed 45/45 programs with zero failed or
-missing results: Gambit took 90.94s, with random/property/library/agent/runtime/
-integration shards at 91/32/71/29/21/3 seconds; Racket took 100.71s, with those
-shards at 101/36/89/41/29/4 seconds. Direct hosts retain the full 64/256/1024
-memory-index stress ladders. Compiled host-run uses explicit 8/32/128 ladders
-to keep the same scaling assertions without multiplying source-interpreter
-work. Earlier 106s Gambit and 118s Racket memory-program observations were
-test-volume amplification and are superseded, not product improvements. The
-final bounded memory program took 17s on Gambit and 22s on Racket. The
-`scheme/` digest and both binary hashes matched before and after these gates.
-
-#### Interpreted-path caveat
-
-One direct Emacs ERT cold-loads and exercises the internal reader and memory
-query source graph in a single evaluator context. Two final measurements took
-18.41s and 19.25s, with 275,962 evaluator steps and 40,752 host callbacks.
-That interpreted cold-load remains expensive. The test has an explicit
-500,000-step and 50,000-callback allowance for this bounded bootstrap; no
-runtime default or production source-call budget was raised. The production
-adapter invocation was separately observed at 32 evaluator steps and zero host
-callbacks. This distinction does not erase the direct interpreted cost; it
-keeps that cost separate from the compiled product measurements above.
+The interpreted memory tests remain intentionally visible rather than folded
+into product timings. On that CI run, the four Emacs memory query scaling
+tests took 121.480s, the memory-key refinement proof took 116.408s, and the
+bounded source-backed no-hash route took 25.596s. Those tests exercise cold
+source realization and deterministic four-corner work envelopes; they do not
+raise any production evaluator default.

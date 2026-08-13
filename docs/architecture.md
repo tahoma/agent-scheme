@@ -179,6 +179,19 @@ storage so public repositories do not accidentally capture personal memory.
 Any tracked or indexed form remains a rebuildable view over canonical
 Scheme-readable memory records.
 
+The current portable store snapshots each public `(scope, key)` datum into a
+detached canonical descriptor. Finite cyclic and shared term graphs are
+minimized before canonical numbering, so descriptor equality follows Scheme
+graph equality without retaining the caller's mutable key. A store-lifetime
+interner shares equal descriptors. Rebuildable inline-or-AVL indexes maintain
+live values, per-scope append order, and latest access sequence while the
+append-only record stream remains authoritative. Query kernels receive current
+live records and detached sidecars rather than deriving identity from borrowed
+mutable record fields. Single-pattern search uses prepared linear matching;
+selection scans all distinct text terms through one multi-pattern automaton.
+Plain-R7RS compatibility sessions cap identity tracking at 64 entries and fail
+closed before a fallback association list can become quadratic.
+
 ### Agent-Layer Determinism and Cross-Host Parity
 
 The First-Class Portable Scheme parity invariant above is a property of the
@@ -374,15 +387,19 @@ each call-scoped owned lookup takes one header probe and release restores any
 outer traversal. Gambit uses its native identity table for foreign host objects;
 other configured performance hosts use SRFI 69 identity hashing. A plain
 R7RS-small identity-alist fallback preserves semantics for legacy private reader
-syntax and other compatibility paths only; it is not part of the owned heap
-asymptotic contract. Canonical heap-taking reads never call that adapter.
+syntax and other bounded compatibility paths only. Foreign datum import and
+export reserve at most 64 distinct host identities on that fallback and fail
+closed before a 65th identity could make lookup quadratic; the fallback is not
+part of the unbounded owned-heap asymptotic contract. Canonical heap-taking reads
+never call that adapter.
 Borrowed native transitions fail closed when their required hash-backed adapter
 is unavailable; the portable source realization remains available.
 
 The compound boundary has an explicit complexity contract. Allocation,
 identity lookup, access, and mutation are amortized constant time. Owned graph
-copy and export visit each node and edge once; foreign-host import has the same
-bound on a hash-backed adapter. Direct owned reading is linear in source plus
+copy and export visit each node and edge once; foreign-host import and export
+have the same bound on a hash-backed adapter and use the fixed 64-identity
+fail-closed envelope otherwise. Direct owned reading is linear in source plus
 the published graph and allocates exactly one heap object per compound datum;
 datum-label bookkeeping uses one-header owned maps. Prepared incremental reads
 reuse lexical preprocessing, making a sequence linear in the source plus its
@@ -395,6 +412,16 @@ ordinary call may scan historical mirrors or repeatedly rescan one borrow for
 nested transitions. Owned writer bookkeeping uses the same call-scoped
 one-header marks and assembles output fragments once, so its work follows the
 visited graph and emitted text.
+
+Fresh native result, condition, and writeback compounds are charged once at the
+same value-node cost as source constructors after import and reconciliation.
+Borrowed identities reused from the active call are neither allocated nor
+charged again. Reconciliation publishes native mutations before an aggregate
+budget stop so a failed charge cannot leave a half-applied boundary transaction.
+A native result that does not share an active graph bridge may return scalars or
+compounds already owned by the active context without an identity table; fresh
+host or cross-heap compounds require the hash-backed adapter and fail closed
+when it is unavailable.
 
 The complete representation and boundary contract is recorded in
 [Portable Compound Datum Heap Design](portable-compound-datum-heap-design.md).
