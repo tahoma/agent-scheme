@@ -456,6 +456,15 @@ Memory-key partition refinement and canonical quotient traversal use bounded
 worklists, as does breadth-first failure-link completion in the memory-query
 text automaton; all three release their temporary rings on every dynamic exit.
 
+`(consent dense-set)` imports growable storage for generation-stamped O(1)
+membership and small-color state over dense identifiers. Ordinary clear only
+advances a bounded generation; wraparound performs one counted physical scan
+before reusing generation one. Slots contain exact integer stamps rather than
+marked objects, and symbolic domains keep collector, query, writer, and graph
+ownership inspectably separate. Memory-key refinement uses independent sets for
+pending blocks and per-splitter state marks. The complete contract is recorded
+in [Generation-Stamped Dense Sets and Epoch Marks](dense-sets.md).
+
 #### Portable character ownership
 
 Language-visible characters are Consent-owned Unicode scalar values. Reader,

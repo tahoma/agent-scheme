@@ -663,6 +663,13 @@ The baseline and incremental collectors in #335 and #966 consume
 trace section and treat capacity exhaustion as a Scheme-readable collection
 failure, not as permission to allocate from the heap under collection.
 
+Generation-stamped membership and small-color state belong to
+`(consent dense-set)`, not to the arena's positional reset marks or the
+worklist's ordering state. Dense-set slots contain only encoded exact integers;
+ordinary clear advances an epoch without scanning capacity. See
+[Generation-Stamped Dense Sets and Epoch Marks](dense-sets.md) for wraparound,
+ownership-domain, accounting, and memory-key migration details.
+
 ## Verification
 
 `tests/scheme/consent-growable-vector-test.scm` covers zero and maximum capacity
