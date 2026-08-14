@@ -89,6 +89,54 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (consent dense-set))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "dense-set.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-make-dense-set
+          consent-dense-set?
+          consent-dense-set-active?
+          consent-dense-set-domain
+          consent-dense-set-empty?
+          consent-dense-set-size
+          consent-dense-set-capacity
+          consent-dense-set-maximum-capacity
+          consent-dense-set-maximum-generation
+          consent-dense-set-color-count
+          consent-dense-set-growth-policy
+          consent-dense-set-generation
+          consent-dense-set-reserve!
+          consent-dense-set-member?
+          consent-dense-set-color
+          consent-dense-set-mark!
+          consent-dense-set-unmark!
+          consent-dense-set-clear!
+          consent-dense-set-full-clear!
+          consent-dense-set-release!
+          consent-dense-set-integral-storage?
+          consent-dense-set-stats))
+        (dependencies
+         ((library (scheme base))
+          (library (consent growable-vector))))
+        (provenance
+         ((origin repo)
+          (representation generation-and-color-exact-integer)
+          (allocation-policy bounded-callback-free)
+          (growth-policies (allow-growth pre-reserved))
+          (clear-policy generation-advance-with-explicit-wrap)
+          (memory-lifecycle scalar-stamps-only)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (consent scratch-arena))
         (owner consent-core)
         (provider repo-source)

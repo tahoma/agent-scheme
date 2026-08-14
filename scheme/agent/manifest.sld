@@ -111,6 +111,7 @@
          ((library (scheme base))
           (library (consent character))
           (library (consent datum))
+          (library (consent dense-set))
           (library (consent identity-map))
           (library (consent reader))
           (library (consent growable-vector))

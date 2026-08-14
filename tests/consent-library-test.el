@@ -1320,6 +1320,8 @@
       (spec
        '(("(consent growable-vector)"
           . "scheme/consent/growable-vector.sld")
+         ("(consent dense-set)"
+          . "scheme/consent/dense-set.sld")
          ("(consent scratch-arena)"
           . "scheme/consent/scratch-arena.sld")
          ("(consent worklist)"
@@ -1382,6 +1384,32 @@
            (consent-growable-vector-capacity tuned))))"
      '(:internal-libraries-allowed t))
     "(3 3 filled left right #t 1 2 3/2 6)")))
+
+(ert-deftest consent-library-test-dense-set-runs-source-backed ()
+  "Exercise dense-set epochs through the Emacs source loader."
+  (should
+   (equal
+    (consent-library-test--external/options
+     "(import (scheme base)
+              (consent dense-set))
+      (let ((dense
+             (consent-make-dense-set
+              1 4 2 3 'allow-growth 'emacs-loader)))
+        (consent-dense-set-mark! dense 3 2)
+        (consent-dense-set-clear! dense)
+        (consent-dense-set-mark! dense 1)
+        (consent-dense-set-clear! dense)
+        (let ((stats (consent-dense-set-stats dense)))
+          (list
+           (consent-dense-set-domain dense)
+           (consent-dense-set-capacity dense)
+           (consent-dense-set-generation dense)
+           (consent-dense-set-member? dense 1)
+           (cadr (assq 'physical-clears (cdr stats)))
+           (cadr (assq 'physical-clear-slots (cdr stats)))
+           (consent-dense-set-integral-storage? dense))))"
+     '(:internal-libraries-allowed t))
+    "(emacs-loader 4 1 #f 1 4 #t)")))
 
 (ert-deftest consent-library-test-scratch-arena-runs-source-backed ()
   "Exercise scratch ownership and marks through the Emacs source loader."

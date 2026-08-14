@@ -51,6 +51,13 @@
               consent-datum-bytevector?
               consent-datum-bytevector-length
               consent-datum-bytevector-u8-ref)
+        (only (consent dense-set)
+              consent-make-dense-set
+              consent-dense-set-clear!
+              consent-dense-set-mark!
+              consent-dense-set-member?
+              consent-dense-set-release!
+              consent-dense-set-unmark!)
         (only (consent identity-map)
               consent-identity-map-fast-backend?
               consent-make-identity-map
@@ -89,6 +96,11 @@
 ;; the kernel runs directly on an R7RS bootstrap host.
 (define memory-key-maximum-growable-capacity 536870911)
 
+;; Generation stamps stay in the same bounded exact-integer profile as graph
+;; storage.  Wraparound remains correct if an adversarial refinement reaches
+;; the ceiling; ordinary keys do not approach it.
+(define memory-key-maximum-dense-generation 536870911)
+
 (define (make-memory-key-growable-vector)
   "Return bounded growable storage for one memory-key preparation."
   (consent-make-growable-vector
@@ -98,6 +110,16 @@
   "Return a bounded FIFO for at most MAXIMUM-CAPACITY graph states."
   (consent-make-worklist
    (min 16 maximum-capacity) maximum-capacity 'allow-growth))
+
+(define (make-memory-key-dense-set capacity domain)
+  "Return a pre-reserved one-color dense set for graph DOMAIN."
+  (consent-make-dense-set
+   capacity
+   capacity
+   memory-key-maximum-dense-generation
+   1
+   'pre-reserved
+   domain))
 
 ;;;; Exact observable labels.
 
@@ -1052,18 +1074,21 @@
          (state-prev (make-vector state-count -1))
          (block-head (make-vector state-count -1))
          (block-size (make-vector state-count 0))
-         (block-pending? (make-vector state-count #f))
-         (marked (make-vector state-count 0))
+         (block-pending
+          (make-memory-key-dense-set
+           state-count 'memory-key-block-pending))
+         (marked
+          (make-memory-key-dense-set
+           state-count 'memory-key-refinement-mark))
          (marked-members (make-vector state-count '()))
          (marked-count (make-vector state-count 0))
-         (generation 0)
          (block-count 0)
          (work (make-memory-key-worklist state-count)))
     (define (enqueue-block! block)
       "Enqueue BLOCK once as a pending partition splitter."
-      (if (not (vector-ref block-pending? block))
+      (if (not (consent-dense-set-member? block-pending block))
           (begin
-            (vector-set! block-pending? block #t)
+            (consent-dense-set-mark! block-pending block)
             (consent-worklist-push-back! work block))))
     (define (link-state! state block)
       "Insert STATE into BLOCK's intrusive member list."
@@ -1094,7 +1119,7 @@
               (loop (vector-ref state-next state))))))
     (define (split-by-predecessors! predecessors)
       "Refine touched blocks by PREDECESSORS using smaller-half scheduling."
-      (set! generation (+ generation 1))
+      (consent-dense-set-clear! marked)
       (let collect ((rest predecessors) (touched '()))
         (if (null? rest)
             (let finish ((blocks touched))
@@ -1146,11 +1171,11 @@
                     (vector-set! marked-count block 0)
                     (finish (cdr blocks)))))
             (let ((state (car rest)))
-              (if (= (vector-ref marked state) generation)
+              (if (consent-dense-set-member? marked state)
                   (collect (cdr rest) touched)
                   (let* ((block (vector-ref state-block state))
                          (count (vector-ref marked-count block)))
-                    (vector-set! marked state generation)
+                    (consent-dense-set-mark! marked state)
                     (vector-set! marked-members block
                                  (cons state
                                        (vector-ref marked-members block)))
@@ -1207,7 +1232,7 @@
              (let ((splitter (consent-worklist-pop-front! work))
                    (sources-0 '())
                    (sources-1 '()))
-               (vector-set! block-pending? splitter #f)
+               (consent-dense-set-unmark! block-pending splitter)
                (let snapshot ((state (vector-ref block-head splitter)))
                  (if (>= state 0)
                      (begin
@@ -1231,7 +1256,9 @@
                (refine))))
        (vector state-block block-head block-size block-count))
      (lambda ()
-       (consent-worklist-release! work)))))
+       (consent-worklist-release! work)
+       (consent-dense-set-release! marked)
+       (consent-dense-set-release! block-pending)))))
 
 ;;;; Canonical rooted quotient encoding.
 

@@ -78,6 +78,11 @@ does; retaining an ERT test does not make it the semantic source of truth.
 - `(consent growable-vector)` bounded growth, allocation counters, clearing,
   reset/release, and failure-state preservation are canonical in
   `tests/scheme/consent-growable-vector-test.scm`.
+- `(consent dense-set)` bounded membership, finite colors, generation clear and
+  forced wrap, scalar-only stale stamps, ownership domains, release/re-entry,
+  and model equivalence are canonical in
+  `tests/scheme/consent-dense-set-test.scm`. The portable plan runs it on direct
+  and compiled hosts; ERT retains an independent Emacs source-loader route.
 - `(consent scratch-arena)` ownership, marks, exception cleanup, continuation
   re-entry, and pre-reserved collector workloads are canonical in
   `tests/scheme/consent-scratch-arena-test.scm`. The portable plan runs both
