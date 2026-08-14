@@ -369,10 +369,12 @@
       (apply
        (case-lambda
         (()
-         (set-list-queue-first-pair! queue items)
-         (set-list-queue-last-pair!
-          queue
-          (proper-list-last-pair "list-queue-set-list!" items)))
+         (let ((last
+                (proper-list-last-pair
+                 "list-queue-set-list!"
+                 items)))
+           (set-list-queue-first-pair! queue items)
+           (set-list-queue-last-pair! queue last)))
         ((last)
          (check-explicit-ends "list-queue-set-list!" items last)
          (set-list-queue-first-pair! queue items)

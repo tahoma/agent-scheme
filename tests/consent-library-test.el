@@ -3696,7 +3696,18 @@
                           (lambda (value) value)
                           (lambda (value) (+ value 1))
                           0))")
-    "(0 1 2 3)")))
+    "(0 1 2 3)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib list-queue))
+      (let ((queue (list-queue 'kept)))
+        (list
+         (guard (condition (else #t))
+           (list-queue-set-list! queue '(invalid . tail))
+           #f)
+         (list-queue-list queue)))")
+    "(#t (kept))")))
 
 (ert-deftest consent-library-test-srfi-117-missing-export-diagnostic ()
   "Report missing SRFI 117 imports through the resolver diagnostic."
