@@ -3602,6 +3602,83 @@ ged "
  "#t"))
 
 (testing-registry-case
+ 'srfi-117-list-queue-behavior '(portable core)
+(check-external
+ 'srfi-117-list-queue-behavior
+ "(import (scheme base) (scheme list-queue))
+  (let* ((items (list 'a 'b))
+         (queue (make-list-queue items (cdr items)))
+         (result
+          (list-queue-append! queue (list-queue) (list-queue 'c 'd))))
+    (list-queue-add-back! result 'e)
+    (list (eq? items (list-queue-list result))
+          (list-queue-front result)
+          (list-queue-back result)
+          (list-queue-list result)))"
+ "(#t a e (a b c d e))"))
+
+(testing-registry-case
+ 'srfi-117-numeric-alias-import '(portable core)
+(check-external
+ 'srfi-117-numeric-alias-import
+ "(import (scheme base) (srfi 117))
+  (list-queue-list
+   (list-queue-map (lambda (value) (* value value))
+                   (list-queue 1 2 3)))"
+ "(1 4 9)"))
+
+(testing-registry-case
+ 'srfi-117-portable-alias-import '(portable core)
+(check-external
+ 'srfi-117-portable-alias-import
+ "(import (scheme base) (srfi srfi-117))
+  (list-queue-list
+   (list-queue-unfold (lambda (value) (> value 3))
+                      (lambda (value) value)
+                      (lambda (value) (+ value 1))
+                      0))"
+ "(0 1 2 3)"))
+
+(testing-registry-case
+ 'srfi-117-missing-export-diagnostic '(portable core)
+(check 'srfi-117-missing-export-diagnostic
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base)
+                    (only (srfi 117) missing-list-queue-helper))
+            missing-list-queue-helper")))
+       #t))
+
+(testing-registry-case
+ 'stdlib-srfi-117-manifest '(portable core)
+(check-external
+ 'stdlib-srfi-117-manifest
+ (stdlib-manifest-source
+  "(let ((entry (stdlib-manifest-ref '(stdlib list-queue)))
+         (scheme-alias (stdlib-manifest-ref '(scheme list-queue)))
+         (alias (stdlib-manifest-ref '(srfi 117)))
+         (portable-alias (stdlib-manifest-ref '(srfi srfi-117))))
+     (and (eq? (car entry) 'manifest-entry)
+          (equal? (manifest-field entry 'status)
+                  'vendored-adapted-implementation)
+          (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                  \"BSD-3-Clause\")
+          (equal? (manifest-field entry 'aliases)
+                  '((scheme list-queue)
+                    (srfi 117)
+                    (srfi srfi-117)))
+          (equal? (manifest-field entry 'dependencies)
+                  '((library (scheme base))
+                    (library (scheme case-lambda))))
+          (equal? (manifest-field scheme-alias 'target)
+                  '(stdlib list-queue))
+          (equal? (manifest-field alias 'target) '(stdlib list-queue))
+          (equal? (manifest-field portable-alias 'target)
+                  '(stdlib list-queue))))")
+ "#t"))
+
+(testing-registry-case
  'srfi-180-json-read '(portable core)
 (check-external 'srfi-180-json-read
                 (string-append
@@ -3966,8 +4043,9 @@ ash))
 
 (testing-registry-case
  'stdlib-mapping-manifest '(portable core)
-(check-external 'stdlib-mapping-manifest
-                (stdlib-manifest-source
+(check-external/options
+ 'stdlib-mapping-manifest
+ (stdlib-manifest-source
                  "(let ((entry (stdlib-manifest-ref '(stdlib mapping)))
                        (scheme-alias
                         (stdlib-manifest-ref '(scheme mapping)))
@@ -4001,7 +4079,8 @@ ash))
                         (equal? (manifest-field portable-alias 'target)
                                 '(stdlib mapping))
                         (not hash-alias)))")
-                "#t"))
+ '((max-host-callbacks . 20000))
+ "#t"))
 
 (testing-registry-case
  'base-list-helpers '(portable core)
