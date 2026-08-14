@@ -55,7 +55,6 @@
               consent-make-dense-set
               consent-dense-set-clear!
               consent-dense-set-mark!
-              consent-dense-set-member?
               consent-dense-set-release!
               consent-dense-set-unmark!)
         (only (consent identity-map)
@@ -1086,10 +1085,8 @@
          (work (make-memory-key-worklist state-count)))
     (define (enqueue-block! block)
       "Enqueue BLOCK once as a pending partition splitter."
-      (if (not (consent-dense-set-member? block-pending block))
-          (begin
-            (consent-dense-set-mark! block-pending block)
-            (consent-worklist-push-back! work block))))
+      (if (not (consent-dense-set-mark! block-pending block))
+          (consent-worklist-push-back! work block)))
     (define (link-state! state block)
       "Insert STATE into BLOCK's intrusive member list."
       (let ((head (vector-ref block-head block)))
@@ -1171,11 +1168,10 @@
                     (vector-set! marked-count block 0)
                     (finish (cdr blocks)))))
             (let ((state (car rest)))
-              (if (consent-dense-set-member? marked state)
+              (if (consent-dense-set-mark! marked state)
                   (collect (cdr rest) touched)
                   (let* ((block (vector-ref state-block state))
                          (count (vector-ref marked-count block)))
-                    (consent-dense-set-mark! marked state)
                     (vector-set! marked-members block
                                  (cons state
                                        (vector-ref marked-members block)))
