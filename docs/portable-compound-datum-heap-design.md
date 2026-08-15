@@ -279,9 +279,10 @@ one lookup performs one header probe and scope release restores any outer mark.
 While an inner map is current, an outer map lookup is intentionally absent;
 releasing the inner map restores the outer entry's visibility.
 The borrowed host's identity adapter is reserved for host objects. Gambit uses
-its native identity table; other configured performance hosts provide SRFI 69
-identity hashing. The plain R7RS identity-alist fallback preserves correctness
-for legacy private reader syntax and other bounded compatibility paths only.
+its native `eq?-hash`; other configured performance hosts provide SRFI 69
+identity hashing. Table storage and policy remain portable Scheme. The plain
+R7RS identity-alist fallback preserves correctness for legacy private reader
+syntax and other bounded compatibility paths only.
 Foreign datum import and export reserve at most 64 distinct host identities on
 that fallback and fail closed before a 65th identity could make association-list
 lookup quadratic. It carries no unbounded owned-heap asymptotic claim.

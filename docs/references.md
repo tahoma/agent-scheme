@@ -15,7 +15,10 @@ prior art for typed documentation metadata, library-edge contract hints, and
 type-related context for coding agents; in
 [Runtime Heap and Native-Boundary References](#runtime-heap-and-native-boundary-references),
 established handle-lifetime, root, and mutation-barrier designs for the owned
-datum heap and borrowed-host ABI; and in
+datum heap and borrowed-host ABI; in
+[Hash-table references](#hash-tables-identity-and-persistent-map-references),
+moving-collector identity hashing, weak reachability, persistent hash mappings,
+and collision resistance; and in
 [Scheme and Lisp Prior-Art Corpus](scheme-lisp-prior-art.md), the broader
 Scheme/Lisp application, library, tooling, runtime, and book-code corpus that
 should inform Consent Scheme without becoming normative. Keep
@@ -132,6 +135,72 @@ instead of repeated scans of historical heap state.
   regions. Consent's mutation observer is not a collector, but it follows the
   same ownership rule: record writes at the write gateway instead of
   rediscovering them by scanning unrelated history.
+
+## Hash Tables, Identity, and Persistent-Map References
+
+These references separate concerns that should not collapse into one table
+implementation: public mutable APIs, identity hashing under a moving collector,
+weak reachability, persistent hash mappings, and collision resistance for
+attacker-controlled keys. Consent's current fixed-policy identity tables use
+stable owned identifiers or a host-provided stable identity hash; collector
+techniques below are prior art for the eventual standalone runtime, not a claim
+that the portable implementation uses address hashing or collector hooks.
+
+### Scheme identity hashing and weak reachability
+
+- Abdulaziz Ghuloum and R. Kent Dybvig's
+  [Generation-Friendly Eq Hash Tables](https://www.schemeworkshop.org/2007/procPaper3.pdf)
+  (Scheme and Functional Programming 2007) addresses identity hashes under a
+  moving generational collector. Its transport-link-cell design makes repair
+  work follow keys that actually move rather than the total size of every live
+  identity table.
+- The [MIT/GNU Scheme hash-table manual](https://www.gnu.org/software/mit-scheme/documentation/stable/mit-scheme-ref/Hash-Tables.html)
+  documents a contrasting address-hash design: tables declare that hashes can
+  change, and the runtime rehashes them after collection. It also records why
+  SRFI 69's callback and hash-stability contract prevents that optimization
+  from being exposed portably without additional constraints.
+- [SRFI 69](https://srfi.schemers.org/srfi-69/),
+  [SRFI 125](https://srfi.schemers.org/srfi-125/),
+  [SRFI 126](https://srfi.schemers.org/srfi-126/), and
+  [SRFI 250](https://srfi.schemers.org/srfi-250/) define the mutable Scheme
+  hash-table lineage scheduled around `(scheme hash-table)`. Their rationales
+  distinguish the basic compatibility surface, implementation-selected
+  identity hashing, R6RS naming, and insertion-order semantics.
+- Barry Hayes's
+  [Ephemerons: A New Finalization Mechanism](https://doi.org/10.1145/263698.263733)
+  (OOPSLA 1997) explains why an ordinary weak key/value pair is insufficient
+  when a value can retain its key. [SRFI 254](https://srfi.schemers.org/srfi-254/)
+  carries ephemerons and guardians into a current Scheme library contract and
+  makes the required collector cooperation explicit.
+
+### Persistent hash mappings
+
+- Phil Bagwell's
+  [Ideal Hash Trees](https://infoscience.epfl.ch/entities/publication/b892b2ce-7bf0-41d2-b68c-fb44a3c64a33)
+  (2001) introduces the hash-array mapped trie family used by many persistent
+  map implementations.
+- Michael J. Steindorfer and Jurgen J. Vinju's
+  [Optimizing Hash-Array Mapped Tries for Fast and Lean Immutable JVM Collections](https://doi.org/10.1145/2814270.2814312)
+  (OOPSLA 2015) develops compact, cache-conscious HAMT layouts and evaluates
+  representation size as well as lookup, iteration, and equality costs.
+- Sona Torosyan, Jon Zeppieri, and Matthew Flatt's
+  [Runtime and Compiler Support for HAMTs](https://doi.org/10.1145/3486602.3486931)
+  (DLS 2021) describes Racket's stencil-vector support for compact HAMTs. It is
+  the most direct Lisp-family reference for deciding which representation help
+  belongs in portable Scheme and which belongs in a future runtime or compiler.
+
+### Collision resistance for untrusted keys
+
+- Scott A. Crosby and Dan S. Wallach's
+  [Denial of Service via Algorithmic Complexity Attacks](https://www.usenix.org/conference/12th-usenix-security-symposium/denial-service-algorithmic-complexity-attacks)
+  (USENIX Security 2003) demonstrates that attacker-selected collisions can
+  force ordinary expected-constant-time tables into worst-case behavior.
+- Jean-Philippe Aumasson and Daniel J. Bernstein's
+  [SipHash: a fast short-input PRF](https://eprint.iacr.org/2012/351.pdf)
+  (INDOCRYPT 2012) designs a keyed short-input function specifically suited to
+  defending content-keyed tables against hash flooding. It is relevant when a
+  public table accepts attacker-controlled strings or symbols; it is not a
+  replacement for fixed-policy object-identity hashing.
 
 ## R7RS-Large References
 

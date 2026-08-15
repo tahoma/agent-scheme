@@ -312,6 +312,10 @@ across the supported R7RS hosts.
 - Chris Okasaki, *Purely Functional Data Structures*, Cambridge University
   Press, 1998, describes the persistent-container techniques that make shared
   bases and inexpensive snapshots practical.
+- The project bibliography's
+  [persistent hash-mapping references](../../../docs/references.md#persistent-hash-mappings)
+  cover HAMT base representations that can implement this adapter without
+  changing the transient-map contract.
 
 ## Copyright
 

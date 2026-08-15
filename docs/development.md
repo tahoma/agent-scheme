@@ -678,10 +678,11 @@ make clean-compile && make install   # exits 2: "run `make compile` first"
 The host is chosen with `CONSENT_COMPILE_HOST`, which **defaults to Gambit**. The
 Gambit binary (`gsc -exe -nopreload`) is a standalone native executable:
 relocatable, with no runtime dependency, so the default install flow produces an
-artifact that works on a machine without a Scheme toolchain. The build
-uses Gambit's built-in identity tables, so the hot graph registry has no
-external module dependency. Its startup smoke hides the build host's Gambit
-module tree, so any accidentally unlinked dependency fails before the
+artifact that works on a machine without a Scheme toolchain. The build uses
+Gambit's built-in `eq?-hash` behind Consent's identity adapter, while table
+storage and policy remain portable Scheme. The hot graph registry therefore
+has no external module dependency. Its startup smoke hides the build host's
+Gambit module tree, so any accidentally unlinked dependency fails before the
 standalone artifact is published:
 
 ```sh
