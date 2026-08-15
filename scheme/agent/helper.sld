@@ -20,6 +20,11 @@
           helper-store-artifact-save!
           helper-promote-to-skill)
   (import (scheme base)
+          (only (consent identity-map)
+                consent-make-identity-map
+                consent-identity-map-ref
+                consent-identity-map-set!
+                consent-identity-map-release!)
           (only (stdlib list) filter find remove))
   (begin
     ;; Public helper scopes mirror the Consent Scheme architecture boundary.
@@ -46,15 +51,43 @@
       (make-helper-store '() '() 0))
 
     (define (copy-datum datum)
-      "Return a copy of DATUM so public records do not share nested list cells\
-."
-      (cond
-       ((pair? datum)
-        (cons (copy-datum (car datum))
-              (copy-datum (cdr datum))))
-       ((vector? datum)
-        (list->vector (map copy-datum (vector->list datum))))
-       (else datum)))
+      "Return a topology-preserving pair/vector graph copy of DATUM."
+      (if (not (or (pair? datum) (vector? datum)))
+          datum
+          (let ((copies (consent-make-identity-map 'helper-copy))
+                (absent (vector 'helper-copy-absent)))
+            (define (walk value)
+              (cond
+               ((pair? value)
+                (let ((known
+                       (consent-identity-map-ref copies value absent)))
+                  (if (eq? known absent)
+                      (let ((copy (cons #f #f)))
+                        (consent-identity-map-set! copies value copy)
+                        (set-car! copy (walk (car value)))
+                        (set-cdr! copy (walk (cdr value)))
+                        copy)
+                      known)))
+               ((vector? value)
+                (let ((known
+                       (consent-identity-map-ref copies value absent)))
+                  (if (eq? known absent)
+                      (let* ((length (vector-length value))
+                             (copy (make-vector length #f)))
+                        (consent-identity-map-set! copies value copy)
+                        (let loop ((index 0))
+                          (if (< index length)
+                              (begin
+                                (vector-set!
+                                 copy index (walk (vector-ref value index)))
+                                (loop (+ index 1)))))
+                        copy)
+                      known)))
+               (else value)))
+            (dynamic-wind
+             (lambda () #t)
+             (lambda () (walk datum))
+             (lambda () (consent-identity-map-release! copies))))))
 
     (define (member-equal? value list)
       "Report whether VALUE appears in LIST using equal?."

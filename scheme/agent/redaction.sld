@@ -16,16 +16,20 @@
   (import (scheme base)
           (scheme char)
           (prefix (agent redaction-kernel) redaction-kernel:)
-          (prefix (stdlib generator) gen:))
+          (prefix (agent redaction-state) redaction-state:)
+          (only (consent identity-map)
+                consent-make-identity-map
+                consent-identity-map-ref
+                consent-identity-map-set!
+                consent-identity-map-release!))
   (begin
     ;; Text used in place of secret values.
-    (define redaction-replacement "[redacted]")
+    (define redaction-replacement
+      redaction-state:redaction-state-replacement)
 
     ;; Text used in place of withheld local-only context.
-    (define local-only-replacement "[local-only]")
-
-    ;; Recent redaction decisions, newest first.
-    (define redaction-records '())
+    (define local-only-replacement
+      redaction-state:redaction-state-local-only-replacement)
 
     ;; Source labels that often carry secrets or private context.
     (define secret-prone-sources
@@ -120,22 +124,59 @@
           (car datum)
           #f))
 
+    (define (pair-spine-cycle-shape value)
+      "Return VALUE's cdr-cycle `(prefix . period)', or #f."
+      (if (not (pair? value))
+          #f
+          (let detect ((slow value) (fast value))
+            (let ((fast-one (cdr fast)))
+              (if (not (pair? fast-one))
+                  #f
+                  (let ((slow-one (cdr slow))
+                        (fast-two (cdr fast-one)))
+                    (if (not (pair? fast-two))
+                        #f
+                        (if (eq? slow-one fast-two)
+                            (let entry ((left value)
+                                        (right slow-one)
+                                        (prefix 0))
+                              (if (eq? left right)
+                                  (let period ((cursor (cdr left))
+                                               (length 1))
+                                    (if (eq? cursor left)
+                                        (cons prefix length)
+                                        (period (cdr cursor)
+                                                (+ length 1))))
+                                  (entry (cdr left)
+                                         (cdr right)
+                                         (+ prefix 1))))
+                            (detect slow-one fast-two)))))))))
+
     (define (field-values datum)
-      "Return field pairs from DATUM."
+      "Return field pairs from DATUM after one pass per cdr identity."
       (if (not (pair? datum))
           '()
-          (let ((fields (if (and (pair? (car datum))
-                                 (symbol? (caar datum)))
-                            datum
-                            (cdr datum))))
-            (let loop ((cursor fields) (result '()))
+          (let* ((fields (if (and (pair? (car datum))
+                                  (symbol? (caar datum)))
+                             datum
+                             (cdr datum)))
+                 (shape (pair-spine-cycle-shape fields))
+                 (limit (and shape (+ (car shape) (cdr shape)))))
+            (let loop ((cursor fields) (remaining limit) (result '()))
               (cond
-               ((null? cursor) (reverse result))
-               ((not (pair? cursor)) (reverse result))
+               ((or (null? cursor)
+                    (not (pair? cursor))
+                    (and remaining (= remaining 0)))
+                (reverse result))
                ((and (pair? (car cursor))
                      (symbol? (caar cursor)))
-                (loop (cdr cursor) (cons (car cursor) result)))
-               (else (loop (cdr cursor) result)))))))
+                (loop (cdr cursor)
+                      (and remaining (- remaining 1))
+                      (cons (car cursor) result)))
+               (else
+                (loop (cdr cursor)
+                      (and remaining (- remaining 1))
+                      result)))))))
 
     (define (field-name field)
       "Return FIELD's name."
@@ -222,50 +263,50 @@
       (or (eq? (record-head datum) 'local-only)
           (and (pair? datum) (field-value datum 'local-only))))
 
-    (define (make-redaction-record kind source field policy)
-      "Build a redaction record."
-      (list 'redaction
-            (list 'kind kind)
-            (list 'source (if source source 'unknown))
-            (list 'field (if field field "value"))
-            (list 'replacement redaction-replacement)
-            (list 'policy policy)))
-
-    (define (make-local-only-record reason)
-      "Build a local-only redaction record."
-      (list 'redaction
-            (list 'kind 'local-only)
-            (list 'source 'local-only)
-            (list 'field "datum")
-            (list 'replacement local-only-replacement)
-            (list 'policy 'local-only)
-            (list 'reason reason)))
-
-    (define (remember! record)
-      "Remember RECORD in the process-local redaction log."
-      (set! redaction-records (cons record redaction-records))
-      record)
-
     (define (record-for-datum datum)
       "Return a redaction record for DATUM and log it."
-      (remember!
-       (make-redaction-record
-        'secret
+      (redaction-state:redaction-state-record-secret!
         (source-name datum)
-        (sensitive-field-name datum)
-        'local-only)))
+        (sensitive-field-name datum)))
+
+    (define (graph-contains? datum scalar? pair-self?)
+      "Return whether DATUM's finite identity graph satisfies a predicate."
+      (cond
+       ((redaction-record? datum) #f)
+       ((scalar? datum) #t)
+       ((not (or (pair? datum) (vector? datum))) #f)
+       (else
+        (let ((seen (consent-make-identity-map 'redaction-search)))
+          (define (walk value)
+            (cond
+             ((redaction-record? value) #f)
+             ((scalar? value) #t)
+             ((pair? value)
+              (if (consent-identity-map-ref seen value #f)
+                  #f
+                  (begin
+                    (consent-identity-map-set! seen value #t)
+                    (or (pair-self? value)
+                        (walk (car value))
+                        (walk (cdr value))))))
+             ((vector? value)
+              (if (consent-identity-map-ref seen value #f)
+                  #f
+                  (begin
+                    (consent-identity-map-set! seen value #t)
+                    (let loop ((index 0))
+                      (and (< index (vector-length value))
+                           (or (walk (vector-ref value index))
+                               (loop (+ index 1))))))))
+             (else #f)))
+          (dynamic-wind
+           (lambda () #t)
+           (lambda () (walk datum))
+           (lambda () (consent-identity-map-release! seen)))))))
 
     (define (local-only? datum)
       "Return #t when DATUM contains local-only context."
-      (cond
-       ((redaction-record? datum) #f)
-       ((pair? datum)
-        (or (self-local-only? datum)
-            (local-only? (car datum))
-            (local-only? (cdr datum))))
-       ((vector? datum)
-        (gen:generator-any local-only? (gen:vector->generator datum)))
-       (else #f)))
+      (graph-contains? datum (lambda (value) #f) self-local-only?))
 
     (define (secret-source? datum)
       "Return #t when DATUM contains secret-prone source data."
@@ -276,16 +317,7 @@
           ("#t when DATUM appears to contain a secret or secret-prone"
             "source marker; otherwise #f.")))
         (effects pure))
-      (cond
-       ((redaction-record? datum) #f)
-       ((string? datum) (secret-string? datum))
-       ((pair? datum)
-        (or (self-secret-source? datum)
-            (secret-source? (car datum))
-            (secret-source? (cdr datum))))
-       ((vector? datum)
-        (gen:generator-any secret-source? (gen:vector->generator datum)))
-       (else #f)))
+      (graph-contains? datum secret-string? self-secret-source?))
 
     (define (redact datum policy)
       "Return DATUM with secret and local-only content redacted."
@@ -298,28 +330,59 @@
          . ("DATUM with secret-like values and local-only context"
             "replaced by safe public records."))
         (effects state-write))
-      (cond
-       ((redaction-record? datum) datum)
-       ((and (string? datum) (secret-string? datum))
-        (remember! (make-redaction-record 'secret 'string "value" 'local-only))
-        redaction-replacement)
-       ((self-secret-source? datum)
-        (record-for-datum datum))
-       ((self-local-only? datum)
-        (let ((reason (or (field-value datum 'reason) "local-only context")))
-          (remember! (make-local-only-record reason))
-          (list 'local-only
-                (list 'reason reason)
-                (list 'datum local-only-replacement))))
-       ((pair? datum)
-        (cons (redact (car datum) policy)
-              (redact (cdr datum) policy)))
-       ((vector? datum)
-        (gen:generator->vector
-         (gen:gmap
-          (lambda (value) (redact value policy))
-          (gen:vector->generator datum))))
-       (else datum)))
+      (if (not (or (pair? datum) (vector? datum)))
+          (redaction-state:redaction-state-redact-scalar datum)
+          (let ((copies (consent-make-identity-map 'redaction-copy))
+                (absent (vector 'redaction-copy-absent)))
+            (define (walk value)
+              (let ((known
+                     (if (or (pair? value) (vector? value))
+                         (consent-identity-map-ref copies value absent)
+                         absent)))
+                (if (not (eq? known absent))
+                    known
+                    (cond
+                     ((redaction-record? value) value)
+                     ((and (string? value) (secret-string? value))
+                      (redaction-state:redaction-state-redact-scalar value))
+                     ((and (pair? value) (self-secret-source? value))
+                      (let ((record (record-for-datum value)))
+                        (consent-identity-map-set! copies value record)
+                        record))
+                     ((and (pair? value) (self-local-only? value))
+                      (let* ((reason
+                              (or (field-value value 'reason)
+                                  "local-only context"))
+                             (record
+                              (list 'local-only
+                                    (list 'reason reason)
+                                    (list 'datum local-only-replacement))))
+                        (redaction-state:redaction-state-record-local-only!
+                         reason)
+                        (consent-identity-map-set! copies value record)
+                        record))
+                     ((pair? value)
+                      (let ((copy (cons #f #f)))
+                        (consent-identity-map-set! copies value copy)
+                        (set-car! copy (walk (car value)))
+                        (set-cdr! copy (walk (cdr value)))
+                        copy))
+                     ((vector? value)
+                      (let* ((length (vector-length value))
+                             (copy (make-vector length #f)))
+                        (consent-identity-map-set! copies value copy)
+                        (let loop ((index 0))
+                          (if (< index length)
+                              (begin
+                                (vector-set!
+                                 copy index (walk (vector-ref value index)))
+                                (loop (+ index 1)))))
+                        copy))
+                     (else value)))))
+            (dynamic-wind
+             (lambda () #t)
+             (lambda () (walk datum))
+             (lambda () (consent-identity-map-release! copies))))))
 
     (define (context-local-only! datum reason)
       "Wrap DATUM as local-only context."
@@ -333,7 +396,7 @@
          (description
            "A `local-only` wrapper datum carrying REASON and DATUM."))
         (effects state-write))
-      (remember! (make-local-only-record reason))
+      (redaction-state:redaction-state-record-local-only! reason)
       (list 'local-only
             (list 'reason reason)
             (list 'datum datum)))
@@ -350,7 +413,8 @@
             "records.")))
         (effects state-read))
       (list 'redaction-log
-            (list 'records redaction-records)))
+            (list 'records
+                  (redaction-state:redaction-state-records))))
 
     (define (consent-redaction-clear!)
       "Clear the process-local redaction log."
@@ -359,7 +423,7 @@
          . ("An unspecified value after clearing the process-local"
             "redaction records."))
         (effects state-write))
-      (set! redaction-records '()))
+      (redaction-state:redaction-state-clear!))
 
     (define (safe-for-provider? datum provider)
       "Return #t when DATUM can be sent to PROVIDER without redaction."

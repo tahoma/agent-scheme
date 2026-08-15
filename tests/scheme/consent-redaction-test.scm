@@ -92,6 +92,38 @@
               (pair? (cdr (redaction-log)))))
 
 (testing-registry-case
+ 'redaction-cyclic-and-shared-graphs '(agent redaction security identity)
+(consent-redaction-clear!)
+(let* ((shared (cons "sk-shared" '()))
+       (root (make-vector 3 #f)))
+  (vector-set! root 0 root)
+  (vector-set! root 1 shared)
+  (vector-set! root 2 shared)
+  (test-assert "cyclic secret graph is detected"
+               (secret-source? root))
+  (test-assert "cyclic secret graph is unsafe for providers"
+               (not (safe-for-provider? root 'openai)))
+  (let ((copy (redact root 'remote-provider)))
+    (test-assert "redaction preserves a vector self-cycle"
+                 (eq? copy (vector-ref copy 0)))
+    (test-assert "redaction preserves shared compound identity"
+                 (eq? (vector-ref copy 1) (vector-ref copy 2)))
+    (test-equal "shared secret is redacted"
+                "[redacted]"
+                (car (vector-ref copy 1)))
+    (test-equal "shared secret is logged once"
+                1
+                (length (field-value (redaction-log) 'records)))))
+(let ((cycle (cons 'ordinary '())))
+  (set-cdr! cycle cycle)
+  (test-assert "ordinary cycle is provider-safe"
+               (safe-for-provider? cycle 'openai))
+  (let ((copy (redact cycle 'debugger)))
+    (test-assert "ordinary pair cycle is copied"
+                 (and (not (eq? copy cycle))
+                      (eq? copy (cdr copy)))))))
+
+(testing-registry-case
  'redaction-string-kernel '(agent redaction security boundary)
  (consent-redaction-clear!)
  (let* ((long-prefix (make-string 4096 #\z))

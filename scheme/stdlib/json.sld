@@ -23,6 +23,11 @@
           json-write)
   (import (scheme base)
           (scheme case-lambda)
+          (only (consent identity-map)
+                consent-make-identity-map
+                consent-identity-map-adjoin!
+                consent-identity-map-delete!
+                consent-identity-map-release!)
           (prefix (stdlib generator) gen:)
           (stdlib and-let-star))
   (begin
@@ -662,8 +667,68 @@ object."))))))))))))))
                     (not (= value -inf.0))
                     (= value value)))))
 
+    (define (json-active-enter! active datum)
+      "Mark container DATUM active, rejecting an ancestor back edge."
+      (if (not (consent-identity-map-adjoin! active datum #t))
+          (json-fail "JSON value contains a cycle.")))
+
+    (define (json-active-leave! active datum)
+      "Remove container DATUM from the active writer path."
+      (consent-identity-map-delete! active datum))
+
+    (define (json-write-vector datum emit active)
+      "Emit vector DATUM while guarding its active identity path."
+      (json-active-enter! active datum)
+      (emit #\[)
+      (let ((length (vector-length datum)))
+        (let loop ((index 0))
+          (if (< index length)
+              (begin
+                (if (> index 0) (emit #\,))
+                (json-write-value (vector-ref datum index) emit active)
+                (loop (+ index 1))))))
+      (emit #\])
+      (json-active-leave! active datum))
+
+    (define (json-check-object-spine! datum)
+      "Require DATUM to have a finite proper object spine."
+      (let loop ((cursor datum) (slow datum) (advance-slow? #f))
+        (cond
+         ((null? cursor) #t)
+         ((not (pair? cursor))
+          (json-fail "JSON object must be a proper association list."))
+         (else
+          (let* ((next (cdr cursor))
+                 (next-slow (if advance-slow? (cdr slow) slow)))
+            (if (and (pair? next) (eq? next next-slow))
+                (json-fail "JSON value contains a cycle."))
+            (loop next next-slow (not advance-slow?)))))))
+
+    (define (json-write-object datum emit active)
+      "Emit object-alist DATUM while guarding active value edges."
+      (json-check-object-spine! datum)
+      (json-active-enter! active datum)
+      (emit #\{)
+      (let loop ((cursor datum) (first? #t))
+        (if (null? cursor)
+            (emit #\})
+            (let ((entry (car cursor)))
+              (if (not (and (pair? entry) (symbol? (car entry))))
+                  (json-fail "JSON object entries must be symbol pairs."))
+              (let* ((value (cdr entry))
+                     (compound? (or (pair? value) (vector? value))))
+                ;; Scalar edges cannot return to ENTRY, so do not hash them.
+                (if compound? (json-active-enter! active entry))
+                (if first? (set! first? #f) (emit #\,))
+                (json-write-string-value (symbol->string (car entry)) emit)
+                (emit #\:)
+                (json-write-value value emit active)
+                (if compound? (json-active-leave! active entry))
+                (loop (cdr cursor) first?)))))
+      (json-active-leave! active datum))
+
     ;; Emit DATUM as JSON through EMIT.
-    (define (json-write-value datum emit)
+    (define (json-write-value datum emit active)
       "Emit DATUM as JSON through EMIT."
       (cond
        ((json-null? datum) (emit "null"))
@@ -671,41 +736,25 @@ object."))))))))))))))
        ((string? datum) (json-write-string-value datum emit))
        ((json-valid-number-value? datum) (emit (number->string datum)))
        ((vector? datum)
-        (emit #\[)
-        (let ((first? #t))
-          (gen:generator-for-each
-           (lambda (value)
-             (if first?
-                 (set! first? #f)
-                 (emit #\,))
-             (json-write-value value emit))
-           (gen:vector->generator datum)))
-        (emit #\]))
+        (json-write-vector datum emit active))
        ((null? datum)
         (emit #\{)
         (emit #\}))
        ((pair? datum)
-        (emit #\{)
-        (let ((first? #t))
-          (gen:generator-for-each
-           (lambda (entry)
-             (if (not (and (pair? entry) (symbol? (car entry))))
-                 (json-fail "JSON object entries must be symbol pairs."))
-             (if first?
-                 (set! first? #f)
-                 (emit #\,))
-             (json-write-string-value (symbol->string (car entry)) emit)
-             (emit #\:)
-             (json-write-value (cdr entry) emit))
-           (gen:list->generator datum)))
-        (emit #\}))
+        (json-write-object datum emit active))
        (else
         (json-fail "Value cannot be encoded as JSON."))))
 
     (define (json-write-target datum target)
       "Write DATUM as JSON to TARGET, a port or accumulator procedure."
       (let ((emit (if (procedure? target) target (json-emit-port target))))
-        (json-write-value datum emit)
+        (if (or (pair? datum) (vector? datum))
+            (let ((active (consent-make-identity-map 'json-write-active)))
+              (dynamic-wind
+               (lambda () #t)
+               (lambda () (json-write-value datum emit active))
+               (lambda () (consent-identity-map-release! active))))
+            (json-write-value datum emit #f))
         (json-unspecified)))
 
     ;; Optional-arity dispatcher for the public JSON writer.

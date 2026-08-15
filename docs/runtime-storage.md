@@ -8,8 +8,8 @@
 
 ## Summary
 
-Five private, portable libraries provide storage for allocation-sensitive
-runtime and graph algorithms:
+Five private, portable foundation libraries provide storage for
+allocation-sensitive runtime and graph algorithms:
 
 - `(consent growable-vector)` owns bounded indexed storage and imports only
   `(scheme base)`;
@@ -21,6 +21,10 @@ runtime and graph algorithms:
   dense integer identifiers; and
 - `(consent identity-table)` provides fixed-policy owned and host identity
   associations with bounded growth and explicit release.
+
+The smaller portable `(consent identity-map)` specialization fixes policy to
+hot host-key graph walks. It shares the identity adapter and fixed limits while
+omitting the generic table's configurable policy and detailed accounting.
 
 None of the libraries imports a public SRFI, calls user code, or depends on an
 initialized standard-library shelf. The Emacs bootstrap source loader and
@@ -688,7 +692,13 @@ host identities occupy separate namespaces; the latter is the only namespace
 that crosses a three-operation host adapter. See
 [Fixed-Policy Identity Tables](identity-tables.md) for load, tombstone,
 host-hash normalization, lazy growable allocation, node-reusing chained
-rehash, no-hash, root, release, and compatibility-facade details.
+rehash, no-hash, root, release, and lean-specialization details.
+Call-scoped redaction, JSON writing, and helper copying use `(consent
+identity-map)` directly because their public language values are not private
+`(consent datum)` heap objects. This avoids loading the compound-datum
+implementation merely to route every key back to the host namespace. The
+memory-key session cache uses the same specialization instead of retaining a
+second no-hash alist implementation.
 
 ## Verification
 

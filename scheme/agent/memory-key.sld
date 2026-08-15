@@ -12,9 +12,10 @@
 ;;; and compared scalar content.  Owned pair/vector discovery is intrusive;
 ;;; immutable scalar wrappers and host nodes use the identity adapter so shared
 ;;; large payloads are copied once.  A host compound or nested identity scalar
-;;; fails closed without a fast backend.  Bulk no-hash sessions keep only a
-;;; fixed 64-entry identity alist before failing closed, so compatibility work
-;;; cannot become quadratic.  A descriptor comparison is O(K), so an AVL
+;;; fails closed without a fast backend. Bulk no-hash sessions use the
+;;; identity-map policy's fixed 64-entry compatibility envelope, so they cannot
+;;; become quadratic or duplicate fallback policy. A descriptor comparison is
+;;; O(K), so an AVL
 ;;; operation is O(K log R) in the worst case and avoids K-token scans when
 ;;; canonical descriptor identity is shared.  Raw host numbers additionally
 ;;; inherit the adapter's T_number->string cost; owned canonical-number
@@ -1429,29 +1430,16 @@
         (reentered? #f)
         (absent (vector 'absent))
         (owned-cache #f)
-        (host-cache #f)
-        (host-cache-alist '())
-        (host-cache-alist-size 0))
-    ;; Maximum compatibility identities retained by one key session.
-    (define nohash-cache-maximum-size 64)
-    (define (host-cache-alist-ref key)
-      "Return nohash KEY's cached entry, or ABSENT."
-      (let loop ((rest host-cache-alist))
-        (cond
-         ((null? rest) absent)
-         ((eq? key (car (car rest))) (cdr (car rest)))
-         (else (loop (cdr rest))))))
+        (host-cache #f))
     (define (cache-ref key)
       "Return KEY's session entry, or ABSENT when unprepared."
       (if (consent-datum-object? key)
           (if owned-cache
               (consent-datum-object-map-ref owned-cache key absent)
               absent)
-          (if (consent-identity-map-fast-backend?)
-              (if host-cache
-                  (consent-identity-map-ref host-cache key absent)
-                  absent)
-              (host-cache-alist-ref key))))
+          (if host-cache
+              (consent-identity-map-ref host-cache key absent)
+              absent)))
     (define (cache-set! key entry)
       (if (consent-datum-object? key)
           (begin
@@ -1459,21 +1447,18 @@
                 (set! owned-cache (consent-make-datum-object-map)))
             (consent-datum-object-map-set! owned-cache key entry))
           (begin
+            (if (not host-cache)
+                (set! host-cache
+                      (consent-make-identity-map 'memory-key-session)))
             (if (consent-identity-map-fast-backend?)
-                (begin
-                  (if (not host-cache)
-                      (set! host-cache (consent-make-identity-map)))
-                  (consent-identity-map-set! host-cache key entry))
-                (begin
-                  (if (>= host-cache-alist-size
-                          nohash-cache-maximum-size)
-                      (error
-                       "memory key session cache requires fast identity map"
-                       key))
-                  (set! host-cache-alist
-                        (cons (cons key entry) host-cache-alist))
-                  (set! host-cache-alist-size
-                        (+ host-cache-alist-size 1)))))))
+                (consent-identity-map-set! host-cache key entry)
+                (guard
+                 (condition
+                  (else
+                   (error
+                    "memory key session cache requires fast identity map"
+                    key)))
+                 (consent-identity-map-set! host-cache key entry))))))
     (define (entry-descriptor entry scope-name)
       "Return ENTRY's descriptor for SCOPE-NAME, or #f."
       (let loop ((rest (vector-ref entry 1)))

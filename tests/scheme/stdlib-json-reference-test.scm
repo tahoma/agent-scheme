@@ -543,6 +543,20 @@ ailing text.")))
       (car items)
       (last-item (cdr items))))
 
+(define (json-output-string datum)
+  "Return DATUM's JSON spelling."
+  (let ((port (open-output-string)))
+    (json-write datum port)
+    (get-output-string port)))
+
+(define (json-write-error-reason datum)
+  "Return DATUM's JSON writer error reason, or #f."
+  (guard (condition
+          ((json-error? condition) (json-error-reason condition))
+          (else #f))
+    (json-output-string datum)
+    #f))
+
 ;; Null runner inspected below so every fixture runs before failure is raised.
 (define runner (test-runner-null))
 (test-with-runner runner
@@ -579,6 +593,31 @@ ailing text.")))
   (test-assert "invalid classifications are unique"
                (unique? (classified-names invalid-exclusions)))
   (test-end "SRFI 180 reference corpus inventory"))
+
+(test-with-runner runner
+  (test-begin "SRFI 180 graph writing" 4)
+  (let ((array (make-vector 1 #f)))
+    (vector-set! array 0 array)
+    (test-equal "self-cyclic array is rejected"
+                "JSON value contains a cycle."
+                (json-write-error-reason array)))
+  (let* ((entry (cons 'self #f))
+         (object (list entry)))
+    (set-cdr! entry object)
+    (test-equal "object value cycle is rejected"
+                "JSON value contains a cycle."
+                (json-write-error-reason object)))
+  (let ((object (list (cons 'value 1))))
+    (set-cdr! object object)
+    (test-equal "object spine cycle is rejected"
+                "JSON value contains a cycle."
+                (json-write-error-reason object)))
+  (let* ((shared (vector 1 2))
+         (object (list (cons 'left shared) (cons 'right shared))))
+    (test-equal "shared acyclic value remains legal"
+                "{\"left\":[1,2],\"right\":[1,2]}"
+                (json-output-string object)))
+  (test-end "SRFI 180 graph writing"))
 
 (test-with-runner runner
   (test-begin "SRFI 180 invalid reference corpus"

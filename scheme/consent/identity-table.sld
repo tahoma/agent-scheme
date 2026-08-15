@@ -33,10 +33,13 @@
           consent-host-identity-hash
           consent-host-identity=?)
   (import (scheme base)
-          (consent identity-table adapter))
+          (consent identity-table adapter)
+          (only (consent identity-policy)
+                consent-identity-compatibility-limit))
   (begin
     ;; Compatibility scans are constant-bounded independently of table limits.
-    (define identity-table-compatibility-limit 64)
+    (define identity-table-compatibility-limit
+      consent-identity-compatibility-limit)
 
     ;; Empty slots contain #f. Deleted slots contain this private singleton.
     (define identity-table-tombstone
@@ -127,7 +130,7 @@
 
     ;; Host-only tables use one compact linked node per association. Chaining
     ;; avoids interpreting open-address offset arithmetic and general entry
-    ;; accessors on the dominant compatibility-facade path.
+    ;; accessors on the dominant host-key path.
     (define (make-host-chain-entry next hash key value)
       "Return one private host bucket node."
       (vector next hash key value))

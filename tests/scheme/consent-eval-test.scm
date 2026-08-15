@@ -3880,7 +3880,8 @@ null],"
                         (equal? (manifest-field entry 'aliases)
                                 '((consent json) (srfi 180) (srfi srfi-180)))
                         (equal? (manifest-field entry 'dependencies)
-                                '((library (stdlib and-let-star))))))")
+                                '((library (consent identity-map))
+                                  (library (stdlib and-let-star))))))")
                 "#t"))
 
 (testing-registry-case
@@ -7706,6 +7707,24 @@ only")
                 "(policy local-only)) #f)"))
               #t)
          #t)))
+
+(testing-registry-case
+ 'agent-redaction-owned-cycle-and-sharing '(portable core identity)
+(check-external
+ 'agent-redaction-owned-cycle-and-sharing
+ "(import (scheme base) (agent redaction))
+  (let* ((shared (cons \"sk-shared\" '()))
+         (root (make-vector 3 #f)))
+    (vector-set! root 0 root)
+    (vector-set! root 1 shared)
+    (vector-set! root 2 shared)
+    (let ((copy (redact root 'remote-provider)))
+      (list (secret-source? root)
+            (safe-for-provider? root 'openai)
+            (eq? copy (vector-ref copy 0))
+            (eq? (vector-ref copy 1) (vector-ref copy 2))
+            (car (vector-ref copy 1)))))"
+ "(#t #f #t #t \"[redacted]\")"))
 
 (testing-registry-case
  'agent-source-libraries-import-through-portable-registry '(portable core)
