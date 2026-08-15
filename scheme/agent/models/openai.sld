@@ -17,7 +17,7 @@
   (import (scheme base)
           (scheme write)
           (prefix (agent models openai-codec) openai-codec:)
-          (prefix (agent redaction) redaction-model:)
+          (prefix (agent redaction-state) redaction-state:)
           (prefix (cli process-host) cli-host:))
   (begin
     ;; Default request timeout for local OpenAI-compatible HTTP transports.
@@ -272,7 +272,8 @@
                 (model-openai-object->string detail))))
              (effective-limit
               (model-openai-normalize-transport-detail-limit limit)))
-        (let ((redacted (redaction-model:redact text 'model-diagnostics)))
+        (let ((redacted
+               (redaction-state:redaction-state-redact-scalar text)))
           (if (> (string-length redacted) effective-limit)
               (string-append
                (substring redacted 0 (- effective-limit 3))

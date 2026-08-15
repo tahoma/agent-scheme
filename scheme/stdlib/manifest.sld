@@ -61,7 +61,8 @@
           json-accumulator
           json-write))
         (dependencies
-         ((library (stdlib and-let-star))))
+         ((library (consent identity-map))
+          (library (stdlib and-let-star))))
         (provenance
          ((origin repo)
           (upstream-source-url

@@ -86,11 +86,14 @@
    (path "tests/scheme/testing-plan-test.scm")
     (tags (full direct compiled testing)))
    (program
-   (path "tests/scheme/consent-plan-test.scm")
+    (path "tests/scheme/consent-plan-test.scm")
     (tags (full direct compiled agent registered)))
    (program
-   (path "tests/scheme/consent-redaction-test.scm")
+    (path "tests/scheme/consent-redaction-test.scm")
     (tags (full direct agent registered self-host-gap)))
+   (program
+    (path "tests/scheme/consent-helper-test.scm")
+    (tags (full direct compiled agent registered)))
    (program
    (path "tests/scheme/consent-task-test.scm")
     (tags (full direct agent registered self-host-gap)))

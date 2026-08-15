@@ -235,6 +235,11 @@
    (and (member '(agent redaction-kernel) roots)
         (member '(agent redaction-kernel) native-libraries)))
   (test-assert
+   'redaction-state-is-source-only-compiled-dependency
+   (and (member '(agent redaction-state) names)
+        (not (member '(agent redaction-state) roots))
+        (not (member '(agent redaction-state) native-libraries))))
+  (test-assert
    'redaction-facade-is-source-root-not-native
    (and (member '(agent redaction) roots)
         (not (member '(agent redaction) native-libraries))))
@@ -287,6 +292,19 @@
    'redaction-kernel-uses-canonical-portable-source
    "agent/redaction-kernel.sld"
    (consent-compiler-unit-source (unit-ref '(agent redaction-kernel))))
+  (test-equal
+   'redaction-state-uses-canonical-portable-source
+   "agent/redaction-state.sld"
+   (consent-compiler-unit-source (unit-ref '(agent redaction-state))))
+  (test-assert
+   'redaction-kernel-precedes-state
+   (ordered-before? '(agent redaction-kernel) '(agent redaction-state)))
+  (test-assert
+   'redaction-state-precedes-consumers
+   (and (ordered-before? '(agent redaction-state) '(agent redaction))
+        (ordered-before?
+         '(agent redaction-state)
+         '(agent models openai))))
   (test-assert
    'redaction-kernel-precedes-facade
    (ordered-before? '(agent redaction-kernel) '(agent redaction)))

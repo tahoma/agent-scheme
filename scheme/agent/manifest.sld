@@ -331,6 +331,7 @@
           agent-helper-promote-to-skill))
         (dependencies
          ((library (scheme base))
+          (library (consent identity-map))
           (library (stdlib list))))
         (provenance ((origin repo)))
         (status implemented)
@@ -1178,7 +1179,7 @@
          ((library (scheme base))
           (library (scheme write))
           (library (agent models openai-codec))
-          (library (agent redaction))
+          (library (agent redaction-state))
           (library (cli process-host))))
         (provenance ((origin repo)))
         (status implemented)
@@ -1615,6 +1616,35 @@
         (dependencies
          ((library (scheme base))))
         (provenance ((origin repo)))
+       (status internal)
+       (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (agent redaction-state))
+        (owner agent)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer implementation)
+        (source-kind source-library)
+        (source (path "redaction-state.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (redaction-state-replacement
+          redaction-state-local-only-replacement
+          redaction-state-record-secret!
+          redaction-state-record-local-only!
+          redaction-state-redact-scalar
+          redaction-state-records
+          redaction-state-clear!))
+        (dependencies
+         ((library (scheme base))
+          (library (agent redaction-kernel))))
+        (provenance
+         ((origin repo)
+          (state process-local-redaction-decisions)))
         (status internal)
         (canonical #t))
        (manifest-entry
@@ -1641,7 +1671,8 @@
          ((library (scheme base))
           (library (scheme char))
           (library (agent redaction-kernel))
-          (library (stdlib generator))))
+          (library (agent redaction-state))
+          (library (consent identity-map))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))

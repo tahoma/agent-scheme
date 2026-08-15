@@ -203,6 +203,29 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (consent identity-policy))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "identity-policy.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-identity-compatibility-limit
+          consent-identity-map-maximum-capacity))
+        (dependencies
+         ((library (scheme base))))
+        (provenance
+         ((origin repo)
+          (policy fixed-host-identity-storage)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (consent worklist))
         (owner consent-core)
         (provider repo-source)
@@ -356,6 +379,7 @@
           consent-host-identity=?))
         (dependencies
          ((library (scheme base))
+          (library (consent identity-policy))
           (library (consent identity-table adapter))))
         (provenance
          ((origin repo)
@@ -394,12 +418,16 @@
           consent-identity-map-stats))
         (dependencies
          ((library (scheme base))
-          (library (consent identity-table))))
+          (library (consent identity-policy))
+          (library (consent identity-table adapter))))
         (provenance
          ((origin repo)
-          (compatibility-facade (library (consent identity-table)))
+          (representation lean-host-chaining)
           (key-policy host)
-          (callbacks none)))
+          (fallback fixed-shared-policy)
+          (accounting structural-only)
+          (callbacks none)
+          (memory-lifecycle (clear roots) (release terminal))))
         (status internal)
         (canonical #t))
        (manifest-entry

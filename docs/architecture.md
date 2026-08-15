@@ -387,14 +387,29 @@ accounting, and lifetime in portable Scheme. Stable heap and object identifiers
 provide owned hashes; host identity hash and comparison are the only
 irreducible adapter operations. Owned and host keys occupy distinct namespaces,
 including in a mixed table. The older `(consent identity-map)` surface is a
-portable compatibility facade over the host-key policy, not a second table
-implementation. The full contract is recorded in
+lean fixed-policy specialization for hot host-key graph walks. It shares the
+same three-operation adapter and compatibility limits while omitting the
+generic table's configurable policies, entry snapshots, tombstones, and
+per-operation counter vector. The full contract is recorded in
 [Fixed-Policy Identity Tables](identity-tables.md).
 
 The portable table normalizes host hashes before bucket reduction. This keeps
 valid allocation-serial hashes from overlaying long-lived insertion bursts
 after short-lived identity maps advance the host's sequence. Hash distribution
 therefore remains table policy above the same narrow adapter boundary.
+
+Redaction traversal, JSON active paths, and helper datum copying use the
+portable `(consent identity-map)` specialization directly. These libraries
+traverse ordinary language values rather than `(consent datum)`'s private heap
+objects, so importing the intrusive owned-datum implementation would add a
+large transitive load without avoiding host-identity routing. Scalar fast paths
+avoid allocating a table when no compound graph can be encountered.
+
+Scalar redaction decisions and their process-local log live in `(agent
+redaction-state)`. Transport diagnostics therefore share the same policy and
+log without importing the recursive redaction graph walker or identity-map
+storage. The public redaction library composes that scalar state with graph
+traversal only for compound values.
 
 An owned datum object still supplies one private intrusive map header, so each
 call-scoped owned lookup takes one header probe and release restores any outer

@@ -1445,6 +1445,12 @@
   "Keep identity-table policy portable above three host primitives."
   (let* ((key "(consent identity-table)")
          (entry (consent--library-collection-manifest-entry key))
+         (map
+          (consent--library-collection-manifest-entry
+           "(consent identity-map)"))
+         (policy
+          (consent--library-collection-manifest-entry
+           "(consent identity-policy)"))
          (adapter
           (consent--library-collection-manifest-entry
            "(consent identity-table adapter)"))
@@ -1458,6 +1464,9 @@
     (should-not (plist-get entry :primitive-overlay-library))
     (should
      (member "(consent identity-table adapter)"
+             (plist-get entry :dependencies)))
+    (should
+     (member "(consent identity-policy)"
              (plist-get entry :dependencies)))
     (should
      (string-suffix-p
@@ -1476,7 +1485,15 @@
               (plist-get primitive :primitive-exports))
       '("consent-host-identity-fast-backend?"
         "consent-host-identity-hash"
-        "consent-host-identity=?")))))
+        "consent-host-identity=?")))
+    (should policy)
+    (should (eq (plist-get policy :source-kind) 'portable-source))
+    (should map)
+    (should
+     (equal (plist-get map :dependencies)
+            '("(scheme base)"
+              "(consent identity-policy)"
+              "(consent identity-table adapter)")))))
 
 (ert-deftest consent-library-test-identity-table-runs-source-backed ()
   "Exercise portable table policy through the Emacs adapter import."
@@ -1514,7 +1531,7 @@
     "(#t #t #f right owned 3 #f 7)")))
 
 (ert-deftest consent-library-test-identity-table-compound-comparison-portable ()
-  "Keep compound identity comparison above the native host boundary."
+  "Keep compound identity storage above the native host boundary."
   (cl-letf
       (((symbol-function 'consent--primitive-consent-host-identity=?)
         (lambda (_arguments _context)
@@ -1522,19 +1539,30 @@
     (should
      (equal
       (consent-library-test--external/options
-       "(import (scheme base) (consent identity-table))
+       "(import (scheme base)
+                (consent identity-map)
+                (consent identity-table))
         (let ((table
                (consent-make-identity-table
                 5 31 'allow-growth 'host 'portable-comparison))
+              (map (consent-make-identity-map 'portable-comparison))
               (left (vector 'same))
               (right (vector 'same)))
           (consent-identity-table-host-set! table left 'left)
           (consent-identity-table-host-set! table right 'right)
-          (list
-           (consent-identity-table-host-ref table left 'absent)
-           (consent-identity-table-host-ref table right 'absent)))"
+          (consent-identity-map-set! map left 'map-left)
+          (consent-identity-map-set! map right 'map-right)
+          (let ((answer
+                 (list
+                  (consent-identity-table-host-ref table left 'absent)
+                  (consent-identity-table-host-ref table right 'absent)
+                  (consent-identity-map-ref map left 'absent)
+                  (consent-identity-map-ref map right 'absent))))
+            (consent-identity-map-release! map)
+            (consent-identity-table-release! table)
+            answer))"
        '(:internal-libraries-allowed t))
-      "(left right)"))))
+      "(left right map-left map-right)"))))
 
 (ert-deftest consent-library-test-scratch-arena-runs-source-backed ()
   "Exercise scratch ownership and marks through the Emacs source loader."
@@ -4766,7 +4794,8 @@
              (equal? (manifest-field entry 'aliases)
                      '((consent json) (srfi 180) (srfi srfi-180)))
              (equal? (manifest-field entry 'dependencies)
-                     '((library (stdlib and-let-star))))
+                     '((library (consent identity-map))
+                       (library (stdlib and-let-star))))
              (equal? (manifest-subfield entry 'verification 'test-status)
                      '(import-resolution representative-read-write
                        portable-host-suite compiled-self-host-corpus

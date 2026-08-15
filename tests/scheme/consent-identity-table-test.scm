@@ -597,42 +597,45 @@
                (consent-identity-table-stats table) 'size))))
 
 (testing-registry-case
- 'identity-map-compatibility-facade-lifecycle
+ 'identity-map-lean-lifecycle
  '(portable runtime storage identity compatibility)
 (let ((map (consent-make-identity-map))
       (key (vector 'legacy)))
   (test-equal 'identity-map-constructor-defers-buckets
               0
-              (consent-identity-table-capacity map))
+              (stats-ref (consent-identity-map-stats map) 'capacity))
   (test-equal 'identity-map-constructor-uses-adapter
-              (consent-identity-map-fast-backend?)
-              (consent-identity-table-fast-host-backend? map))
-  (test-assert 'identity-map-facade-adjoin-inserts
+              (if (consent-identity-map-fast-backend?)
+                  'fast-hash
+                  'compatibility)
+              (stats-ref
+               (consent-identity-map-stats map) 'host-backend))
+  (test-assert 'identity-map-adjoin-inserts
                (consent-identity-map-adjoin! map key 'first))
   (test-equal 'identity-map-first-insert-uses-small-bucket-floor
               4
-              (consent-identity-table-capacity map))
-  (test-assert 'identity-map-facade-adjoin-preserves-existing
+              (stats-ref (consent-identity-map-stats map) 'capacity))
+  (test-assert 'identity-map-adjoin-preserves-existing
                (not (consent-identity-map-adjoin! map key 'ignored)))
-  (test-equal 'identity-map-facade-adjoin-value
+  (test-equal 'identity-map-adjoin-value
               'first
               (consent-identity-map-ref map key 'absent))
   (consent-identity-map-set! map key 'value)
-  (test-equal 'identity-map-facade-ref
+  (test-equal 'identity-map-ref
               'value
               (consent-identity-map-ref map key 'absent))
-  (test-assert 'identity-map-facade-delete
+  (test-assert 'identity-map-delete
                (consent-identity-map-delete! map key))
   (consent-identity-map-set! map key 'replacement)
   (consent-identity-map-clear! map)
-  (test-equal 'identity-map-facade-clear
+  (test-equal 'identity-map-clear
               'absent
               (consent-identity-map-ref map key 'absent))
   (consent-identity-map-release! map)
-  (test-equal 'identity-map-facade-release-size
+  (test-equal 'identity-map-release-size
               0
               (stats-ref (consent-identity-map-stats map) 'size))
-  (test-assert 'identity-map-facade-released-operation
+  (test-assert 'identity-map-released-operation
                (raises?
                 (lambda ()
                   (consent-identity-map-set! map key 'late))))))

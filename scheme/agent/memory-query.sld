@@ -29,6 +29,8 @@
                 consent-identity-map-ref
                 consent-identity-map-release!
                 consent-identity-map-set!)
+          (only (consent identity-policy)
+                consent-identity-compatibility-limit)
           (only (consent reader) consent-datum->external)
           (only (consent worklist)
                 consent-make-worklist
@@ -839,48 +841,50 @@
       (if (not (consent-identity-map-fast-backend?))
           (let ((seen (consent-make-identity-map))
                 (absent (vector 'absent)))
+            (define (seen-compound? value)
+              "Report whether compound VALUE was already traversed."
+              (not
+               (eq? (consent-identity-map-ref seen value absent)
+                    absent)))
+
+            (define (prepend-compound-children value pending)
+              "Prepend compound VALUE's children to PENDING."
+              (if (pair? value)
+                  (cons (car value) (cons (cdr value) pending))
+                  (let push ((index (- (vector-length value) 1))
+                             (next pending))
+                    (if (< index 0)
+                        next
+                        (push
+                         (- index 1)
+                         (cons (vector-ref value index) next))))))
+
             (dynamic-wind
              (lambda () #t)
              (lambda ()
                (let walk ((pending (list record)) (count 0))
                  (if (null? pending)
                      #t
-                     (let* ((value (car pending))
-                            (rest (cdr pending))
-                            (compound?
-                             (or (pair? value) (vector? value))))
-                       (if (not compound?)
-                           (walk rest count)
-                           (let ((known
-                                  (consent-identity-map-ref
-                                   seen value absent)))
-                             (if (not (eq? known absent))
-                                 (walk rest count)
-                                 (let ((next-count (+ count 1)))
-                                   (if (> next-count 64)
-                                       (error
-                                        (string-append
-                                         "large text query requires fast "
-                                         "identity map")
-                                        record))
-                                   (consent-identity-map-set! seen value #t)
-                                   (if (pair? value)
-                                       (walk
-                                        (cons
-                                         (car value)
-                                         (cons (cdr value) rest))
-                                        next-count)
-                                       (let push
-                                           ((index
-                                             (- (vector-length value) 1))
-                                            (next rest))
-                                         (if (< index 0)
-                                             (walk next next-count)
-                                             (push
-                                              (- index 1)
-                                              (cons
-                                               (vector-ref value index)
-                                               next)))))))))))))
+                     (let ((value (car pending))
+                           (rest (cdr pending)))
+                       (cond
+                        ((not (or (pair? value) (vector? value)))
+                         (walk rest count))
+                        ((seen-compound? value)
+                         (walk rest count))
+                        (else
+                         (let ((next-count (+ count 1)))
+                           (if (> next-count
+                                  consent-identity-compatibility-limit)
+                               (error
+                                (string-append
+                                 "large text query requires fast "
+                                 "identity map")
+                                record))
+                           (consent-identity-map-set! seen value #t)
+                           (walk
+                            (prepend-compound-children value rest)
+                            next-count))))))))
              (lambda ()
                (consent-identity-map-release! seen))))))
 

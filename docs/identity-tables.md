@@ -179,13 +179,24 @@ This version deliberately excludes weak keys, ephemerons, finalizers, and
 collector notification. Those semantics belong to #666 and require a distinct
 collector-owned contract rather than a mode flag on a strong identity table.
 
-## Compatibility facade and consumers
+## Lean host-map specialization and consumers
 
-`(consent identity-map)` is now a portable compatibility facade over a
-host-policy identity table. It preserves the existing constructor, lookup,
-mutation, and fast-backend query while adding delete, clear, release, and
-statistics. The facade contains no host table implementation; both evaluator
-bootstraps load the same Scheme source above the three-operation adapter.
+`(consent identity-map)` is a lean fixed-policy host-key specialization. It
+preserves the existing constructor, lookup, mutation, and fast-backend query
+while adding delete, clear, release, and structural statistics. Both evaluator
+bootstraps load the same Scheme source above the same three-operation adapter
+as the generic table. A seven-slot control vector and four-slot chained nodes
+replace the generic table's configurable record, tombstone policy, entry
+snapshots, and 19-slot operation-counter vector. This keeps hot graph walks
+from paying for policy and accounting they do not consume without adding a
+native host boundary.
+
+The specialization and generic table import `(consent identity-policy)`, so
+the no-hash envelope and maximum hot-map capacity remain single-sourced rather
+than drifting between implementations. Identity-map statistics report current
+structure and lifecycle only; deterministic operation accounting remains the
+generic table's responsibility.
+
 Its fixed fast-backend bucket ceiling is 16,777,215 associations. This covers
 the runtime's ten-million-node default evaluation envelope without
 preallocating that ceiling. Its four-bucket initial floor limits small-map
@@ -209,6 +220,24 @@ Memory redaction and equality consumers scan unary graph spines with
 constant-space cycle detection, allocating an identity table only when a graph
 branches or unequal cycle periods require general congruence closure.
 
+Redaction predicates now mark visited pair and vector identities, and redaction
+copies memoize source-to-output identities before descending. Cycles therefore
+terminate, shared subgraphs remain shared, and repeated shared secrets log one
+decision. Helper and artifact copies use the same shell-first memoization so
+their documented Scheme-readable payloads preserve cycles and sharing instead
+of duplicating or looping. Both use `(consent identity-map)` directly; scalar
+roots bypass table allocation.
+
+The JSON writer uses graph identities as an active path rather than a global
+visited set. Object spines receive constant-space proper-list and cycle
+validation; the map retains only active container roots and compound entry
+edges. Atomic adjoin avoids a separate lookup and insertion, and scalar entry
+values bypass identity hashing. Shared acyclic values remain legal and are
+emitted at every occurrence; an ancestor back edge raises a deterministic JSON
+error. Memory-key sessions now use the identity-map specialization directly on
+both fast and compatibility hosts, removing their duplicate 64-entry alist
+while preserving their consumer-specific fail-closed diagnostic.
+
 ## Verification
 
 `tests/scheme/consent-identity-table-test.scm` covers equal-but-distinct host
@@ -219,6 +248,10 @@ accounting. A
 forced compatibility case fills exactly 64 identities and proves the next
 insertion fails without hashing or mutation. Counted 128- and 256-entry runs
 guard additive expected O(N) work.
+
+Redaction, helper, evaluator, and JSON suites cover cyclic and shared consumer
+graphs. The identity-table suite pins the 64-key no-hash envelope inherited by
+these compatibility consumers.
 
 Exception and continuation fixtures verify release on every dynamic exit and
 re-entry failure. The portable plan runs the same program on direct and
