@@ -3410,6 +3410,15 @@ ntry"
       "Return cross-root host conversion state sharing OWNED-STATE."
       (vector #f owned-state))
 
+    (define (native-egress-state-release! state)
+      "Release STATE's call-scoped host identity map when allocated."
+      (let ((map (vector-ref state 0)))
+        (if map
+            (begin
+              (consent-identity-map-release! map)
+              (vector-set! state 0 #f))))
+      state)
+
     (define (call-with-fresh-native-egress-state procedure)
       "Call PROCEDURE with fresh egress state and release it on every exit."
       (let* ((owned-state (make-native-owned-state))
@@ -3417,7 +3426,9 @@ ntry"
         (dynamic-wind
          (lambda () #t)
          (lambda () (procedure state))
-         (lambda () (native-owned-state-release! owned-state)))))
+         (lambda ()
+           (native-egress-state-release! state)
+           (native-owned-state-release! owned-state)))))
 
     (define (native-egress-state-ref state source absent)
       "Return SOURCE's completed conversion from STATE, or ABSENT."
@@ -3673,8 +3684,11 @@ ntry"
                             (if owned?
                                 (finish-owned copy source)
                                 (copy-host-source copy source)))))
-                    (let ((root (make-node value)))
-                      (let scan ()
+                    (dynamic-wind
+                     (lambda () #t)
+                     (lambda ()
+                      (let ((root (make-node value)))
+                       (let scan ()
                         (if (pair? scan-work)
                             (let* ((node (car scan-work))
                                    (length
@@ -3722,9 +3736,13 @@ ntry"
                                    (vector-ref node 6)
                                    (vector-ref node 0)))
                               (remember (cdr rest)))))
-                      (if (vector-ref root 5)
-                          (vector-ref root 6)
-                          value))))))))
+                       (if (vector-ref root 5)
+                           (vector-ref root 6)
+                           value)))
+                     (lambda ()
+                       (if host-nodes
+                           (consent-identity-map-release!
+                            host-nodes))))))))))
 
     (define (native-copy-source-noop! target source)
       "Return TARGET without attaching durable source metadata."
@@ -3913,8 +3931,9 @@ host"
     (define native-call-context #f)
 
     ;; The active native graph bridge is dynamically scoped with the outermost
-    ;; native call. Re-entrant calls and callbacks share that one transaction;
-    ;; its identity maps and callback shims become unreachable on outer unwind.
+    ;; native call. Re-entrant calls and callbacks share that one transaction.
+    ;; The outer unwind explicitly releases its identity maps before restoring
+    ;; state.
     ;; Raw host mirrors and callback shims must not escape or be retained by a
     ;; native library. Stateful native code retains Consent-owned values or
     ;; opaque handles, never borrowed host containers.
@@ -3934,7 +3953,8 @@ host"
       ;; holds call-scoped callback indexes; slot five is the unique scope
       ;; token. Slot six records a dynamically scoped compound-entry
       ;; prohibition for callbacks or re-entrant native transitions. Slot
-      ;; seven lazily memoizes mixed-domain egress across argument roots.
+      ;; seven lazily memoizes mixed-domain egress across argument roots. Slot
+      ;; eight owns every other host identity map allocated by the bridge.
       ;; The portable alist backend preserves identity semantics but would make
       ;; graph and callback transitions silently quadratic. Native borrowing
       ;; is therefore unavailable unless the host provides identity hashing.
@@ -3946,7 +3966,28 @@ host"
               #f
               (list 'native-call-scope)
               #f
-              #f))
+              #f
+              '()))
+
+    (define (native-bridge-make-identity-map! bridge domain)
+      "Allocate and register one call-scoped identity map for BRIDGE."
+      (let ((created (consent-make-identity-map domain)))
+        (vector-set! bridge 8 (cons created (vector-ref bridge 8)))
+        created))
+
+    (define (native-bridge-release! bridge)
+      "Release every call-scoped graph index owned by BRIDGE."
+      (let ((egress-state (vector-ref bridge 7)))
+        (if egress-state
+            (native-egress-state-release! egress-state)))
+      (let loop ((rest (vector-ref bridge 8)))
+        (if (pair? rest)
+            (begin
+              (consent-identity-map-release! (car rest))
+              (loop (cdr rest)))))
+      (vector-set! bridge 8 '())
+      (native-owned-state-release! (native-bridge-owned-index bridge))
+      bridge)
 
     (define (native-bridge-context bridge)
       "Return BRIDGE's owning evaluation context."
@@ -3989,7 +4030,8 @@ host"
       "Return BRIDGE's native-object identity index, allocating it lazily."
       (or (native-bridge-native-index bridge)
           (let ((created
-                 (consent-make-identity-map 'native-bridge-index)))
+                 (native-bridge-make-identity-map!
+                  bridge 'native-bridge-index)))
             (vector-set! bridge 3 created)
             created)))
 
@@ -4002,8 +4044,10 @@ host"
       (or (native-bridge-callback-indexes bridge)
           (let ((created
                  (vector
-                  (consent-make-identity-map 'native-callback-forward)
-                  (consent-make-identity-map 'native-callback-origin))))
+                  (native-bridge-make-identity-map!
+                   bridge 'native-callback-forward)
+                  (native-bridge-make-identity-map!
+                   bridge 'native-callback-origin))))
             (vector-set! bridge 4 created)
             created)))
 
@@ -4045,8 +4089,8 @@ host"
               (or
                (consent-identity-map-ref forward context #f)
                (let ((created
-                      (consent-make-identity-map
-                       'native-callback-policy)))
+                      (native-bridge-make-identity-map!
+                       bridge 'native-callback-policy)))
                  (consent-identity-map-set! forward context created)
                  created)))
              (callables
@@ -4054,8 +4098,8 @@ host"
                (consent-identity-map-ref
                 policies convert-symbols? #f)
                (let ((created
-                      (consent-make-identity-map
-                       'native-callback-callable)))
+                      (native-bridge-make-identity-map!
+                       bridge 'native-callback-callable)))
                  (consent-identity-map-set!
                   policies convert-symbols? created)
                  created))))
@@ -5430,8 +5474,8 @@ required")))
                  (set! native-call-context previous-context)
                  (set! native-call-graph-bridge previous-bridge)
                  ;; Mutations performed before a native exception remain
-                 ;; observable. Release the intrusive header map even when
-                 ;; reconciliation itself raises.
+                 ;; observable. Release every bridge-owned identity map even
+                 ;; when reconciliation itself raises.
                  (dynamic-wind
                   (lambda () #t)
                   (lambda ()
@@ -5442,8 +5486,7 @@ required")))
                           (native-bridge-native-values->owned bridge '())
                           (set! reconciliation-state 'completed))))
                   (lambda ()
-                    (native-owned-state-release!
-                     (native-bridge-owned-index bridge))))))))))
+                    (native-bridge-release! bridge)))))))))
 
     (define (consent-call-native-library procedure context . arguments)
       "Call native PROCEDURE through the runtime representation boundary."

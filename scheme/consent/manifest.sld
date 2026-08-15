@@ -339,6 +339,7 @@
           consent-identity-table-maximum-capacity
           consent-identity-table-reserve!
           consent-identity-table-host-contains?
+          consent-identity-table-host-adjoin!
           consent-identity-table-host-ref
           consent-identity-table-host-set!
           consent-identity-table-host-delete!
@@ -384,6 +385,7 @@
         (exports
          (consent-identity-map-fast-backend?
           consent-make-identity-map
+          consent-identity-map-adjoin!
           consent-identity-map-ref
           consent-identity-map-set!
           consent-identity-map-delete!

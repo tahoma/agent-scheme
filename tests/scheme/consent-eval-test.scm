@@ -689,6 +689,7 @@ ffset 1) (span 7) (phase read)))"))
        (cycle (cons 9 '()))
        (unchanged-child (cons 'stable '()))
        (unchanged (vector unchanged-child unchanged-child))
+       (unchanged-flat (list 'stable 'leaf))
        (callable (lambda () 'value))
        (wrapped-child (cons callable '()))
        (wrapped-root (vector wrapped-child wrapped-child))
@@ -700,6 +701,8 @@ ffset 1) (span 7) (phase read)))"))
          (converted-cycle (consent-host-datum->consent-datum cycle))
          (converted-unchanged
           (consent-host-datum->consent-datum unchanged))
+         (converted-unchanged-flat
+          (consent-host-datum->consent-datum unchanged-flat))
          (converted-wrapped
           (consent-host-datum->consent-datum
            wrapped-root
@@ -725,12 +728,13 @@ ffset 1) (span 7) (phase read)))"))
            (vector-ref converted-root 1))
       (eq? converted-cycle (cdr converted-cycle))
       (eq? converted-unchanged unchanged)
+      (eq? converted-unchanged-flat unchanged-flat)
       (eq? (vector-ref converted-wrapped 0)
            (vector-ref converted-wrapped 1))
       wrapper-count
       (consent-host-symbol-eq?
        (car converted-wrapped-child) 'wrapped))
-     '(#t deep-source #t #t #t #t 1 #t)))))
+     '(#t deep-source #t #t #t #t #t 1 #t)))))
 
 (testing-registry-case
  'proper-list-elements-mixed-linear-cycle-safe
@@ -4269,20 +4273,27 @@ ash))
       (set-car! right-last 'same)
       (set-cdr! left-last left)
       (set-cdr! right-last right)
-      (let* ((left-shared (list 'shared))
+      (let* ((one-period (cons 'same #f))
+             (two-period-first (cons 'same #f))
+             (two-period-second (cons 'same #f))
+             (left-shared (list 'shared))
              (right-shared (list 'shared))
              (left-root (vector left-shared left-shared #f))
              (right-root (vector right-shared right-shared #f)))
+        (set-cdr! one-period one-period)
+        (set-cdr! two-period-first two-period-second)
+        (set-cdr! two-period-second two-period-first)
         (vector-set! left-root 2 left-root)
         (vector-set! right-root 2 right-root)
         (list same-acyclic?
               different-at-end?
               (equal? left right)
+              (equal? one-period two-period-first)
               (equal? left-root right-root)))))"
  '((max-steps . 2000000)
    (max-value-nodes . 500000)
    (max-host-callbacks . 2000000))
- "(#t #f #t #t)"))
+ "(#t #f #t #t #t)"))
 
 (testing-registry-case
  'deep-list-copy-is-stack-safe-and-topology-preserving
@@ -9821,6 +9832,26 @@ te-pulls'."
 
 ;; Graph projection and result rendering index identity by the current graph,
 ;; preserving sharing without rescanning an ever-growing ancestor list.
+(testing-registry-case
+ 'symbol-boundary-unary-pair-equality
+ '(portable core datum performance)
+(let* ((table (consent-make-symbol-table))
+       (owned (consent-intern-symbol table "shared-name")))
+  (test-assert
+   'symbol-boundary-short-flat-list-owned-symbol
+   (consent-host-symbol-equal?
+    (list owned 'tail 3) '(shared-name tail 3)))
+  (test-assert
+   'symbol-boundary-short-flat-list-mismatch
+   (not
+    (consent-host-symbol-equal?
+     (list owned 'tail 3) '(shared-name other 3))))
+  (test-assert
+   'symbol-boundary-long-flat-list-owned-symbol
+   (consent-host-symbol-equal?
+    (make-list 4096 owned)
+    (make-list 4096 'shared-name)))))
+
 (testing-registry-case
  'symbol-boundary-cyclic-graph-equality
  '(portable core datum graph performance)

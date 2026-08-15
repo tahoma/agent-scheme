@@ -62,9 +62,11 @@
                 avl-tree-max
                 avl-tree-key-predecessor)
           (only (consent identity-map)
+                consent-identity-map-adjoin!
                 consent-identity-map-fast-backend?
                 consent-make-identity-map
                 consent-identity-map-ref
+                consent-identity-map-release!
                 consent-identity-map-set!))
   (begin
     ;; Small memory stores dominate interactive agent work.  Keep at most this
@@ -682,54 +684,116 @@
                 (and (not (eq? slow-one fast-two))
                      (loop slow-one fast-two))))))))))
 
+    ;; Unique result selecting the general branching-graph traversal.
+    (define memory-tagged-branch
+      (vector 'memory-tagged-branch))
+
+    ;; Unique result marking the end of a unary compound spine.
+    (define memory-tagged-leaf
+      (vector 'memory-tagged-leaf))
+
+    ;; Return VALUE's only compound child or one of the tagged results above.
+    (define-syntax memory-single-compound-child
+      (syntax-rules ()
+        ((_ value)
+         (let ((current value))
+           (cond
+            ((pair? current)
+             (let* ((left (car current))
+                    (right (cdr current))
+                    (left? (or (pair? left) (vector? left)))
+                    (right? (or (pair? right) (vector? right))))
+               (cond
+                ((and left? right?) memory-tagged-branch)
+                (left? left)
+                (right? right)
+                (else memory-tagged-leaf))))
+            ((vector? current)
+             (let find ((index 0) (child memory-tagged-leaf))
+               (if (= index (vector-length current))
+                   child
+                   (let ((candidate (vector-ref current index)))
+                     (if (or (pair? candidate) (vector? candidate))
+                         (if (eq? child memory-tagged-leaf)
+                             (find (+ index 1) candidate)
+                             memory-tagged-branch)
+                         (find (+ index 1) child))))))
+            (else memory-tagged-leaf))))))
+
     (define (memory-values-contain-tagged? values tags irritant)
       "Return #t when VALUES contain a record headed by one of TAGS."
-      ;; Configured products use identity hashing.  Compatibility hosts may
-      ;; inspect only a fixed small graph, so the fallback cannot grow into an
-      ;; unbounded quadratic identity alist.
-      (let ((fast? (consent-identity-map-fast-backend?))
-            (seen (consent-make-identity-map))
-            (seen-count 0)
-            (absent (vector 'absent)))
+      (let ()
         (define (matching-record? value)
-          (and
-           (pair? value)
-           (let ((candidate (car value)))
-             (memq candidate tags))))
-        (define (seen? value)
-          (let ((known (consent-identity-map-ref seen value absent)))
-            (if (eq? known absent)
-                (begin
-                  (set! seen-count (+ seen-count 1))
-                  (if (and (not fast?) (> seen-count 64))
-                      (error
-                       "large memory record requires fast identity map"
-                       irritant))
-                  (consent-identity-map-set! seen value #t)
-                  #f)
-                #t)))
-        (let walk ((pending values))
-          (if (null? pending)
+          (and (pair? value) (memq (car value) tags)))
+        (define (unary-scan root)
+          ;; Brent cycle detection keeps unary spines stack safe and constant
+          ;; space. Branching graphs use the identity-table walk.
+          (let loop
+              ((value root) (checkpoint root) (power 1) (distance 0))
+            (if (matching-record? value)
+                #t
+                (let ((next (memory-single-compound-child value)))
+                  (cond
+                   ((eq? next memory-tagged-branch) memory-tagged-branch)
+                   ((eq? next memory-tagged-leaf) #f)
+                   ((eq? next checkpoint) #f)
+                   ((= (+ distance 1) power)
+                    (loop next next (* power 2) 0))
+                   (else
+                    (loop next checkpoint power (+ distance 1))))))))
+        (define (branching-scan)
+          ;; Compatibility hosts admit only a fixed small branching graph, so
+          ;; the fallback cannot become an unbounded quadratic identity alist.
+          (let ((fast? (consent-identity-map-fast-backend?))
+                (seen (consent-make-identity-map))
+                (seen-count 0))
+            (define (seen? value)
+              (if (consent-identity-map-adjoin! seen value #t)
+                  (begin
+                    (set! seen-count (+ seen-count 1))
+                    (if (and (not fast?) (> seen-count 64))
+                        (error
+                         "large memory record requires fast identity map"
+                         irritant))
+                    #f)
+                  #t))
+            (dynamic-wind
+             (lambda () #t)
+             (lambda ()
+               (let walk ((pending values))
+                 (if (null? pending)
+                     #f
+                     (let ((value (car pending))
+                           (rest (cdr pending)))
+                       (cond
+                        ((matching-record? value) #t)
+                        ((pair? value)
+                         (if (seen? value)
+                             (walk rest)
+                             (walk
+                              (cons (car value) (cons (cdr value) rest)))))
+                        ((vector? value)
+                         (if (seen? value)
+                             (walk rest)
+                             (let push
+                                 ((index (- (vector-length value) 1))
+                                  (next rest))
+                               (if (< index 0)
+                                   (walk next)
+                                   (push
+                                    (- index 1)
+                                    (cons
+                                     (vector-ref value index) next))))))
+                        (else (walk rest)))))))
+             (lambda () (consent-identity-map-release! seen)))))
+        (let loop ((rest values))
+          (if (null? rest)
               #f
-              (let ((value (car pending))
-                    (rest (cdr pending)))
+              (let ((result (unary-scan (car rest))))
                 (cond
-                 ((matching-record? value) #t)
-                 ((pair? value)
-                  (if (seen? value)
-                      (walk rest)
-                      (walk (cons (car value) (cons (cdr value) rest)))))
-                 ((vector? value)
-                  (if (seen? value)
-                      (walk rest)
-                      (let push ((index (- (vector-length value) 1))
-                                 (next rest))
-                        (if (< index 0)
-                            (walk next)
-                            (push
-                             (- index 1)
-                             (cons (vector-ref value index) next))))))
-                 (else (walk rest))))))))
+                 ((eq? result memory-tagged-branch) (branching-scan))
+                 (result #t)
+                 (else (loop (cdr rest)))))))))
 
     (define (memory-record-contains-tagged? datum tag . additional-tags)
       "Return #t when DATUM contains a record headed by a requested tag."
@@ -1420,20 +1484,26 @@
                           "unbounded access projection requires fast "
                           "identity map")
                          id-key))))))
-        (let loop ((rest entries) (records '()) (projections '()))
-          (if (null? rest)
-              (vector (reverse records) (reverse projections))
-              (let ((entry (car rest)))
-                (loop
-                 (cdr rest)
-                 (cons (memory-live-entry-record entry) records)
-                 (cons
-                  (vector
-                   (if refresh-security?
-                       (selection-sidecar entry)
-                       (memory-live-entry-sidecar entry))
-                   (access-sequence entry))
-                  projections)))))))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (let loop ((rest entries) (records '()) (projections '()))
+             (if (null? rest)
+                 (vector (reverse records) (reverse projections))
+                 (let ((entry (car rest)))
+                   (loop
+                    (cdr rest)
+                    (cons (memory-live-entry-record entry) records)
+                    (cons
+                     (vector
+                      (if refresh-security?
+                          (selection-sidecar entry)
+                          (memory-live-entry-sidecar entry))
+                      (access-sequence entry))
+                     projections))))))
+         (lambda ()
+           (if known-access
+               (consent-identity-map-release! known-access))))))
 
     (define (memory-store-known-key store scope key)
       "Return STORE's canonical descriptor for SCOPE/KEY, or #f."
@@ -1503,24 +1573,30 @@
       (let* ((fast? (consent-identity-map-fast-backend?))
              (known (and fast? (consent-make-identity-map)))
              (absent (vector 'absent)))
-        (call-with-memory-index-key-session
-         (lambda (prepare)
-           (define (projection term)
-             (if fast?
-                 (let ((cached
-                        (consent-identity-map-ref known term absent)))
-                   (if (eq? cached absent)
-                       (let ((value
-                              (memory-query-term-projection
-                               store prepare term #f)))
-                         (consent-identity-map-set! known term value)
-                         value)
-                       cached))
-                 (memory-query-term-projection
-                  store prepare term #t)))
-           (vector
-            query
-            (list->vector (map projection (memory-query-terms query))))))))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (call-with-memory-index-key-session
+            (lambda (prepare)
+              (define (projection term)
+                (if fast?
+                    (let ((cached
+                           (consent-identity-map-ref known term absent)))
+                      (if (eq? cached absent)
+                          (let ((value
+                                 (memory-query-term-projection
+                                  store prepare term #f)))
+                            (consent-identity-map-set! known term value)
+                            value)
+                          cached))
+                    (memory-query-term-projection
+                     store prepare term #t)))
+              (vector
+               query
+               (list->vector
+                (map projection (memory-query-terms query)))))))
+         (lambda ()
+           (if known (consent-identity-map-release! known))))))
 
     (define (memory-store-find store scope query)
       "Return SCOPE records matching QUERY."

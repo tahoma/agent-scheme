@@ -936,7 +936,7 @@
          "\"memory key host compound requires fast identity map\" "
          "\"unbounded memory key comparison requires fast identity map\" "
          "\"unbounded access projection requires fast identity map\" "
-         "\"large memory record requires fast identity map\")")))
+         "\"memory key session cache requires fast identity map\")")))
       (should
        (equal
         (consent-library-test--external/options
@@ -1512,6 +1512,29 @@
                    (cdr (consent-identity-table-stats table))))))))"
      '(:internal-libraries-allowed t))
     "(#t #t #f right owned 3 #f 7)")))
+
+(ert-deftest consent-library-test-identity-table-compound-comparison-portable ()
+  "Keep compound identity comparison above the native host boundary."
+  (cl-letf
+      (((symbol-function 'consent--primitive-consent-host-identity=?)
+        (lambda (_arguments _context)
+          (error "compound comparison crossed the host boundary"))))
+    (should
+     (equal
+      (consent-library-test--external/options
+       "(import (scheme base) (consent identity-table))
+        (let ((table
+               (consent-make-identity-table
+                5 31 'allow-growth 'host 'portable-comparison))
+              (left (vector 'same))
+              (right (vector 'same)))
+          (consent-identity-table-host-set! table left 'left)
+          (consent-identity-table-host-set! table right 'right)
+          (list
+           (consent-identity-table-host-ref table left 'absent)
+           (consent-identity-table-host-ref table right 'absent)))"
+       '(:internal-libraries-allowed t))
+      "(left right)"))))
 
 (ert-deftest consent-library-test-scratch-arena-runs-source-backed ()
   "Exercise scratch ownership and marks through the Emacs source loader."

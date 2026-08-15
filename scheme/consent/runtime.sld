@@ -2856,16 +2856,57 @@ tuple."
            ((procedure? value)
             (wrap-procedure value))
            (else value)))
+        (define (flat-proper-host-list? value)
+          "Return whether VALUE is an acyclic proper list of leaves."
+          (let loop ((cursor value)
+                     (checkpoint value)
+                     (power 1)
+                     (distance 0))
+            (cond
+             ((null? cursor) #t)
+             ((not (pair? cursor)) #f)
+             ((host-conversion-compound? (car cursor)) #f)
+             (else
+              (let ((next (cdr cursor)))
+                (cond
+                 ((eq? next checkpoint) #f)
+                 ((= (+ distance 1) power)
+                  (loop next next (* power 2) 0))
+                 (else
+                  (loop next checkpoint power (+ distance 1)))))))))
+        (define (convert-flat-proper-host-list value)
+          "Convert one flat proper host list without a graph index."
+          (let ((head (cons #f '())))
+            (let loop ((source value) (tail head) (changed? #f))
+              (if (null? source)
+                  (if changed? (cdr head) value)
+                  (let* ((original (car source))
+                         (converted (convert-leaf original))
+                         (copy (cons converted '())))
+                    (consent-copy-datum-source! copy source)
+                    (set-cdr! tail copy)
+                    (loop
+                     (cdr source)
+                     copy
+                     (or changed?
+                         (not (runtime-symbol-eq?
+                               converted original)))))))))
         ;; Scalar boundary values dominate this helper's callers. Avoid the
         ;; graph registry and worklist unless DATUM can contain graph edges.
-        (if (not (host-conversion-compound? datum))
-            (convert-leaf datum)
-            (let ((nodes-by-source #f)
+        (cond
+         ((not (host-conversion-compound? datum))
+          (convert-leaf datum))
+         ((and (pair? datum)
+               (flat-proper-host-list? datum))
+          (convert-flat-proper-host-list datum))
+         (else
+          (let ((nodes-by-source #f)
                   (host-fast?
                    (consent-identity-map-fast-backend?))
                   (host-count 0)
                   (all-nodes '())
-                  (locally-changed '()))
+                  (locally-changed '())
+                  (active? #t))
               (define (conversion-node-ref source)
                 "Return SOURCE's conversion node, or #f before/if absent."
                 "Node slots are source, pair-kind?, edge payloads, compound"
@@ -3040,12 +3081,25 @@ tuple."
                                            (conversion-edge-value node index))
                                           (fill (+ index 1) length)))))))
                         (loop (cdr rest))))))
-              (let ((root (make-conversion-node datum)))
-                (discover-conversion-graph! root)
-                (propagate-conversion-changes!)
-                (allocate-conversion-outputs!)
-                (fill-conversion-outputs!)
-                (vector-ref root 6))))))
+              (dynamic-wind
+               (lambda ()
+                 (if (not active?)
+                     (error
+                      (string-append
+                       "host datum conversion continuation "
+                       "cannot be re-entered"))))
+               (lambda ()
+                 (let ((root (make-conversion-node datum)))
+                   (discover-conversion-graph! root)
+                   (propagate-conversion-changes!)
+                   (allocate-conversion-outputs!)
+                   (fill-conversion-outputs!)
+                   (vector-ref root 6)))
+               (lambda ()
+                 (set! active? #f)
+                 (if nodes-by-source
+                     (consent-identity-map-release!
+                      nodes-by-source)))))))))
 
     (define (network-public-datum datum)
       "Convert host-owned network metadata to Consent data before publication.\
@@ -3700,11 +3754,6 @@ tuple."
       "Associate identity KEY with VALUE in MAP and return VALUE."
       (let* ((owned? (consent-datum-object? key))
              (index (if owned? 0 1))
-             (existing
-              (if owned?
-                  runtime-identity-map-absent
-                  (runtime-identity-map-ref
-                   map key runtime-identity-map-absent)))
              (backend
               (or
                (vector-ref map index)
@@ -3714,21 +3763,23 @@ tuple."
                           (consent-make-identity-map))))
                  (vector-set! map index created)
                  created))))
-        (if (and
-             (not owned?)
-             (eq? existing runtime-identity-map-absent))
-            (begin
-              (if (and
-                   (not (vector-ref map 2))
-                   (>= (vector-ref map 3)
-                       runtime-host-identity-compatibility-limit))
-                  (error
-                   "runtime foreign graph requires fast identity maps"
-                   key))
-              (vector-set! map 3 (+ (vector-ref map 3) 1))))
         (if owned?
             (consent-datum-object-map-set! backend key value)
-            (consent-identity-map-set! backend key value)))
+            (if (and
+                 (not (vector-ref map 2))
+                 (>= (vector-ref map 3)
+                     runtime-host-identity-compatibility-limit))
+                (if (eq?
+                     (consent-identity-map-ref
+                      backend key runtime-identity-map-absent)
+                     runtime-identity-map-absent)
+                    (error
+                     "runtime foreign graph requires fast identity maps"
+                     key)
+                    (consent-identity-map-set! backend key value))
+                (if (consent-identity-map-adjoin! backend key value)
+                    (vector-set! map 3 (+ (vector-ref map 3) 1))
+                    (consent-identity-map-set! backend key value)))))
       value)
 
     (define (runtime-identity-map-release! map)
@@ -3764,25 +3815,51 @@ tuple."
       "Associate identity KEY with VALUE in source-copy MAP."
       (if (context-source-copy-direct-owner? key)
           (consent-datum-source-set! key value)
-          (let ((backend
-                 (or (vector-ref map 0)
-                     (let ((created (consent-make-identity-map)))
-                       (vector-set! map 0 created)
-                       created))))
+          (let ((backend (vector-ref map 0)))
+            (if (not backend)
+                (let ((created (consent-make-identity-map)))
+                  (vector-set! map 0 created)
+                  (set! backend created)))
+            (if (and
+                 (not (vector-ref map 1))
+                 (>= (vector-ref map 2)
+                     runtime-host-identity-compatibility-limit))
+                (if (eq?
+                     (consent-identity-map-ref
+                      backend key runtime-identity-map-absent)
+                     runtime-identity-map-absent)
+                    (error
+                     "source metadata graph requires fast identity maps"
+                     key)
+                    (consent-identity-map-set! backend key value))
+                (if (consent-identity-map-adjoin! backend key value)
+                    (vector-set! map 2 (+ (vector-ref map 2) 1))
+                    (consent-identity-map-set! backend key value))))))
+
+    (define (context-source-copy-map-adjoin! map key value)
+      "Associate absent host KEY with VALUE and report insertion."
+      (let ((backend (vector-ref map 0)))
+        (if (not backend)
+            (let ((created (consent-make-identity-map)))
+              (vector-set! map 0 created)
+              (set! backend created)))
+        (if (and
+             (not (vector-ref map 1))
+             (>= (vector-ref map 2)
+                 runtime-host-identity-compatibility-limit))
             (if (eq?
                  (consent-identity-map-ref
                   backend key runtime-identity-map-absent)
                  runtime-identity-map-absent)
-                (begin
-                  (if (and
-                       (not (vector-ref map 1))
-                       (>= (vector-ref map 2)
-                           runtime-host-identity-compatibility-limit))
-                      (error
-                       "source metadata graph requires fast identity maps"
-                       key))
-                  (vector-set! map 2 (+ (vector-ref map 2) 1))))
-            (consent-identity-map-set! backend key value))))
+                (error
+                 "source metadata graph requires fast identity maps"
+                 key)
+                #f)
+            (let ((inserted?
+                   (consent-identity-map-adjoin! backend key value)))
+              (if inserted?
+                  (vector-set! map 2 (+ (vector-ref map 2) 1)))
+              inserted?))))
 
     (define (context-source-copy-source-ref context value)
       "Return materialized CONTEXT-local source metadata for copied VALUE."
@@ -3848,25 +3925,29 @@ tuple."
           (let* ((state (context-source-copies context))
                  (map (vector-ref state 1))
                  (direct-owner?
-                  (context-source-copy-direct-owner? value))
-                 (existing
-                  (context-source-copy-map-ref map value #f)))
+                  (context-source-copy-direct-owner? value)))
             ;; The observable contract exposes only the current immutable
             ;; note. Direct-owner fields retain no context entry, and replacing
             ;; a host entry must not retain history or consume another unit.
-            (if (and (not direct-owner?) (not existing))
+            (if direct-owner?
+                (context-source-copy-map-set! map value metadata)
                 (let* ((count (vector-ref state 0))
-                       (next-count (+ count 1))
                        (limit (context-maximum-source-metadata context)))
-                  (if (> next-count limit)
-                      (budget-stop!
-                       context
-                       'source-metadata
-                       "source copy count exceeds maximum source metadata"
-                       next-count
-                       limit))
-                  (vector-set! state 0 next-count)))
-            (context-source-copy-map-set! map value metadata)))
+                  (if (< count limit)
+                      (if (context-source-copy-map-adjoin!
+                           map value metadata)
+                          (vector-set! state 0 (+ count 1))
+                          (context-source-copy-map-set!
+                           map value metadata))
+                      (if (context-source-copy-map-ref map value #f)
+                          (context-source-copy-map-set!
+                           map value metadata)
+                          (budget-stop!
+                           context
+                           'source-metadata
+                           "source copy count exceeds maximum source metadata"
+                           (+ count 1)
+                           limit)))))))
       value)
 
     (define (context-source-copy-set! context value source)

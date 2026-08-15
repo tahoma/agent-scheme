@@ -10707,6 +10707,147 @@ d"
                (consent-number? right)
                (numeric-representation-eqv? left right))))
 
+    ;; Unique result for comparisons that require the general graph path.
+    (define equal-comparison-unknown
+      (vector 'equal-comparison-unknown))
+
+    (define (equal-graph-compound? value)
+      "Return whether VALUE participates in graph comparison work."
+      (or (consent-datum-pair? value)
+          (pair? value)
+          (consent-datum-vector? value)
+          (vector? value)
+          (consent-datum-string? value)
+          (string? value)
+          (consent-datum-bytevector? value)
+          (bytevector? value)
+          (consent-record? value)
+          (consent-record-type? value)))
+
+    (define (equal-pair-value? value)
+      "Return whether VALUE is an owned or private host pair."
+      (or (consent-datum-pair? value) (pair? value)))
+
+    (define (equal-pair-kind-matches? first second)
+      "Return whether FIRST and SECOND use the same pair representation."
+      (eq? (consent-datum-pair? first)
+           (consent-datum-pair? second)))
+
+    (define (equal-pair-same? first second)
+      "Return whether same-kind pair values FIRST and SECOND are identical."
+      (if (consent-datum-pair? first)
+          (consent-datum-same? first second)
+          (eq? first second)))
+
+    (define (equal-pair-car first)
+      "Return same-kind pair FIRST's car without repeated public validation."
+      (if (consent-datum-pair? first)
+          (consent-datum-car-trusted first)
+          (car first)))
+
+    (define (equal-pair-cdr first)
+      "Return same-kind pair FIRST's cdr without repeated public validation."
+      (if (consent-datum-pair? first)
+          (consent-datum-cdr-trusted first)
+          (cdr first)))
+
+    (define (equal-atomic-value? first second)
+      "Compare atomic values, or return the general-path marker."
+      (cond
+       ((eqv-value? first second) #t)
+       ((or (equal-graph-compound? first)
+            (equal-graph-compound? second))
+        equal-comparison-unknown)
+       (else (equal? first second))))
+
+    (define (equal-unary-pair-result left right)
+      "Compare one unary pair graph, returning result/count or unknown."
+      ;; Proper lists and equal-period cdr cycles need no identity index. Brent
+      ;; checkpoints prove those shapes in constant auxiliary space. A pair in
+      ;; either car position or an unequal-period cycle retains the general
+      ;; congruence-closure path.
+      (let loop ((first left)
+                 (second right)
+                 (checkpoint-first left)
+                 (checkpoint-second right)
+                 (power 1)
+                 (distance 0)
+                 (count 0))
+        (cond
+         ((and (equal-pair-value? first)
+               (equal-pair-value? second)
+               (equal-pair-kind-matches? first second)
+               (equal-pair-same? first second))
+          (cons #t count))
+         ((and (equal-pair-value? first)
+               (equal-pair-value? second))
+          (if (not (equal-pair-kind-matches? first second))
+              (cons #f (+ count 1))
+              (let ((leaf-result
+                     (equal-atomic-value?
+                      (equal-pair-car first)
+                      (equal-pair-car second)))
+                    (next-first (equal-pair-cdr first))
+                    (next-second (equal-pair-cdr second))
+                    (next-count (+ count 1)))
+                (cond
+                 ((eq? leaf-result equal-comparison-unknown)
+                  equal-comparison-unknown)
+                 ((not leaf-result) (cons #f next-count))
+                 ((and (equal-pair-value? next-first)
+                       (equal-pair-value? next-second)
+                       (equal-pair-kind-matches?
+                        next-first next-second)
+                       (equal-pair-same? next-first next-second))
+                  (cons #t (+ next-count 1)))
+                 ((and (equal-pair-value? next-first)
+                       (equal-pair-value? next-second)
+                       (equal-pair-kind-matches?
+                        next-first next-second)
+                       (equal-pair-same?
+                        next-first checkpoint-first)
+                       (equal-pair-same?
+                        next-second checkpoint-second))
+                  (cons #t (+ next-count 1)))
+                 ((or
+                   (and (equal-pair-value? next-first)
+                        (equal-pair-kind-matches?
+                         next-first checkpoint-first)
+                        (equal-pair-same?
+                         next-first checkpoint-first))
+                   (and (equal-pair-value? next-second)
+                        (equal-pair-kind-matches?
+                         next-second checkpoint-second)
+                        (equal-pair-same?
+                         next-second checkpoint-second)))
+                  equal-comparison-unknown)
+                 ((= (+ distance 1) power)
+                  (loop
+                   next-first next-second
+                   next-first next-second
+                   (* power 2) 0 next-count))
+                 (else
+                  (loop
+                   next-first next-second
+                   checkpoint-first checkpoint-second
+                   power (+ distance 1) next-count))))))
+         ((or (equal-pair-value? first)
+              (equal-pair-value? second))
+          (cons #f (+ count 1)))
+         (else
+          (let ((result (equal-atomic-value? first second)))
+            (if (eq? result equal-comparison-unknown)
+                equal-comparison-unknown
+                (cons result count)))))))
+
+    (define (charge-equal-pair-steps! context count)
+      "Charge COUNT unary-pair comparisons to CONTEXT."
+      (let loop ((remaining count))
+        (if (> remaining 0)
+            (begin
+              (note-step! context)
+              (loop (- remaining 1))))))
+
     (define (equal-graph-value? left right context)
       "Iteratively compare non-identical values by congruence closure."
       ;; Union-find records equivalence classes of owned and private host
@@ -10810,18 +10951,6 @@ d"
                        (vector-ref first index)
                        (vector-ref second index)))
                   (loop (- index 1))))))
-        (define (compound-value? value)
-          "Return whether VALUE participates in graph comparison work."
-          (or (consent-datum-pair? value)
-              (pair? value)
-              (consent-datum-vector? value)
-              (vector? value)
-              (consent-datum-string? value)
-              (string? value)
-              (consent-datum-bytevector? value)
-              (bytevector? value)
-              (consent-record? value)
-              (consent-record-type? value)))
         (define (owned-string-content=? first second length)
           "Compare LENGTH owned string slots without host copies."
           (let loop ((index 0))
@@ -10851,8 +10980,8 @@ d"
                      (first (car comparison))
                      (second (cdr comparison)))
                 (set! pending (cdr pending))
-                (if (or (compound-value? first)
-                        (compound-value? second))
+                (if (or (equal-graph-compound? first)
+                        (equal-graph-compound? second))
                     (note-step! context))
                 (cond
                  ((eqv-value? first second) (loop))
@@ -10940,7 +11069,15 @@ d"
       "Implement equal? with an allocation-free identity fast path."
       (if (eqv-value? left right)
           #t
-          (equal-graph-value? left right context)))
+          (if (and (equal-pair-value? left)
+                   (equal-pair-value? right))
+              (let ((result (equal-unary-pair-result left right)))
+                (if (eq? result equal-comparison-unknown)
+                    (equal-graph-value? left right context)
+                    (begin
+                      (charge-equal-pair-steps! context (cdr result))
+                      (car result))))
+              (equal-graph-value? left right context))))
 
     (define (primitive-eq? arguments context)
       "Implement the `eq?` primitive with argument validation and Consent Sche\

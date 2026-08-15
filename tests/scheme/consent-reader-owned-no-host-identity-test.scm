@@ -6,7 +6,12 @@
         (scheme write)
         (consent datum)
         (consent identity-map)
-        (consent reader))
+        (consent reader)
+        (only (consent symbol)
+              consent-intern-symbol
+              consent-make-symbol-table)
+        (only (consent symbol-boundary)
+              consent-host-symbol-equal?))
 
 (define (check condition message . irritants)
   "Raise MESSAGE with IRRITANTS unless CONDITION is true."
@@ -140,6 +145,17 @@
 
 ;; The overlay starts poisoned. Any constructor, lookup, or set through the
 ;; host identity-map interface aborts this program immediately.
+(let* ((table (consent-make-symbol-table))
+       (owned (consent-intern-symbol table "shared-name")))
+  (check
+   (consent-host-symbol-equal?
+    (list owned 'tail 3) '(shared-name tail 3))
+   "short symbol-aware list equality allocated an identity map")
+  (check
+   (not
+    (consent-host-symbol-equal?
+     (list owned 'tail 3) '(shared-name other 3)))
+   "short symbol-aware list mismatch allocated an identity map"))
 (check (= (consent-test-identity-map-operation-count) 0)
        "identity map was touched while importing owned reader libraries")
 (check-owned-read 256)
@@ -162,6 +178,8 @@
          "legacy fallback writer lost cyclic syntax"))
 (check (> (consent-test-identity-map-operation-count) 0)
        "legacy fallback did not exercise the identity alist")
+(check (> (consent-test-identity-map-release-count) 0)
+       "legacy fallback did not release its host identity maps")
 
 (write '(owned-reader-no-host-identity pass
          exact-allocations ((256 . 1281) (1024 . 5121))

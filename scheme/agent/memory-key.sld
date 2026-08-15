@@ -61,6 +61,7 @@
               consent-identity-map-fast-backend?
               consent-make-identity-map
               consent-identity-map-ref
+              consent-identity-map-release!
               consent-identity-map-set!)
         (only (consent reader)
               consent-number-representation-snapshot
@@ -1048,6 +1049,8 @@
                        (consent-growable-vector-snapshot edge-0)
                        (consent-growable-vector-snapshot edge-1))))))
      (lambda ()
+       (if host-objects
+           (consent-identity-map-release! host-objects))
        (if owned-objects
            (consent-datum-object-map-release! owned-objects))))))
 
@@ -1539,7 +1542,9 @@
            (begin
              (set! completed? #t)
              (if owned-cache
-                 (consent-datum-object-map-release! owned-cache))))))))
+                 (consent-datum-object-map-release! owned-cache))
+             (if host-cache
+                 (consent-identity-map-release! host-cache))))))))
 
 (define (memory-prepare-index-key scope key)
   "Return one detached durable ordered key for SCOPE and KEY."
