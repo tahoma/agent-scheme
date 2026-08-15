@@ -495,7 +495,11 @@ repository verification.
 - #716 and #721 can fork symbol-table handles from persistent roots and define
   commit/abort policy without replacing the symbol or AVL representation.
 - #624 can add the official hash Mapping facade by implementing the common
-  provider capabilities without the ordered extension.
+  provider capabilities without the ordered extension. Its #623 HAMT substrate
+  should consult the Bagwell, Steindorfer/Vinju, and Racket stencil-vector work
+  collected under
+  [the hash-table references](references.md#hash-tables-identity-and-persistent-map-references)
+  before fixing its portable/runtime representation boundary.
 - Additional `(data ...)` libraries can follow the namespace policy without
   depending on Consent runtime internals.
 - Additional ordered Mapping providers can reuse the same constructor/provider

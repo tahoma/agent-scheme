@@ -52,22 +52,25 @@ lookup, insertion, deletion, clear, snapshot, or release in either
 representation.
 
 Owned hashes are computed from heap and object identifiers. Host hashing and
-raw host identity comparison form the irreducible adapter boundary:
+raw host identity comparison form the irreducible adapter boundary. The
+adapter reports whether hashing is available and, when it is, supplies a hash
+for borrowed host identities. The Emacs bootstrap uses `sxhash-eq`; direct
+R7RS hosts select Gambit's `eq?-hash`, Gauche's `eq-hash`, or SRFI 69
+`hash-by-identity` in that order. A host without any of those operations uses
+the fixed compatibility envelope below.
 
-- the Emacs bootstrap uses `sxhash-eq` and raw `eq`;
-- configured R7RS hosts use their audited identity hash and raw `eq?`; and
-- a host without an identity hash uses the fixed compatibility envelope below.
-
-The comparison operation cannot be replaced by the portable library's imported
-`eq?`. When that source runs inside the Consent evaluator, `eq?` deliberately
-implements Consent number and owned-symbol equivalence rather than raw outer
-host identity. Pairing those semantics with a raw identity hash would violate
-the table's hash/equality invariant on equal-but-distinct host objects.
+Portable `eq?` compares compound host keys such as pairs and vectors because
+its result for those objects already reflects outer-host identity. Numbers,
+characters, and symbols use the adapter's raw comparison instead: Consent gives
+those atomic categories language-level `eq?` semantics that may differ from
+outer-host identity. Pairing those semantics with a raw identity hash would
+violate the table's hash/equality invariant on equal-but-distinct host objects.
 
 This replaces the old opaque native table constructor, lookup, and mutation
 operations. The host boundary therefore shrinks from implementing table policy
-to reporting availability and supplying the two identity facts portable Scheme
-cannot derive.
+to three operations: reporting availability and supplying the two identity
+facts portable Scheme cannot derive. Hash buckets, entries, growth, limits,
+lifetime, and consumer policy remain portable Scheme.
 
 The existing host-hash adapter normalizes every raw identity hash through a
 fixed modular multiplicative mix. Some valid host identity hashes are stable
@@ -113,13 +116,49 @@ and association ceiling. Open tables admit fewer associations because their
 load threshold reserves empty probe space; chained tables can use the full
 ceiling.
 
+## Host-hash availability
+
+Availability is a property of the execution host, selected once when each map
+or table is constructed. It is not an intermittent runtime condition.
+
+| Execution path | Hash source | Automatic backend |
+| --- | --- | --- |
+| Emacs-hosted evaluator | Emacs `sxhash-eq` primitive overlay | Hashed |
+| Direct or compiled Gambit | Gambit `eq?-hash` | Hashed |
+| Direct Gauche | Gauche `eq-hash` | Hashed |
+| Other configured R7RS hosts | SRFI 69 `hash-by-identity` | Hashed |
+| Minimal R7RS without the operations above | None | Compatibility |
+| Any host with forced `compatibility` policy | Deliberately bypassed | Compatibility |
+
+The normal Emacs, direct-host, and compiled-host configurations therefore use
+hash-backed maps. The compatibility backend is exercised when bringing Consent
+up on a minimal R7RS implementation that lacks an identity hash, and when tests
+force it to verify the portable correctness floor.
+
+R7RS-small specifies identity comparison through `eq?`, but it does not expose
+an object address, stable object identifier, or identity hash. Portable Scheme
+therefore cannot derive an expected-O(1) bucket index for a borrowed host object
+without first maintaining another identity index, which would merely move the
+same problem. Consent relies on the host only for this irreducible fact. Owned
+Consent objects do not need it: their heap and object identifiers provide
+portable hashes, and call-scoped owned traversals normally use intrusive object
+headers instead.
+
 ## No-hash compatibility envelope
 
-When host identity hashing is unavailable, host entries use an identity alist
-with an exact 64-entry ceiling. Each operation scans at most 64 associations.
-The sixty-fifth distinct host insertion fails before mutation, so this path is
-a fixed bounded compatibility mechanism rather than a silently quadratic
-general table.
+When a constructed map selects compatibility mode, its host entries use one
+identity alist with an exact 64-entry ceiling. Each operation scans at most 64
+associations. Multiple simultaneously active maps have separate alists and
+separate limits; there is no shared process-wide scan. The sixty-fifth distinct
+host insertion into one map fails before mutation, so this path is a fixed
+bounded compatibility mechanism rather than a silently quadratic general
+table.
+
+Consumers that cannot tolerate that bound do not silently fall back. Native
+graph borrowing and general native-result import require the hashed backend and
+fail closed without it. Source-library copying reparses the rare labelled
+source form instead of exhausting the compatibility map. Other compatibility
+consumers remain explicitly subject to the 64-identity limit.
 
 The optional internal constructor policy `compatibility` forces that path on a
 hash-capable host. It exists for deterministic conformance testing and does not
@@ -178,6 +217,32 @@ roots.
 This version deliberately excludes weak keys, ephemerons, finalizers, and
 collector notification. Those semantics belong to #666 and require a distinct
 collector-owned contract rather than a mode flag on a strong identity table.
+
+## Related work
+
+Ghuloum and Dybvig's
+[Generation-Friendly Eq Hash Tables](https://www.schemeworkshop.org/2007/procPaper3.pdf)
+is the closest Scheme-specific collector reference. It uses transport link cells
+to repair only entries whose keys move during a generational collection. The
+current Consent implementation instead avoids address-derived owned hashes by
+using stable heap and object identifiers. The paper is prior art for a future
+standalone moving collector, not part of the present host adapter contract.
+
+The [MIT/GNU Scheme hash-table design](https://www.gnu.org/software/mit-scheme/documentation/stable/mit-scheme-ref/Hash-Tables.html)
+shows the contrasting whole-table repair strategy: address-hashed tables opt
+into rehashing after collection. [SRFI 125](https://srfi.schemers.org/srfi-125/)
+and [SRFI 126](https://srfi.schemers.org/srfi-126/) explain why public Scheme
+interfaces generally use dedicated identity-table constructors or permit an
+implementation-selected identity hash rather than promising a portable raw
+address hash. Those public callback-bearing APIs remain owned by #178 and #790,
+not this private fixed-policy structure.
+
+Hayes's [Ephemerons](https://doi.org/10.1145/263698.263733) and
+[SRFI 254](https://srfi.schemers.org/srfi-254/) explain why weak-key tables need
+collector-aware reachability when a retained value points back to its key. They
+support the separate-issue boundary above. The broader bibliography, including
+persistent HAMTs and hash-flooding defenses, lives in
+[the broader hash-table references](references.md#hash-tables-identity-and-persistent-map-references).
 
 ## Lean host-map specialization and consumers
 

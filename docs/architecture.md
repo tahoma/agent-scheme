@@ -384,10 +384,11 @@ mutators, or explicit global-handle model belongs to #120 and #662.
 `(consent identity-table)` keeps foreign graph memo tables and bridge identity
 indexes private. It implements open addressing, bounded growth, deletion,
 accounting, and lifetime in portable Scheme. Stable heap and object identifiers
-provide owned hashes; host identity hash and comparison are the only
-irreducible adapter operations. Owned and host keys occupy distinct namespaces,
-including in a mixed table. The older `(consent identity-map)` surface is a
-lean fixed-policy specialization for hot host-key graph walks. It shares the
+provide owned hashes; the irreducible host adapter reports hash availability
+and supplies host identity hash and raw comparison. Owned and host keys occupy
+distinct namespaces, including in a mixed table. The older
+`(consent identity-map)` surface is a lean fixed-policy specialization for hot
+host-key graph walks. It shares the
 same three-operation adapter and compatibility limits while omitting the
 generic table's configurable policies, entry snapshots, tombstones, and
 per-operation counter vector. The full contract is recorded in
