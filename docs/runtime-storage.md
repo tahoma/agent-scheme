@@ -687,7 +687,8 @@ identifier membership or public comparator-configurable hash tables. Owned and
 host identities occupy separate namespaces; the latter is the only namespace
 that crosses a three-operation host adapter. See
 [Fixed-Policy Identity Tables](identity-tables.md) for load, tombstone,
-no-hash, root, release, and compatibility-facade details.
+host-hash normalization, lazy growable allocation, node-reusing chained
+rehash, no-hash, root, release, and compatibility-facade details.
 
 ## Verification
 
@@ -704,9 +705,10 @@ and compiled routes. ERT imports each internal library independently through
 the Emacs source-library loader, proving that both bootstrap surfaces use their
 portable source implementations.
 `tests/scheme/consent-identity-table-test.scm` covers fixed namespaces,
-hash-backed probing, forced bounded compatibility, roots, lifecycle, and
-counted scale behavior. ERT also proves that the Emacs bootstrap loads the
-portable table above only three host identity primitives.
+hash-backed probing, allocation-serial burst distribution, forced bounded
+compatibility, roots, lifecycle, and counted scale behavior. ERT also proves
+that the Emacs bootstrap loads the portable table above only three host
+identity primitives.
 `tests/scheme/consent-agent-memory-test.scm` retains the consumer equivalence
 corpus: bounded arbitrary-key quotient oracles and cyclic-key lifecycle cases
 cover both memory-key FIFOs, while overlapping multi-pattern relevance covers

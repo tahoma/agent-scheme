@@ -9,20 +9,28 @@
 (define-library (consent identity-map)
   (export consent-identity-map-fast-backend?
           consent-make-identity-map
+          consent-identity-map-adjoin!
           consent-identity-map-ref
           consent-identity-map-set!
           consent-identity-map-delete!
+          consent-identity-map-clear!
           consent-identity-map-release!
           consent-test-identity-map-operation-count
+          consent-test-identity-map-release-count
           consent-test-identity-map-poison-set!)
   (import (scheme base))
   (begin
     (define poison? #t)
     (define operation-count 0)
+    (define release-count 0)
 
     (define (consent-test-identity-map-operation-count)
       "Return the number of host identity-map operations attempted."
       operation-count)
+
+    (define (consent-test-identity-map-release-count)
+      "Return the number of host identity maps explicitly released."
+      release-count)
 
     (define (consent-test-identity-map-poison-set! value)
       "Set whether every host identity-map operation raises an error."
@@ -64,6 +72,17 @@
          (else (loop (cdr rest)))))
       value)
 
+    (define (consent-identity-map-adjoin! map key value)
+      "Associate absent identity KEY with VALUE and report insertion."
+      (charge! 'adjoin!)
+      (let loop ((rest (vector-ref map 1)))
+        (cond
+         ((null? rest)
+          (vector-set! map 1 (cons (cons key value) (vector-ref map 1)))
+          #t)
+         ((eq? key (caar rest)) #f)
+         (else (loop (cdr rest))))))
+
     (define (consent-identity-map-delete! map key)
       "Delete identity KEY from MAP and report whether it was present."
       (charge! 'delete!)
@@ -78,8 +97,15 @@
           #t)
          (else (loop (cdr rest) rest)))))
 
+    (define (consent-identity-map-clear! map)
+      "Clear every identity association and return MAP."
+      (charge! 'clear!)
+      (vector-set! map 1 '())
+      map)
+
     (define (consent-identity-map-release! map)
       "Clear MAP after passing the poison gate."
       (charge! 'release!)
+      (set! release-count (+ release-count 1))
       (vector-set! map 1 '())
       map)))

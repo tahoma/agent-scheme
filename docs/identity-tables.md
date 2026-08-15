@@ -38,30 +38,80 @@ namespaces in one fixed-policy object.
 
 ## Representation and probing
 
-Fast tables use portable open addressing with linear probing. Empty buckets
-contain `#f`; deletion writes a private tombstone. Each live entry contains
-only its namespace, fixed identity fields, retained key or object, value, and
-precomputed hash. No callback is stored or invoked by lookup, insertion,
-deletion, clear, snapshot, or release.
+All hash-table policy and storage remain portable. Host-only fast tables use
+separate chaining, with one compact vector node per association. Each node
+holds its next link, complete host hash, key, and value. This keeps the common
+identity-map path out of the evaluator-heavy offset arithmetic and general
+entry accessors required by open addressing.
+
+Owned and mixed-policy tables use portable open addressing with linear
+probing. Empty buckets contain `#f`; deletion writes a private tombstone. Each
+open entry contains only its namespace, fixed identity fields, retained key or
+object, value, and precomputed hash. No callback is stored or invoked by
+lookup, insertion, deletion, clear, snapshot, or release in either
+representation.
 
 Owned hashes are computed from heap and object identifiers. Host hashing and
-host identity comparison form the entire irreducible adapter boundary:
+raw host identity comparison form the irreducible adapter boundary:
 
-- the Emacs bootstrap uses `sxhash-eq` and `eq`;
-- configured R7RS hosts use their audited identity hash and `eq?`; and
+- the Emacs bootstrap uses `sxhash-eq` and raw `eq`;
+- configured R7RS hosts use their audited identity hash and raw `eq?`; and
 - a host without an identity hash uses the fixed compatibility envelope below.
 
-The table reuses the first tombstone seen during a probe. Insertion may rebuild
-the same capacity when tombstones would otherwise make the next occupied load
-reach two thirds. If live entries require more room, `allow-growth` chooses the
-smaller of the configured maximum and `2 * capacity + 1` while still ensuring
-the requested entry fits below the two-thirds threshold. Rehash allocates and
-populates replacement storage before publishing it.
+The comparison operation cannot be replaced by the portable library's imported
+`eq?`. When that source runs inside the Consent evaluator, `eq?` deliberately
+implements Consent number and owned-symbol equivalence rather than raw outer
+host identity. Pairing those semantics with a raw identity hash would violate
+the table's hash/equality invariant on equal-but-distinct host objects.
 
-`pre-reserved` rejects an insertion that would require a larger bucket vector.
-`reserve!` remains available before entering a no-allocation phase. The maximum
-capacity is an inclusive bucket-count ceiling; usable association count can be
-lower because the load threshold always reserves empty probe space.
+This replaces the old opaque native table constructor, lookup, and mutation
+operations. The host boundary therefore shrinks from implementing table policy
+to reporting availability and supplying the two identity facts portable Scheme
+cannot derive.
+
+The existing host-hash adapter normalizes every raw identity hash through a
+fixed modular multiplicative mix. Some valid host identity hashes are stable
+allocation serials. Using those serials directly would let a long-lived table's
+insertion bursts overlap after unrelated short-lived maps advance the host
+sequence by one capacity interval. The mix preserves same-object hash stability
+while preventing that allocation pattern from turning linear probing
+quadratic. Keeping normalization inside the existing hash operation also lets
+evaluator hosts perform it before converting the result into an owned number;
+it does not add another host-boundary operation.
+
+Each entry retains that complete normalized hash. Probing compares complete
+hashes first, so bucket collisions with different hashes stay entirely in
+portable Scheme. When complete hashes agree, portable `eq?` compares compound
+host keys directly. Raw adapter comparison remains necessary only for numbers,
+characters, and symbols, whose Consent `eq?` semantics deliberately differ
+from outer-host identity.
+
+Open addressing reuses the first tombstone seen during a probe. It may rebuild
+the same capacity when tombstones would otherwise make the next occupied load
+reach two thirds. Host-only deletion unlinks its chain node and therefore does
+not create tombstones. Chained tables grow only when the next association
+would exceed one live entry per bucket; empty probe space is not required. If
+live entries require more room, `allow-growth` chooses the smaller of the
+configured maximum and `2 * capacity + 1` while satisfying the
+representation's load threshold.
+
+Open-table rebuilds populate replacement storage before publication.
+Host-chain growth likewise allocates all replacement buckets first, then
+relinks the existing nodes with fixed non-callback operations instead of
+allocating a duplicate node set. The table publishes the replacement vector
+after every node has moved. This bounds chain growth to one new bucket vector
+rather than a vector plus one temporary node for every live association.
+
+Growable tables defer their initial bucket allocation until the first insertion
+or explicit reserve; the constructor's initial capacity remains the minimum
+first allocation. `pre-reserved` tables allocate their initial buckets eagerly
+and reject an insertion that would require a larger vector. `reserve!` remains
+available before entering a no-allocation phase. Host-only compatibility tables
+have no hash buckets, so reserve validates the requested bound without
+allocating unused storage. The maximum capacity is an inclusive bucket-count
+and association ceiling. Open tables admit fewer associations because their
+load threshold reserves empty probe space; chained tables can use the full
+ceiling.
 
 ## No-hash compatibility envelope
 
@@ -79,35 +129,44 @@ because their stable identifiers always provide a portable hash.
 ## Operations and complexity
 
 Host and owned namespaces have separate `contains?`, `ref`, `set!`, and
-`delete!` operations. A stored `#f` value is distinct from absence: `ref`
-returns its caller-supplied default only when the identity is absent, and
-`contains?` reports membership independently of the value.
+`delete!` operations. Host identities additionally provide `adjoin!`, which
+inserts only when absent and reports whether it inserted; graph traversals can
+therefore combine cycle membership and marking in one probe. A stored `#f`
+value is distinct from absence: `ref` returns its caller-supplied default only
+when the identity is absent, and `contains?` reports membership independently
+of the value.
 
 | Operation | Hash-backed bound | Compatibility bound |
 | --- | --- | --- |
-| `contains?`, `ref`, `set!`, `delete!` | Expected O(1) | At most 64 steps. |
-| Growth or tombstone rebuild | O(capacity) | Not applicable. |
-| `clear!`, `release!` | O(capacity) | At most 64 entries. |
+| `contains?`, `ref`, `set!`, `adjoin!`, `delete!` | Expected O(1) | At most 64 steps. |
+| Growth or open-table tombstone rebuild | O(capacity) | Not applicable. |
+| `clear!` | O(capacity) | At most 64 entries. |
+| `release!` | O(1) | O(1). |
 | `entries` | O(capacity) | At most 64 entries. |
 | `stats` | O(1) | O(1). |
 
-Entry snapshot order is explicitly unspecified. Rehash, tombstone reuse, and a
-future native acceleration may change it. Consumers that need stable order own
-that order separately instead of deriving semantics from bucket placement.
+Entry snapshot order is explicitly unspecified. Rehash, chain insertion, and
+tombstone reuse may change it. Consumers that need stable order own that order
+separately instead of deriving semantics from bucket placement.
 
-Statistics record logical operations, misses, identity tests, hash calls, probe
-steps, compatibility scan steps, tombstones, capacity changes, rehashed
-entries, clear and release work, and snapshots. These deterministic counters
-support additive O(N) gates without treating elapsed time as an API.
+Statistics record logical operations, misses, identity tests, hash calls,
+inspected open buckets or chain nodes, compatibility scan steps, tombstones,
+capacity changes, rehashed entries, clear and release accounting, and
+snapshots. The
+`release-clear-slots` field records the detached capacity whose roots were
+removed; it does not imply a slot-by-slot release scan. These deterministic
+counters support additive O(N) gates without treating elapsed time as an API.
 
 ## Root and lifetime contract
 
 Every live entry is an explicit strong root for its value and for the key or
 owned object needed to represent identity. `delete!` removes those roots before
-reporting success. `clear!` removes every root while retaining bucket capacity;
-it is intended for reuse. `release!` removes every root, drops the bucket
-vector, and terminally marks the table inactive. Repeated release is
-idempotent.
+reporting success. `clear!` removes every root while retaining bucket capacity,
+so it overwrites the retained slots and is intended for reuse. `release!`
+replaces the table's sole reference to its encapsulated bucket vector, drops
+the compatibility list, and terminally marks the table inactive. That
+constant-work detach makes every entry unreachable without first scanning
+storage that is about to be discarded. Repeated release is idempotent.
 
 After release, the predicate, active-state query, statistics, and idempotent
 release remain valid. All other operations reject the inactive table. Code
@@ -127,25 +186,36 @@ host-policy identity table. It preserves the existing constructor, lookup,
 mutation, and fast-backend query while adding delete, clear, release, and
 statistics. The facade contains no host table implementation; both evaluator
 bootstraps load the same Scheme source above the three-operation adapter.
-Its fixed fast-backend bucket ceiling is 16,777,215, admitting at most
-11,184,809 associations under the strict load threshold. This covers the
-runtime's ten-million-node default evaluation envelope without preallocating
-that ceiling. The constructor accepts an optional symbolic ownership-domain
+Its fixed fast-backend bucket ceiling is 16,777,215 associations. This covers
+the runtime's ten-million-node default evaluation envelope without
+preallocating that ceiling. Its four-bucket initial floor limits small-map
+slack while keeping geometric rehash work linear. The constructor accepts an
+optional symbolic ownership-domain
 label so failures and lifecycle accounting identify the responsible runtime
 scope.
 
-Datum import and export, result projection, syntax ownership, runtime graph
-comparison, and bootstrap-symbol equality preserve their topology and
-allocation behavior while releasing call-scoped host tables alongside their
-intrusive owned maps. Canonical heap-owned reading continues to use intrusive
-object headers and does not touch host identity tables.
+Datum import and export, result projection, syntax ownership, reader graph
+traversals, memory-key normalization, runtime graph comparison, native graph
+bridges, and bootstrap-symbol equality preserve their topology and allocation
+behavior while releasing call-scoped host tables alongside their intrusive
+owned maps. Native bridges release both per-walk indexes and every index owned
+by the outer call during dynamic unwind. Canonical heap-owned reading continues
+to use intrusive object headers and does not touch host identity tables.
+Host datum conversion classifies acyclic flat proper lists with constant-space
+cycle checkpoints and copies them forward without building per-node graph
+records or an identity table. Branching, nested, shared, and cyclic host graphs
+retain the general identity-table-backed topology algorithm.
+Memory redaction and equality consumers scan unary graph spines with
+constant-space cycle detection, allocating an identity table only when a graph
+branches or unequal cycle periods require general congruence closure.
 
 ## Verification
 
 `tests/scheme/consent-identity-table-test.scm` covers equal-but-distinct host
 keys, cycles, shared values, mixed namespaces, stable owned identifiers,
-stored false values, updates, deletion and tombstone reuse, bounded growth,
-pre-reserved failure, clear and release, and deterministic accounting. A
+stored false values, updates, chained deletion, open-table tombstone reuse,
+bounded growth, pre-reserved failure, clear and release, and deterministic
+accounting. A
 forced compatibility case fills exactly 64 identities and proves the next
 insertion fails without hashing or mutation. Counted 128- and 256-entry runs
 guard additive expected O(N) work.
@@ -154,4 +224,4 @@ Exception and continuation fixtures verify release on every dynamic exit and
 re-entry failure. The portable plan runs the same program on direct and
 compiled hosts. ERT imports the internal library through the Emacs source
 loader and asserts that its adapter overlay contains only host-backend
-availability, identity hash, and identity comparison.
+availability, identity hash, and raw identity comparison.

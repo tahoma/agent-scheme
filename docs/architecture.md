@@ -391,6 +391,11 @@ portable compatibility facade over the host-key policy, not a second table
 implementation. The full contract is recorded in
 [Fixed-Policy Identity Tables](identity-tables.md).
 
+The portable table normalizes host hashes before bucket reduction. This keeps
+valid allocation-serial hashes from overlaying long-lived insertion bursts
+after short-lived identity maps advance the host's sequence. Hash distribution
+therefore remains table policy above the same narrow adapter boundary.
+
 An owned datum object still supplies one private intrusive map header, so each
 call-scoped owned lookup takes one header probe and release restores any outer
 traversal. This remains preferable to allocating a separate table for canonical

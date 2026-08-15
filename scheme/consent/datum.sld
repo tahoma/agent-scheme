@@ -1434,26 +1434,26 @@
           (if host-seen
               (consent-identity-map-ref host-seen item absent-token)
               absent-token))
-        (define (import-host-set! item copy)
-          "Memoize already-reserved host ITEM as COPY."
+        (define (import-host-insert! item copy)
+          "Memoize known-absent host ITEM as COPY."
           (if (not host-seen)
               (set! host-seen (consent-make-identity-map)))
-          (if (eq? (import-host-ref item) absent-token)
-              (begin
-                (if (and (not host-fast?)
-                         (>= host-count
-                             datum-host-identity-compatibility-limit))
-                    (error
-                     "consent-datum-import: foreign graph requires fast \
+          (if (and (not host-fast?)
+                   (>= host-count
+                       datum-host-identity-compatibility-limit))
+              (error
+               "consent-datum-import: foreign graph requires fast \
 identity maps"
-                     item))
-                (set! host-count (+ host-count 1))))
+               item))
+          (set! host-count (+ host-count 1))
+          (host-seen-set! host-seen item copy))
+        (define (import-host-update! item copy)
+          "Replace already-reserved host ITEM with COPY."
           (host-seen-set! host-seen item copy))
         (define (reserve-import-host! item)
           "Reserve one distinct host ITEM before callback or allocation."
-          (if (eq? (import-host-ref item) absent-token)
-              (import-host-set!
-               item (vector 'consent-datum-import-reserved))))
+          (import-host-insert!
+           item (vector 'consent-datum-import-reserved)))
         (define (import-owned-ref item)
           "Return ITEM's cross-heap copy, or the private absent token."
           (if owned-seen
@@ -1499,7 +1499,7 @@ identity maps"
                (if (eq? candidate absent-token)
                    #f
                    (begin
-                     (import-host-set! source candidate)
+                     (import-host-update! source candidate)
                      (deliver! destination slot candidate)
                      #t)))))
           (define (accept-owned-reuse! source destination slot)
@@ -1613,7 +1613,7 @@ identity maps"
             (cond
              ((pair? source)
               (let ((copy (make-pair-placeholder heap #t)))
-                (import-host-set! source copy)
+                (import-host-update! source copy)
                 (deliver! destination slot copy)
                 (if count-source? (note-nodes! 1))
                 (push-finish! source copy)
@@ -1629,7 +1629,7 @@ identity maps"
                  count-source?)))
              ((string? source)
               (let ((copy (consent-datum-string-from-host heap source)))
-                (import-host-set! source copy)
+                (import-host-update! source copy)
                 (deliver! destination slot copy)
                 (if count-source?
                     (note-nodes! (+ 1 (string-length source))))
@@ -1637,7 +1637,7 @@ identity maps"
              ((bytevector? source)
               (let ((copy
                      (consent-datum-bytevector-from-host heap source)))
-                (import-host-set! source copy)
+                (import-host-update! source copy)
                 (deliver! destination slot copy)
                 (if count-source?
                     (note-nodes! (+ 1 (bytevector-length source))))
@@ -1645,7 +1645,7 @@ identity maps"
              ((vector? source)
               (let* ((length (vector-length source))
                      (copy (make-vector-placeholder heap length #t)))
-                (import-host-set! source copy)
+                (import-host-update! source copy)
                 (deliver! destination slot copy)
                 (if count-source? (note-nodes! 1))
                 (push-finish! source copy)
@@ -1733,7 +1733,7 @@ identity maps"
             "Count an unseen host compound SOURCE without copying it."
             (if (eq? (import-host-ref source) absent-token)
                 (begin
-                  (import-host-set! source count-only-token)
+                  (import-host-insert! source count-only-token)
                   (cond
                    ((pair? source)
                     (note-nodes! 1)
@@ -1917,26 +1917,26 @@ identity maps"
               (consent-identity-map-ref
                host-seen item absent-token)
               absent-token))
-        (define (export-host-set! item copy)
-          "Memoize already-reserved host ITEM as COPY."
+        (define (export-host-insert! item copy)
+          "Memoize known-absent host ITEM as COPY."
           (if (not host-seen)
               (set! host-seen (consent-make-identity-map)))
-          (if (eq? (export-host-ref item) absent-token)
-              (begin
-                (if (and (not host-fast?)
-                         (>= host-count
-                             datum-host-identity-compatibility-limit))
-                    (error
-                     "consent-datum-export: foreign graph requires fast \
+          (if (and (not host-fast?)
+                   (>= host-count
+                       datum-host-identity-compatibility-limit))
+              (error
+               "consent-datum-export: foreign graph requires fast \
 identity maps"
-                     item))
-                (set! host-count (+ host-count 1))))
+               item))
+          (set! host-count (+ host-count 1))
+          (consent-identity-map-set! host-seen item copy))
+        (define (export-host-update! item copy)
+          "Replace already-reserved host ITEM with COPY."
           (consent-identity-map-set! host-seen item copy))
         (define (reserve-export-host! item)
           "Reserve one distinct host ITEM before callback or allocation."
-          (if (eq? (export-host-ref item) absent-token)
-              (export-host-set!
-               item (vector 'consent-datum-export-reserved))))
+          (export-host-insert!
+           item (vector 'consent-datum-export-reserved)))
         ;; Visit jobs use #(0 source destination slot).  Non-negative slots
         ;; address vectors; -1 and -2 address a host pair's car and cdr.
         ;; Finish jobs use #(1 source copy 0).  The explicit stack preserves
@@ -1967,7 +1967,7 @@ identity maps"
                   (begin
                     (if (consent-datum-object? source)
                         (export-owned-set! source candidate)
-                        (export-host-set! source candidate))
+                        (export-host-update! source candidate))
                     (deliver! destination slot candidate)
                     #t))))
           (define (push-vector-edges! source copy length owned?)
@@ -2016,25 +2016,25 @@ identity maps"
             (cond
              ((pair? source)
               (let ((copy (cons #f #f)))
-                (export-host-set! source copy)
+                (export-host-update! source copy)
                 (deliver! destination slot copy)
                 (push-finish! source copy)
                 (push-visit! (cdr source) copy -2)
                 (push-visit! (car source) copy -1)))
              ((string? source)
               (let ((copy (string-copy source)))
-                (export-host-set! source copy)
+                (export-host-update! source copy)
                 (deliver! destination slot copy)
                 (push-finish! source copy)))
              ((bytevector? source)
               (let ((copy (bytevector-copy source)))
-                (export-host-set! source copy)
+                (export-host-update! source copy)
                 (deliver! destination slot copy)
                 (push-finish! source copy)))
              ((vector? source)
               (let* ((length (vector-length source))
                      (copy (make-vector length #f)))
-                (export-host-set! source copy)
+                (export-host-update! source copy)
                 (deliver! destination slot copy)
                 (push-finish! source copy)
                 (push-vector-edges! source copy length #f)))))

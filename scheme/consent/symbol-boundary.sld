@@ -81,25 +81,109 @@
                (consent-host-symbol-eq? left right))
           (host-eqv? left right)))
 
-    (define (consent-host-symbol-equal? left right)
-      "Compare compound values while honoring owned symbol equivalence."
-      #((parameters
-         (left (type any) (description "First value to compare."))
-         (right (type any) (description "Second value to compare.")))
-        (returns (type boolean) (description "Whether values are equal."))
-        (effects allocation))
+    ;; Unique result for graphs that require the general cycle-aware path.
+    (define symbol-boundary-comparison-unknown
+      (vector 'symbol-boundary-comparison-unknown))
+
+    (define (symbol-boundary-atomic-equal? left right)
+      "Classify equality of atomic LEFT and RIGHT, or return unknown."
+      (cond
+       ((consent-host-symbol-eqv? left right) #t)
+       ((or (pair? left)
+            (pair? right)
+            (vector? left)
+            (vector? right))
+        symbol-boundary-comparison-unknown)
+       (else (host-equal? left right))))
+
+    (define (unary-pair-equal? left right)
+      "Compare one unary pair graph, or return the general-path marker."
+      ;; Bootstrap results are commonly long proper lists. Brent checkpoints
+      ;; let those lists and equal-period cycles avoid an identity table while
+      ;; preserving constant auxiliary space. Branching and unequal-period
+      ;; cycles retain the general congruence-closure path below.
+      (let loop ((first left)
+                 (second right)
+                 (checkpoint-first left)
+                 (checkpoint-second right)
+                 (power 1)
+                 (distance 0))
+        (cond
+         ((host-eq? first second) #t)
+         ((and (pair? first) (pair? second))
+          (let* ((first-car (car first))
+                 (first-cdr (cdr first))
+                 (second-car (car second))
+                 (second-cdr (cdr second))
+                 (first-car? (pair? first-car))
+                 (first-cdr? (pair? first-cdr))
+                 (second-car? (pair? second-car))
+                 (second-cdr? (pair? second-cdr)))
+            (cond
+             ((or (not (host-eq? first-car? second-car?))
+                  (not (host-eq? first-cdr? second-cdr?)))
+              #f)
+             ((and first-car? first-cdr?)
+              symbol-boundary-comparison-unknown)
+             ((not (or first-car? first-cdr?))
+              (and
+               (consent-host-symbol-equal? first-car second-car)
+               (consent-host-symbol-equal? first-cdr second-cdr)))
+             (else
+              (let ((leaf-equal?
+                     (if first-car?
+                         (consent-host-symbol-equal?
+                          first-cdr second-cdr)
+                         (consent-host-symbol-equal?
+                          first-car second-car)))
+                    (next-first
+                     (if first-car? first-car first-cdr))
+                    (next-second
+                     (if second-car? second-car second-cdr)))
+                (cond
+                 ((not leaf-equal?) #f)
+                 ((and
+                   (host-eq? next-first left)
+                   (host-eq? next-second right))
+                  #t)
+                 ((or
+                   (host-eq? next-first left)
+                   (host-eq? next-second right))
+                  symbol-boundary-comparison-unknown)
+                 ((and
+                   (host-eq? next-first checkpoint-first)
+                   (host-eq? next-second checkpoint-second))
+                  #t)
+                 ((or
+                   (host-eq? next-first checkpoint-first)
+                   (host-eq? next-second checkpoint-second))
+                  symbol-boundary-comparison-unknown)
+                 ((= (+ distance 1) power)
+                  (loop
+                   next-first next-second
+                   next-first next-second
+                   (* power 2) 0))
+                 (else
+                  (loop
+                   next-first next-second
+                   checkpoint-first checkpoint-second
+                   power (+ distance 1)))))))))
+         ((or (pair? first) (pair? second)) #f)
+         (else (symbol-boundary-atomic-equal? first second)))))
+
+    (define (compound-symbol-equal? left right)
+      "Compare arbitrary LEFT and RIGHT graphs with owned symbol semantics."
       ;; Union-find records compound congruence classes. Each successful union
       ;; schedules that constructor's edges once, so equal cycles with different
-      ;; periods do not produce a product traversal. Hash-backed adapters make
-      ;; the iterative walk expected O(V+E); the plain-R7RS adapter has a fixed
-      ;; compatibility envelope.
+      ;; periods do not produce a product traversal.
       (let ((absent (vector 'symbol-equal-absent))
             (nodes #f)
             (pending (list (cons left right))))
         (define (value-node value)
           "Return VALUE's existing or fresh union-find node."
           (if (not nodes)
-              (set! nodes (consent-make-identity-map)))
+              (set! nodes
+                    (consent-make-identity-map 'symbol-boundary-equal)))
           (let ((known (consent-identity-map-ref nodes value absent)))
             (if (host-eq? known absent)
                 (let ((node (vector #f 0)))
@@ -178,6 +262,19 @@
                     (else #f))))))
          (lambda ()
            (if nodes (consent-identity-map-release! nodes))))))
+
+    (define (consent-host-symbol-equal? left right)
+      "Compare compound values while honoring owned symbol equivalence."
+      #((parameters
+         (left (type any) (description "First value to compare."))
+         (right (type any) (description "Second value to compare.")))
+        (returns (type boolean) (description "Whether values are equal."))
+        (effects allocation))
+      (let ((short-result (unary-pair-equal? left right)))
+        (if (host-eq?
+             short-result symbol-boundary-comparison-unknown)
+            (compound-symbol-equal? left right)
+            short-result)))
 
     (define (consent-host-symbol-memq value values)
       "Return VALUES' tail whose head is bootstrap-EQ? to VALUE."

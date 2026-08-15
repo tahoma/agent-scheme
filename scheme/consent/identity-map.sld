@@ -5,6 +5,7 @@
 (define-library (consent identity-map)
   (export consent-identity-map-fast-backend?
           consent-make-identity-map
+          consent-identity-map-adjoin!
           consent-identity-map-ref
           consent-identity-map-set!
           consent-identity-map-delete!
@@ -15,6 +16,7 @@
           (only (consent identity-table)
                 consent-host-identity-fast-backend?
                 consent-identity-table-clear!
+                consent-identity-table-host-adjoin!
                 consent-identity-table-host-delete!
                 consent-identity-table-host-ref
                 consent-identity-table-host-set!
@@ -24,8 +26,8 @@
   (begin
     ;; This ceiling is explicit even on hash-backed hosts. The no-hash path has
     ;; the identity table's smaller fixed compatibility envelope.
-    ;; The strict load limit admits 11,184,809 associations, covering the
-    ;; runtime's ten-million-node default evaluation envelope.
+    ;; Separate chaining admits one association per bucket at the growth
+    ;; threshold, covering the runtime's ten-million-node default envelope.
     (define identity-map-maximum-capacity 16777215)
 
     (define (consent-identity-map-fast-backend?)
@@ -48,7 +50,7 @@
           (error "consent-make-identity-map: too many domains"
                  maybe-domain))
       (consent-make-identity-table
-       8
+       4
        identity-map-maximum-capacity
        'allow-growth
        'host
@@ -63,6 +65,17 @@
         (returns (type any) (description "Stored value or DEFAULT."))
         (effects state-read error))
       (consent-identity-table-host-ref map key default))
+
+    (define (consent-identity-map-adjoin! map key value)
+      "Associate identity KEY only when absent and report insertion."
+      #((parameters
+         (map (type identity-map) (description "Map to update."))
+         (key (type any) (description "Host identity key."))
+         (value (type any) (description "Value retained for a new key.")))
+        (returns (type boolean)
+         (description "Whether a new association was inserted."))
+        (effects allocation state-write error))
+      (consent-identity-table-host-adjoin! map key value))
 
     (define (consent-identity-map-set! map key value)
       "Associate identity KEY with VALUE in MAP and return VALUE."

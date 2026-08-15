@@ -3226,9 +3226,20 @@ the maximum endpoint for DESCRIPTION."
   "Report that Emacs supplies identity hashing without Scheme callbacks."
   consent-true)
 
+(defconst consent--host-identity-hash-modulus 16777213
+  "Prime modulus for distributed host identity hashes.")
+
+(defconst consent--host-identity-hash-multiplier 104729
+  "Prime multiplier for distributed host identity hashes.")
+
 (defun consent--primitive-consent-host-identity-hash (arguments _context)
-  "Return Emacs' identity hash for the first value in ARGUMENTS."
-  (consent--number-from-host (sxhash-eq (car arguments))))
+  "Return a distributed Emacs identity hash for the first argument."
+  (consent--number-from-host
+   (mod
+    (* (mod (sxhash-eq (car arguments))
+            consent--host-identity-hash-modulus)
+       consent--host-identity-hash-multiplier)
+    consent--host-identity-hash-modulus)))
 
 (defun consent--primitive-consent-host-identity=? (arguments _context)
   "Compare the first two ARGUMENTS by raw Emacs identity."

@@ -27,6 +27,7 @@
                 consent-identity-map-fast-backend?
                 consent-make-identity-map
                 consent-identity-map-ref
+                consent-identity-map-release!
                 consent-identity-map-set!)
           (only (consent reader) consent-datum->external)
           (only (consent worklist)
@@ -46,13 +47,14 @@
     ;; the source-backed public facade across the native borrowed-compound call.
     (define-record-type <memory-query-view>
       (make-memory-query-view-record
-       records projections next-id key=? valid-key?)
+       records projections next-id key=? valid-key? release!)
       memory-query-view?
       (records store-records)
       (projections store-projections)
       (next-id store-next-id)
       (key=? store-key=?)
-      (valid-key? store-valid-key?))
+      (valid-key? store-valid-key?)
+      (release! memory-query-view-release-procedure))
 
 (define (memory-key-sidecar-live-key sidecar)
   "Return SIDECAR's detached live-key descriptor."
@@ -179,7 +181,8 @@
             (validated
              (and (consent-identity-map-fast-backend?)
                   (consent-make-identity-map)))
-            (absent (vector 'absent)))
+            (absent (vector 'absent))
+            (completed? #f))
         (define (valid-key-once? key)
           (if (not fast?)
               ;; This sealed ABI is created only by the source facade.  A
@@ -206,23 +209,55 @@
              "unbounded memory key comparison requires fast identity map"
              left
              right))))
-        (if (not (and (proper-acyclic-list? records)
-                      (proper-acyclic-list? projections)))
-            (error "memory query records/projections must be finite lists"))
-        (let loop ((record-rest records) (projection-rest projections))
-          (cond
-           ((and (null? record-rest) (null? projection-rest)) #t)
-           ((or (null? record-rest) (null? projection-rest))
-            (error "memory query records/projections are not aligned"))
-           ((not (memory-live-projection?
-                  (car projection-rest)
-                  valid-key-once?))
-            (error "memory query received invalid live projection"
-                   (car projection-rest)))
-           (else
-            (loop (cdr record-rest) (cdr projection-rest)))))
-      (make-memory-query-view-record
-       records projections next-id safe-key=? valid-key-once?)))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (if (not (and (proper-acyclic-list? records)
+                         (proper-acyclic-list? projections)))
+               (error
+                "memory query records/projections must be finite lists"))
+           (let loop
+               ((record-rest records) (projection-rest projections))
+             (cond
+              ((and (null? record-rest) (null? projection-rest)) #t)
+              ((or (null? record-rest) (null? projection-rest))
+               (error "memory query records/projections are not aligned"))
+              ((not (memory-live-projection?
+                     (car projection-rest)
+                     valid-key-once?))
+               (error "memory query received invalid live projection"
+                      (car projection-rest)))
+              (else
+               (loop (cdr record-rest) (cdr projection-rest)))))
+           (let ((view
+                  (make-memory-query-view-record
+                   records
+                   projections
+                   next-id
+                   safe-key=?
+                   valid-key-once?
+                   (lambda ()
+                     (if validated
+                         (consent-identity-map-release! validated))))))
+             (set! completed? #t)
+             view))
+         (lambda ()
+           (if (and validated (not completed?))
+               (consent-identity-map-release! validated))))))
+
+    (define (memory-query-view-release! view)
+      "Release VIEW's call-scoped validation index."
+      ((memory-query-view-release-procedure view)))
+
+    (define (call-with-memory-query-view
+             records projections next-id procedure)
+      "Call PROCEDURE with one query view and release it on every exit."
+      (let ((view
+             (make-memory-query-view records projections next-id)))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda () (procedure view))
+         (lambda () (memory-query-view-release! view)))))
 
     (define (integer-value value)
       "Validate and return VALUE for memory count arguments."
@@ -804,43 +839,50 @@
       (if (not (consent-identity-map-fast-backend?))
           (let ((seen (consent-make-identity-map))
                 (absent (vector 'absent)))
-            (let walk ((pending (list record)) (count 0))
-              (if (null? pending)
-                  #t
-                  (let* ((value (car pending))
-                         (rest (cdr pending))
-                         (compound? (or (pair? value) (vector? value))))
-                    (if (not compound?)
-                        (walk rest count)
-                        (let ((known
-                               (consent-identity-map-ref
-                                seen value absent)))
-                          (if (not (eq? known absent))
-                              (walk rest count)
-                              (let ((next-count (+ count 1)))
-                                (if (> next-count 64)
-                                    (error
-                                     (string-append
-                                      "large text query requires fast "
-                                      "identity map")
-                                     record))
-                                (consent-identity-map-set! seen value #t)
-                                (if (pair? value)
-                                    (walk
-                                     (cons
-                                      (car value)
-                                      (cons (cdr value) rest))
-                                     next-count)
-                                    (let push
-                                        ((index (- (vector-length value) 1))
-                                         (next rest))
-                                      (if (< index 0)
-                                          (walk next next-count)
-                                          (push
-                                           (- index 1)
-                                           (cons
-                                            (vector-ref value index)
-                                            next)))))))))))))))
+            (dynamic-wind
+             (lambda () #t)
+             (lambda ()
+               (let walk ((pending (list record)) (count 0))
+                 (if (null? pending)
+                     #t
+                     (let* ((value (car pending))
+                            (rest (cdr pending))
+                            (compound?
+                             (or (pair? value) (vector? value))))
+                       (if (not compound?)
+                           (walk rest count)
+                           (let ((known
+                                  (consent-identity-map-ref
+                                   seen value absent)))
+                             (if (not (eq? known absent))
+                                 (walk rest count)
+                                 (let ((next-count (+ count 1)))
+                                   (if (> next-count 64)
+                                       (error
+                                        (string-append
+                                         "large text query requires fast "
+                                         "identity map")
+                                        record))
+                                   (consent-identity-map-set! seen value #t)
+                                   (if (pair? value)
+                                       (walk
+                                        (cons
+                                         (car value)
+                                         (cons (cdr value) rest))
+                                        next-count)
+                                       (let push
+                                           ((index
+                                             (- (vector-length value) 1))
+                                            (next rest))
+                                         (if (< index 0)
+                                             (walk next next-count)
+                                             (push
+                                              (- index 1)
+                                              (cons
+                                               (vector-ref value index)
+                                               next)))))))))))))
+             (lambda ()
+               (consent-identity-map-release! seen))))))
 
     (define (record-search-text record)
       "Return RECORD's canonical external text for substring search."
@@ -1172,6 +1214,25 @@
            (vector 'absent)))
         consent-memory-scopes)))
 
+    (define (release-relevance-key-indexes! indexes)
+      "Release every identity shortcut in relevance INDEXES."
+      (let loop ((index 0))
+        (if (< index (vector-length indexes))
+            (begin
+              (let ((identities
+                     (vector-ref (vector-ref indexes index) 1)))
+                (if identities
+                    (consent-identity-map-release! identities)))
+              (loop (+ index 1)))))
+      indexes)
+
+    (define (release-memory-relevance-index! relevance)
+      "Release RELEVANCE's call-scoped identity indexes."
+      (if (memory-relevance-index? relevance)
+          (release-relevance-key-indexes!
+           (relevance-indexes relevance)))
+      relevance)
+
     (define (relevance-key-index-add! indexes scope-index key term-index)
       "Associate TERM-INDEX with KEY in one scope index."
       (let* ((index (vector-ref indexes scope-index))
@@ -1259,18 +1320,25 @@
              (multiplicities (make-vector count 0))
              (marks (make-vector count 0))
              (group-count 0)
-             (has-text? #f))
-        (let term-loop ((occurrence-index 0))
-          (if (= occurrence-index count)
-              (make-memory-relevance-index
-               indexes
-               (and
-                has-text?
-                (complete-memory-relevance-text-automaton! text-root))
-               multiplicities
-               marks
-               group-count
-               0)
+             (has-text? #f)
+             (completed? #f))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+          (let term-loop ((occurrence-index 0))
+           (if (= occurrence-index count)
+              (let ((relevance
+                     (make-memory-relevance-index
+                      indexes
+                      (and
+                       has-text?
+                       (complete-memory-relevance-text-automaton! text-root))
+                      multiplicities
+                      marks
+                      group-count
+                      0)))
+                (set! completed? #t)
+                relevance)
               (let* ((projection
                       (vector-ref projections occurrence-index))
                      (cached
@@ -1330,7 +1398,11 @@
                  (vector-ref bucket 0)
                  (+ 1
                     (vector-ref multiplicities (vector-ref bucket 0))))
-                (term-loop (+ occurrence-index 1)))))))
+                 (term-loop (+ occurrence-index 1))))))
+         (lambda ()
+           (if known (consent-identity-map-release! known))
+           (if (not completed?)
+               (release-relevance-key-indexes! indexes))))))
 
     (define (memory-scope-name-index name)
       "Return canonical scope NAME's relevance-index position, or #f."
@@ -1744,7 +1816,8 @@
                (car rest) (vector-ref selected-membership ordinal))
               finalized)))))
 
-    (define (memory-store-select store query-projection policy context)
+    (define (memory-store-select-with-terms
+             store query-projection policy context terms)
       "Return a deterministic receipt from detached QUERY-PROJECTION."
       #((parameters
          (store (type consent-memory-store)
@@ -1755,21 +1828,16 @@
          (policy (type retrieval-policy)
           (description "Printable retrieval policy record."))
          (context (type retrieval-context)
-          (description "Request scope, trust, and logical-clock context.")))
+          (description "Request scope, trust, and logical-clock context."))
+         (terms (type memory-relevance-index)
+          (description "Call-scoped normalized relevance terms.")))
         (returns (type memory-selection)
          (description
           ("A replayable selection receipt with selected records,"
             "per-candidate scores, filter reasons, and the cutoff.")))
         (effects state-read error))
-      (if (not (and (vector? query-projection)
-                    (= (vector-length query-projection) 2)
-                    (vector? (vector-ref query-projection 1))))
-          (error "memory query received invalid select projection"
-                 query-projection))
       (let* ((query (vector-ref query-projection 0))
-             (term-projections (vector-ref query-projection 1))
              (live (all-live-entries store))
-             (terms (normalize-query-terms store term-projections))
              (weights (policy-field policy 'weights '()))
              (cutoff (numeric-value (policy-field policy 'cutoff 0)))
              (raw-limit
@@ -1839,6 +1907,23 @@
                          selected))
               (list 'candidates final-candidates))))
 
+    (define (memory-store-select store query-projection policy context)
+      "Select through one call-scoped normalized relevance index."
+      (if (not (and (vector? query-projection)
+                    (= (vector-length query-projection) 2)
+                    (vector? (vector-ref query-projection 1))))
+          (error "memory query received invalid select projection"
+                 query-projection))
+      (let ((terms
+             (normalize-query-terms
+              store (vector-ref query-projection 1))))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (memory-store-select-with-terms
+            store query-projection policy context terms))
+         (lambda () (release-memory-relevance-index! terms)))))
+
 
     (define (memory-query-find records live-projections scope projection)
       "Search canonical RECORDS in SCOPE from detached PROJECTION."
@@ -1855,10 +1940,12 @@
         (returns (type (list-of list))
          (description "Matching canonical memory record datums in SCOPE."))
         (effects allocation error))
-      (memory-store-find
-       (make-memory-query-view records live-projections 0)
-       scope
-       projection))
+      (call-with-memory-query-view
+       records
+       live-projections
+       0
+       (lambda (view)
+         (memory-store-find view scope projection))))
 
     (define (memory-query-by-tag records live-projections scope tag-key)
       "Return live canonical RECORDS in SCOPE carrying TAG-KEY."
@@ -1875,10 +1962,12 @@
         (returns (type (list-of list))
          (description "Canonical memory record datums carrying TAG."))
         (effects allocation error))
-      (memory-store-by-tag
-       (make-memory-query-view records live-projections 0)
-       scope
-       tag-key))
+      (call-with-memory-query-view
+       records
+       live-projections
+       0
+       (lambda (view)
+         (memory-store-by-tag view scope tag-key))))
 
     (define (memory-query-recent records live-projections scope count)
       "Return at most COUNT recent live canonical RECORDS in SCOPE."
@@ -1896,10 +1985,12 @@
         (returns (type (list-of list))
          (description "At most COUNT recent canonical records in SCOPE."))
         (effects allocation error))
-      (memory-store-recent
-       (make-memory-query-view records live-projections 0)
-       scope
-       count))
+      (call-with-memory-query-view
+       records
+       live-projections
+       0
+       (lambda (view)
+         (memory-store-recent view scope count))))
 
     (define (memory-query-select
              records
@@ -1929,8 +2020,10 @@
           ("A replayable selection receipt with selected records,"
             "per-candidate scores, filter reasons, and the cutoff.")))
         (effects allocation error))
-      (memory-store-select
-       (make-memory-query-view records live-projections next-id)
-       query-projection
-       policy
-       context))))
+      (call-with-memory-query-view
+       records
+       live-projections
+       next-id
+       (lambda (view)
+         (memory-store-select
+          view query-projection policy context))))))
