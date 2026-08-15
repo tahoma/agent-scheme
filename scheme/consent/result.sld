@@ -305,6 +305,8 @@
                    (loop))))
            (vector-ref root 0))
          (lambda ()
+           (if host-map
+               (consent-identity-map-release! host-map))
            (if owned-map
                (consent-datum-object-map-release! owned-map))))))
 
@@ -414,18 +416,24 @@
            ((vector? item)
             (visit-host-compound! item setter #f))
            (else (setter item))))
-        (push-visit! value (lambda (rendered)
-                             (vector-set! root 0 rendered)))
-        (let loop ()
-          (if (pair? pending)
-              (let ((task (car pending)))
-                (set! pending (cdr pending))
-                (if (eq? (vector-ref task 0) 'finish)
-                    ((vector-ref task 1))
-                    (visit! (vector-ref task 1)
-                            (vector-ref task 2)))
-                (loop))))
-        (vector-ref root 0)))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (push-visit! value (lambda (rendered)
+                                (vector-set! root 0 rendered)))
+           (let loop ()
+             (if (pair? pending)
+                 (let ((task (car pending)))
+                   (set! pending (cdr pending))
+                   (if (eq? (vector-ref task 0) 'finish)
+                       ((vector-ref task 1))
+                       (visit! (vector-ref task 1)
+                               (vector-ref task 2)))
+                   (loop))))
+           (vector-ref root 0))
+         (lambda ()
+           (if host-map
+               (consent-identity-map-release! host-map))))))
 
     (define (budget-result-field context)
       "Build the budget field for a public evaluation-result datum."

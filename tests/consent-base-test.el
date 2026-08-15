@@ -759,30 +759,28 @@
        (equal (car integer)
               (concat "LIe+1" (make-string 8192 ?0)))))))
 
-(ert-deftest consent-base-test-identity-map-fast-backend-is-scheme-boolean ()
-  "Return Scheme booleans and preserve identity-keyed overlay semantics."
+(ert-deftest consent-base-test-identity-adapter-is-fixed-policy ()
+  "Expose Scheme booleans, identity hashes, and raw identity comparison."
   (let* ((result
-          (consent--primitive-consent-identity-map-fast-backend? nil nil))
-         (map (consent--primitive-consent-make-identity-map nil nil))
+          (consent--primitive-consent-host-identity-fast-backend? nil nil))
          (left (list 'equal))
          (right (list 'equal)))
     (should (consent-boolean-p result))
     (should (eq result consent-true))
     (should
-     (eq
-      (consent--primitive-consent-identity-map-set!
-       (list map left 'found) nil)
-      'found))
+     (consent-number-p
+      (consent--primitive-consent-host-identity-hash
+       (list left) nil)))
     (should
      (eq
-      (consent--primitive-consent-identity-map-ref
-       (list map left 'missing) nil)
-      'found))
+      (consent--primitive-consent-host-identity=?
+       (list left left) nil)
+      consent-true))
     (should
      (eq
-      (consent--primitive-consent-identity-map-ref
-       (list map right 'missing) nil)
-      'missing)))
+      (consent--primitive-consent-host-identity=?
+       (list left right) nil)
+      consent-false)))
   (should
    (equal
     (consent-base-test--external

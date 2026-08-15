@@ -61,6 +61,10 @@
           (consent character)
           (consent datum)
           (consent identity-map)
+          (only (consent identity-table)
+                consent-host-identity-fast-backend?
+                consent-host-identity-hash
+                consent-host-identity=?)
           (consent numeric)
           (consent reader)
           (consent symbol)
@@ -357,6 +361,8 @@ d."
                    (loop))))
            (vector-ref root 0))
          (lambda ()
+           (if host-map
+               (consent-identity-map-release! host-map))
            (if owned-map
                (consent-datum-object-map-release! owned-map))))))
 
@@ -8071,27 +8077,19 @@ d.")))
                (else #f))))
         (if metadata (own-runtime-datum metadata context) #f)))
 
-    (define (primitive-consent-identity-map-fast-backend?
+    (define (primitive-consent-host-identity-fast-backend?
              arguments context)
-      "Report whether the statically imported host identity map is fast."
-      (consent-identity-map-fast-backend?))
+      "Report whether the outer runtime supplies host identity hashing."
+      (consent-host-identity-fast-backend?))
 
-    (define (primitive-consent-make-identity-map arguments context)
-      "Return one opaque host identity map for an interpreted source call."
-      ;; The table and its buckets are internal scratch, not Consent datum
-      ;; nodes.  Do not make logical value budgets depend on a host's table
-      ;; representation or resize policy.
-      (consent-make-identity-map))
+    (define (primitive-consent-host-identity-hash arguments context)
+      "Return the outer runtime's hash for one interpreter value."
+      (consent-make-canonical-integer
+       (consent-host-identity-hash (car arguments))))
 
-    (define (primitive-consent-identity-map-ref arguments context)
-      "Return an identity-keyed value or the caller's absent marker."
-      (consent-identity-map-ref
-       (car arguments) (second arguments) (third arguments)))
-
-    (define (primitive-consent-identity-map-set! arguments context)
-      "Associate an interpreter value in an opaque host identity map."
-      (consent-identity-map-set!
-       (car arguments) (second arguments) (third arguments)))
+    (define (primitive-consent-host-identity=? arguments context)
+      "Compare two interpreter values by outer-runtime identity."
+      (consent-host-identity=? (car arguments) (second arguments)))
 
     (define (primitive-consent-number-representation-snapshot-outer
              arguments context)
@@ -10933,6 +10931,8 @@ d"
                   #f)
                    (else (and (equal? first second) (loop))))))))
          (lambda ()
+           (if host-nodes
+               (consent-identity-map-release! host-nodes))
            (if owned-nodes
                (consent-datum-object-map-release! owned-nodes))))))
 
@@ -11205,14 +11205,12 @@ eme values."
        (cons 'primitive-handle-kind primitive-handle-kind)
        (cons 'primitive-handle-revalidate primitive-handle-revalidate)
        (cons 'primitive-handle-release! primitive-handle-release!)
-       (cons 'primitive-consent-identity-map-fast-backend?
-             primitive-consent-identity-map-fast-backend?)
-       (cons 'primitive-consent-make-identity-map
-             primitive-consent-make-identity-map)
-       (cons 'primitive-consent-identity-map-ref
-             primitive-consent-identity-map-ref)
-       (cons 'primitive-consent-identity-map-set!
-             primitive-consent-identity-map-set!)
+       (cons 'primitive-consent-host-identity-fast-backend?
+             primitive-consent-host-identity-fast-backend?)
+       (cons 'primitive-consent-host-identity-hash
+             primitive-consent-host-identity-hash)
+       (cons 'primitive-consent-host-identity=?
+             primitive-consent-host-identity=?)
        (cons 'primitive-consent-number-representation-snapshot-outer
              primitive-consent-number-representation-snapshot-outer)
        (cons 'primitive-consent-outer-representation-kind

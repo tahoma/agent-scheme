@@ -381,17 +381,22 @@ full-graph scans. Higher-order or retaining libraries resolve their canonical
 portable source realization. A future direct-owned compiled ABI, barriered
 mutators, or explicit global-handle model belongs to #120 and #662.
 
-`(consent identity-map)` keeps foreign graph memo tables and bridge identity
-indexes private. An owned object supplies one private intrusive map header, so
-each call-scoped owned lookup takes one header probe and release restores any
-outer traversal. Gambit uses its native identity table for foreign host objects;
-other configured performance hosts use SRFI 69 identity hashing. A plain
-R7RS-small identity-alist fallback preserves semantics for legacy private reader
-syntax and other bounded compatibility paths only. Foreign datum import and
-export reserve at most 64 distinct host identities on that fallback and fail
-closed before a 65th identity could make lookup quadratic; the fallback is not
-part of the unbounded owned-heap asymptotic contract. Canonical heap-taking reads
-never call that adapter.
+`(consent identity-table)` keeps foreign graph memo tables and bridge identity
+indexes private. It implements open addressing, bounded growth, deletion,
+accounting, and lifetime in portable Scheme. Stable heap and object identifiers
+provide owned hashes; host identity hash and comparison are the only
+irreducible adapter operations. Owned and host keys occupy distinct namespaces,
+including in a mixed table. The older `(consent identity-map)` surface is a
+portable compatibility facade over the host-key policy, not a second table
+implementation. The full contract is recorded in
+[Fixed-Policy Identity Tables](identity-tables.md).
+
+An owned datum object still supplies one private intrusive map header, so each
+call-scoped owned lookup takes one header probe and release restores any outer
+traversal. This remains preferable to allocating a separate table for canonical
+owned graph walks. A no-hash host uses an exact 64-identity compatibility
+envelope and fails closed before a sixty-fifth insertion could make lookup
+unboundedly quadratic. Canonical heap-taking reads never call that adapter.
 Borrowed native transitions fail closed when their required hash-backed adapter
 is unavailable; the portable source realization remains available.
 
@@ -1222,6 +1227,7 @@ Likely portable R7RS modules:
 - `scheme/consent/runtime.sld`
 - `scheme/consent/base.sld`
 - `scheme/consent/datum.sld`
+- `scheme/consent/identity-table.sld`
 - `scheme/consent/identity-map.sld`
 - `scheme/consent/frontend.sld`
 - `scheme/consent/library.sld`

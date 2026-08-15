@@ -8116,9 +8116,15 @@ only")
   (consent-datum-heap-mutation-hook-set!
    heap
    (lambda (active-heap object operation slot old new)
-     (set! observed (cons (list operation slot) observed))
-     (if (eq? operation 'vector-set!)
-         (error "reject memory state-root publish")
+     ;; Portable identity-table buckets are private runtime storage in this
+     ;; heap. Target only the memory store's seven-slot immutable state root,
+     ;; so the fixture still rejects the atomic root publication it owns.
+     (if (and (eq? operation 'vector-set!)
+              (consent-datum-vector? new)
+              (= (consent-datum-vector-length new) 7))
+         (begin
+           (set! observed (cons (list operation slot) observed))
+           (error "reject memory state-root publish"))
          #t)))
   (let ((raised?
          (raises?
@@ -8159,7 +8165,7 @@ only")
              (list raised?
                    (reverse store-writes)
                    (consent-value->external state))
-             '(#t ((vector-set! 1))
+             '(#t ((vector-set! 0))
                "((alpha) alpha #f m-2)"))
             (filter-framework-writes
              (cdr rest)

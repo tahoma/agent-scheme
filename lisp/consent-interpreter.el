@@ -3221,23 +3221,18 @@ the maximum endpoint for DESCRIPTION."
           (consent--make-canonical-decimal float-pi)
         (consent--make-canonical-decimal 0.0)))))
 
-(defun consent--primitive-consent-identity-map-fast-backend?
+(defun consent--primitive-consent-host-identity-fast-backend?
     (_arguments _context)
-  "Report that the Emacs identity-map primitive uses an eq hash table."
+  "Report that Emacs supplies identity hashing without Scheme callbacks."
   consent-true)
 
-(defun consent--primitive-consent-make-identity-map (_arguments _context)
-  "Return an opaque identity-keyed hash table."
-  (make-hash-table :test #'eq))
+(defun consent--primitive-consent-host-identity-hash (arguments _context)
+  "Return Emacs' identity hash for the first value in ARGUMENTS."
+  (consent--number-from-host (sxhash-eq (car arguments))))
 
-(defun consent--primitive-consent-identity-map-ref (arguments _context)
-  "Return an identity-keyed value or the caller's absent marker."
-  (gethash (cadr arguments) (car arguments) (caddr arguments)))
-
-(defun consent--primitive-consent-identity-map-set! (arguments _context)
-  "Associate an interpreter value in an opaque identity-keyed hash table."
-  (puthash (cadr arguments) (caddr arguments) (car arguments))
-  (caddr arguments))
+(defun consent--primitive-consent-host-identity=? (arguments _context)
+  "Compare the first two ARGUMENTS by raw Emacs identity."
+  (consent--scheme-boolean (eq (car arguments) (cadr arguments))))
 
 (defun consent--number-snapshot-integer (value)
   "Return canonical integer VALUE as signed minimal hexadecimal ASCII."

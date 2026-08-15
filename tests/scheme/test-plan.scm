@@ -152,6 +152,9 @@
     (path "tests/scheme/consent-dense-set-test.scm")
     (tags (full direct compiled core runtime registered)))
    (program
+    (path "tests/scheme/consent-identity-table-test.scm")
+    (tags (full direct compiled core runtime registered)))
+   (program
     (path "tests/scheme/consent-scratch-arena-test.scm")
     (tags (full direct compiled core runtime registered)))
    (program

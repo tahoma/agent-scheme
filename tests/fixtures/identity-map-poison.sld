@@ -11,6 +11,8 @@
           consent-make-identity-map
           consent-identity-map-ref
           consent-identity-map-set!
+          consent-identity-map-delete!
+          consent-identity-map-release!
           consent-test-identity-map-operation-count
           consent-test-identity-map-poison-set!)
   (import (scheme base))
@@ -36,7 +38,7 @@
       "Return #f for this forced plain-R7RS fallback backend."
       #f)
 
-    (define (consent-make-identity-map)
+    (define (consent-make-identity-map . maybe-domain)
       "Return a mutable identity alist after passing the poison gate."
       (charge! 'make)
       (vector 'consent-identity-map '()))
@@ -60,4 +62,24 @@
          ((eq? key (caar rest))
           (set-cdr! (car rest) value))
          (else (loop (cdr rest)))))
-      value)))
+      value)
+
+    (define (consent-identity-map-delete! map key)
+      "Delete identity KEY from MAP and report whether it was present."
+      (charge! 'delete!)
+      (let loop ((rest (vector-ref map 1))
+                 (previous #f))
+        (cond
+         ((null? rest) #f)
+         ((eq? key (caar rest))
+          (if previous
+              (set-cdr! previous (cdr rest))
+              (vector-set! map 1 (cdr rest)))
+          #t)
+         (else (loop (cdr rest) rest)))))
+
+    (define (consent-identity-map-release! map)
+      "Clear MAP after passing the poison gate."
+      (charge! 'release!)
+      (vector-set! map 1 '())
+      map)))

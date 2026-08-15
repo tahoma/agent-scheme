@@ -94,10 +94,12 @@
       ;; the iterative walk expected O(V+E); the plain-R7RS adapter has a fixed
       ;; compatibility envelope.
       (let ((absent (vector 'symbol-equal-absent))
-            (nodes (consent-make-identity-map))
+            (nodes #f)
             (pending (list (cons left right))))
         (define (value-node value)
           "Return VALUE's existing or fresh union-find node."
+          (if (not nodes)
+              (set! nodes (consent-make-identity-map)))
           (let ((known (consent-identity-map-ref nodes value absent)))
             (if (host-eq? known absent)
                 (let ((node (vector #f 0)))
@@ -138,38 +140,44 @@
                   #f))))
         (define (push! first second)
           (set! pending (cons (cons first second) pending)))
-        (let loop ()
-          (if (null? pending)
-              #t
-              (let* ((comparison (car pending))
-                     (first (car comparison))
-                     (second (cdr comparison)))
-                (set! pending (cdr pending))
-                (cond
-                 ((consent-host-symbol-eqv? first second) (loop))
-                 ((and (pair? first) (pair? second))
-                  (if (not (seen-or-mark! first second))
-                      (begin
-                        (push! (cdr first) (cdr second))
-                        (push! (car first) (car second))))
-                  (loop))
-                 ((or (pair? first) (pair? second)) #f)
-                 ((and (vector? first) (vector? second))
-                  (let ((length (vector-length first)))
-                    (if (not (= length (vector-length second)))
-                        #f
-                        (begin
-                          (if (not (seen-or-mark! first second))
-                              (let push-slots ((index (- length 1)))
-                                (if (>= index 0)
-                                    (begin
-                                      (push! (vector-ref first index)
-                                             (vector-ref second index))
-                                      (push-slots (- index 1))))))
-                          (loop)))))
-                 ((or (vector? first) (vector? second)) #f)
-                 ((host-equal? first second) (loop))
-                 (else #f)))))))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (let loop ()
+             (if (null? pending)
+                 #t
+                 (let* ((comparison (car pending))
+                        (first (car comparison))
+                        (second (cdr comparison)))
+                   (set! pending (cdr pending))
+                   (cond
+                    ((consent-host-symbol-eqv? first second) (loop))
+                    ((and (pair? first) (pair? second))
+                     (if (not (seen-or-mark! first second))
+                         (begin
+                           (push! (cdr first) (cdr second))
+                           (push! (car first) (car second))))
+                     (loop))
+                    ((or (pair? first) (pair? second)) #f)
+                    ((and (vector? first) (vector? second))
+                     (let ((length (vector-length first)))
+                       (if (not (= length (vector-length second)))
+                           #f
+                           (begin
+                             (if (not (seen-or-mark! first second))
+                                 (let push-slots ((index (- length 1)))
+                                   (if (>= index 0)
+                                       (begin
+                                         (push!
+                                          (vector-ref first index)
+                                          (vector-ref second index))
+                                         (push-slots (- index 1))))))
+                             (loop)))))
+                    ((or (vector? first) (vector? second)) #f)
+                    ((host-equal? first second) (loop))
+                    (else #f))))))
+         (lambda ()
+           (if nodes (consent-identity-map-release! nodes))))))
 
     (define (consent-host-symbol-memq value values)
       "Return VALUES' tail whose head is bootstrap-EQ? to VALUE."

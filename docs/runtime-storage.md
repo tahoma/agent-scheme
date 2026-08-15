@@ -1,14 +1,14 @@
 # Bootstrap-Safe Runtime Storage
 
-**Issues:** #968 and #969
+**Issues:** #968, #969, #980, and #971
 
-**Roadmap versions:** 0.18.39 and 0.18.41
+**Roadmap versions:** 0.18.39, 0.18.41, 0.18.43, and 0.18.44
 
 **Status:** Implemented
 
 ## Summary
 
-Three private, portable libraries provide storage for allocation-sensitive
+Five private, portable libraries provide storage for allocation-sensitive
 runtime and graph algorithms:
 
 - `(consent growable-vector)` owns bounded indexed storage and imports only
@@ -16,7 +16,11 @@ runtime and graph algorithms:
 - `(consent scratch-arena)` layers reusable, phase-owned lifetimes over that
   storage and imports `(consent growable-vector)`; and
 - `(consent worklist)` layers bounded FIFO and deque ordering over a circular
-  growable-vector backing store.
+  growable-vector backing store;
+- `(consent dense-set)` provides generation-stamped membership and colors over
+  dense integer identifiers; and
+- `(consent identity-table)` provides fixed-policy owned and host identity
+  associations with bounded growth and explicit release.
 
 None of the libraries imports a public SRFI, calls user code, or depends on an
 initialized standard-library shelf. The Emacs bootstrap source loader and
@@ -33,10 +37,13 @@ flowchart TB
   grow["(consent growable-vector)<br/>bounded indexed storage"]
   scratch["(consent scratch-arena)<br/>owners, marks, reuse policy"]
   worklist["(consent worklist)<br/>bounded FIFO and deque ring"]
+  dense["(consent dense-set)<br/>generation-stamped membership"]
+  identity["(consent identity-table)<br/>fixed identity associations"]
   srfi["(srfi 214)<br/>public flexvectors"]
   reader --> grow
   scratch --> grow
   worklist --> grow
+  dense --> grow
   collectors["Collector phases"] --> scratch
   srfi -. "may reuse compatible storage" .-> grow
 ```
@@ -48,6 +55,9 @@ Use a scratch arena when storage is reused across calls or runtime phases and a
 stale operation must be rejected after cleanup.
 Use a worklist when logical insertion or removal order, rather than indexed
 storage, is the abstraction the algorithm needs.
+Use a dense set for membership over bounded integer identifiers, and an
+identity table for key-value associations over stable owned or borrowed-host
+identity.
 
 | Need | Layer | Why |
 | --- | --- | --- |
@@ -57,8 +67,10 @@ storage, is the abstraction the algorithm needs.
 | Temporary safe growth | `allow-growth` arena | Grows boundedly. |
 | FIFO graph traversal | Worklist | Ring ordering without list reversal. |
 | Double-ended phase work | Worklist | O(1) front and back operations. |
+| Dense identifier membership | Dense set | O(1) generation-stamped marks. |
+| Identity-keyed values | Identity table | Fixed equality and hash policy. |
 
-None of these layers is a general sequence abstraction. All three libraries are
+None of these layers is a general sequence abstraction. All five libraries are
 private, mutable, callback-free, and deliberately narrower than public SRFIs.
 
 Programs that need the public sequence abstraction import `(stdlib
@@ -670,6 +682,13 @@ ordinary clear advances an epoch without scanning capacity. See
 [Generation-Stamped Dense Sets and Epoch Marks](dense-sets.md) for wraparound,
 ownership-domain, accounting, and memory-key migration details.
 
+Identity-keyed values belong to `(consent identity-table)`, not to dense
+identifier membership or public comparator-configurable hash tables. Owned and
+host identities occupy separate namespaces; the latter is the only namespace
+that crosses a three-operation host adapter. See
+[Fixed-Policy Identity Tables](identity-tables.md) for load, tombstone,
+no-hash, root, release, and compatibility-facade details.
+
 ## Verification
 
 `tests/scheme/consent-growable-vector-test.scm` covers zero and maximum capacity
@@ -684,6 +703,10 @@ synthetic collector workload. The portable plan runs both programs on direct
 and compiled routes. ERT imports each internal library independently through
 the Emacs source-library loader, proving that both bootstrap surfaces use their
 portable source implementations.
+`tests/scheme/consent-identity-table-test.scm` covers fixed namespaces,
+hash-backed probing, forced bounded compatibility, roots, lifecycle, and
+counted scale behavior. ERT also proves that the Emacs bootstrap loads the
+portable table above only three host identity primitives.
 `tests/scheme/consent-agent-memory-test.scm` retains the consumer equivalence
 corpus: bounded arbitrary-key quotient oracles and cyclic-key lifecycle cases
 cover both memory-key FIFOs, while overlapping multi-pattern relevance covers
