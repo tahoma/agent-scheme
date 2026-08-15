@@ -390,7 +390,8 @@
                (let ((created
                       (if owned?
                           (consent-make-datum-object-map)
-                          (consent-make-identity-map))))
+                          (consent-make-identity-map
+                           'reader-identity-map))))
                  (vector-set! map index created)
                  created))))
         (if owned?
@@ -421,7 +422,8 @@
     (define (ensure-consent-source-metadata!)
       "Return the lazily allocated legacy host-syntax provenance table."
       (if (not consent-source-metadata)
-          (set! consent-source-metadata (consent-make-identity-map)))
+          (set! consent-source-metadata
+                (consent-make-identity-map 'reader-source-metadata)))
       consent-source-metadata)
 
     ;; Count unique current entries in the legacy host-syntax compatibility
@@ -1037,7 +1039,8 @@ r"
                          (and source-metadata
                               (not owned?)
                               (if active-source-metadata-sink
-                                  (consent-make-identity-map)
+                                  (consent-make-identity-map
+                                   'reader-local-source-metadata)
                                   (ensure-consent-source-metadata!)))
                          active-source-metadata-sink
                          0
@@ -4030,7 +4033,8 @@ maximum vector length"
                   (set! table
                         (if owned?
                             (consent-make-datum-object-map)
-                            (consent-make-identity-map)))
+                            (consent-make-identity-map
+                             'reader-validation)))
                   (vector-set! map index table)))
             (if owned?
                 (consent-datum-object-map-set! table key value)

@@ -1,113 +1,112 @@
-;;; Private portable identity-map adapter.
+;;; Compatibility facade over fixed-policy host identity tables.
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;;
-;;; Gambit uses its native identity table; other configured hosts use SRFI 69
-;;; identity hashing. A plain R7RS host without either accelerator retains
-;;; reference semantics through a fixed-envelope identity association list. The
-;;; fallback admits at most 64 distinct identities, keeping every map operation
-;;; bounded while preserving compatibility for small calls. Code that needs an
-;;; unbounded identity domain must use owned-object state or require the
-;;; hash-backed backend.
 
 (define-library (consent identity-map)
   (export consent-identity-map-fast-backend?
           consent-make-identity-map
           consent-identity-map-ref
-          consent-identity-map-set!)
-  (import (scheme base))
-  (cond-expand
-   (gambit
-    (import (only (gambit)
-                  make-table
-                  string->keyword
-                  table-ref
-                  table-set!))
-    (begin
-      ;; Under Gambit's R7RS front end `test:' is an identifier rather than a
-      ;; keyword literal.  Build the native table option once without routing
-      ;; every identity operation through SRFI 69's Scheme hash callback.
-      (define consent-identity-table-test-keyword
-        (string->keyword "test"))
+          consent-identity-map-set!
+          consent-identity-map-delete!
+          consent-identity-map-clear!
+          consent-identity-map-release!
+          consent-identity-map-stats)
+  (import (scheme base)
+          (only (consent identity-table)
+                consent-host-identity-fast-backend?
+                consent-identity-table-clear!
+                consent-identity-table-host-delete!
+                consent-identity-table-host-ref
+                consent-identity-table-host-set!
+                consent-identity-table-release!
+                consent-identity-table-stats
+                consent-make-identity-table))
+  (begin
+    ;; This ceiling is explicit even on hash-backed hosts. The no-hash path has
+    ;; the identity table's smaller fixed compatibility envelope.
+    ;; The strict load limit admits 11,184,809 associations, covering the
+    ;; runtime's ten-million-node default evaluation envelope.
+    (define identity-map-maximum-capacity 16777215)
 
-      (define (consent-identity-map-fast-backend?)
-        "Return #t when identity maps use Gambit's native table adapter."
-        #t)
+    (define (consent-identity-map-fast-backend?)
+      "Return whether new identity maps use host identity hashing."
+      #((parameters)
+        (returns (type boolean)
+         (description "Whether new maps use hashed host identity."))
+        (effects pure))
+      (consent-host-identity-fast-backend?))
 
-      (define (consent-make-identity-map)
-        "Return a mutable map keyed by object identity."
-        (make-table consent-identity-table-test-keyword eq?))
+    (define (consent-make-identity-map . maybe-domain)
+      "Return a mutable fixed-policy host identity map."
+      #((parameters
+         (maybe-domain (type list)
+          (description "Zero or one symbolic ownership-domain label.")))
+        (returns (type identity-map)
+         (description "Fresh active host identity map."))
+        (effects allocation error))
+      (if (> (length maybe-domain) 1)
+          (error "consent-make-identity-map: too many domains"
+                 maybe-domain))
+      (consent-make-identity-table
+       8
+       identity-map-maximum-capacity
+       'allow-growth
+       'host
+       (if (null? maybe-domain) 'identity-map (car maybe-domain))))
 
-      (define (consent-identity-map-ref map key default)
-        "Return KEY's value in MAP, or DEFAULT when KEY is absent."
-        (table-ref map key default))
+    (define (consent-identity-map-ref map key default)
+      "Return KEY's value in MAP, or DEFAULT when KEY is absent."
+      #((parameters
+         (map (type identity-map) (description "Map to inspect."))
+         (key (type any) (description "Host identity key."))
+         (default (type any) (description "Absent-key result.")))
+        (returns (type any) (description "Stored value or DEFAULT."))
+        (effects state-read error))
+      (consent-identity-table-host-ref map key default))
 
-      (define (consent-identity-map-set! map key value)
-        "Associate identity KEY with VALUE in MAP and return VALUE."
-        (table-set! map key value)
-        value)))
-   ((library (srfi 69))
-    (import (only (srfi 69)
-                  hash-by-identity
-                  hash-table-ref/default
-                  hash-table-set!
-                  make-hash-table))
-    (begin
-      (define (consent-identity-map-fast-backend?)
-        "Return #t when identity maps use the host hash-table adapter."
-        #t)
+    (define (consent-identity-map-set! map key value)
+      "Associate identity KEY with VALUE in MAP and return VALUE."
+      #((parameters
+         (map (type identity-map) (description "Map to update."))
+         (key (type any) (description "Host identity key."))
+         (value (type any) (description "Value to retain.")))
+        (returns (type any) (description "The supplied VALUE."))
+        (effects allocation state-write error))
+      (consent-identity-table-host-set! map key value))
 
-      (define (consent-make-identity-map)
-        "Return a mutable map keyed by object identity."
-        (make-hash-table eq? hash-by-identity))
+    (define (consent-identity-map-delete! map key)
+      "Delete identity KEY from MAP and report whether it was present."
+      #((parameters
+         (map (type identity-map) (description "Map to update."))
+         (key (type any) (description "Host identity key.")))
+        (returns (type boolean)
+         (description "Whether an association was deleted."))
+        (effects state-write error))
+      (consent-identity-table-host-delete! map key))
 
-      (define (consent-identity-map-ref map key default)
-        "Return KEY's value in MAP, or DEFAULT when KEY is absent."
-        (hash-table-ref/default map key default))
+    (define (consent-identity-map-clear! map)
+      "Clear MAP while retaining its bucket capacity."
+      #((parameters
+         (map (type identity-map) (description "Map to clear.")))
+        (returns (type identity-map)
+         (description "The empty active MAP."))
+        (effects state-write error))
+      (consent-identity-table-clear! map))
 
-      (define (consent-identity-map-set! map key value)
-        "Associate identity KEY with VALUE in MAP and return VALUE."
-        (hash-table-set! map key value)
-        value)))
-   (else
-    (begin
-      ;; Bound the alist itself, not only selected callers. This makes the
-      ;; adapter's nohash complexity contract apply to every current and future
-      ;; internal consumer.
-      (define consent-identity-map-compatibility-limit 64)
+    (define (consent-identity-map-release! map)
+      "Clear MAP and end its lifetime."
+      #((parameters
+         (map (type identity-map) (description "Map to release.")))
+        (returns (type identity-map)
+         (description "The inactive released MAP."))
+        (effects state-write error))
+      (consent-identity-table-release! map))
 
-      (define (consent-identity-map-fast-backend?)
-        "Return #f for the compatibility-only identity-alist adapter."
-        "Compatibility maps reserve slots for a tag, association list, and"
-        "bounded distinct-identity count."
-        #f)
-
-      (define (consent-make-identity-map)
-        "Return a mutable compatibility map keyed by object identity."
-        (vector 'consent-identity-map '() 0))
-
-      (define (consent-identity-map-ref map key default)
-        "Return KEY's value in MAP, or DEFAULT when KEY is absent."
-        (let loop ((rest (vector-ref map 1)))
-          (cond
-           ((null? rest) default)
-           ((eq? key (car (car rest))) (cdr (car rest)))
-           (else (loop (cdr rest))))))
-
-      (define (consent-identity-map-set! map key value)
-        "Associate identity KEY with VALUE in MAP and return VALUE."
-        (let loop ((rest (vector-ref map 1)))
-          (cond
-           ((null? rest)
-            (if (>= (vector-ref map 2)
-                    consent-identity-map-compatibility-limit)
-                (error
-                 "identity map compatibility limit requires fast backend"
-                 consent-identity-map-compatibility-limit))
-            (vector-set!
-             map 1 (cons (cons key value) (vector-ref map 1)))
-            (vector-set! map 2 (+ (vector-ref map 2) 1)))
-           ((eq? key (car (car rest)))
-            (set-cdr! (car rest) value))
-           (else (loop (cdr rest)))))
-        value)))))
+    (define (consent-identity-map-stats map)
+      "Return MAP's deterministic fixed-policy statistics."
+      #((parameters
+         (map (type identity-map) (description "Map to inspect.")))
+        (returns (type list)
+         (description "Stable map statistics."))
+        (effects allocation state-read error))
+      (consent-identity-table-stats map))))

@@ -13,8 +13,10 @@
           model-openai-codec-provider-error-projected)
   (import (scheme base)
           (only (consent identity-map)
+                consent-identity-map-delete!
                 consent-identity-map-fast-backend?
                 consent-identity-map-ref
+                consent-identity-map-release!
                 consent-identity-map-set!
                 consent-make-identity-map)
           (prefix (stdlib generator) gen:)
@@ -22,7 +24,8 @@
   (begin
     ;; Replacement text used when prompt content is intentionally withheld.
     (define model-openai-local-only-replacement "[local-only]")
-    ;; Maximum active schema depth on compatibility-only identity maps.
+    ;; Maximum active schema depth tracked with bounded ancestor scans before
+    ;; a fast identity map becomes mandatory.
     (define model-openai-schema-nohash-depth-limit 64)
 
     (define (model-openai-field-name=? left right)
@@ -266,7 +269,7 @@
     (define (model-openai-json-value datum)
       "Project canonical Scheme datums into `(stdlib json)' values."
       (let* ((fast? (consent-identity-map-fast-backend?))
-             (active (and fast? (consent-make-identity-map)))
+             (active #f)
              (active-marker (list 'active))
              (absent (list 'absent))
              (bounded-active '())
@@ -278,9 +281,28 @@
               (set-cdr! target value)
               (vector-set! target index value)))
 
+        (define (release-active!)
+          "Release the optional deep-path identity map."
+          (if active
+              (begin
+                (consent-identity-map-release! active)
+                (set! active #f))))
+
+        (define (activate! value)
+          "Create the deep-path map and register ancestors plus VALUE."
+          (set! active
+                (consent-make-identity-map 'openai-schema-active))
+          (let seed ((rest bounded-active))
+            (if (pair? rest)
+                (begin
+                  (consent-identity-map-set!
+                   active (car rest) active-marker)
+                  (seed (cdr rest)))))
+          (consent-identity-map-set! active value active-marker))
+
         (define (enter! value)
           "Mark compound VALUE active or reject a cycle or unsafe depth."
-          (if fast?
+          (if active
               (begin
                 (if (eq? (consent-identity-map-ref active value absent)
                          active-marker)
@@ -291,19 +313,23 @@
                     (error "OpenAI tool schema must be acyclic" value))
                 (if (>= bounded-depth
                         model-openai-schema-nohash-depth-limit)
-                    (error
-                     "OpenAI tool schema depth requires fast identity maps"
-                     value))
-                (set! bounded-active (cons value bounded-active))
-                (set! bounded-depth (+ bounded-depth 1)))))
+                    (if fast?
+                        (activate! value)
+                        (error
+                         "OpenAI tool schema depth requires fast identity maps"
+                         value)))))
+          (set! bounded-active (cons value bounded-active))
+          (set! bounded-depth (+ bounded-depth 1)))
 
         (define (leave! value)
           "Mark compound VALUE inactive after all of its children."
-          (if fast?
-              (consent-identity-map-set! active value #f)
-              (begin
-                (set! bounded-active (cdr bounded-active))
-                (set! bounded-depth (- bounded-depth 1)))))
+          (if active (consent-identity-map-delete! active value))
+          (set! bounded-active (cdr bounded-active))
+          (set! bounded-depth (- bounded-depth 1))
+          (if (and active
+                   (< bounded-depth
+                      model-openai-schema-nohash-depth-limit))
+              (release-active!)))
 
         (define (visit-task value target kind index)
           "Return a work item projecting VALUE into TARGET."
@@ -313,7 +339,8 @@
           "Return a work item leaving active compound VALUE."
           (vector 'leave value))
 
-        (let loop ((tasks (list (visit-task datum root 'vector 0))))
+        (define (project! tasks)
+          "Project pending TASKS through the iterative traversal."
           (if (null? tasks)
               (vector-ref root 0)
               (let* ((task (car tasks))
@@ -323,24 +350,24 @@
                 (if (eq? kind 'leave)
                     (begin
                       (leave! value)
-                      (loop rest))
+                      (project! rest))
                     (let ((target (vector-ref task 2))
                           (target-kind (vector-ref task 3))
                           (index (vector-ref task 4)))
                       (cond
                        ((boolean? value)
                         (assign! target target-kind index value)
-                        (loop rest))
+                        (project! rest))
                        ((number? value)
                         (assign! target target-kind index value)
-                        (loop rest))
+                        (project! rest))
                        ((string? value)
                         (assign! target target-kind index value)
-                        (loop rest))
+                        (project! rest))
                        ((symbol? value)
                         (assign!
                          target target-kind index (symbol->string value))
-                        (loop rest))
+                        (project! rest))
                        ((vector? value)
                         (enter! value)
                         (let* ((length (vector-length value))
@@ -351,7 +378,7 @@
                           (let add ((child (- length 1))
                                     (pending next))
                             (if (< child 0)
-                                (loop pending)
+                                (project! pending)
                                 (add
                                  (- child 1)
                                  (cons
@@ -375,7 +402,7 @@
                                   (let ((output (reverse entries)))
                                     (assign!
                                      target target-kind index output)
-                                    (loop
+                                    (project!
                                      (append
                                       (reverse visits)
                                       (cons (leave-task value) rest))))
@@ -386,7 +413,8 @@
                                      (cons entry entries)
                                      (cons
                                       (visit-task
-                                       (model-openai-schema-entry-value field)
+                                       (model-openai-schema-entry-value
+                                        field)
                                        entry
                                        'pair
                                        #f)
@@ -398,7 +426,7 @@
                                           (child 0)
                                           (visits '()))
                                 (if (null? cursor)
-                                    (loop
+                                    (project!
                                      (append
                                       (reverse visits)
                                       (cons (leave-task value) rest)))
@@ -414,10 +442,17 @@
                                       visits)))))))
                        ((null? value)
                         (assign! target target-kind index '#())
-                        (loop rest))
+                        (project! rest))
                        (else
                         (assign! target target-kind index value)
-                        (loop rest))))))))))
+                        (project! rest))))))))
+
+        (dynamic-wind
+         (lambda () #t)
+         (lambda ()
+           (project! (list (visit-task datum root 'vector 0))))
+         (lambda ()
+           (release-active!)))))
 
     (define (model-openai-tool-json tool)
       "Return TOOL as an OpenAI-compatible JSON object."

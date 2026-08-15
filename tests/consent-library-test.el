@@ -821,7 +821,7 @@
     (consent--environment-define environment "host-cycle" host-cycle)
     (cl-letf
         (((symbol-function
-           'consent--primitive-consent-identity-map-fast-backend?)
+           'consent--primitive-consent-host-identity-fast-backend?)
           (lambda (_arguments _context) consent-false)))
       (should
        (equal
@@ -961,6 +961,18 @@
          "datum\" \"persistent memory key rejects private or raw "
          "interpreted datum\")"))))))
 
+(defun consent-library-test--identity-table-interaction-limit
+    (corners metric minimum)
+  "Bound fixed-policy table work in CORNERS for METRIC above MINIMUM."
+  ;; Open-addressing probe lengths and bounded rebuild points depend on the
+  ;; private identity population. Keep that interaction below one eighth
+  ;; of the largest measured corner, while the algorithm-specific envelopes
+  ;; continue to reject multiplicative graph work.
+  (max minimum
+       (/ (apply #'max (mapcar (lambda (corner) (nth metric corner))
+                               corners))
+          8)))
+
 (ert-deftest
     consent-library-test-agent-memory-shared-query-terms-scale-additively ()
   "Bound shared query-term preparation by term count plus key size."
@@ -1031,8 +1043,14 @@
                 (- (nth metric lk))
                 (nth metric ll))))
         (ert-info ((format "shared query ledger LL/NL/LK/NK: %S" corners))
-          (should (<= (mixed-difference 1) 64))
-          (should (<= (mixed-difference 2) 16)))))))
+          (should
+           (<= (abs (mixed-difference 1))
+               (consent-library-test--identity-table-interaction-limit
+                corners 1 64)))
+          (should
+           (<= (abs (mixed-difference 2))
+               (consent-library-test--identity-table-interaction-limit
+                corners 2 16))))))))
 
 (ert-deftest
     consent-library-test-agent-memory-text-terms-scale-additively ()
@@ -1115,8 +1133,14 @@
         (dolist (corner corners)
           (should (stringp (car corner))))
         (ert-info ((format "text relevance LL/NL/LK/NK: %S" corners))
-          (should (<= (abs (mixed-difference corners 1)) 512))
-          (should (<= (abs (mixed-difference corners 2)) 128)))))))
+          (should
+           (<= (abs (mixed-difference corners 1))
+               (consent-library-test--identity-table-interaction-limit
+                corners 1 512)))
+          (should
+           (<= (abs (mixed-difference corners 2))
+               (consent-library-test--identity-table-interaction-limit
+                corners 2 128))))))))
 
 (defun consent-library-test--assert-agent-memory-key-work
     (fast-specifications nohash-specifications check-high-indegree)
@@ -1204,7 +1228,7 @@
              (if nohash?
                  (cl-letf
                      (((symbol-function
-                        'consent--primitive-consent-identity-map-fast-backend?)
+                        'consent--primitive-consent-host-identity-fast-backend?)
                        (lambda (_arguments _context) consent-false)))
                    (funcall run))
                (funcall run))))
@@ -1244,8 +1268,14 @@
                         "memory key %s work corners: %S"
                         name
                         corners))
-              (should (<= (abs (mixed-difference corners 1)) 128))
-              (should (<= (abs (mixed-difference corners 2)) 32)))))
+              (should
+               (<= (abs (mixed-difference corners 1))
+                   (consent-library-test--identity-table-interaction-limit
+                    corners 1 128)))
+              (should
+               (<= (abs (mixed-difference corners 2))
+                   (consent-library-test--identity-table-interaction-limit
+                    corners 2 32))))))
         (when check-high-indegree
           (let ((high-indegree
                  (cdr (assq 'high-indegree-key-probe probes))))
@@ -1410,6 +1440,78 @@
            (consent-dense-set-integral-storage? dense))))"
      '(:internal-libraries-allowed t))
     "(emacs-loader 4 1 #f 1 4 #t)")))
+
+(ert-deftest consent-library-test-identity-table-adapter-is-narrow ()
+  "Keep identity-table policy portable above three host primitives."
+  (let* ((key "(consent identity-table)")
+         (entry (consent--library-collection-manifest-entry key))
+         (adapter
+          (consent--library-collection-manifest-entry
+           "(consent identity-table adapter)"))
+         (primitive
+          (consent--library-collection-manifest-entry
+           "(consent identity-table primitive)")))
+    (should entry)
+    (should (eq (plist-get entry :provider) 'repo-source))
+    (should (eq (plist-get entry :visibility) 'internal-runtime))
+    (should (eq (plist-get entry :source-kind) 'portable-source))
+    (should-not (plist-get entry :primitive-overlay-library))
+    (should
+     (member "(consent identity-table adapter)"
+             (plist-get entry :dependencies)))
+    (should
+     (string-suffix-p
+      "scheme/consent/identity-table.sld"
+      (consent-library-test--manifest-source-file key)))
+    (should adapter)
+    (should (eq (plist-get adapter :source-kind) 'portable-source))
+    (should
+     (equal (plist-get adapter :primitive-overlay-library)
+            "(consent identity-table primitive)"))
+    (should primitive)
+    (should (eq (plist-get primitive :source-kind) 'primitive))
+    (should
+     (equal
+      (mapcar (lambda (spec) (plist-get spec :name))
+              (plist-get primitive :primitive-exports))
+      '("consent-host-identity-fast-backend?"
+        "consent-host-identity-hash"
+        "consent-host-identity=?")))))
+
+(ert-deftest consent-library-test-identity-table-runs-source-backed ()
+  "Exercise portable table policy through the Emacs adapter import."
+  (should
+   (equal
+    (consent-library-test--external/options
+     "(import (scheme base)
+              (consent identity-table))
+      (let ((table
+             (consent-make-identity-table
+              3 31 'allow-growth 'mixed 'emacs-loader))
+            (left (vector 'same))
+            (right (vector 'same)))
+        (consent-identity-table-host-set! table left #f)
+        (consent-identity-table-host-set! table right 'right)
+        (consent-identity-table-owned-set!
+         table 4 9 left 'owned)
+        (let ((answer
+               (list
+                (consent-identity-table-fast-host-backend? table)
+                (consent-identity-table-host-contains? table left)
+                (consent-identity-table-host-ref table left 'absent)
+                (consent-identity-table-host-ref table right 'absent)
+                (consent-identity-table-owned-ref table 4 9 'absent)
+                (consent-identity-table-size table))))
+          (consent-identity-table-release! table)
+          (append
+           answer
+           (list
+            (consent-identity-table-active? table)
+            (cadr
+             (assq 'release-clear-slots
+                   (cdr (consent-identity-table-stats table))))))))"
+     '(:internal-libraries-allowed t))
+    "(#t #t #f right owned 3 #f 7)")))
 
 (ert-deftest consent-library-test-scratch-arena-runs-source-backed ()
   "Exercise scratch ownership and marks through the Emacs source loader."

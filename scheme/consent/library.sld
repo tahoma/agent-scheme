@@ -3173,8 +3173,14 @@ ntry"
       ;; Custom symbol tables parse afresh and never reach this helper.
       (if shared-datum?
           (if (consent-identity-map-fast-backend?)
-              (source-library-copy-datum
-               forms (consent-make-identity-map) context)
+              (let ((seen
+                     (consent-make-identity-map 'source-library-copy)))
+                (dynamic-wind
+                 (lambda () #t)
+                 (lambda ()
+                   (source-library-copy-datum forms seen context))
+                 (lambda ()
+                   (consent-identity-map-release! seen))))
               ;; Manifest realization reparses shared syntax on the portable
               ;; compatibility backend. Keep this guard so no future caller
               ;; silently routes an ultra-critical graph copy through the
@@ -3439,7 +3445,8 @@ ntry"
             (if (not map)
                 (begin
                   (require-native-fast-identity-maps!)
-                  (set! map (consent-make-identity-map))
+                  (set! map
+                        (consent-make-identity-map 'native-egress-state))
                   (vector-set! state 0 map)))
             (consent-identity-map-set! map source target)))
       target)
@@ -3504,7 +3511,8 @@ ntry"
                                 (begin
                                   (require-native-fast-identity-maps!)
                                   (set! host-nodes
-                                        (consent-make-identity-map))))
+                                        (consent-make-identity-map
+                                         'native-egress-walk))))
                             (consent-identity-map-set!
                              host-nodes source node))))
                     (define (source-kind source owned?)
@@ -3980,7 +3988,8 @@ host"
     (define (ensure-native-bridge-native-index! bridge)
       "Return BRIDGE's native-object identity index, allocating it lazily."
       (or (native-bridge-native-index bridge)
-          (let ((created (consent-make-identity-map)))
+          (let ((created
+                 (consent-make-identity-map 'native-bridge-index)))
             (vector-set! bridge 3 created)
             created)))
 
@@ -3992,8 +4001,9 @@ host"
       "Return BRIDGE's callback identity indexes, allocating them lazily."
       (or (native-bridge-callback-indexes bridge)
           (let ((created
-                 (vector (consent-make-identity-map)
-                         (consent-make-identity-map))))
+                 (vector
+                  (consent-make-identity-map 'native-callback-forward)
+                  (consent-make-identity-map 'native-callback-origin))))
             (vector-set! bridge 4 created)
             created)))
 
@@ -4034,14 +4044,18 @@ host"
              (policies
               (or
                (consent-identity-map-ref forward context #f)
-               (let ((created (consent-make-identity-map)))
+               (let ((created
+                      (consent-make-identity-map
+                       'native-callback-policy)))
                  (consent-identity-map-set! forward context created)
                  created)))
              (callables
               (or
                (consent-identity-map-ref
                 policies convert-symbols? #f)
-               (let ((created (consent-make-identity-map)))
+               (let ((created
+                      (consent-make-identity-map
+                       'native-callback-callable)))
                  (consent-identity-map-set!
                   policies convert-symbols? created)
                  created))))
@@ -5503,14 +5517,16 @@ required")))
       (or (context-native-binding-cache context)
           (begin
             (require-native-fast-identity-maps!)
-            (let ((cache (consent-make-identity-map)))
+            (let ((cache
+                   (consent-make-identity-map 'native-binding-cache)))
               (set-context-native-binding-cache! context cache)
               cache))))
 
     (define (native-binding-cache-level! cache key)
       "Return CACHE's identity-keyed child map for KEY, creating it once."
       (or (consent-identity-map-ref cache key #f)
-          (let ((created (consent-make-identity-map)))
+          (let ((created
+                 (consent-make-identity-map 'native-binding-cache-level)))
             (consent-identity-map-set! cache key created)
             created)))
 

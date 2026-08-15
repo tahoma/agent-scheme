@@ -122,7 +122,7 @@
                 compiled-library
                 compiled-random
                 compiled-property))))
-    (test-equal "compiled project shard program count" 53
+    (test-equal "compiled project shard program count" 54
                 (length compiled-files))
     (test-assert "compiled project shard includes registered semantics"
                  (member "tests/scheme/consent-context-test.scm"
@@ -138,6 +138,9 @@
                          compiled-files))
     (test-assert "compiled project shard includes dense sets"
                  (member "tests/scheme/consent-dense-set-test.scm"
+                         compiled-files))
+    (test-assert "compiled project shard includes identity tables"
+                 (member "tests/scheme/consent-identity-table-test.scm"
                          compiled-files))
     (test-assert "compiled project shard includes scratch arenas"
                  (member "tests/scheme/consent-scratch-arena-test.scm"
@@ -159,19 +162,19 @@
                  (member
                   "tests/scheme/stdlib-list-queue-upstream-test.scm"
                   compiled-files))
-    (test-equal "programs admitted to compiled self-host" 53
+    (test-equal "programs admitted to compiled self-host" 54
                 (program-count-with-tag programs 'compiled))
-    (test-equal "ordinary full-suite programs" 73
+    (test-equal "ordinary full-suite programs" 74
                 (program-count-with-tag programs 'full))
     (test-equal "full programs carrying an explicit self-host gap" 21
                 (program-count-with-tag programs 'self-host-gap))
     (test-assert "full programs exactly partition compiled coverage and gaps"
                  (every full-program-self-host-classified? programs))
     (test-equal "balanced direct shard program counts"
-                '(18 1 5 19 23 5 2)
+                '(19 1 5 19 23 5 2)
                 (map length direct-shards))
     (test-equal "balanced compiled shard program counts"
-                '(11 1 14 20 5 2)
+                '(12 1 14 20 5 2)
                 (map length compiled-shards))
     (test-assert "balanced direct shards exactly partition full programs"
                  (programs-exactly-partitioned?

@@ -1793,6 +1793,8 @@ identity maps"
                     (else (visit-count-only! (vector-ref job 1))))
                   (loop))))))
          (lambda ()
+           (if host-seen
+               (consent-identity-map-release! host-seen))
            (if owned-seen
                (consent-datum-object-map-release! owned-seen))))))
 
@@ -2085,6 +2087,8 @@ identity maps"
                        (vector-ref job 2) (vector-ref job 1)))
                   (loop))))))
          (lambda ()
+           (if host-seen
+               (consent-identity-map-release! host-seen))
            (if owned-seen
                (consent-datum-object-map-release! owned-seen)))))
           (if (null? rest) value ((car rest) value))))))

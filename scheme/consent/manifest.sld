@@ -89,6 +89,32 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (consent identity-table adapter))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer primitive)
+        (source-kind source-library)
+        (source (path "identity-table/adapter.sld"))
+        (api-version internal)
+        (source-version runtime)
+        (realization portable-source)
+        (primitive-overlay-library (consent identity-table primitive))
+        (exports
+         (consent-host-identity-fast-backend?
+          consent-host-identity-hash
+          consent-host-identity=?))
+        (dependencies
+         ((library (scheme base))))
+        (provenance
+         ((origin repo)
+          (boundary direct-host-identity-adapter)
+          (callbacks none)))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (consent dense-set))
         (owner consent-core)
         (provider repo-source)
@@ -228,13 +254,13 @@
        (manifest-entry
         (schema-version 1)
         (kind primitive-library)
-        (name (consent identity-map primitive))
+        (name (consent identity-table primitive))
         (owner consent-core)
         (provider host-adapter)
         (visibility internal-runtime)
         (layer primitive)
         (source-kind primitive-library)
-        (source (implementation-id consent-identity-map))
+        (source (implementation-id consent-identity-hash))
         (implementation-resolver
          (module consent-base)
          (procedure consent-standard-primitive-implementation))
@@ -242,36 +268,31 @@
         (source-version runtime)
         (realization host-primitive)
         (exports
-         (consent-identity-map-fast-backend?
-          consent-make-identity-map
-          consent-identity-map-ref
-          consent-identity-map-set!))
+         (consent-host-identity-fast-backend?
+          consent-host-identity-hash
+          consent-host-identity=?))
         (primitive-exports
-         ((name consent-identity-map-fast-backend?)
-          (primitive primitive-consent-identity-map-fast-backend?)
+         ((name consent-host-identity-fast-backend?)
+          (primitive primitive-consent-host-identity-fast-backend?)
           (arity 0 0)
           (effects (pure))
           (capabilities ()))
-         ((name consent-make-identity-map)
-          (primitive primitive-consent-make-identity-map)
-          (arity 0 0)
+         ((name consent-host-identity-hash)
+          (primitive primitive-consent-host-identity-hash)
+          (arity 1 1)
           (effects (allocation))
           (capabilities ()))
-         ((name consent-identity-map-ref)
-          (primitive primitive-consent-identity-map-ref)
-          (arity 3 3)
-          (effects (state-read))
-          (capabilities ()))
-         ((name consent-identity-map-set!)
-          (primitive primitive-consent-identity-map-set!)
-          (arity 3 3)
-          (effects (state-write))
+         ((name consent-host-identity=?)
+          (primitive primitive-consent-host-identity=?)
+          (arity 2 2)
+          (effects (pure))
           (capabilities ())))
         (dependencies
          ((library (scheme base))))
         (provenance
          ((origin repo)
-          (boundary host-identity-hash)))
+          (boundary audited-host-identity)
+          (callbacks none)))
         (status internal)
         (canonical #t))
        (manifest-entry
@@ -296,6 +317,60 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (consent identity-table))
+        (owner consent-core)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (layer runtime)
+        (source-kind source-library)
+        (source (path "identity-table.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (consent-make-identity-table
+          consent-identity-table?
+          consent-identity-table-active?
+          consent-identity-table-fast-host-backend?
+          consent-identity-table-domain
+          consent-identity-table-key-policy
+          consent-identity-table-size
+          consent-identity-table-capacity
+          consent-identity-table-maximum-capacity
+          consent-identity-table-reserve!
+          consent-identity-table-host-contains?
+          consent-identity-table-host-ref
+          consent-identity-table-host-set!
+          consent-identity-table-host-delete!
+          consent-identity-table-owned-contains?
+          consent-identity-table-owned-ref
+          consent-identity-table-owned-set!
+          consent-identity-table-owned-delete!
+          consent-identity-table-clear!
+          consent-identity-table-release!
+          consent-identity-table-entries
+          consent-identity-table-stats
+          consent-host-identity-fast-backend?
+          consent-host-identity-hash
+          consent-host-identity=?))
+        (dependencies
+         ((library (scheme base))
+          (library (consent identity-table adapter))))
+        (provenance
+         ((origin repo)
+          (representation portable-open-addressing)
+          (identity-policies (owned-id host-identity mixed))
+          (load-factor less-than-two-thirds)
+          (deletion tombstones)
+          (iteration-order unspecified)
+          (fallback fixed-64-entry-compatibility-envelope)
+          (callbacks none)
+          (memory-lifecycle (clear roots) (release terminal))))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (consent identity-map))
         (owner consent-core)
         (provider repo-source)
@@ -306,19 +381,23 @@
         (api-version internal)
         (source-version unknown)
         (realization portable-source)
-        (primitive-overlay-library (consent identity-map primitive))
         (exports
          (consent-identity-map-fast-backend?
           consent-make-identity-map
           consent-identity-map-ref
-          consent-identity-map-set!))
+          consent-identity-map-set!
+          consent-identity-map-delete!
+          consent-identity-map-clear!
+          consent-identity-map-release!
+          consent-identity-map-stats))
         (dependencies
-         ((library (scheme base))))
+         ((library (scheme base))
+          (library (consent identity-table))))
         (provenance
          ((origin repo)
-          (gambit-accelerator native-identity-table)
-          (optional-accelerator (library (srfi 69)))
-          (fallback identity-alist)))
+          (compatibility-facade (library (consent identity-table)))
+          (key-policy host)
+          (callbacks none)))
         (status internal)
         (canonical #t))
        (manifest-entry
@@ -2652,6 +2731,7 @@
           (library (consent character))
           (library (consent datum))
           (library (consent identity-map))
+          (library (consent identity-table))
           (library (consent numeric))
           (library (consent reader))
           (library (consent symbol))

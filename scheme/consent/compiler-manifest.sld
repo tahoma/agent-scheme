@@ -93,9 +93,9 @@
          ;; callback invocation or durable storage surface. Memory-key remains
          ;; a compiled dependency inside memory-query, while the persistent
          ;; memory facade realizes that same source directly. The transient
-         ;; overlay and identity map likewise remain ordinary compiled
-         ;; dependencies because their private records never cross the core
-         ;; interface.
+         ;; overlay, identity table, and identity-map facade likewise remain
+         ;; ordinary compiled dependencies because their private records never
+         ;; cross the core interface.
          (native-libraries
           ((agent task)
            (agent transcript)

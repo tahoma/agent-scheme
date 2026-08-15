@@ -3732,9 +3732,11 @@ tuple."
       value)
 
     (define (runtime-identity-map-release! map)
-      "Release MAP's call-scoped owned-object backend when allocated."
-      (let ((owned (vector-ref map 0)))
-        (if owned (consent-datum-object-map-release! owned)))
+      "Release MAP's call-scoped owned and host backends when allocated."
+      (let ((owned (vector-ref map 0))
+            (host (vector-ref map 1)))
+        (if owned (consent-datum-object-map-release! owned))
+        (if host (consent-identity-map-release! host)))
       map)
 
     (define (make-context-source-copy-map)
