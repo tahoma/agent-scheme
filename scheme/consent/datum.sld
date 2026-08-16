@@ -37,6 +37,11 @@
           consent-datum-object-map-release!
           consent-datum-object-map-probe-count
           call-with-consent-datum-object-map
+          consent-datum-residency-tracking-start!
+          consent-datum-residency-tracking-finish!
+          consent-datum-residency-tracking-statistic
+          consent-datum-residency-tracking-release!
+          consent-datum-residency-tracking-report
           consent-call-with-datum-construction
           consent-datum-same?
           consent-datum-make-internal-slots
@@ -93,6 +98,309 @@
     ;; Process-local heap identifiers distinguish otherwise equal ordinals.
     (define next-datum-heap-id 0)
 
+    ;; Residency tracking is an opt-in portable observation scope. Ordinary
+    ;; execution pays only one false branch per tracked ownership event; the
+    ;; counters and their result datum allocate only while a benchmark or test
+    ;; explicitly installs a tracker.
+    (define datum-residency-category-names
+      '#(owned-pair
+         owned-string
+         owned-vector
+         owned-bytevector
+         owned-internal
+         construction-marker
+         construction-index-slot
+         revision-sidecar-page
+         traversal-sidecar-page
+         map-sidecar-page
+         source-sidecar-page
+         phase-map-page
+         graph-map-entry
+         import-result-shell
+         import-host-memo-entry
+         import-owned-memo-entry
+         import-work-entry
+         export-result-shell
+         export-host-memo-entry
+         export-owned-memo-entry
+         export-work-entry))
+
+    ;; Owned pair category index.
+    (define datum-residency-owned-pair 0)
+    ;; Owned string category index.
+    (define datum-residency-owned-string 1)
+    ;; Owned vector category index.
+    (define datum-residency-owned-vector 2)
+    ;; Owned bytevector category index.
+    (define datum-residency-owned-bytevector 3)
+    ;; Private internal object category index.
+    (define datum-residency-owned-internal 4)
+    ;; Construction marker category index.
+    (define datum-residency-construction-marker 5)
+    ;; Construction marker index-slot category index.
+    (define datum-residency-construction-index-slot 6)
+    ;; Revision sidecar-page category index.
+    (define datum-residency-revision-sidecar-page 7)
+    ;; Traversal sidecar-page category index.
+    (define datum-residency-traversal-sidecar-page 8)
+    ;; Intrusive-map sidecar-page category index.
+    (define datum-residency-map-sidecar-page 9)
+    ;; Source-metadata sidecar-page category index.
+    (define datum-residency-source-sidecar-page 10)
+    ;; Phase-local map-page category index.
+    (define datum-residency-phase-map-page 11)
+    ;; Intrusive graph-map entry category index.
+    (define datum-residency-graph-map-entry 12)
+    ;; Import result-shell category index.
+    (define datum-residency-import-result-shell 13)
+    ;; Import host-memo entry category index.
+    (define datum-residency-import-host-memo-entry 14)
+    ;; Import owned-memo entry category index.
+    (define datum-residency-import-owned-memo-entry 15)
+    ;; Import work-entry category index.
+    (define datum-residency-import-work-entry 16)
+    ;; Export result-shell category index.
+    (define datum-residency-export-result-shell 17)
+    ;; Export host-memo entry category index.
+    (define datum-residency-export-host-memo-entry 18)
+    ;; Export owned-memo entry category index.
+    (define datum-residency-export-owned-memo-entry 19)
+    ;; Export work-entry category index.
+    (define datum-residency-export-work-entry 20)
+
+    ;; One category counter is #(allocations releases live high-water).
+    ;; Allocation counter slot.
+    (define datum-residency-allocations 0)
+    ;; Release counter slot.
+    (define datum-residency-releases 1)
+    ;; Current live-owner counter slot.
+    (define datum-residency-live 2)
+    ;; High-water owner counter slot.
+    (define datum-residency-high-water 3)
+
+    ;; A tracker is #(marker active? category-counters token outer).
+    (define datum-residency-tracker-marker
+      (vector 'consent-datum-residency-tracker))
+    ;; Dynamically active tracker, or #f outside an observation scope.
+    (define current-datum-residency-tracker #f)
+    ;; Next scalar token safe to pass through the evaluator boundary.
+    (define next-datum-residency-tracker-token 0)
+    ;; Finished trackers retained until their caller explicitly releases them.
+    (define completed-datum-residency-trackers '())
+
+    (define (make-datum-residency-tracker token outer)
+      "Return one active lazily populated residency tracker."
+      (vector
+       datum-residency-tracker-marker
+       #t
+       (make-vector (vector-length datum-residency-category-names) #f)
+       token
+       outer))
+
+    (define (datum-residency-counter-for-write! tracker category)
+      "Return TRACKER's writable counter vector for CATEGORY."
+      (let* ((categories (vector-ref tracker 2))
+             (counter (vector-ref categories category)))
+        (or counter
+            (let ((created (make-vector 4 0)))
+              (vector-set! categories category created)
+              created))))
+
+    (define (datum-residency-open! category amount)
+      "Record AMOUNT newly live units in the current CATEGORY."
+      (let ((tracker current-datum-residency-tracker))
+        (if tracker
+            (let* ((counter
+                    (datum-residency-counter-for-write! tracker category))
+                   (live (+ (vector-ref counter datum-residency-live) amount)))
+              (vector-set!
+               counter
+               datum-residency-allocations
+               (+ (vector-ref counter datum-residency-allocations) amount))
+              (vector-set! counter datum-residency-live live)
+              (if (> live (vector-ref counter datum-residency-high-water))
+                  (vector-set!
+                   counter datum-residency-high-water live))))))
+
+    (define (datum-residency-close! category amount)
+      "Record release of AMOUNT live units in the current CATEGORY."
+      (let ((tracker current-datum-residency-tracker))
+        (if tracker
+            (let* ((counter
+                    (datum-residency-counter-for-write! tracker category))
+                   (live (- (vector-ref counter datum-residency-live) amount)))
+              (if (< live 0)
+                  (error
+                   "datum residency release exceeds live units"
+                   (vector-ref datum-residency-category-names category)
+                   amount
+                   (vector-ref counter datum-residency-live)))
+              (vector-set!
+               counter
+               datum-residency-releases
+               (+ (vector-ref counter datum-residency-releases) amount))
+              (vector-set! counter datum-residency-live live)))))
+
+    (define (datum-residency-statistics tracker)
+      "Return deterministic Scheme-readable residency statistics."
+      (let ((counters (vector-ref tracker 2)))
+        (let loop ((index 0) (result '()))
+          (if (= index (vector-length datum-residency-category-names))
+              (cons
+               'datum-residency-stats
+               (cons
+                (list 'active (vector-ref tracker 1))
+                (reverse result)))
+              (let ((counter (vector-ref counters index)))
+                (loop
+                 (+ index 1)
+                 (cons
+                  (list
+                   (vector-ref datum-residency-category-names index)
+                   (list 'allocations
+                         (if counter
+                             (vector-ref
+                              counter datum-residency-allocations)
+                             0))
+                   (list 'releases
+                         (if counter
+                             (vector-ref counter datum-residency-releases)
+                             0))
+                   (list 'live
+                         (if counter
+                             (vector-ref counter datum-residency-live)
+                             0))
+                   (list 'high-water
+                         (if counter
+                             (vector-ref counter datum-residency-high-water)
+                             0)))
+                  result)))))))
+
+    (define (completed-datum-residency-tracker-ref token)
+      "Return completed TOKEN's tracker, or #f when it is not retained."
+      (let loop ((rest completed-datum-residency-trackers))
+        (cond
+         ((null? rest) #f)
+         ((= token (caar rest)) (cdar rest))
+         (else (loop (cdr rest))))))
+
+    (define (consent-datum-residency-tracking-start!)
+      "Start a nested portable datum-residency census and return its token."
+      #((parameters)
+        (returns (type exact-non-negative-integer)
+         (description "Scalar token naming the new active census."))
+        (effects allocation state-read state-write))
+      (let* ((token next-datum-residency-tracker-token)
+             (tracker
+              (make-datum-residency-tracker
+               token current-datum-residency-tracker)))
+        (set! next-datum-residency-tracker-token (+ token 1))
+        (set! current-datum-residency-tracker tracker)
+        token))
+
+    (define (consent-datum-residency-tracking-finish! token)
+      "Finish the active datum-residency TOKEN and return TOKEN."
+      #((parameters
+         (token (type exact-non-negative-integer)
+          (description "Token returned by the matching start operation.")))
+        (returns (type exact-non-negative-integer)
+         (description "TOKEN, now naming a completed retained census."))
+        (effects allocation state-read state-write error))
+      (let ((tracker current-datum-residency-tracker))
+        (if (not (and tracker
+                      (integer? token)
+                      (exact? token)
+                      (>= token 0)
+                      (= token (vector-ref tracker 3))))
+            (error
+             "consent-datum-residency-tracking-finish!: expected active token"
+             token))
+        (set! current-datum-residency-tracker (vector-ref tracker 4))
+        (vector-set! tracker 1 #f)
+        (vector-set! tracker 4 #f)
+        (set! completed-datum-residency-trackers
+              (cons
+               (cons token tracker)
+               completed-datum-residency-trackers))
+        token))
+
+    (define (consent-datum-residency-tracking-statistic
+             token category field)
+      "Return one scalar FIELD counter for completed TOKEN and CATEGORY."
+      #((parameters
+         (token (type exact-non-negative-integer)
+          (description "Completed retained census token."))
+         (category (type exact-non-negative-integer)
+          (description "Zero-based residency category index."))
+         (field (type exact-non-negative-integer)
+          (description "Counter index from allocation through high water.")))
+        (returns (type exact-non-negative-integer)
+         (description "The selected counter, or zero when unpopulated."))
+        (effects state-read error))
+      (let ((tracker
+             (and (integer? token)
+                  (exact? token)
+                  (>= token 0)
+                  (completed-datum-residency-tracker-ref token))))
+        (if (not tracker)
+            (error
+             "datum residency statistic expected completed token"
+             token))
+        (if (not (and (integer? category)
+                      (exact? category)
+                      (<= 0 category)
+                      (< category
+                         (vector-length datum-residency-category-names))))
+            (error "datum residency category index out of range" category))
+        (if (not (and (integer? field)
+                      (exact? field)
+                      (<= 0 field)
+                      (< field 4)))
+            (error "datum residency field index out of range" field))
+        (let ((counter (vector-ref (vector-ref tracker 2) category)))
+          (if counter (vector-ref counter field) 0))))
+
+    (define (consent-datum-residency-tracking-report token)
+      "Return completed retained TOKEN's Scheme-readable statistics."
+      #((parameters
+         (token (type exact-non-negative-integer)
+          (description "Completed retained census token.")))
+        (returns (type list)
+         (description "Per-category allocation and lifetime counters."))
+        (effects allocation state-read error))
+      (let ((tracker
+             (and (integer? token)
+                  (exact? token)
+                  (>= token 0)
+                  (completed-datum-residency-tracker-ref token))))
+        (if (not tracker)
+            (error "datum residency report expected completed token" token))
+        (datum-residency-statistics tracker)))
+
+    (define (consent-datum-residency-tracking-release! token)
+      "Release the completed datum-residency TOKEN and its retained counters."
+      #((parameters
+         (token (type exact-non-negative-integer)
+          (description "Completed retained census token.")))
+        (returns (type boolean)
+         (description "#t after the matching retained census is released."))
+        (effects state-read state-write error))
+      (let loop ((rest completed-datum-residency-trackers) (kept '()))
+        (cond
+         ((null? rest)
+          (error "datum residency release expected completed token" token))
+         ((and (integer? token)
+               (exact? token)
+               (>= token 0)
+               (= token (caar rest)))
+          (let ((tracker (cdar rest)))
+            (vector-fill! (vector-ref tracker 2) #f)
+            (vector-set! tracker 2 (vector)))
+          (set! completed-datum-residency-trackers
+                (append (reverse kept) (cdr rest)))
+          #t)
+         (else (loop (cdr rest) (cons (car rest) kept))))))
+
     ;; A heap owns object-id allocation, cold ordinal sidecars, and the future
     ;; mutation barrier.  Object headers retain only the heap reference and
     ;; ordinal needed to derive heap-level identity and ownership metadata.
@@ -125,10 +433,11 @@
     ;; direct ordinal indexing preserves O(1) access without placing an empty
     ;; slot in every ordinary object.
     (define-record-type <consent-datum-sidecar>
-      (make-datum-sidecar-record storage count)
+      (make-datum-sidecar-record storage count residency-category)
       datum-sidecar?
       (storage datum-sidecar-storage set-datum-sidecar-storage!)
-      (count datum-sidecar-count set-datum-sidecar-count!))
+      (count datum-sidecar-count set-datum-sidecar-count!)
+      (residency-category datum-sidecar-residency-category))
 
     ;; Two-level pages keep a late cold property from allocating one empty
     ;; slot for every earlier object in the heap. Division by this fixed power
@@ -174,12 +483,16 @@
 
     ;; Open-ended private runtime slots retain an explicit internal kind.
     (define-record-type <consent-datum-internal>
-      (make-datum-internal-record heap id kind storage)
+      (make-datum-internal-record heap id kind storage revision)
       datum-internal-record?
       (heap datum-internal-heap)
       (id datum-internal-id)
       (kind datum-internal-kind)
-      (storage datum-internal-storage))
+      (storage datum-internal-storage)
+      ;; Private runtime objects are allocation-heavy and short-lived. Keeping
+      ;; their hot revision with the record lets host collection reclaim it;
+      ;; a heap ordinal sidecar would retain pages after those objects die.
+      (revision datum-internal-revision set-datum-internal-revision!))
 
     (define (consent-datum-object? value)
       "Report whether VALUE is any owned compound or private slot object."
@@ -275,9 +588,9 @@
         (effects error))
       (consent-datum-heap-owner (datum-object-heap object)))
 
-    (define (make-datum-sidecar)
+    (define (make-datum-sidecar residency-category)
       "Return one lazily grown ordinal sidecar."
-      (make-datum-sidecar-record (vector) 0))
+      (make-datum-sidecar-record (vector) 0 residency-category))
 
     (define (datum-sidecar-ref sidecar ordinal default)
       "Return SIDECAR's ORDINAL value or DEFAULT when absent."
@@ -322,7 +635,9 @@
                       (set! page
                             (make-vector (+ datum-sidecar-page-size 1) #f))
                       (vector-set! page 0 0)
-                      (vector-set! current-pages page-index page)))
+                      (vector-set! current-pages page-index page)
+                      (datum-residency-open!
+                       (datum-sidecar-residency-category sidecar) 1)))
                 (if page
                     (let* ((slot (+ offset 1))
                            (old (vector-ref page slot)))
@@ -337,15 +652,37 @@
                         (vector-set! page 0 (+ (vector-ref page 0) 1))))
                       (vector-set! page slot value)
                       (if (= (vector-ref page 0) 0)
-                          (vector-set! current-pages page-index #f)))))))))
+                          (begin
+                            (vector-set! current-pages page-index #f)
+                            (datum-residency-close!
+                             (datum-sidecar-residency-category sidecar)
+                             1))))))))))
+
+    (define (datum-sidecar-release! sidecar)
+      "Clear SIDECAR's roots and abandon all of its allocated pages."
+      (let ((pages (datum-sidecar-storage sidecar)))
+        (let loop ((index 0))
+          (if (< index (vector-length pages))
+              (begin
+                (let ((page (vector-ref pages index)))
+                  (if page
+                      (begin
+                        (vector-fill! page #f)
+                        (datum-residency-close!
+                         (datum-sidecar-residency-category sidecar) 1))))
+                (loop (+ index 1)))))
+        (vector-fill! pages #f)
+        (set-datum-sidecar-storage! sidecar (vector))
+        (set-datum-sidecar-count! sidecar 0))
+      sidecar)
 
     (define (heap-sidecar-set!
-             heap current install! object value)
+             heap current install! category object value)
       "Set OBJECT's VALUE in a lazily installed HEAP sidecar."
       (let ((sidecar (current heap)))
         (if (and (not sidecar) value)
             (begin
-              (set! sidecar (make-datum-sidecar))
+              (set! sidecar (make-datum-sidecar category))
               (install! heap sidecar)))
         (if sidecar
             (begin
@@ -363,19 +700,24 @@
          (description "Visible mutation count, initially zero."))
         (effects state-read error))
       (let ((heap (datum-object-heap object)))
-        (datum-sidecar-ref
-         (datum-heap-revision-sidecar heap)
-         (consent-datum-object-id object)
-         0)))
+        (if (datum-internal-record? object)
+            (datum-internal-revision object)
+            (datum-sidecar-ref
+             (datum-heap-revision-sidecar heap)
+             (consent-datum-object-id object)
+             0))))
 
     (define (set-datum-object-revision! object revision)
-      "Set owned OBJECT's sidecar mutation REVISION."
-      (heap-sidecar-set!
-       (datum-object-heap object)
-       datum-heap-revision-sidecar
-       set-datum-heap-revision-sidecar!
-       object
-       revision))
+      "Set owned OBJECT's mutation REVISION."
+      (if (datum-internal-record? object)
+          (set-datum-internal-revision! object revision)
+          (heap-sidecar-set!
+           (datum-object-heap object)
+           datum-heap-revision-sidecar
+           set-datum-heap-revision-sidecar!
+           datum-residency-revision-sidecar-page
+           object
+           revision)))
 
     (define (consent-datum-object-mutable? object)
       "Report whether owned OBJECT permits visible slot mutation."
@@ -406,6 +748,7 @@
        (datum-object-heap object)
        datum-heap-traversal-sidecar
        set-datum-heap-traversal-sidecar!
+       datum-residency-traversal-sidecar-page
        object
        metadata))
 
@@ -423,6 +766,7 @@
        (datum-object-heap object)
        datum-heap-map-sidecar
        set-datum-heap-map-sidecar!
+       datum-residency-map-sidecar-page
        object
        entry))
 
@@ -445,6 +789,7 @@
        (datum-object-heap object)
        datum-heap-source-sidecar
        set-datum-heap-source-sidecar!
+       datum-residency-source-sidecar-page
        object
        metadata))
 
@@ -552,17 +897,31 @@
 
     (define (allocate-datum-pair heap head tail)
       "Allocate one inline owned pair in HEAP."
-      (make-datum-pair-record
-       heap (allocate-datum-id heap) head tail))
+      (let ((pair
+             (make-datum-pair-record
+              heap (allocate-datum-id heap) head tail)))
+        (datum-residency-open! datum-residency-owned-pair 1)
+        pair))
 
     (define (allocate-datum-object heap kind storage)
       "Allocate one KIND object backed privately by STORAGE in HEAP."
-      (let ((id (allocate-datum-id heap)))
-        (case kind
-          ((string) (make-datum-string-record heap id storage))
-          ((vector) (make-datum-vector-record heap id storage))
-          ((bytevector) (make-datum-bytevector-record heap id storage))
-          (else (make-datum-internal-record heap id kind storage)))))
+      (let* ((id (allocate-datum-id heap))
+             (object
+              (case kind
+                ((string) (make-datum-string-record heap id storage))
+                ((vector) (make-datum-vector-record heap id storage))
+                ((bytevector)
+                 (make-datum-bytevector-record heap id storage))
+                (else
+                 (make-datum-internal-record heap id kind storage 0)))))
+        (datum-residency-open!
+         (case kind
+           ((string) datum-residency-owned-string)
+           ((vector) datum-residency-owned-vector)
+           ((bytevector) datum-residency-owned-bytevector)
+           (else datum-residency-owned-internal))
+         1)
+        object))
 
     ;; Construction scopes are one-shot capabilities for trusted runtime
     ;; producers such as the reader. A scope-local ordinal sidecar names each
@@ -661,9 +1020,26 @@
                        (capacity
                         (datum-sidecar-next-capacity length required))
                        (larger (make-vector capacity #f)))
+                  (datum-residency-open!
+                   datum-residency-construction-index-slot capacity)
                   (vector-copy! larger 0 markers)
+                  (if (> length 0)
+                      (begin
+                        (vector-fill! markers #f)
+                        (datum-residency-close!
+                         datum-residency-construction-index-slot length)))
                   (set! markers larger)))
             (vector-set! markers offset marker)))
+
+        (define (release-construction-index!)
+          "Clear and release the scope-local marker index."
+          (let ((length (vector-length markers)))
+            (if (> length 0)
+                (begin
+                  (vector-fill! markers #f)
+                  (datum-residency-close!
+                   datum-residency-construction-index-slot length)))
+            (set! markers (vector))))
 
         (define (make-shell kind length)
           (check-active "datum construction make-shell:")
@@ -708,6 +1084,7 @@
                    object
                    objects)))
             (construction-marker-set! object marker)
+            (datum-residency-open! datum-residency-construction-marker 1)
             ;; Link through the opaque marker instead of allocating one host
             ;; cons cell per compound merely to close the construction scope.
             (set! objects marker)
@@ -801,7 +1178,8 @@
 
         (define (seal! object)
           "Seal one completed shell without a visible mutation event."
-          (construction-marker-set! object #f))
+          (construction-marker-set! object #f)
+          (datum-residency-close! datum-residency-construction-marker 1))
 
         (define (sanitize-abandoned! object)
           "Make an escaped abandoned shell a valid inert owned datum."
@@ -816,7 +1194,8 @@
                               (raw-datum-object-slot-set!
                                object index replacement))
                           (loop (+ index 1)))))))
-            (construction-marker-set! object #f)))
+            (construction-marker-set! object #f))
+          (datum-residency-close! datum-residency-construction-marker 1))
 
         (define (sanitize-all!)
           "Sanitize and close every shell after an abandoned construction."
@@ -845,7 +1224,8 @@
                                  (datum-construction-marker-object rest))
                                 (seal
                                  (datum-construction-marker-next rest)))))
-                        (set! markers (vector))
+                        (set! objects #f)
+                        (release-construction-index!)
                         (set! state 'closed))
                        ((shell-complete?
                          (datum-construction-marker-object rest))
@@ -860,7 +1240,8 @@
                                      marker)
                                     'invalid-marker)))
                           (sanitize-all!)
-                          (set! markers (vector))
+                          (set! objects #f)
+                          (release-construction-index!)
                           (set! state 'closed)
                           (error
                            "datum construction ended with unfilled slots"
@@ -868,7 +1249,8 @@
                            remaining)))))
                     (begin
                       (sanitize-all!)
-                      (set! markers (vector))
+                      (set! objects #f)
+                      (release-construction-index!)
                       (set! state 'closed))))))
 
         ;; Treat the scope as one-shot.  A continuation that leaves during
@@ -1736,7 +2118,9 @@
                            (vector-ref map 1))))
               (if header (vector-set! header 3 created))
               (raw-set-datum-object-map-entry! object created)
-              (vector-set! map 1 created))))
+              (vector-set! map 1 created)
+              (datum-residency-open!
+               datum-residency-graph-map-entry 1))))
       value)
 
     (define (datum-object-map-entry-unlink! object entry)
@@ -1771,6 +2155,8 @@
                      (vector-ref touched 4) touched)
                     (vector-set! touched 4 #f)
                     (vector-set! touched 5 #f)
+                    (datum-residency-close!
+                     datum-residency-graph-map-entry 1)
                     (loop next))))
             (vector-set! map 1 #f)))
       map)
@@ -1810,6 +2196,90 @@
                (error "datum-object map continuation cannot be re-entered")))
          (lambda () (procedure map))
          (lambda () (consent-datum-object-map-release! map)))))
+
+    ;; Import and export own their memo tables for exactly one dynamic phase.
+    ;; Their common case visits one source heap, so a phase-local ordinal
+    ;; sidecar can store memo values directly without allocating an intrusive
+    ;; entry and a heap-sidecar slot for every object. A foreign-heap overflow
+    ;; map preserves exact hybrid-graph behavior without penalizing that common
+    ;; ownership shape. MAP is
+    ;; #(false-token heap sidecar overflow category size active?).
+    (define (make-datum-phase-map category)
+      "Return an empty phase-owned map for import or export memoization."
+      (vector
+       (vector 'consent-datum-phase-map-false)
+       #f
+       #f
+       #f
+       category
+       0
+       #t))
+
+    (define (datum-phase-map-ref map object default)
+      "Return OBJECT's phase-local value in MAP, or DEFAULT."
+      (if (eq? (vector-ref map 1) (datum-object-heap object))
+          (let ((value
+                 (datum-sidecar-ref
+                  (vector-ref map 2)
+                  (consent-datum-object-id object)
+                  #f)))
+            (cond
+             ((not value) default)
+             ((eq? value (vector-ref map 0)) #f)
+             (else value)))
+          (let ((overflow (vector-ref map 3)))
+            (if overflow
+                (consent-datum-object-map-ref overflow object default)
+                default))))
+
+    (define (datum-phase-map-set! map object value)
+      "Associate OBJECT with VALUE in phase-owned MAP."
+      (if (not (vector-ref map 1))
+          (begin
+            (vector-set! map 1 (datum-object-heap object))
+            (vector-set!
+             map 2 (make-datum-sidecar datum-residency-phase-map-page))))
+      (if (eq? (vector-ref map 1) (datum-object-heap object))
+          (let* ((sidecar (vector-ref map 2))
+                 (ordinal (consent-datum-object-id object))
+                 (prior (datum-sidecar-ref sidecar ordinal #f)))
+            (datum-sidecar-set!
+             sidecar ordinal (if value value (vector-ref map 0)))
+            (if (not prior)
+                (begin
+                  (vector-set! map 5 (+ (vector-ref map 5) 1))
+                  (datum-residency-open! (vector-ref map 4) 1))))
+          (let ((overflow (vector-ref map 3)))
+            (if (not overflow)
+                (begin
+                  (set! overflow (consent-make-datum-object-map))
+                  (vector-set! map 3 overflow)))
+            (let ((missing (vector 'datum-phase-map-missing)))
+              (if (eq? (consent-datum-object-map-ref
+                        overflow object missing)
+                       missing)
+                  (begin
+                    (vector-set! map 5 (+ (vector-ref map 5) 1))
+                    (datum-residency-open! (vector-ref map 4) 1)))
+              (consent-datum-object-map-set! overflow object value))))
+      value)
+
+    (define (datum-phase-map-release! map)
+      "Clear every root held by phase-owned MAP and make it inactive."
+      (if (vector-ref map 6)
+          (begin
+            (vector-set! map 6 #f)
+            (let ((sidecar (vector-ref map 2))
+                  (overflow (vector-ref map 3)))
+              (if sidecar (datum-sidecar-release! sidecar))
+              (if overflow
+                  (consent-datum-object-map-release! overflow)))
+            (datum-residency-close! (vector-ref map 4) (vector-ref map 5))
+            (vector-set! map 1 #f)
+            (vector-set! map 2 #f)
+            (vector-set! map 3 #f)
+            (vector-set! map 5 0)))
+      map)
 
     (define (consent-datum-object-shareable? object)
       "Report whether OBJECT belongs to a certified frozen runtime image."
@@ -1953,7 +2423,8 @@
             (owned-seen #f)
             (node-count 0)
             (invalid-leaf? #f)
-            (first-invalid-leaf #f))
+            (first-invalid-leaf #f)
+            (work '()))
         (define (note-nodes! count)
           "Add COUNT nodes when this import is counting."
           (if counted? (set! node-count (+ node-count count))))
@@ -1983,8 +2454,10 @@
                "consent-datum-import: foreign graph requires fast \
 identity maps"
                item))
+          (host-seen-set! host-seen item copy)
           (set! host-count (+ host-count 1))
-          (host-seen-set! host-seen item copy))
+          (datum-residency-open!
+           datum-residency-import-host-memo-entry 1))
         (define (import-host-update! item copy)
           "Replace already-reserved host ITEM with COPY."
           (host-seen-set! host-seen item copy))
@@ -1995,14 +2468,15 @@ identity maps"
         (define (import-owned-ref item)
           "Return ITEM's cross-heap copy, or the private absent token."
           (if owned-seen
-              (consent-datum-object-map-ref
-               owned-seen item absent-token)
+              (datum-phase-map-ref owned-seen item absent-token)
               absent-token))
         (define (import-owned-set! item copy)
           "Memoize owned ITEM as COPY, allocating the map on first use."
           (if (not owned-seen)
-              (set! owned-seen (consent-make-datum-object-map)))
-          (consent-datum-object-map-set! owned-seen item copy))
+              (set! owned-seen
+                    (make-datum-phase-map
+                     datum-residency-import-owned-memo-entry)))
+          (datum-phase-map-set! owned-seen item copy))
         ;; Work entries are #(tag source destination slot). Tags zero and three
         ;; copy with counting enabled or disabled. Tag one finishes source
         ;; metadata after outgoing edges. Tag two counts an already-owned
@@ -2011,21 +2485,26 @@ identity maps"
         (dynamic-wind
          (lambda () #t)
          (lambda ()
-          (let ((root (vector #f))
-                (work '()))
+          (let ((root (vector #f)))
           (define (push-copy-visit! source destination slot count-source?)
             "Schedule SOURCE for copying, optionally counting its subtree."
             (set! work
                   (cons
                    (vector
                     (if count-source? 0 3) source destination slot)
-                   work)))
+                   work))
+            (datum-residency-open!
+             datum-residency-import-work-entry 1))
           (define (push-finish! source copy)
             "Schedule one post-edge source metadata copy."
-            (set! work (cons (vector 1 source copy 0) work)))
+            (set! work (cons (vector 1 source copy 0) work))
+            (datum-residency-open!
+             datum-residency-import-work-entry 1))
           (define (push-count-visit! source)
             "Schedule SOURCE for counting without copying or callbacks."
-            (set! work (cons (vector 2 source #f 0) work)))
+            (set! work (cons (vector 2 source #f 0) work))
+            (datum-residency-open!
+             datum-residency-import-work-entry 1))
           (define (deliver! destination slot result)
             "Store one imported RESULT in its already-allocated parent."
             (if (datum-pair-record? destination)
@@ -2087,6 +2566,8 @@ identity maps"
             (case (consent-datum-object-kind source)
               ((pair)
                (let ((copy (make-pair-placeholder heap)))
+                 (datum-residency-open!
+                  datum-residency-import-result-shell 1)
                  (import-owned-set! source copy)
                  (deliver! destination slot copy)
                  (if count-source? (note-nodes! 1))
@@ -2108,6 +2589,8 @@ identity maps"
                        'string
                        (copy-string-storage
                         (datum-object-storage source)))))
+                 (datum-residency-open!
+                  datum-residency-import-result-shell 1)
                  (import-owned-set! source copy)
                  (deliver! destination slot copy)
                  (if count-source?
@@ -2121,6 +2604,8 @@ identity maps"
                        'bytevector
                        (copy-host-bytevector
                         (datum-object-storage source)))))
+                 (datum-residency-open!
+                  datum-residency-import-result-shell 1)
                  (import-owned-set! source copy)
                  (deliver! destination slot copy)
                  (if count-source?
@@ -2133,6 +2618,8 @@ identity maps"
                (let* ((length
                        (consent-datum-vector-length-trusted source))
                       (copy (make-vector-placeholder heap length)))
+                 (datum-residency-open!
+                  datum-residency-import-result-shell 1)
                  (import-owned-set! source copy)
                  (deliver! destination slot copy)
                  (if count-source? (note-nodes! 1))
@@ -2149,6 +2636,8 @@ identity maps"
             (cond
              ((pair? source)
               (let ((copy (make-pair-placeholder heap)))
+                (datum-residency-open!
+                 datum-residency-import-result-shell 1)
                 (import-host-update! source copy)
                 (deliver! destination slot copy)
                 (if count-source? (note-nodes! 1))
@@ -2165,6 +2654,8 @@ identity maps"
                  count-source?)))
              ((string? source)
               (let ((copy (consent-datum-string-from-host heap source)))
+                (datum-residency-open!
+                 datum-residency-import-result-shell 1)
                 (import-host-update! source copy)
                 (deliver! destination slot copy)
                 (if count-source?
@@ -2173,6 +2664,8 @@ identity maps"
              ((bytevector? source)
               (let ((copy
                      (consent-datum-bytevector-from-host heap source)))
+                (datum-residency-open!
+                 datum-residency-import-result-shell 1)
                 (import-host-update! source copy)
                 (deliver! destination slot copy)
                 (if count-source?
@@ -2180,7 +2673,9 @@ identity maps"
                 (push-finish! source copy)))
              ((vector? source)
               (let* ((length (vector-length source))
-                     (copy (make-vector-placeholder heap length)))
+                    (copy (make-vector-placeholder heap length)))
+                (datum-residency-open!
+                 datum-residency-import-result-shell 1)
                 (import-host-update! source copy)
                 (deliver! destination slot copy)
                 (if count-source? (note-nodes! 1))
@@ -2313,6 +2808,8 @@ identity maps"
                     (vector-ref root 0))
                 (let ((job (car work)))
                   (set! work (cdr work))
+                  (datum-residency-close!
+                   datum-residency-import-work-entry 1)
                   (case (vector-ref job 0)
                     ((0 3)
                      (let ((source (vector-ref job 1))
@@ -2330,10 +2827,17 @@ identity maps"
                     (else (visit-count-only! (vector-ref job 1))))
                   (loop))))))
          (lambda ()
+           (let ((pending (length work)))
+             (set! work '())
+             (datum-residency-close!
+              datum-residency-import-work-entry pending))
            (if host-seen
-               (consent-identity-map-release! host-seen))
+               (begin
+                 (consent-identity-map-release! host-seen)
+                 (datum-residency-close!
+                  datum-residency-import-host-memo-entry host-count)))
            (if owned-seen
-               (consent-datum-object-map-release! owned-seen))))))
+               (datum-phase-map-release! owned-seen))))))
 
     (define (consent-datum-import heap value . rest)
       "Import host compound VALUE into HEAP, preserving sharing and cycles."
@@ -2436,18 +2940,20 @@ identity maps"
             (owned-seen #f)
             (host-seen #f)
             (host-fast? (consent-identity-map-fast-backend?))
-            (host-count 0))
+            (host-count 0)
+            (work '()))
         (define (export-owned-ref item)
           "Return owned ITEM's host copy, or the private absent token."
           (if owned-seen
-              (consent-datum-object-map-ref
-               owned-seen item absent-token)
+              (datum-phase-map-ref owned-seen item absent-token)
               absent-token))
         (define (export-owned-set! item copy)
           "Memoize owned ITEM as COPY, allocating the map on first use."
           (if (not owned-seen)
-              (set! owned-seen (consent-make-datum-object-map)))
-          (consent-datum-object-map-set! owned-seen item copy))
+              (set! owned-seen
+                    (make-datum-phase-map
+                     datum-residency-export-owned-memo-entry)))
+          (datum-phase-map-set! owned-seen item copy))
         (define (export-host-ref item)
           "Return host ITEM's graph copy, or the private absent token."
           (if host-seen
@@ -2465,8 +2971,10 @@ identity maps"
                "consent-datum-export: foreign graph requires fast \
 identity maps"
                item))
+          (consent-identity-map-set! host-seen item copy)
           (set! host-count (+ host-count 1))
-          (consent-identity-map-set! host-seen item copy))
+          (datum-residency-open!
+           datum-residency-export-host-memo-entry 1))
         (define (export-host-update! item copy)
           "Replace already-reserved host ITEM with COPY."
           (consent-identity-map-set! host-seen item copy))
@@ -2481,15 +2989,18 @@ identity maps"
         (dynamic-wind
          (lambda () #t)
          (lambda ()
-          (let ((root (vector #f))
-                (work '()))
+          (let ((root (vector #f)))
           (define (push-visit! source destination slot)
             "Schedule SOURCE for delivery into DESTINATION at SLOT."
             (set! work
-                  (cons (vector 0 source destination slot) work)))
+                  (cons (vector 0 source destination slot) work))
+            (datum-residency-open!
+             datum-residency-export-work-entry 1))
           (define (push-finish! source copy)
             "Schedule one post-edge source metadata copy."
-            (set! work (cons (vector 1 source copy 0) work)))
+            (set! work (cons (vector 1 source copy 0) work))
+            (datum-residency-open!
+             datum-residency-export-work-entry 1))
           (define (deliver! destination slot result)
             "Store exported RESULT into a root, vector, or pair slot."
             (cond
@@ -2524,6 +3035,8 @@ identity maps"
             (case (consent-datum-object-kind source)
               ((pair)
                (let ((copy (cons #f #f)))
+                 (datum-residency-open!
+                  datum-residency-export-result-shell 1)
                  (export-owned-set! source copy)
                  (deliver! destination slot copy)
                  (push-finish! source copy)
@@ -2533,17 +3046,23 @@ identity maps"
                   (consent-datum-car-trusted source) copy -1)))
               ((string)
                (let ((copy (consent-datum-string->host source)))
+                 (datum-residency-open!
+                  datum-residency-export-result-shell 1)
                  (export-owned-set! source copy)
                  (deliver! destination slot copy)
                  (push-finish! source copy)))
               ((bytevector)
                (let ((copy (consent-datum-bytevector->host source)))
+                 (datum-residency-open!
+                  datum-residency-export-result-shell 1)
                  (export-owned-set! source copy)
                  (deliver! destination slot copy)
                  (push-finish! source copy)))
               ((vector)
                (let* ((length (consent-datum-vector-length source))
                       (copy (make-vector length #f)))
+                 (datum-residency-open!
+                  datum-residency-export-result-shell 1)
                  (export-owned-set! source copy)
                  (deliver! destination slot copy)
                  (push-finish! source copy)
@@ -2553,6 +3072,8 @@ identity maps"
             (cond
              ((pair? source)
               (let ((copy (cons #f #f)))
+                (datum-residency-open!
+                 datum-residency-export-result-shell 1)
                 (export-host-update! source copy)
                 (deliver! destination slot copy)
                 (push-finish! source copy)
@@ -2560,17 +3081,23 @@ identity maps"
                 (push-visit! (car source) copy -1)))
              ((string? source)
               (let ((copy (string-copy source)))
+                (datum-residency-open!
+                 datum-residency-export-result-shell 1)
                 (export-host-update! source copy)
                 (deliver! destination slot copy)
                 (push-finish! source copy)))
              ((bytevector? source)
               (let ((copy (bytevector-copy source)))
+                (datum-residency-open!
+                 datum-residency-export-result-shell 1)
                 (export-host-update! source copy)
                 (deliver! destination slot copy)
                 (push-finish! source copy)))
              ((vector? source)
               (let* ((length (vector-length source))
-                     (copy (make-vector length #f)))
+                    (copy (make-vector length #f)))
+                (datum-residency-open!
+                 datum-residency-export-result-shell 1)
                 (export-host-update! source copy)
                 (deliver! destination slot copy)
                 (push-finish! source copy)
@@ -2615,6 +3142,8 @@ identity maps"
                 (vector-ref root 0)
                 (let ((job (car work)))
                   (set! work (cdr work))
+                  (datum-residency-close!
+                   datum-residency-export-work-entry 1)
                   (if (= (vector-ref job 0) 0)
                       (visit!
                        (vector-ref job 1)
@@ -2624,8 +3153,15 @@ identity maps"
                        (vector-ref job 2) (vector-ref job 1)))
                   (loop))))))
          (lambda ()
+           (let ((pending (length work)))
+             (set! work '())
+             (datum-residency-close!
+              datum-residency-export-work-entry pending))
            (if host-seen
-               (consent-identity-map-release! host-seen))
+               (begin
+                 (consent-identity-map-release! host-seen)
+                 (datum-residency-close!
+                  datum-residency-export-host-memo-entry host-count)))
            (if owned-seen
-               (consent-datum-object-map-release! owned-seen)))))
+               (datum-phase-map-release! owned-seen)))))
           (if (null? rest) value ((car rest) value))))))
