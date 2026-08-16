@@ -33,31 +33,73 @@
           consent-growable-vector-stats)
   (import (scheme base))
   (begin
-    ;; Shared empty backing store installed by terminal release.
-    (define growable-vector-empty-storage (vector))
+    ;; Initial capacity zero is active but owns no backing vector.
+    (define growable-vector-lazy-storage
+      (list 'growable-vector-lazy-storage))
 
-    ;; Mutable bounded vector state and deterministic lifetime counters.
+    ;; Cold counters allocate together on the first operation that can record
+    ;; one. Capacity and active state remain derivable from DATA.
+    (define growable-vector-high-water-index 0)
+    ;; Automatic backing-vector growth count.
+    (define growable-vector-growth-count-index 1)
+    ;; Elements copied while replacing backing storage.
+    (define growable-vector-copied-elements-index 2)
+    ;; Logical reset count.
+    (define growable-vector-reset-count-index 3)
+    ;; Number of slots in the statistics sidecar.
+    (define growable-vector-statistics-size 4)
+
+    ;; Mutable bounded vector state with a lazy diagnostic sidecar.
     (define-record-type <consent-growable-vector>
       (make-growable-vector-record
-       length data initial-capacity maximum-capacity growth-factor high-water
-       growth-count copied-elements reset-count active?)
+       length data initial-capacity maximum-capacity growth-factor statistics)
       consent-growable-vector?
       (length growable-vector-length set-growable-vector-length!)
       (data growable-vector-data set-growable-vector-data!)
       (initial-capacity growable-vector-initial-capacity)
       (maximum-capacity growable-vector-maximum-capacity)
       (growth-factor growable-vector-growth-factor)
-      (high-water growable-vector-high-water set-growable-vector-high-water!)
-      (growth-count
-       growable-vector-growth-count
-       set-growable-vector-growth-count!)
-      (copied-elements
-       growable-vector-copied-elements
-       set-growable-vector-copied-elements!)
-      (reset-count
-       growable-vector-reset-count
-       set-growable-vector-reset-count!)
-      (active? growable-vector-active? set-growable-vector-active!))
+      (statistics
+       growable-vector-statistics
+       set-growable-vector-statistics!))
+
+    (define (growable-vector-active? grow)
+      "Return whether GROW's lifetime remains active."
+      (not (eq? (growable-vector-data grow) #f)))
+
+    (define (growable-vector-capacity-value grow)
+      "Return GROW's allocated capacity, including zero when lazy."
+      (let ((data (growable-vector-data grow)))
+        (if (vector? data) (vector-length data) 0)))
+
+    (define (growable-vector-statistic grow index)
+      "Return GROW's cold statistic at INDEX, defaulting to zero."
+      (let ((statistics (growable-vector-statistics grow)))
+        (if statistics (vector-ref statistics index) 0)))
+
+    (define (growable-vector-statistics-for-write! grow)
+      "Return GROW's writable cold-statistics sidecar."
+      (or (growable-vector-statistics grow)
+          (let ((statistics
+                 (make-vector growable-vector-statistics-size 0)))
+            (set-growable-vector-statistics! grow statistics)
+            statistics)))
+
+    (define (growable-vector-note! grow index amount)
+      "Add AMOUNT to GROW's cold statistic at INDEX."
+      (let ((statistics (growable-vector-statistics-for-write! grow)))
+        (vector-set!
+         statistics index (+ (vector-ref statistics index) amount))))
+
+    (define (growable-vector-note-high-water! grow length)
+      "Raise GROW's historical high-water mark to LENGTH when needed."
+      (let ((current
+             (growable-vector-statistic
+              grow growable-vector-high-water-index)))
+        (if (> length current)
+            (let ((statistics (growable-vector-statistics-for-write! grow)))
+              (vector-set!
+               statistics growable-vector-high-water-index length)))))
 
     (define (exact-nonnegative-integer? value)
       "Return whether VALUE is an exact nonnegative integer."
@@ -148,15 +190,20 @@
 
     (define (replace-growable-vector-capacity! operation grow requested)
       "Replace GROW's storage with REQUESTED slots and return GROW."
+      ;; Publish a zeroed sidecar before allocating storage.  Its presence is
+      ;; not observable, and doing this first leaves all reported state exact
+      ;; if the backing allocation fails.
+      (growable-vector-statistics-for-write! grow)
       (let* ((length (growable-vector-length grow))
              (old (growable-vector-data grow))
              (larger (allocate-storage operation requested)))
-        (vector-copy! larger 0 old 0 length)
+        (if (> length 0)
+            (vector-copy! larger 0 old 0 length))
         (set-growable-vector-data! grow larger)
-        (set-growable-vector-growth-count!
-         grow (+ (growable-vector-growth-count grow) 1))
-        (set-growable-vector-copied-elements!
-         grow (+ (growable-vector-copied-elements grow) length))
+        (growable-vector-note!
+         grow growable-vector-growth-count-index 1)
+        (growable-vector-note!
+         grow growable-vector-copied-elements-index length)
         grow))
 
     (define (growable-vector-truncate-internal! operation grow requested)
@@ -168,11 +215,13 @@
            (string-append operation ": invalid reset length")
            requested
            (growable-vector-length grow)))
+      (growable-vector-statistics-for-write! grow)
       (let ((data (growable-vector-data grow)))
-        (vector-fill! data #f requested (growable-vector-length grow)))
+        (if (vector? data)
+            (vector-fill!
+             data #f requested (growable-vector-length grow))))
       (set-growable-vector-length! grow requested)
-      (set-growable-vector-reset-count!
-       grow (+ (growable-vector-reset-count grow) 1))
+      (growable-vector-note! grow growable-vector-reset-count-index 1)
       grow)
 
     (define (consent-make-growable-vector
@@ -180,7 +229,7 @@
       "Return empty growable storage within the supplied capacity bounds."
       #((parameters
          (initial-capacity (type exact-non-negative-integer)
-          (description "Initially reserved slots."))
+          (description "Initial capacity; zero keeps backing lazy."))
          (maximum-capacity (type exact-non-negative-integer)
           (description "Largest permitted reserved capacity."))
          (maybe-growth-factor (type list)
@@ -208,16 +257,14 @@
          "consent-make-growable-vector" growth-factor)
         (make-growable-vector-record
          0
-         (allocate-storage
-          "consent-make-growable-vector" initial-capacity)
+         (if (= initial-capacity 0)
+             growable-vector-lazy-storage
+             (allocate-storage
+              "consent-make-growable-vector" initial-capacity))
          initial-capacity
          maximum-capacity
          growth-factor
-         0
-         0
-         0
-         0
-         #t)))
+         #f)))
 
     (define (consent-growable-vector-active? grow)
       "Return whether GROW is an active growable vector."
@@ -247,7 +294,7 @@
          (description "Number of reserved slots."))
         (effects state-read error))
       (check-growable-vector "consent-growable-vector-capacity" grow)
-      (vector-length (growable-vector-data grow)))
+      (growable-vector-capacity-value grow))
 
     (define (consent-growable-vector-maximum-capacity grow)
       "Return GROW's configured maximum capacity."
@@ -283,7 +330,7 @@
       (check-growable-vector "consent-growable-vector-reserve!" grow)
       (check-requested-capacity
        "consent-growable-vector-reserve!" grow requested)
-      (if (> requested (vector-length (growable-vector-data grow)))
+      (if (> requested (growable-vector-capacity-value grow))
           (replace-growable-vector-capacity!
            "consent-growable-vector-reserve!" grow requested))
       grow)
@@ -300,7 +347,7 @@
       (check-growable-vector "consent-growable-vector-grow!" grow)
       (check-requested-capacity
        "consent-growable-vector-grow!" grow minimum-capacity)
-      (let ((capacity (vector-length (growable-vector-data grow)))
+      (let ((capacity (growable-vector-capacity-value grow))
             (maximum (growable-vector-maximum-capacity grow))
             (growth-factor (growable-vector-growth-factor grow)))
         (if (> minimum-capacity capacity)
@@ -328,13 +375,13 @@
          (description "Assigned zero-based index."))
         (effects allocation state-write error))
       (check-growable-vector "consent-growable-vector-append!" grow)
+      (growable-vector-statistics-for-write! grow)
       (let ((index (growable-vector-length grow)))
-        (if (= index (vector-length (growable-vector-data grow)))
+        (if (= index (growable-vector-capacity-value grow))
             (consent-growable-vector-grow! grow (+ index 1)))
         (vector-set! (growable-vector-data grow) index value)
         (set-growable-vector-length! grow (+ index 1))
-        (if (> (+ index 1) (growable-vector-high-water grow))
-            (set-growable-vector-high-water! grow (+ index 1)))
+        (growable-vector-note-high-water! grow (+ index 1))
         index))
 
     (define (consent-growable-vector-ref grow index)
@@ -413,19 +460,20 @@
              (required (+ at count)))
         (check-requested-capacity
          "consent-growable-vector-copy!" destination required)
+        (if (> required old-length)
+            (growable-vector-statistics-for-write! destination))
         (consent-growable-vector-grow! destination required)
-        (vector-copy!
-         (growable-vector-data destination)
-         at
-         (growable-vector-data source)
-         start
-         end)
+        (if (> count 0)
+            (vector-copy!
+             (growable-vector-data destination)
+             at
+             (growable-vector-data source)
+             start
+             end))
         (if (> required old-length)
             (begin
               (set-growable-vector-length! destination required)
-              (if (> required (growable-vector-high-water destination))
-                  (set-growable-vector-high-water!
-                   destination required))))
+              (growable-vector-note-high-water! destination required)))
         destination))
 
     (define (consent-growable-vector-fill! grow fill start end)
@@ -442,7 +490,8 @@
         (effects state-write error))
       (check-growable-vector-slice
        "consent-growable-vector-fill!" grow start end)
-      (vector-fill! (growable-vector-data grow) fill start end)
+      (if (< start end)
+          (vector-fill! (growable-vector-data grow) fill start end))
       grow)
 
     (define (consent-growable-vector-snapshot grow)
@@ -457,8 +506,9 @@
              (snapshot
               (allocate-storage
                "consent-growable-vector-snapshot" length)))
-        (vector-copy!
-         snapshot 0 (growable-vector-data grow) 0 length)
+        (if (> length 0)
+            (vector-copy!
+             snapshot 0 (growable-vector-data grow) 0 length))
         snapshot))
 
     (define (consent-growable-vector-truncate! grow requested)
@@ -481,15 +531,17 @@
          (description "The empty active GROW."))
         (effects allocation state-write error))
       (check-growable-vector "consent-growable-vector-clear!" grow)
+      (growable-vector-statistics-for-write! grow)
       (let ((replacement
-             (allocate-storage
-              "consent-growable-vector-clear!"
-              (growable-vector-initial-capacity grow))))
+             (if (= (growable-vector-initial-capacity grow) 0)
+                 growable-vector-lazy-storage
+                 (allocate-storage
+                  "consent-growable-vector-clear!"
+                  (growable-vector-initial-capacity grow)))))
         ;; Allocate before mutation so failure preserves GROW exactly.
         (set-growable-vector-data! grow replacement)
         (set-growable-vector-length! grow 0)
-        (set-growable-vector-reset-count!
-         grow (+ (growable-vector-reset-count grow) 1))
+        (growable-vector-note! grow growable-vector-reset-count-index 1)
         grow))
 
     (define (consent-growable-vector-reset! grow)
@@ -517,9 +569,7 @@
           (begin
             (growable-vector-truncate-internal!
              "consent-growable-vector-release!" grow 0)
-            (set-growable-vector-data!
-             grow growable-vector-empty-storage)
-            (set-growable-vector-active! grow #f)))
+            (set-growable-vector-data! grow #f)))
       grow)
 
     (define (consent-growable-vector-unused-slots-cleared? grow)
@@ -533,10 +583,11 @@
           (error
            "unused-slots-cleared?: expected growable vector" grow))
       (let ((data (growable-vector-data grow)))
-        (let loop ((index (growable-vector-length grow)))
-          (or (= index (vector-length data))
-              (and (eq? (vector-ref data index) #f)
-                   (loop (+ index 1)))))))
+        (or (not (vector? data))
+            (let loop ((index (growable-vector-length grow)))
+              (or (= index (vector-length data))
+                  (and (eq? (vector-ref data index) #f)
+                       (loop (+ index 1))))))))
 
     (define (consent-growable-vector-stats grow)
       "Return deterministic Scheme-readable allocation statistics for GROW."
@@ -550,13 +601,24 @@
       (list
        'growable-vector-stats
        (list 'length (growable-vector-length grow))
-       (list 'capacity (vector-length (growable-vector-data grow)))
+       (list 'capacity
+             (if (growable-vector-active? grow)
+                 (growable-vector-capacity-value grow)
+                 0))
        (list 'maximum-capacity
              (growable-vector-maximum-capacity grow))
        (list 'growth-factor (growable-vector-growth-factor grow))
-       (list 'high-water (growable-vector-high-water grow))
-       (list 'growths (growable-vector-growth-count grow))
-       (list 'copied-elements (growable-vector-copied-elements grow))
-       (list 'resets (growable-vector-reset-count grow))
+       (list 'high-water
+             (growable-vector-statistic
+              grow growable-vector-high-water-index))
+       (list 'growths
+             (growable-vector-statistic
+              grow growable-vector-growth-count-index))
+       (list 'copied-elements
+             (growable-vector-statistic
+              grow growable-vector-copied-elements-index))
+       (list 'resets
+             (growable-vector-statistic
+              grow growable-vector-reset-count-index))
        (list 'released (not (growable-vector-active? grow)))))
 ))

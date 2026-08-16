@@ -39,6 +39,17 @@
                 consent-growable-vector-unused-slots-cleared?
                 consent-make-growable-vector))
   (begin
+    ;; Maximum simultaneously populated scratch slots.
+    (define scratch-arena-high-water-index 0)
+    ;; Successful owner-token acquisition count.
+    (define scratch-arena-acquisitions-index 1)
+    ;; Logical reset count.
+    (define scratch-arena-resets-index 2)
+    ;; Owner-token release count.
+    (define scratch-arena-releases-index 3)
+    ;; Number of slots in the arena statistics sidecar.
+    (define scratch-arena-statistics-size 4)
+
     (define (exact-nonnegative-integer? value)
       "Return whether VALUE is an exact nonnegative integer."
       (and (integer? value) (exact? value) (>= value 0)))
@@ -50,32 +61,62 @@
             (cadr field)
             (error "scratch arena: missing growable-vector statistic" name))))
 
-    ;; An arena owns one reusable growable vector. One active owner record is
+    ;; An arena owns one reusable growable vector. One current owner record is
     ;; the phase/call token. Releasing that token clears the populated prefix
     ;; before the arena can issue a fresh token, so escaped owners never become
     ;; valid again when the backing capacity is reused.
     (define-record-type <consent-scratch-arena>
       (make-scratch-arena-record
-       storage growth-policy owner high-water acquisitions resets releases)
+       storage initial-capacity growth-policy owner statistics)
       consent-scratch-arena?
       (storage scratch-arena-storage)
+      (initial-capacity scratch-arena-initial-capacity)
       (growth-policy scratch-arena-growth-policy)
       (owner scratch-arena-owner set-scratch-arena-owner!)
-      (high-water scratch-arena-high-water set-scratch-arena-high-water!)
-      (acquisitions
-       scratch-arena-acquisitions
-       set-scratch-arena-acquisitions!)
-      (resets scratch-arena-resets set-scratch-arena-resets!)
-      (releases scratch-arena-releases set-scratch-arena-releases!))
+      (statistics
+       scratch-arena-statistics
+       set-scratch-arena-statistics!))
 
     ;; One-use ownership token issued for a single arena phase.
     (define-record-type <consent-scratch-owner>
-      (make-scratch-owner-record arena token phase active?)
+      (make-scratch-owner-record arena token phase)
       consent-scratch-owner?
       (arena scratch-owner-arena)
       (token scratch-owner-token)
-      (phase scratch-owner-phase-value)
-      (active? scratch-owner-active? set-scratch-owner-active!))
+      (phase scratch-owner-phase-value))
+
+    (define (scratch-owner-active? owner)
+      "Return whether OWNER is its arena's current token."
+      (eq? (scratch-arena-owner (scratch-owner-arena owner)) owner))
+
+    (define (scratch-arena-statistic arena index)
+      "Return ARENA's cold statistic at INDEX, defaulting to zero."
+      (let ((statistics (scratch-arena-statistics arena)))
+        (if statistics (vector-ref statistics index) 0)))
+
+    (define (scratch-arena-statistics-for-write! arena)
+      "Return ARENA's writable cold-statistics sidecar."
+      (or (scratch-arena-statistics arena)
+          (let ((statistics (make-vector scratch-arena-statistics-size 0)))
+            (set-scratch-arena-statistics! arena statistics)
+            statistics)))
+
+    (define (note-scratch-arena! arena index amount)
+      "Add AMOUNT to ARENA's cold statistic at INDEX."
+      (let ((statistics (scratch-arena-statistics-for-write! arena)))
+        (vector-set!
+         statistics index (+ (vector-ref statistics index) amount))))
+
+    (define (note-scratch-arena-high-water! arena length)
+      "Raise ARENA's historical high-water mark to LENGTH when needed."
+      (let ((high-water
+             (scratch-arena-statistic
+              arena scratch-arena-high-water-index)))
+        (if (> length high-water)
+            (vector-set!
+             (scratch-arena-statistics-for-write! arena)
+             scratch-arena-high-water-index
+             length))))
 
     ;; Marks carry a library-wide lifetime token, not an arena-local generation.
     ;; That prevents equal-capacity arenas acquired in the same ordinal lifetime
@@ -104,7 +145,7 @@
       "Return an idle bounded scratch arena using GROWTH-POLICY."
       #((parameters
          (initial-capacity (type exact-non-negative-integer)
-          (description "Capacity allocated before owner acquisition."))
+          (description "First-allocation floor or eager capacity."))
          (maximum-capacity (type exact-non-negative-integer)
           (description "Largest permitted capacity."))
          (growth-policy (type symbol)
@@ -116,18 +157,30 @@
           (error
            "consent-make-scratch-arena: invalid growth policy"
            growth-policy))
+      (if (not (and (exact-nonnegative-integer? initial-capacity)
+                    (exact-nonnegative-integer? maximum-capacity)))
+          (error
+           "consent-make-scratch-arena: expected exact capacities"
+           initial-capacity
+           maximum-capacity))
+      (if (> initial-capacity maximum-capacity)
+          (error
+           "consent-make-scratch-arena: initial capacity exceeds maximum"
+           initial-capacity
+           maximum-capacity))
       (make-scratch-arena-record
        (consent-make-growable-vector
-        initial-capacity maximum-capacity)
+        (if (eq? growth-policy 'pre-reserved)
+            initial-capacity
+            0)
+        maximum-capacity)
+       initial-capacity
        growth-policy
        #f
-       0
-       0
-       0
-       0))
+       #f))
 
     (define (consent-scratch-arena-reserve! arena requested)
-      "Reserve REQUESTED arena slots while no owner is active."
+      "Reserve at least REQUESTED arena slots while no owner is active."
       #((parameters
          (arena (type scratch-arena) (description "Idle arena to reserve."))
          (requested (type exact-non-negative-integer)
@@ -140,8 +193,13 @@
           (error
            "consent-scratch-arena-reserve!: arena has an active owner"
            arena))
-      (consent-growable-vector-reserve!
-       (scratch-arena-storage arena) requested)
+      (let ((storage (scratch-arena-storage arena)))
+        (consent-growable-vector-reserve!
+         storage
+         (if (and (> requested 0)
+                  (= (consent-growable-vector-capacity storage) 0))
+             (max requested (scratch-arena-initial-capacity arena))
+             requested)))
       arena)
 
     (define (consent-scratch-arena-acquire! arena phase)
@@ -165,14 +223,14 @@
           (error
            "consent-scratch-arena-acquire!: arena storage is not empty"
            arena))
-      (let* ((acquisition (+ (scratch-arena-acquisitions arena) 1))
-             (token (+ scratch-owner-next-token 1))
+      (scratch-arena-statistics-for-write! arena)
+      (let* ((token (+ scratch-owner-next-token 1))
              (owner
-              (make-scratch-owner-record
-               arena token phase #t)))
+              (make-scratch-owner-record arena token phase)))
         (set! scratch-owner-next-token token)
         (set-scratch-arena-owner! arena owner)
-        (set-scratch-arena-acquisitions! arena acquisition)
+        (note-scratch-arena!
+         arena scratch-arena-acquisitions-index 1)
         owner))
 
     (define (consent-scratch-owner-active? owner)
@@ -183,8 +241,7 @@
          (description "Whether OWNER is the active arena owner."))
         (effects state-read))
       (and (consent-scratch-owner? owner)
-           (scratch-owner-active? owner)
-           (eq? (scratch-arena-owner (scratch-owner-arena owner)) owner)))
+           (scratch-owner-active? owner)))
 
     (define (consent-scratch-owner-phase owner)
       "Return active OWNER's phase tag."
@@ -237,10 +294,13 @@
              length
              capacity
              (scratch-owner-phase-value owner)))
+        (if (and (= capacity 0)
+                 (> (scratch-arena-initial-capacity arena) 0))
+            (consent-growable-vector-reserve!
+             storage (scratch-arena-initial-capacity arena)))
         (let ((index (consent-growable-vector-append! storage value)))
           (let ((new-length (+ index 1)))
-            (if (> new-length (scratch-arena-high-water arena))
-                (set-scratch-arena-high-water! arena new-length)))
+            (note-scratch-arena-high-water! arena new-length))
           index)))
 
     (define (consent-scratch-owner-ref owner index)
@@ -312,8 +372,7 @@
         (consent-growable-vector-truncate!
          (scratch-arena-storage arena)
          length)
-        (set-scratch-arena-resets!
-         arena (+ (scratch-arena-resets arena) 1)))
+        (note-scratch-arena! arena scratch-arena-resets-index 1))
       owner)
 
     (define (consent-scratch-owner-release! owner)
@@ -334,10 +393,9 @@
                  owner))
             (consent-growable-vector-reset!
              (scratch-arena-storage arena))
-            (set-scratch-owner-active! owner #f)
             (set-scratch-arena-owner! arena #f)
-            (set-scratch-arena-releases!
-             arena (+ (scratch-arena-releases arena) 1))))
+            (note-scratch-arena!
+             arena scratch-arena-releases-index 1)))
       owner)
 
     (define (consent-scratch-arena-unused-slots-cleared? arena)
@@ -372,10 +430,18 @@
          (list 'capacity (consent-growable-vector-capacity storage))
          (list 'maximum-capacity
                (consent-growable-vector-maximum-capacity storage))
-         (list 'high-water (scratch-arena-high-water arena))
-         (list 'acquisitions (scratch-arena-acquisitions arena))
-         (list 'resets (scratch-arena-resets arena))
-         (list 'releases (scratch-arena-releases arena))
+         (list 'high-water
+               (scratch-arena-statistic
+                arena scratch-arena-high-water-index))
+         (list 'acquisitions
+               (scratch-arena-statistic
+                arena scratch-arena-acquisitions-index))
+         (list 'resets
+               (scratch-arena-statistic
+                arena scratch-arena-resets-index))
+         (list 'releases
+               (scratch-arena-statistic
+                arena scratch-arena-releases-index))
          (list 'storage-growths
                (growable-vector-stats-ref storage 'growths))
          (list 'storage-copied-elements

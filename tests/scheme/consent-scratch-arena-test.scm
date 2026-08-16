@@ -281,6 +281,16 @@
 
 (testing-registry-case
  'scratch-arena-growth-policy '(portable runtime storage arena error)
+(let* ((lazy (consent-make-scratch-arena 4 8 'allow-growth))
+       (owner (consent-scratch-arena-acquire! lazy 'lazy-floor)))
+  (test-equal 'scratch-allow-growth-defers-initial-backing
+              0
+              (consent-scratch-owner-capacity owner))
+  (consent-scratch-owner-append! owner 'materialized)
+  (test-equal 'scratch-first-allocation-honors-initial-floor
+              4
+              (consent-scratch-owner-capacity owner))
+  (consent-scratch-owner-release! owner))
 (let* ((fixed (consent-make-scratch-arena 2 4 'pre-reserved))
        (fixed-owner
         (consent-scratch-arena-acquire! fixed 'collector-mark)))
@@ -337,7 +347,7 @@
                 (lambda ()
                   (consent-scratch-owner-append! owner 8))))
   (test-equal 'allow-growth-exhaustion-preserves-stats
-              '(8 8 8 3 7)
+              '(8 8 8 4 7)
               (let ((stats (consent-scratch-arena-stats growing)))
                 (list
                  (stats-ref stats 'length)

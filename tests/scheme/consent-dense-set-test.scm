@@ -93,7 +93,7 @@
               (consent-dense-set-domain dense))
   (test-equal 'dense-set-initial-size 0
               (consent-dense-set-size dense))
-  (test-equal 'dense-set-initial-capacity 2
+  (test-equal 'dense-set-lazy-initial-capacity 0
               (consent-dense-set-capacity dense))
   (test-equal 'dense-set-maximum-capacity 16
               (consent-dense-set-maximum-capacity dense))
@@ -107,6 +107,9 @@
               (consent-dense-set-generation dense))
   (test-equal 'dense-set-new-mark-return #f
               (consent-dense-set-mark! dense 1))
+  (test-equal 'dense-set-first-allocation-honors-initial-floor
+              2
+              (consent-dense-set-capacity dense))
   (test-equal 'dense-set-default-color 0
               (consent-dense-set-color dense 1))
   (test-equal 'dense-set-duplicate-mark-return 0
@@ -153,6 +156,9 @@
 (let ((ordinary
        (consent-make-dense-set
         64 64 1000 1 'pre-reserved 'query-generation)))
+  (test-equal 'dense-set-pre-reserved-constructor-is-eager
+              64
+              (consent-dense-set-capacity ordinary))
   (consent-dense-set-mark! ordinary 63)
   (let clear ((count 0))
     (if (< count 100)
@@ -210,6 +216,13 @@
 (testing-registry-case
  'dense-set-reserve-bounds-and-failure-atomicity
  '(portable runtime storage dense-set collector boundary error)
+(let ((dense
+       (consent-make-dense-set
+        4 9 7 2 'allow-growth 'lazy-reserve)))
+  (consent-dense-set-reserve! dense 1)
+  (test-equal 'dense-set-first-reserve-honors-initial-floor
+              4
+              (consent-dense-set-capacity dense)))
 (let ((dense
        (consent-make-dense-set
         0 9 7 2 'pre-reserved 'remembered-set)))
