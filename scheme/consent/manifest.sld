@@ -473,6 +473,10 @@
           consent-datum-object-map-release!
           consent-datum-object-map-probe-count
           call-with-consent-datum-object-map
+          consent-datum-residency-tracking-start!
+          consent-datum-residency-tracking-finish!
+          consent-datum-residency-tracking-statistic
+          consent-datum-residency-tracking-release!
           consent-call-with-datum-construction
           consent-datum-same?
           consent-datum-pair?

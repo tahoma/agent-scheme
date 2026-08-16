@@ -467,6 +467,11 @@ write_racket_main_common() {
 EOF
   printf '%s' "$compiler_root_imports"
   cat <<'EOF'
+        (only (consent datum)
+              consent-datum-residency-tracking-finish!
+              consent-datum-residency-tracking-release!
+              consent-datum-residency-tracking-report
+              consent-datum-residency-tracking-start!)
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -647,6 +652,17 @@ EOF
      (consent-main-stdio-options
       (cons (cons 'script-arguments script-args) options)))))
 
+(define (consent-main-host-run-outcome path)
+  "Run PATH through the compiled product's internal host-runner."
+  (consent-main:cli-script:cli-script-host-run-file
+   path
+   ;; Scope file access and includes to the invoking working directory. PWD is
+   ;; the shell-provided absolute cwd; fall back to "." for programs that
+   ;; perform no file I/O.
+   (let ((pwd (get-environment-variable "PWD")))
+     (if (and pwd (> (string-length pwd) 0)) pwd "."))
+   (lambda (chunk) (display chunk))))
+
 (define (consent-main-host-run path)
   ;; Run a Consent-Scheme host-runner test file on THIS runtime: every form is
   ;; evaluated through the runtime's own interpreter under the host-run
@@ -662,17 +678,37 @@ EOF
                     (current-error-port))
            (newline (current-error-port))
            (exit 1)))
-    (let ((outcome
-           (consent-main:cli-script:cli-script-host-run-file
-            path
-            ;; Scope file access and includes to the invoking working
-            ;; directory. PWD is the shell-provided absolute cwd; fall back
-            ;; to "." so a run
-            ;; that performs no file I/O (e.g. the reader suite) still works.
-            (let ((pwd (get-environment-variable "PWD")))
-              (if (and pwd (> (string-length pwd) 0)) pwd "."))
-            (lambda (chunk) (display chunk)))))
-      (if (eq? outcome #t)
+    (let ((residency-token #f)
+          (report?
+           (let ((value
+                  (get-environment-variable
+                   "CONSENT_DATUM_RESIDENCY_REPORT")))
+             (and value (string=? value "1")))))
+      (let ((outcome
+             (if report?
+                 (let ((token
+                        (consent-datum-residency-tracking-start!))
+                       (tracked-outcome #f))
+                   (dynamic-wind
+                    (lambda () #t)
+                    (lambda ()
+                      (set! tracked-outcome
+                            (consent-main-host-run-outcome path)))
+                    (lambda ()
+                      (set! residency-token
+                            (consent-datum-residency-tracking-finish!
+                             token))))
+                   tracked-outcome)
+                 (consent-main-host-run-outcome path))))
+        (if residency-token
+            (let ((statistics
+                   (consent-datum-residency-tracking-report
+                    residency-token)))
+              (write statistics)
+              (newline)
+              (consent-datum-residency-tracking-release!
+               residency-token)))
+        (if (eq? outcome #t)
           ;; Return normally so host profilers and runtime finalizers can
           ;; observe a successful host-run. Falling off main still exits zero.
           #t
@@ -680,7 +716,7 @@ EOF
             (display "consent: host-run failed: " (current-error-port))
             (write outcome (current-error-port))
             (newline (current-error-port))
-            (exit 1))))))
+            (exit 1)))))))
 
 (define (consent-main args)
   ;; A leading --internal-libraries grant lets the program import the runtime's
@@ -810,6 +846,11 @@ write_gambit_main_common() {
 EOF
   printf '%s' "$compiler_root_imports"
   cat <<'EOF'
+        (only (consent datum)
+              consent-datum-residency-tracking-finish!
+              consent-datum-residency-tracking-release!
+              consent-datum-residency-tracking-report
+              consent-datum-residency-tracking-start!)
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -990,6 +1031,17 @@ EOF
      (consent-main-stdio-options
       (cons (cons 'script-arguments script-args) options)))))
 
+(define (consent-main-host-run-outcome path)
+  "Run PATH through the compiled product's internal host-runner."
+  (consent-main:cli-script:cli-script-host-run-file
+   path
+   ;; Scope file access and includes to the invoking working directory. PWD is
+   ;; the shell-provided absolute cwd; fall back to "." for programs that
+   ;; perform no file I/O.
+   (let ((pwd (get-environment-variable "PWD")))
+     (if (and pwd (> (string-length pwd) 0)) pwd "."))
+   (lambda (chunk) (display chunk))))
+
 (define (consent-main-host-run path)
   ;; Run a Consent-Scheme host-runner test file on THIS runtime: every form is
   ;; evaluated through the runtime's own interpreter under the host-run
@@ -1005,17 +1057,37 @@ EOF
                     (current-error-port))
            (newline (current-error-port))
            (exit 1)))
-    (let ((outcome
-           (consent-main:cli-script:cli-script-host-run-file
-            path
-            ;; Scope file access and includes to the invoking working
-            ;; directory. PWD is the shell-provided absolute cwd; fall back
-            ;; to "." so a run
-            ;; that performs no file I/O (e.g. the reader suite) still works.
-            (let ((pwd (get-environment-variable "PWD")))
-              (if (and pwd (> (string-length pwd) 0)) pwd "."))
-            (lambda (chunk) (display chunk)))))
-      (if (eq? outcome #t)
+    (let ((residency-token #f)
+          (report?
+           (let ((value
+                  (get-environment-variable
+                   "CONSENT_DATUM_RESIDENCY_REPORT")))
+             (and value (string=? value "1")))))
+      (let ((outcome
+             (if report?
+                 (let ((token
+                        (consent-datum-residency-tracking-start!))
+                       (tracked-outcome #f))
+                   (dynamic-wind
+                    (lambda () #t)
+                    (lambda ()
+                      (set! tracked-outcome
+                            (consent-main-host-run-outcome path)))
+                    (lambda ()
+                      (set! residency-token
+                            (consent-datum-residency-tracking-finish!
+                             token))))
+                   tracked-outcome)
+                 (consent-main-host-run-outcome path))))
+        (if residency-token
+            (let ((statistics
+                   (consent-datum-residency-tracking-report
+                    residency-token)))
+              (write statistics)
+              (newline)
+              (consent-datum-residency-tracking-release!
+               residency-token)))
+        (if (eq? outcome #t)
           ;; Return normally so host profilers and runtime finalizers can
           ;; observe a successful host-run. Falling off main still exits zero.
           #t
@@ -1023,7 +1095,7 @@ EOF
             (display "consent: host-run failed: " (current-error-port))
             (write outcome (current-error-port))
             (newline (current-error-port))
-            (exit 1))))))
+            (exit 1)))))))
 
 (define (consent-main args)
   ;; A leading --internal-libraries grant lets the program import the runtime's

@@ -152,6 +152,94 @@
          (resume #t)
          (finish #f))))))
 
+(define (datum-residency-stat stats category field)
+  "Return FIELD from CATEGORY in datum residency STATS."
+  (let ((category-entry (assq category (cdr stats))))
+    (if (not category-entry)
+        (error "missing datum residency category" category))
+    (let ((field-entry (assq field (cdr category-entry))))
+      (if field-entry
+          (cadr field-entry)
+          (error "missing datum residency field" category field)))))
+
+;; Keep the public category ordinals paired with stable assertion labels.
+(define datum-residency-test-category-names
+  '#(owned-pair
+     owned-string
+     owned-vector
+     owned-bytevector
+     owned-internal
+     construction-marker
+     construction-index-slot
+     revision-sidecar-page
+     traversal-sidecar-page
+     map-sidecar-page
+     source-sidecar-page
+     phase-map-page
+     graph-map-entry
+     import-result-shell
+     import-host-memo-entry
+     import-owned-memo-entry
+     import-work-entry
+     export-result-shell
+     export-host-memo-entry
+     export-owned-memo-entry
+     export-work-entry))
+
+;; Keep the public field ordinals paired with stable assertion labels.
+(define datum-residency-test-field-names
+  '#(allocations releases live high-water))
+
+(define (datum-residency-stats-for-token token)
+  "Build named residency statistics through scalar TOKEN queries."
+  (let category-loop ((category 0) (categories '()))
+    (if (= category (vector-length datum-residency-test-category-names))
+        (cons
+         'datum-residency-stats
+         (cons '(active #f) (reverse categories)))
+        (let field-loop ((field 0) (fields '()))
+          (if (= field (vector-length datum-residency-test-field-names))
+              (category-loop
+               (+ category 1)
+               (cons
+                (cons
+                 (vector-ref datum-residency-test-category-names category)
+                 (reverse fields))
+                categories))
+              (field-loop
+               (+ field 1)
+               (cons
+                (list
+                 (vector-ref datum-residency-test-field-names field)
+                 (consent-datum-residency-tracking-statistic
+                  token category field))
+                fields)))))))
+
+(define (finish-datum-residency-stats! token)
+  "Finish TOKEN, collect scalar counters, and release tracker storage."
+  (let ((completed-token
+         (consent-datum-residency-tracking-finish! token))
+        (stats #f))
+    (dynamic-wind
+     (lambda () #t)
+     (lambda ()
+       (set! stats (datum-residency-stats-for-token completed-token)))
+     (lambda ()
+       (consent-datum-residency-tracking-release! completed-token)))
+    stats))
+
+(define (call-with-datum-residency-stats procedure)
+  "Call PROCEDURE in a residency scope and return #(result statistics)."
+  (let ((token (consent-datum-residency-tracking-start!))
+        (result #f)
+        (stats #f))
+    (dynamic-wind
+     (lambda () #t)
+     (lambda () (set! result (procedure)))
+     (lambda ()
+       (set! stats (finish-datum-residency-stats! token))))
+    (vector result stats)))
+
 (define (test-library-binding-cell library name)
   "Return exported NAME's cell from test LIBRARY."
   (let loop ((rest (library-exports library)))
@@ -904,6 +992,190 @@
   (test-assert
    'closed-map-continuation-reentry-fails-closed
    (datum-map-continuation-reentry-condition object))))
+
+(datum-direct-host-case
+ 'owned-residency-accounting-and-release
+ '(portable runtime datum graph performance)
+(let ((retained #f))
+  (let* ((observation
+          (call-with-datum-residency-stats
+           (lambda ()
+             (let* ((first (cons 'first #f))
+                    (second (cons 'second #f))
+                    (third (cons 'third first))
+                    (heap (consent-make-datum-heap)))
+               (set-cdr! first second)
+               (set-cdr! second third)
+               (let ((root (consent-datum-import heap first)))
+                 (consent-datum-object-source-metadata-set! root 'source)
+                 (consent-datum-object-source-metadata-set! root #f)
+                 (consent-datum-object-traversal-set! root 'visited)
+                 (consent-datum-object-traversal-set! root #f)
+                 (call-with-consent-datum-object-map
+                  (lambda (map)
+                    (consent-datum-object-map-set! map root 'root)))
+                 (let ((constructed
+                        (consent-call-with-datum-construction
+                         heap
+                         (lambda (make-shell fill-slot! fixup-slot!)
+                           (let ((pair (make-shell 'pair 2)))
+                             (fill-slot! pair 0 'constructed)
+                             (fill-slot! pair 1 '())
+                             pair)))))
+                   (set! retained
+                         (vector
+                          root constructed (consent-datum-export root)))))))))
+         (stats (vector-ref observation 1))
+         (balanced-categories
+          '(construction-marker
+            construction-index-slot
+            traversal-sidecar-page
+            map-sidecar-page
+            source-sidecar-page
+            phase-map-page
+            graph-map-entry
+            import-host-memo-entry
+            import-work-entry
+            export-owned-memo-entry
+            export-work-entry)))
+    (test-assert
+     'residency-tracker-closes-after-dynamic-scope
+     (and (not (cadr (assq 'active (cdr stats)))) retained))
+    (test-assert
+     'transient-residency-categories-balance
+     (let loop ((rest balanced-categories))
+       (or
+        (null? rest)
+        (let* ((category (car rest))
+               (allocations
+                (datum-residency-stat stats category 'allocations)))
+          (and (> allocations 0)
+               (= allocations
+                  (datum-residency-stat stats category 'releases))
+               (= 0 (datum-residency-stat stats category 'live))
+               (loop (cdr rest)))))))
+    (test-equal
+     'residency-owned-pair-census
+     '(4 0 4 4)
+     (map
+      (lambda (field)
+        (datum-residency-stat stats 'owned-pair field))
+      '(allocations releases live high-water)))
+    (test-equal
+     'residency-result-shell-census
+     '((3 0 3 3) (3 0 3 3))
+     (map
+      (lambda (category)
+        (map
+         (lambda (field) (datum-residency-stat stats category field))
+         '(allocations releases live high-water)))
+     '(import-result-shell export-result-shell))))))
+
+(datum-direct-host-case
+ 'owned-residency-error-and-nonlocal-release
+ '(portable runtime datum graph continuation)
+(let ((error-stats #f)
+      (nonlocal-stats #f)
+      (construction-stats #f)
+      (captured #f))
+  (define (balanced? stats category)
+    "Report whether STATS released every allocated CATEGORY unit."
+    (let ((allocated
+            (datum-residency-stat stats category 'allocations)))
+      (and (> allocated 0)
+           (= allocated
+              (datum-residency-stat stats category 'releases))
+           (= 0 (datum-residency-stat stats category 'live)))))
+  (set! error-stats
+        (vector-ref
+         (call-with-datum-residency-stats
+          (lambda ()
+            (guard (condition (else (set! captured condition)))
+              (consent-datum-import
+               (consent-make-datum-heap)
+               '(before boom after)
+               (lambda (value)
+                 (if (eq? value 'boom)
+                     (error "forced import leaf failure")
+                     value))))))
+         1))
+  (call/cc
+   (lambda (leave)
+     (let ((token (consent-datum-residency-tracking-start!)))
+       (dynamic-wind
+        (lambda () #t)
+        (lambda ()
+          (consent-datum-import
+           (consent-make-datum-heap)
+           '(first second third)
+           (lambda (value) value)
+           (lambda (target source) (leave 'escaped))))
+        (lambda ()
+          (set! nonlocal-stats
+                (finish-datum-residency-stats! token)))))))
+  (set! construction-stats
+        (vector-ref
+         (call-with-datum-residency-stats
+          (lambda ()
+            (guard (condition (else #t))
+              (consent-call-with-datum-construction
+               (consent-make-datum-heap)
+               (lambda (make-shell fill-slot! fixup-slot!)
+                 (let ((pair (make-shell 'pair 2)))
+                   (fill-slot! pair 0 'only-one-slot)
+                   pair))))))
+         1))
+  (test-assert 'residency-import-error-was-raised captured)
+  (test-assert
+   'residency-import-error-releases-temporary-roots
+   (and
+    (balanced? error-stats 'import-host-memo-entry)
+    (balanced? error-stats 'import-work-entry)))
+  (test-assert
+   'residency-import-nonlocal-exit-releases-temporary-roots
+   (and
+    (balanced? nonlocal-stats 'import-host-memo-entry)
+    (balanced? nonlocal-stats 'import-work-entry)))
+  (test-assert
+   'residency-construction-error-releases-temporary-roots
+   (and
+    (balanced? construction-stats 'construction-marker)
+    (balanced? construction-stats 'construction-index-slot)))))
+
+(testing-registry-case
+ 'owned-residency-scalar-boundary-accounting
+ '(portable runtime datum graph performance)
+(let* ((observation
+        (call-with-datum-residency-stats
+         (lambda ()
+           (let* ((heap (consent-make-datum-heap))
+                  (root (consent-datum-import heap '(first second third))))
+             (consent-datum-export root)))))
+       (stats (vector-ref observation 1)))
+  (define (balanced? category)
+    "Report whether STATS released every allocated CATEGORY unit."
+    (let ((allocated
+           (datum-residency-stat stats category 'allocations)))
+      (and (> allocated 0)
+           (= allocated
+              (datum-residency-stat stats category 'releases))
+           (= 0 (datum-residency-stat stats category 'live)))))
+  (test-assert
+   'residency-scalar-boundary-temporary-owners-balance
+   (and
+    (balanced? 'import-host-memo-entry)
+    (balanced? 'import-work-entry)
+    (balanced? 'export-owned-memo-entry)
+    (balanced? 'export-work-entry)))
+  (test-assert
+   'residency-scalar-boundary-result-shells-remain-owned
+   (and
+    (> (datum-residency-stat
+        stats 'import-result-shell 'live)
+       0)
+    (> (datum-residency-stat
+        stats 'export-result-shell 'live)
+       0)))))
 
 (datum-direct-host-case
  'owned-call-scoped-map-fixed-probe-work

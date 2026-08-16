@@ -5,13 +5,18 @@
 ;; Run this program against both an issue-base worktree and the current tree.
 ;; CONSENT_COMPACT_DATUM_WORKLOAD selects one workload. Each process reports
 ;; setup separately from three operation samples so external `/usr/bin/time`
-;; runs can add comparable peak-residency evidence.
+;; runs can add comparable peak-residency evidence. Set
+;; CONSENT_DATUM_RESIDENCY_REPORT=1 to add portable ownership counters.
 
 (import (scheme base)
         (scheme process-context)
         (scheme time)
         (scheme write)
         (only (consent datum)
+              consent-datum-residency-tracking-finish!
+              consent-datum-residency-tracking-release!
+              consent-datum-residency-tracking-report
+              consent-datum-residency-tracking-start!
               consent-datum-car-trusted
               consent-datum-cdr-trusted
               consent-datum-cons
@@ -51,6 +56,10 @@
 
 (define benchmark-size
   (environment-positive-integer "CONSENT_COMPACT_DATUM_SIZE" 32768))
+
+(define benchmark-residency?
+  (string=?
+   (environment-string "CONSENT_DATUM_RESIDENCY_REPORT" "0") "1"))
 
 (define (elapsed-jiffies thunk)
   "Call THUNK, retain its result, and return elapsed jiffies."
@@ -241,7 +250,8 @@
                   (loop (+ index 1)))))
           (vector heap text objects)))))))
 
-(define benchmark-result
+(define (run-selected-benchmark)
+  "Run and return the selected owned-datum workload measurements."
   (cond
    ((string=? benchmark-workload "pair-construction")
     (benchmark-pair-construction))
@@ -266,13 +276,38 @@
    (else (error "unknown compact datum benchmark workload"
                 benchmark-workload))))
 
+(define benchmark-residency-statistics #f)
+
+(define benchmark-result
+  (if benchmark-residency?
+      (let ((token (consent-datum-residency-tracking-start!))
+            (completed-token #f)
+            (result #f))
+        (dynamic-wind
+         (lambda () #t)
+         (lambda () (set! result (run-selected-benchmark)))
+         (lambda ()
+           (set! completed-token
+                 (consent-datum-residency-tracking-finish! token))))
+        (set! benchmark-residency-statistics
+              (consent-datum-residency-tracking-report completed-token))
+        (consent-datum-residency-tracking-release! completed-token)
+        result)
+      (run-selected-benchmark)))
+
 (write
- (list 'consent-compact-owned-datum-benchmark
-       '(schema 1)
-       (list 'workload benchmark-workload)
-       (list 'size benchmark-size)
-       (list 'attempts benchmark-attempts)
-       (list 'setup-jiffies (car benchmark-result))
-       (list 'operation-jiffies (cadr benchmark-result))
-       (list 'jiffies-per-second (jiffies-per-second))))
+ (append
+  (list 'consent-compact-owned-datum-benchmark
+        (list 'schema (if benchmark-residency-statistics 2 1))
+        (list 'workload benchmark-workload)
+        (list 'size benchmark-size)
+        (list 'attempts benchmark-attempts)
+        (list 'setup-jiffies (car benchmark-result))
+        (list 'operation-jiffies (cadr benchmark-result))
+        (list 'jiffies-per-second (jiffies-per-second)))
+  (if benchmark-residency-statistics
+      (list
+       (list
+        'residency benchmark-residency-statistics))
+      '())))
 (newline)

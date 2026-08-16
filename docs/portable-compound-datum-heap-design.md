@@ -427,6 +427,147 @@ accepts sub-second reader and cyclic-operation deltas in exchange for removing
 four always-present cold fields and the separate pair payload from every pair.
 No measured non-pair allocation workload regressed.
 
+## Transient Owned-Graph Residency
+
+The compact representation benchmark also has an opt-in portable census:
+
+```sh
+CONSENT_DATUM_RESIDENCY_REPORT=1 \
+  CONSENT_COMPACT_DATUM_WORKLOAD=cyclic-boundary \
+  CONSENT_COMPACT_DATUM_SIZE=4096 \
+  gsi '-:r7rs,search=scheme' tools/benchmark-compact-owned-datum.scm
+```
+
+The compiled product accepts the same environment switch around `--host-run`.
+It prints one `datum-residency-stats` record after the program completes:
+
+```sh
+CONSENT_DATUM_RESIDENCY_REPORT=1 \
+  TESTING_RUNNER_HOST_RUN=1 \
+  build/compile/gambit/bin/consent \
+  --host-run tests/scheme/consent-agent-memory-test.scm
+```
+
+`consent-datum-residency-tracking-start!` and
+`consent-datum-residency-tracking-finish!` implement the observation scope in
+portable Scheme. Their scalar token crosses the compiled evaluator boundary
+without exposing a host callback or tracker representation. Scalar counter
+queries remain valid during the compiled host runner's fail-closed callback
+reentry; `consent-datum-residency-tracking-release!` then drops the completed
+census. The command adapter only selects and formats that existing portable
+scope; it adds no host operation. Each category reports allocation, release,
+current logical ownership, and high-water logical ownership. `live` means not
+explicitly released inside the observation scope. It is not a claim about the
+outer Scheme host's garbage-collector reachability. Owned objects and result
+shells intentionally remain logically live; construction markers, sidecar
+pages, graph-map entries, memo entries, and work entries have explicit release
+events where their owning phase permits it.
+
+The pre-census isolation probes already placed both the compact executable's
+startup state and its `(agent memory)` import-only state about 6 MB below the
+issue base. The census therefore starts immediately before the active program
+instead of charging static startup/import state to the workload. Its completed
+record is the post-release logical state. The portable path cannot force or
+observe a host collection, so process RSS remains a separate high-water
+measurement rather than a reachability counter.
+
+The private dense-set, worklist, scratch-arena, and identity-map substrates
+already expose per-owner structural and lifetime statistics. Datum graph
+operations do not add a process-global registry for those otherwise unrelated
+owners: their directly relevant work and identity-map entries are counted in
+the import/export categories above, while heap-freeze dense sets and reusable
+scratch/worklist owners remain observable at their existing owner boundaries.
+
+### Attributed owner and representation change
+
+The initial compiled census found 6,269,196 private internal-object
+allocations and 21,698 live revision-sidecar pages. Short-lived internal cells,
+procedures, and other evaluator records advanced heap ordinals and then became
+host-collectable, but their nonzero revision entries kept the corresponding
+heap pages reachable. That was the dominant retained owner. Import work peaked
+at only 130 entries, host memoization at 1,881 entries, intrusive graph maps at
+8,376 entries, and all three categories balanced on release.
+
+Private internal objects now keep their hot revision in their kind-specific
+record. When such an object becomes unreachable, its revision becomes
+unreachable with it. Public pairs, strings, vectors, and bytevectors retain the
+compact header and cold revision sidecar. The compiled census consequently
+dropped live revision pages to 5,158, a 76.2% reduction, without adding a field
+to the public pair representation.
+
+Owned-to-owned import and export use a phase-local sparse ordinal memo for the
+first source heap. A hybrid graph that reaches another heap falls back to the
+public nested intrusive map. Releasing either path clears its page and entry
+roots. Construction closure now clears superseded marker indexes and the
+marker-chain head. Import/export retain the existing explicit DFS job form
+because the census showed its high-water residency was small; the work-entry
+counters still prove balanced cleanup on normal return, error, and non-local
+exit.
+
+The final compiled agent-memory census reported the following dominant
+categories for every one of its three identical runs:
+
+| Category | Allocations | Releases | Live | High water |
+| --- | ---: | ---: | ---: | ---: |
+| Private internal objects | 6,269,034 | 0 | 6,269,034 | 6,269,034 |
+| Revision sidecar pages | 5,158 | 0 | 5,158 | 5,158 |
+| Map sidecar pages | 10,409 | 10,409 | 0 | 686 |
+| Intrusive graph-map entries | 84,294 | 84,294 | 0 | 8,376 |
+| Import result shells | 154,801 | 0 | 154,801 | 154,801 |
+| Import host memo entries | 155,424 | 155,424 | 0 | 1,881 |
+| Import work entries | 342,466 | 342,466 | 0 | 130 |
+| Source sidecar pages | 2 | 0 | 2 | 2 |
+
+Reader-list census at size 4,096 balanced 12,288 construction markers,
+24,552 marker-index slots, 48 map pages, and 12,288 graph-map entries. Its
+high-water counts were 4,096 markers, 6,144 index slots, 16 pages, and 4,096
+entries. Three cyclic-boundary attempts at the same size balanced 48
+phase-map pages, 12,288 import and export memo entries per direction, and
+36,867 work entries per direction. Tests additionally force import error,
+import non-local exit, and incomplete construction; every temporary category
+returns to zero.
+
+### Same-machine evidence
+
+The historical `722e301e7073` program is recorded for context but is not a
+performance baseline: it contained 8 cases and 71 assertions, versus 44 cases
+and 224 assertions in the comparable programs. The other rows run that same
+44-case program. Times are fresh-process wall-time medians and residency is the
+median maximum resident-set size from `/usr/bin/time -l`.
+
+| Snapshot | Cases / assertions | Wall seconds | Peak bytes |
+| --- | ---: | ---: | ---: |
+| Historical `722e301e7073` | 8 / 71 | 0.47 | 49,364,992 |
+| Issue base `212df2d` | 44 / 224 | 118.40 | 118,718,464 |
+| Compact `308f056a` | 44 / 224 | 123.28 | 196,345,856 |
+| Bounded residency, 0.18.47 | 44 / 224 | 139.18 | 120,635,392 |
+
+The final peak is 1.6% above the issue base and 38.5% below the compact
+representation result. Wall time is 17.6% above the issue base, below the 20%
+timing threshold. All three final processes reported 44 cases, 224 assertions,
+and the same portable census.
+
+The default non-census Gambit benchmark retained three samples per workload:
+
+| Workload | Size | Issue base | 0.18.47 | Change |
+| --- | ---: | ---: | ---: | ---: |
+| Pair construction | 250,000 | 481.645 ms | 378.675 ms | +21.4% |
+| Pair traversal | 250,000 | 68.089 ms | 52.757 ms | +22.5% |
+| Reader list | 4,096 | 240.552 ms | 287.081 ms | -19.3% |
+| Cyclic import/export | 4,096 | 60.771 ms | 69.774 ms | -14.8% |
+
+No path regressed by both 20% and three seconds. Three fresh pair-construction
+processes retained the compact representation's residency result; their median
+peak was 197,165,056 bytes, 47.0% below the 372,031,488-byte issue-base median.
+
+The residual costs are deliberate and measured. Public compound revisions and
+source provenance remain heap-owned while their semantic objects may still be
+reachable. Imported and exported result shells belong to the caller after the
+boundary completes. Portable Scheme cannot observe host garbage collection,
+and the contract does not require an operating system to return pages. Future
+work should target a measured remaining owner rather than treating logical
+release as proof of physical page return.
+
 ## Emacs Parity
 
 The Emacs bootstrap remains an irreducible host implementation rather than a
