@@ -1,8 +1,8 @@
 # Portable Compound Datum Heap Design
 
-**Issue:** #347
+**Issues:** #347 and #982
 
-**Roadmap version:** 0.18.38
+**Roadmap versions:** 0.18.38 and 0.18.45
 
 **Status:** Implemented
 
@@ -47,7 +47,8 @@ ABI edges; they are not a second language-visible compound-value domain.
 
 ## Owned Representation
 
-`(consent datum)` defines two opaque implementation types.
+`(consent datum)` defines one heap type, kind-specific public compound record
+types, and private sidecar and runtime-slot records.
 
 A datum heap carries:
 
@@ -55,43 +56,56 @@ A datum heap carries:
 - an allocation generation;
 - an owner tag reserved for a checkpoint branch or delta;
 - the next object ordinal;
-- one mutation observer.
+- one mutation observer;
+- a frozen flag and optional certified-image membership set; and
+- optional revision, traversal, graph-map, and source-provenance sidecars.
 
-An owned heap object carries:
+Every owned object carries only its allocating heap reference and stable object
+ordinal as its common identity header. The remaining physical fields are
+kind-specific:
 
-- its allocating heap and public heap id;
-- a stable object ordinal;
-- its allocation generation and owner tag;
-- a kind; Scheme-visible kinds are `pair`, `string`, `vector`, and
-  `bytevector`, while private runtime slots use kinds such as `cell`;
-- a mutable flag and mutation revision;
-- traversal metadata for writers, collectors, and checkpoint codecs;
-- one current immutable source-provenance note; and
-- private storage.
+- a pair stores `car` and `cdr` inline in that same record;
+- a string or vector stores one private indexed host-vector payload;
+- a bytevector stores one private host-bytevector payload; and
+- a private runtime-slot object stores its open-ended kind and one indexed
+  payload.
+
+Heap id, generation, owner, and mutability are derived from the heap rather
+than copied into every object. Public kind is derived from the specialized
+record type; only open-ended private runtime slots store a kind. Revisions,
+source notes, traversal marks, and intrusive graph-map entries live in
+heap-owned two-level pages indexed by object ordinal. A fixed 256-ordinal page
+amortizes dense traversal setup while bounding the cost of one sparse late
+property; the outer page index grows geometrically. Each page is one vector
+whose first slot counts live entries. Each sidecar is absent until its first
+non-default value, empty pages are released, and the sidecar is dropped when
+its final entry clears. Ordinary pairs therefore pay for none of those cold
+fields.
 
 The semantic identity key is `(heap-id, object-id)`. Compound-value code
 compares that key through `consent-datum-same?`; it does not infer language
 identity from the host record or its private storage. Fresh allocations
 therefore have fresh identity even when their contents are equal.
 
-The current portable implementation uses host vectors for pair and vector
-slots, a host vector of characters for indexed string storage, and a host
-bytevector for byte storage. The character vector makes owned string length,
-reference, and mutation independent of a host string's variable-width or rope
-layout. Those containers never escape `(consent datum)` directly. Accessors
-return language values or scalar adapter values, and host projection always
-returns a graph copy.
+The compact pair calls one record constructor and performs no payload-container
+allocation. The portable implementation still uses a host vector for vector
+slots and indexed string characters, and a host bytevector for byte storage.
+The character vector makes owned string length, reference, and mutation
+independent of a host string's variable-width or rope layout. Those containers
+never escape `(consent datum)` directly. Accessors return language values or
+scalar adapter values, and host projection always returns a graph copy.
 
 The empty list remains the unique immutable host sentinel. It has no mutable
 payload or allocation identity, so wrapping it would add no owned semantics.
 
-Owned provenance lives on the object it describes. Heap-taking reader entry
-points attach the newest note directly while constructing the owned object;
-they create neither a private host compound graph nor a provenance identity
-arena. The stored note is compact and immutable; propagation keeps that note
-opaque, and the public source record is materialized only at an observing
-boundary. Legacy syntax-only reader entry points retain their separate
-bootstrap metadata table because host containers have no owned field.
+Owned provenance is keyed by the ordinal of the object it describes.
+Heap-taking reader entry points attach the newest note to the lazy source
+sidecar while constructing the owned object; they create neither a private host
+compound graph nor a provenance identity arena. The stored note is compact and
+immutable; propagation keeps that note opaque, and the public source record is
+materialized only at an observing boundary. Legacy syntax-only reader entry
+points retain their separate bootstrap metadata table because host containers
+have no owned ordinal.
 
 The per-reader `max-source-metadata` ceiling still bounds attachments made by
 one read. Persistent context source-table counts include only retained host
@@ -102,11 +116,14 @@ decrement it honestly.
 `consent-call-with-datum-construction` grants a dynamic, one-shot capability to
 allocate exact-size pair, string, vector, and bytevector shells. Each slot is
 filled exactly once; a separate single fixup is available for datum-label
-resolution. Normal return verifies completeness and seals every shell without a
-mutation event or revision change. Exceptional exit makes the capabilities
-unusable and sanitizes any shell a trusted producer side-effected out of the
-scope, so no uninitialized sentinel becomes observable. Bytevectors allocate
-their final payload immediately instead of copying a temporary payload at seal.
+resolution. Markers occupy one scope-local vector indexed from the heap's
+starting ordinal; gaps cover only allocations made during that same dynamic
+scope. Normal return verifies completeness, seals every shell, and drops the
+vector, without a mutation event or revision change. Exceptional exit makes
+the capabilities unusable and sanitizes any shell a trusted producer
+side-effected out of the scope, so no uninitialized sentinel becomes
+observable. Bytevectors allocate their final payload immediately instead of
+copying a temporary payload at seal.
 
 ## Mutation Gateway
 
@@ -117,7 +134,7 @@ storage. It then:
 1. calls the heap observer with the heap, object, operation, slot, old value,
    and new value;
 2. performs the storage mutation; and
-3. advances the object's revision.
+3. advances the object's revision in the ordinal sidecar.
 
 Fresh graph shells have a private initialization path. Reader label repair and
 graph import can therefore construct a cycle without reporting partially built
@@ -132,10 +149,40 @@ observer operation tags. Bootstrap and imported binding cells that Scheme code
 cannot mutate may remain private host records until they enter an active
 evaluation context.
 
-R7RS permits mutation of a literal to raise an error. Consent continues its
-existing isolated-literal behavior in this issue and records the mutability
-field needed for a stricter future policy; it does not introduce a new
-cross-evaluation immutable-literal cache.
+R7RS permits mutation of a literal to raise an error. A context-local mutable
+literal remains isolated. Repository-trusted parsed forms or literal
+aggregates may instead enter the frozen runtime-image boundary described below;
+the two policies are explicit and never inferred from source spelling.
+
+## Frozen Runtime Images
+
+`consent-datum-heap-freeze!` accepts a heap and a proper list of intended image
+roots. It first rejects an active construction scope, then validates the graph
+iteratively. Same-heap pairs and vectors contribute edges; strings and
+bytevectors are leaves. Raw host compounds, mutable foreign owned values, and
+private runtime-slot kinds fail closed. An edge to an already certified object
+in another frozen heap is permitted.
+
+Validation records reachable same-heap ordinals in a pre-reserved `(consent
+dense-set)`. A failed validation releases that temporary set and leaves the
+heap mutable. A successful validation installs the membership set and seals the
+whole heap. Allocation, content mutation, owner and observer replacement, and
+source-provenance replacement then fail. The operation is idempotent; later
+calls cannot widen the original root set silently.
+
+`consent-datum-object-shareable?` is true only for certified reachable objects,
+not every allocation that happens to precede the seal. Import into another heap
+reuses a certified object directly and read-only, so a cached parsed library
+form or literal aggregate can retain its Consent identity and graph topology
+without a per-context copy. An unreachable object in the frozen heap is still
+immutable, but import copies it into the target and gives the copy a mutable
+target identity. This distinction prevents the seal from publishing accidental
+heap history.
+
+The frozen boundary supplies the immutable base later copy-on-write work may
+reference. It does not define writable descendants, fork commits, or rollback;
+those remain #721. Nor does it freeze #120's compiled ABI layout: a native
+runtime may encode the same heap/ordinal/image contract in different headers.
 
 ## Graph Import and Export
 
@@ -206,10 +253,10 @@ Writers count and label pair and vector graph nodes by owned identity.
 `write-simple` renders an acyclic expansion without exposing the private
 representation. Source metadata and bounded rendering use the same owned graph
 accessors rather than host `assq`, `memq`, or storage identity. Owned writer
-registries use scoped one-header marks, cycle discovery uses an explicit
-worklist, and output is assembled from fragments once. Work is proportional
-to the visited graph plus emitted text rather than repeated identity-list
-searches or prefix copying.
+registries use scoped ordinal-sidecar marks, cycle discovery uses an explicit
+worklist, and output is assembled from fragments once. The sidecar is absent
+outside an active traversal. Work is proportional to the visited graph plus
+emitted text rather than repeated identity-list searches or prefix copying.
 
 ## Borrowed-host Bridge
 
@@ -274,10 +321,11 @@ borrowed mirror nor turn native registration into authority for the surrounding
 facade. This rule permits measured acceleration without creating a second
 compound heap or making native registration the default for portable code.
 
-Call-scoped owned traversals use one intrusive private header on each object;
-one lookup performs one header probe and scope release restores any outer mark.
-While an inner map is current, an outer map lookup is intentionally absent;
-releasing the inner map restores the outer entry's visibility.
+Call-scoped owned traversals use one intrusive heap sidecar keyed by ordinal;
+one lookup performs one ordinal-slot probe and scope release restores any outer
+mark. While an inner map is current, an outer map lookup is intentionally
+absent; releasing the inner map restores the outer entry's visibility. No
+ordinary object reserves a map field while the sidecar is inactive.
 The borrowed host's identity adapter is reserved for host objects. Gambit uses
 its native `eq?-hash`; other configured performance hosts provide SRFI 69
 identity hashing. Table storage and policy remain portable Scheme. The plain
@@ -298,6 +346,9 @@ a public datum representation.
 ### Complexity contract
 
 - Heap allocation, identity lookup, access, and mutation are amortized O(1).
+- A pair performs one object-record allocation and stores both semantic fields
+  inline. Cold sidecars allocate only on the first non-default entry and use
+  direct ordinal indexing.
 - Direct owned reading is O(source + V + E), allocates one heap object per
   compound datum, and performs no host identity-map operation.
 - Ordinary parser-produced, unlabelled private syntax uses one iterative
@@ -311,6 +362,9 @@ a public datum representation.
 - Owned-to-owned import and export are O(V + E) in the visited graph and
   allocate O(V); foreign-host import and export have that bound with the hash
   adapter. Without it, the 64-identity compatibility envelope fails closed.
+- Runtime-image certification is O(V + E) with O(H) dense storage for a heap
+  high-water ordinal H. Importing a certified root is O(1) and allocates no
+  replacement graph.
 - A scalar native call with no compound arguments performs no historical-heap
   synchronization.
 - Fresh native result, condition, and writeback compounds are charged once at
@@ -330,6 +384,49 @@ a public datum representation.
   uninstrumented raw host mutation cannot be discovered without inspecting the
   active borrowed graph.
 
+## Compact Representation Evidence
+
+The issue benchmark is `tools/benchmark-compact-owned-datum.scm`. It reports
+setup separately from three operation samples. The following same-machine
+Gambit medians compare base commit `212df2d` (version 0.18.44) with the compact
+0.18.45 representation. Times are milliseconds unless marked otherwise;
+positive changes are improvements.
+
+| Workload | Size | Base | Compact | Change |
+| --- | ---: | ---: | ---: | ---: |
+| Pair construction | 250,000 | 481.645 | 367.231 | +23.8% |
+| Pair traversal | 250,000 | 68.089 | 53.366 | +21.6% |
+| Deep equality | 4,096 | 63.479 | 59.700 | +6.0% |
+| List copy | 32,768 | 114.518 | 81.598 | +28.7% |
+| Reader list | 4,096 | 240.552 | 309.695 | -28.7% |
+| Cyclic import/export | 4,096 | 60.771 | 76.893 | -26.5% |
+| Vector allocation | 100,000 | 183.902 | 103.875 | +43.5% |
+| String allocation | 100,000 | 181.747 | 101.434 | +44.2% |
+| Bytevector allocation | 100,000 | 187.166 | 101.744 | +45.6% |
+
+Three fresh-process pair-construction runs under `/usr/bin/time -l` reduced
+median peak RSS from 372,031,488 to 195,100,672 bytes (47.6%) and median
+end-to-end wall time from 2.08 to 1.67 seconds (19.7%). The physical source of
+the allocation reduction is direct: a pair now calls one record constructor
+with inline `car` and `cdr`, where the base called a generic record constructor
+and allocated a second payload vector.
+
+The compiled agent-memory program retained its 44 cases and 224 assertions in
+every process. Alternating three-run medians moved from 118.40 seconds and
+118,718,464 bytes peak RSS to 123.28 seconds and 196,345,856 bytes. This is a
+4.1% wall-time regression, below the combined 20% and three-second regression
+guard, with a reported 65.4% peak-residency cost.
+
+The phase profile attributes the remaining reader and cyclic-boundary cost to
+construction validation and transient graph-map pages, not source provenance.
+Disabling reader source metadata produced similar medians: 220.198 milliseconds
+on the base and 291.998 milliseconds on the compact representation. Releasing
+empty pages minimized the compiled workload's peak; retaining touched pages or
+flat high-water traversal vectors increased it. The retained design therefore
+accepts sub-second reader and cyclic-operation deltas in exchange for removing
+four always-present cold fields and the separate pair payload from every pair.
+No measured non-pair allocation workload regressed.
+
 ## Emacs Parity
 
 The Emacs bootstrap remains an irreducible host implementation rather than a
@@ -341,11 +438,11 @@ do not become the portable language representation.
 
 ## Checkpoint Limitation
 
-The heap records owner, generation, revision, traversal metadata, and a single
-mutation observer so #721 can install copy-on-write or delta storage without
-changing primitive callers. The current storage is mutated in place. If a
-future session fork shares an owned object, this implementation alone does not
-isolate a mutation to one branch.
+The heap records owner, generation, lazy revision and traversal sidecars, and a
+single mutation observer so #721 can install copy-on-write or delta storage
+without changing primitive callers. Mutable heaps still update content in
+place. A frozen image is read-only, but this implementation does not create a
+writable branch when a future session fork shares one of its objects.
 
 Therefore completion of #347 establishes owned compound identity and a
 forkable mutation seam; it does **not** claim complete session-fork or

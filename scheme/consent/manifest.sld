@@ -450,8 +450,10 @@
           consent-datum-heap-id
           consent-datum-heap-generation
           consent-datum-heap-owner
+          consent-datum-heap-frozen?
           consent-datum-heap-owner-set!
           consent-datum-heap-mutation-hook-set!
+          consent-datum-heap-freeze!
           consent-datum-object?
           consent-datum-object-kind
           consent-datum-object-heap-id
@@ -464,6 +466,7 @@
           consent-datum-object-traversal-set!
           consent-datum-object-source-metadata
           consent-datum-object-source-metadata-set!
+          consent-datum-object-shareable?
           consent-make-datum-object-map
           consent-datum-object-map-ref
           consent-datum-object-map-set!
@@ -506,11 +509,14 @@
           consent-datum-export))
         (dependencies
          ((library (scheme base))
+          (library (consent dense-set))
           (library (consent identity-map))))
         (provenance
          ((origin repo)
           (identity heap-id-and-object-id)
-          (representation owned-opaque-compound-records)
+          (representation compact-kind-specialized-records)
+          (cold-state heap-ordinal-sidecars)
+          (runtime-image certified-frozen-heap)
           (boundary private-host-container-accelerators)
           (future-branch-isolation issue-721)))
         (verification

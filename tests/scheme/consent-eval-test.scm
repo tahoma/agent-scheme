@@ -8640,6 +8640,29 @@ context request\"))")
                         '((internal-libraries-allowed . #t))
                         "4"))
 
+(testing-registry-case
+ 'frozen-runtime-image-self-hosts-from-source
+ '(portable core datum identity mutation graph)
+(check-external/options
+ 'frozen-runtime-image-self-hosts-from-source
+ "(import (scheme base) (consent datum))
+  (define heap (consent-make-datum-heap))
+  (define target (consent-make-datum-heap))
+  (define root (consent-datum-cons heap 'image '()))
+  (consent-datum-heap-freeze! heap (list root))
+  (list
+   (consent-datum-heap-frozen? heap)
+   (consent-datum-object-shareable? root)
+   (consent-datum-object-mutable? root)
+   (consent-datum-same?
+    root
+    (consent-datum-import target root (lambda (value) value)))
+   (guard (condition (else 'immutable))
+     (consent-datum-set-car! heap root 'changed)
+     'mutable))"
+ '((internal-libraries-allowed . #t))
+ "(#t #t #f #t immutable)"))
+
 ;; Public agent-domain libraries with primitive counterparts still need to
 ;; self-host under the internal-libraries grant so runtime internals can import
 ;; their portable store helpers while attaching host effects.

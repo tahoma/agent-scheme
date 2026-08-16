@@ -90,6 +90,25 @@ Without an active bridge, scalars and same-context owned compounds remain
 available, but importing a fresh host or cross-heap compound requires a
 hash-backed identity adapter and otherwise fails closed.
 
+The directly linked `(consent datum)` owner now uses the same compact portable
+Scheme representation on both borrowed backends. Pairs are one kind-specific
+record with inline `car` and `cdr`; other public compounds have kind-specific
+records; heap-level identity and owner data are derived; and cold metadata uses
+heap ordinal sidecars. Native registration preserves those owner records and
+applies positional conversion only to declared host adapters, callbacks,
+indexes, and the frozen-image root list. It introduces no host operation to
+reconstruct the retired generic wrapper.
+
+A certified frozen heap supplies the staging boundary for immutable parsed
+library forms and literal aggregates. Its reachable public objects may cross
+contexts by identity without a borrowed mirror or target-heap reboxing, because
+allocation and content mutation have been disabled and the root graph was
+validated before publication. Uncertified or mutable cross-heap objects retain
+the ordinary import/copy rule. This is a portable bootstrap contract: #120 may
+lower heap references, ordinals, sidecars, and image membership into a native
+object or image format, but must preserve the same identity, mutation, and
+ingress decisions rather than freezing the R7RS record layout as its ABI.
+
 General project roots whose exports can retain a compound value in a closure,
 record, parameter, or module state are omitted. An interpreted import then
 resolves the canonical embedded source realization, even though the borrowed
