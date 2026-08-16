@@ -5,9 +5,8 @@
 ;;;
 ;;; Adapted from the official SRFI 214 sample implementation at
 ;;; https://github.com/scheme-requests-for-implementation/srfi-214.
-;;; The public record wraps Consent's private bounded growable storage so the
-;;; primitive capacity, reset, release, and allocation-policy surface remains
-;;; outside the SRFI contract.
+;;; The nominal public record wraps one private bounded growable substrate so
+;;; primitive capacity and allocation policy remain outside the SRFI contract.
 
 (define-library (stdlib flexvectors)
   (export
@@ -156,13 +155,15 @@
         (cons actual-start actual-end)))
 
     (define (new-flexvector-storage initial-capacity)
-      "Return storage reserving INITIAL-CAPACITY with a four-slot clear floor."
+      "Return lazy storage with a four-slot first-allocation floor."
       (let ((storage
              (consent-make-growable-vector
-              4
+              0
               flexvector-maximum-capacity
               3/2)))
-        (consent-growable-vector-reserve! storage initial-capacity)
+        (if (> initial-capacity 0)
+            (consent-growable-vector-reserve!
+             storage (max 4 initial-capacity)))
         storage))
 
     (define (new-flexvector initial-capacity)
@@ -176,12 +177,21 @@
 
     (define (reserve-length! fv length)
       "Reserve enough storage for FV to reach LENGTH."
-      (consent-growable-vector-grow! (flexvector-storage fv) length)
+      (let ((storage (flexvector-storage fv)))
+        (consent-growable-vector-grow!
+         storage
+         (if (and (> length 0)
+                  (= (consent-growable-vector-capacity storage) 0))
+             (max 4 length)
+             length)))
       fv)
 
     (define (append-one! fv value)
       "Append VALUE to FV and return FV."
-      (consent-growable-vector-append! (flexvector-storage fv) value)
+      (let ((storage (flexvector-storage fv)))
+        (if (= (consent-growable-vector-capacity storage) 0)
+            (consent-growable-vector-reserve! storage 4))
+        (consent-growable-vector-append! storage value))
       fv)
 
     (define (shortest-length operation fvs)
@@ -510,7 +520,7 @@
          (fv (type flexvector)
           (description "Flexvector to clear.")))
         (returns (type flexvector)
-         (description "The empty FV with baseline capacity."))
+         (description "The empty FV with lazy backing storage."))
         (effects allocation state-read state-write error))
       (check-flexvector "flexvector-clear!" fv)
       (consent-growable-vector-clear! (flexvector-storage fv))

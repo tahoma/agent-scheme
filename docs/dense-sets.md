@@ -14,7 +14,7 @@ deterministic work counters, and an explicit private ownership domain.
 
 A dense set is constructed with:
 
-- an initial reserved capacity;
+- an initial first-allocation capacity floor;
 - an exclusive maximum identifier capacity;
 - a positive maximum generation;
 - a positive finite color count;
@@ -34,8 +34,9 @@ object.
 
 ## Representation and root safety
 
-The backing store is one `(consent growable-vector)` whose populated prefix
-equals reserved capacity. Each slot contains one exact nonnegative integer:
+The backing store is one private vector owned directly by the dense-set record.
+There is no second growable-vector wrapper or mirrored capacity field. Each
+allocated slot contains one exact nonnegative integer:
 
 ```text
 0                         physically clear
@@ -103,13 +104,16 @@ in the physical encoding and is never reported as current.
 
 ## Capacity and allocation policy
 
-`consent-dense-set-reserve!` grows to an exact requested capacity without
-changing existing marks. A no-op reserve leaves statistics unchanged. Requests
-above maximum capacity fail before mutation.
+`consent-dense-set-reserve!` grows to at least a requested capacity without
+changing existing marks. When lazy storage has not been materialized, a
+positive reserve also honors the immutable initial-capacity floor. A no-op
+reserve leaves statistics unchanged. Requests above maximum capacity fail
+before mutation.
 
-Under `allow-growth`, marking an identifier beyond current capacity grows
-geometrically through `(consent growable-vector)` to address that identifier,
-then appends zero slots without further allocation. The statistics distinguish
+Under `allow-growth`, construction records the initial floor but owns no
+backing vector and reports capacity zero. The first mark allocates enough
+storage to address its identifier and at least the initial floor. Later marks
+beyond current capacity grow geometrically. The statistics distinguish
 explicit capacity changes, automatic growths, and copied elements.
 
 Under `pre-reserved`, a mark outside current capacity fails without changing
@@ -118,10 +122,10 @@ uses only identifiers within that capacity. Membership and color reads beyond
 current capacity but within the configured maximum return false; they do not
 grow storage.
 
-Allocation failures are normalized by the growable-vector substrate. New
-capacity is published only after allocation succeeds. Slot population after a
-successful reserve cannot allocate because the backing vector already owns the
-requested slots.
+Allocation failures are normalized by the dense-set storage owner. New
+capacity is published only after allocation and copying succeed. Counter
+sidecars are prepared before fallible backing allocation, so every reported
+counter and logical value remains unchanged when allocation fails.
 
 ## Ownership domains and lifetime
 
@@ -144,10 +148,10 @@ writer, or graph set cannot change a surrounding collector epoch. This also
 keeps dense-set generations separate from scratch-arena marks, intrusive datum
 map headers, writer traversal tokens, and public bitvector contents.
 
-`consent-dense-set-release!` terminally clears and releases the backing
-growable vector. It records the number of release-cleared slots, drops reported
-capacity to zero, and makes every later operational call fail. Releasing an
-already released set is idempotent.
+`consent-dense-set-release!` terminally clears and drops the backing vector. It
+records the number of release-cleared slots, drops reported capacity to zero,
+and makes every later operational call fail. Releasing an already released set
+is idempotent.
 
 Code that owns control transfer pairs release with `dynamic-wind`. An exception
 or continuation escape runs the release thunk. Re-entering a continuation then

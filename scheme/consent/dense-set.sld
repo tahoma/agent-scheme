@@ -29,31 +29,57 @@
           consent-dense-set-release!
           consent-dense-set-integral-storage?
           consent-dense-set-stats)
-  (import (scheme base)
-          (only (consent growable-vector)
-                consent-growable-vector-append!
-                consent-growable-vector-capacity
-                consent-growable-vector-fill!
-                consent-growable-vector-grow!
-                consent-growable-vector-release!
-                consent-growable-vector-reserve!
-                consent-growable-vector-unsafe-ref
-                consent-growable-vector-unsafe-set!
-                consent-make-growable-vector))
+  (import (scheme base))
   (begin
     ;; One exact integer per identifier encodes the generation and color.
     ;; Zero is the physically clear value.  Current marks are positive.
+    (define dense-set-lazy-storage (list 'dense-set-lazy-storage))
+
+    ;; Cold counters allocate together on the first counted operation.
+    (define dense-set-high-water-index 0)
+    ;; Membership-test count.
+    (define dense-set-membership-tests-index 1)
+    ;; Color-read count.
+    (define dense-set-color-reads-index 2)
+    ;; Mark-operation count.
+    (define dense-set-mark-operations-index 3)
+    ;; Newly marked identifier count.
+    (define dense-set-new-marks-index 4)
+    ;; Existing-mark recolor count.
+    (define dense-set-recolors-index 5)
+    ;; Duplicate mark count.
+    (define dense-set-duplicate-marks-index 6)
+    ;; Successful unmark count.
+    (define dense-set-unmarks-index 7)
+    ;; Logical clear count.
+    (define dense-set-clears-index 8)
+    ;; Generation-advance count.
+    (define dense-set-generation-advances-index 9)
+    ;; Physical clear count.
+    (define dense-set-physical-clears-index 10)
+    ;; Slots written during physical clears.
+    (define dense-set-physical-clear-slots-index 11)
+    ;; Explicit and automatic capacity-change count.
+    (define dense-set-capacity-changes-index 12)
+    ;; Automatic capacity-growth count.
+    (define dense-set-automatic-growths-index 13)
+    ;; Scalars copied while replacing backing storage.
+    (define dense-set-copied-elements-index 14)
+    ;; Release count.
+    (define dense-set-releases-index 15)
+    ;; Slots cleared during releases.
+    (define dense-set-release-clear-slots-index 16)
+    ;; Number of slots in the statistics sidecar.
+    (define dense-set-statistics-size 17)
+
+    ;; Compact integral storage plus one lazy diagnostic sidecar.
     (define-record-type <consent-dense-set>
       (make-dense-set-record
-       storage capacity maximum-capacity maximum-generation color-count
-       growth-policy domain generation size high-water
-       membership-tests color-reads mark-operations new-marks recolors
-       duplicate-marks unmarks clears generation-advances physical-clears
-       physical-clear-slots capacity-changes automatic-growths
-       copied-elements releases release-clear-slots active?)
+       storage initial-capacity maximum-capacity maximum-generation
+       color-count growth-policy domain generation size statistics)
       consent-dense-set?
-      (storage dense-set-storage)
-      (capacity dense-set-capacity-value set-dense-set-capacity!)
+      (storage dense-set-storage set-dense-set-storage!)
+      (initial-capacity dense-set-initial-capacity-value)
       (maximum-capacity dense-set-maximum-capacity-value)
       (maximum-generation dense-set-maximum-generation-value)
       (color-count dense-set-color-count-value)
@@ -61,44 +87,44 @@
       (domain dense-set-domain-value)
       (generation dense-set-generation-value set-dense-set-generation!)
       (size dense-set-size-value set-dense-set-size!)
-      (high-water dense-set-high-water set-dense-set-high-water!)
-      (membership-tests
-       dense-set-membership-tests
-       set-dense-set-membership-tests!)
-      (color-reads dense-set-color-reads set-dense-set-color-reads!)
-      (mark-operations
-       dense-set-mark-operations
-       set-dense-set-mark-operations!)
-      (new-marks dense-set-new-marks set-dense-set-new-marks!)
-      (recolors dense-set-recolors set-dense-set-recolors!)
-      (duplicate-marks
-       dense-set-duplicate-marks
-       set-dense-set-duplicate-marks!)
-      (unmarks dense-set-unmarks set-dense-set-unmarks!)
-      (clears dense-set-clears set-dense-set-clears!)
-      (generation-advances
-       dense-set-generation-advances
-       set-dense-set-generation-advances!)
-      (physical-clears
-       dense-set-physical-clears
-       set-dense-set-physical-clears!)
-      (physical-clear-slots
-       dense-set-physical-clear-slots
-       set-dense-set-physical-clear-slots!)
-      (capacity-changes
-       dense-set-capacity-changes
-       set-dense-set-capacity-changes!)
-      (automatic-growths
-       dense-set-automatic-growths
-       set-dense-set-automatic-growths!)
-      (copied-elements
-       dense-set-copied-elements
-       set-dense-set-copied-elements!)
-      (releases dense-set-releases set-dense-set-releases!)
-      (release-clear-slots
-       dense-set-release-clear-slots
-       set-dense-set-release-clear-slots!)
-      (active? dense-set-active? set-dense-set-active!))
+      (statistics dense-set-statistics set-dense-set-statistics!))
+
+    (define (dense-set-active? dense)
+      "Return whether DENSE has not been released."
+      (not (eq? (dense-set-storage dense) #f)))
+
+    (define (dense-set-capacity-value dense)
+      "Return DENSE's allocated capacity, including zero when lazy."
+      (let ((storage (dense-set-storage dense)))
+        (if (vector? storage) (vector-length storage) 0)))
+
+    (define (dense-set-statistic dense index)
+      "Return DENSE's cold statistic at INDEX, defaulting to zero."
+      (let ((statistics (dense-set-statistics dense)))
+        (if statistics (vector-ref statistics index) 0)))
+
+    (define (dense-set-statistics-for-write! dense)
+      "Return DENSE's writable cold-statistics sidecar."
+      (or (dense-set-statistics dense)
+          (let ((statistics (make-vector dense-set-statistics-size 0)))
+            (set-dense-set-statistics! dense statistics)
+            statistics)))
+
+    (define (note-dense-set! dense index amount)
+      "Add AMOUNT to DENSE's cold statistic at INDEX."
+      (let ((statistics (dense-set-statistics-for-write! dense)))
+        (vector-set!
+         statistics index (+ (vector-ref statistics index) amount))))
+
+    (define (note-dense-set-high-water! dense value)
+      "Raise DENSE's historical high-water mark to VALUE when needed."
+      (let ((current
+             (dense-set-statistic dense dense-set-high-water-index)))
+        (if (> value current)
+            (vector-set!
+             (dense-set-statistics-for-write! dense)
+             dense-set-high-water-index
+             value))))
 
     (define (exact-nonnegative-integer? value)
       "Return whether VALUE is an exact nonnegative integer."
@@ -164,17 +190,14 @@
            (dense-set-color-count-value dense)))
       color)
 
-    (define (make-slot-storage initial-capacity maximum-capacity)
-      "Return growable storage with INITIAL-CAPACITY zero slots."
-      (let ((storage
-             (consent-make-growable-vector
-              initial-capacity maximum-capacity)))
-        (let fill ((index 0))
-          (if (< index initial-capacity)
-              (begin
-                (consent-growable-vector-append! storage 0)
-                (fill (+ index 1)))))
-        storage))
+    (define (allocate-slot-storage operation capacity)
+      "Return CAPACITY zero slots or fail with a normalized condition."
+      (guard (condition
+              (else
+               (error
+                (string-append operation ": storage allocation failed")
+                capacity)))
+        (make-vector capacity 0)))
 
     (define (slot-encode dense color)
       "Encode DENSE's current generation and COLOR as one positive integer."
@@ -200,33 +223,43 @@
     (define (dense-set-slot dense identifier)
       "Return IDENTIFIER's encoded slot, or zero beyond current capacity."
       (if (< identifier (dense-set-capacity-value dense))
-          (consent-growable-vector-unsafe-ref
-           (dense-set-storage dense) identifier)
+          (vector-ref (dense-set-storage dense) identifier)
           0))
 
-    (define (populate-storage-to-capacity! dense old-capacity new-capacity)
-      "Append clear slots from OLD-CAPACITY through NEW-CAPACITY."
-      (let fill ((index old-capacity))
-        (if (< index new-capacity)
-            (begin
-              (consent-growable-vector-append!
-               (dense-set-storage dense) 0)
-              (fill (+ index 1)))))
-      (set-dense-set-capacity! dense new-capacity)
+    (define (replace-dense-set-capacity!
+             operation dense new-capacity automatic?)
+      "Replace DENSE's backing with NEW-CAPACITY scalar slots."
+      (dense-set-statistics-for-write! dense)
+      (let* ((old-storage (dense-set-storage dense))
+             (old-capacity (dense-set-capacity-value dense))
+             (new-storage
+              (allocate-slot-storage operation new-capacity)))
+        (if (> old-capacity 0)
+            (vector-copy!
+             new-storage 0 old-storage 0 old-capacity))
+        (if (vector? old-storage)
+            (vector-fill! old-storage 0))
+        (set-dense-set-storage! dense new-storage)
+        (note-dense-set! dense dense-set-capacity-changes-index 1)
+        (if automatic?
+            (note-dense-set!
+             dense dense-set-automatic-growths-index 1))
+        (note-dense-set!
+         dense dense-set-copied-elements-index old-capacity))
       dense)
 
-    (define (note-capacity-change!
-             dense old-capacity new-capacity automatic?)
-      "Record DENSE capacity change from OLD-CAPACITY to NEW-CAPACITY."
-      (set-dense-set-capacity-changes!
-       dense (+ (dense-set-capacity-changes dense) 1))
-      (if automatic?
-          (set-dense-set-automatic-growths!
-           dense (+ (dense-set-automatic-growths dense) 1)))
-      (set-dense-set-copied-elements!
-       dense (+ (dense-set-copied-elements dense) old-capacity))
-      (populate-storage-to-capacity!
-       dense old-capacity new-capacity))
+    (define (next-dense-set-capacity dense minimum-capacity)
+      "Return DENSE's next bounded capacity covering MINIMUM-CAPACITY."
+      (let ((capacity (dense-set-capacity-value dense))
+            (maximum (dense-set-maximum-capacity-value dense)))
+        (min
+         maximum
+         (max minimum-capacity
+              (if (= capacity 0)
+                  (max 1 (dense-set-initial-capacity-value dense))
+                  (if (>= capacity (quotient maximum 2))
+                      maximum
+                      (* capacity 2)))))))
 
     (define (ensure-identifier-capacity! operation dense identifier)
       "Grow DENSE when needed to address IDENTIFIER for OPERATION."
@@ -239,25 +272,22 @@
                                   ": pre-reserved capacity exhausted")
                    identifier
                    capacity))
-              (consent-growable-vector-grow!
-               (dense-set-storage dense) (+ identifier 1))
-              (note-capacity-change!
+              (replace-dense-set-capacity!
+               operation
                dense
-               capacity
-               (consent-growable-vector-capacity
-                (dense-set-storage dense))
+               (next-dense-set-capacity dense (+ identifier 1))
                #t))))
       dense)
 
     (define (physical-clear! dense)
       "Physically clear DENSE's allocated slots and record their count."
       (let ((capacity (dense-set-capacity-value dense)))
-        (consent-growable-vector-fill!
-         (dense-set-storage dense) 0 0 capacity)
-        (set-dense-set-physical-clears!
-         dense (+ (dense-set-physical-clears dense) 1))
-        (set-dense-set-physical-clear-slots!
-         dense (+ (dense-set-physical-clear-slots dense) capacity)))
+        (dense-set-statistics-for-write! dense)
+        (if (> capacity 0)
+            (vector-fill! (dense-set-storage dense) 0))
+        (note-dense-set! dense dense-set-physical-clears-index 1)
+        (note-dense-set!
+         dense dense-set-physical-clear-slots-index capacity))
       (set-dense-set-generation! dense 1)
       (set-dense-set-size! dense 0)
       dense)
@@ -268,7 +298,7 @@
       "Return an empty bounded generation-stamped dense set."
       #((parameters
          (initial-capacity (type exact-non-negative-integer)
-          (description "Initially reserved identifier slots."))
+          (description "First-allocation floor or eager capacity."))
          (maximum-capacity (type exact-non-negative-integer)
           (description "Exclusive upper identifier bound."))
          (maximum-generation (type exact-positive-integer)
@@ -299,7 +329,10 @@
            initial-capacity
            maximum-capacity))
       (make-dense-set-record
-       (make-slot-storage initial-capacity maximum-capacity)
+       (if (eq? growth-policy 'pre-reserved)
+           (allocate-slot-storage
+            "consent-make-dense-set" initial-capacity)
+           dense-set-lazy-storage)
        initial-capacity
        maximum-capacity
        maximum-generation
@@ -308,24 +341,7 @@
        domain
        1
        0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       0
-       #t))
+       #f))
 
     (define (consent-dense-set-active? dense)
       "Return whether DENSE is an active unreleased dense set."
@@ -426,7 +442,7 @@
       (dense-set-generation-value dense))
 
     (define (consent-dense-set-reserve! dense requested)
-      "Reserve exactly REQUESTED slots when active DENSE is smaller."
+      "Reserve at least REQUESTED slots when active DENSE is smaller."
       #((parameters
          (dense (type dense-set) (description "Dense set to reserve."))
          (requested (type exact-non-negative-integer)
@@ -442,11 +458,14 @@
            (dense-set-maximum-capacity-value dense)))
       (let ((capacity (dense-set-capacity-value dense)))
         (if (> requested capacity)
-            (begin
-              (consent-growable-vector-reserve!
-               (dense-set-storage dense) requested)
-              (note-capacity-change!
-               dense capacity requested #f))))
+            (replace-dense-set-capacity!
+             "consent-dense-set-reserve!"
+             dense
+             (if (= capacity 0)
+                 (max requested
+                      (dense-set-initial-capacity-value dense))
+                 requested)
+             #f)))
       dense)
 
     (define (consent-dense-set-member? dense identifier)
@@ -459,8 +478,7 @@
          (description "Whether IDENTIFIER is currently marked."))
         (effects state-read state-write error))
       (check-identifier "consent-dense-set-member?" dense identifier)
-      (set-dense-set-membership-tests!
-       dense (+ (dense-set-membership-tests dense) 1))
+      (note-dense-set! dense dense-set-membership-tests-index 1)
       (slot-current? dense (dense-set-slot dense identifier)))
 
     (define (consent-dense-set-color dense identifier)
@@ -473,8 +491,7 @@
          (description "Current finite color, or false."))
         (effects state-read state-write error))
       (check-identifier "consent-dense-set-color" dense identifier)
-      (set-dense-set-color-reads!
-       dense (+ (dense-set-color-reads dense) 1))
+      (note-dense-set! dense dense-set-color-reads-index 1)
       (let ((slot (dense-set-slot dense identifier)))
         (if (slot-current? dense slot)
             (slot-color dense slot)
@@ -496,29 +513,25 @@
           (error "consent-dense-set-mark!: too many colors"))
       (let ((color (if (null? maybe-color) 0 (car maybe-color))))
         (check-color "consent-dense-set-mark!" dense color)
+        (dense-set-statistics-for-write! dense)
         (ensure-identifier-capacity!
          "consent-dense-set-mark!" dense identifier)
         (let* ((slot (dense-set-slot dense identifier))
                (current? (slot-current? dense slot))
                (previous (and current? (slot-color dense slot))))
-          (consent-growable-vector-unsafe-set!
+          (vector-set!
            (dense-set-storage dense) identifier (slot-encode dense color))
-          (set-dense-set-mark-operations!
-           dense (+ (dense-set-mark-operations dense) 1))
+          (note-dense-set! dense dense-set-mark-operations-index 1)
           (cond
            ((not current?)
             (set-dense-set-size!
              dense (+ (dense-set-size-value dense) 1))
-            (set-dense-set-new-marks!
-             dense (+ (dense-set-new-marks dense) 1)))
+            (note-dense-set! dense dense-set-new-marks-index 1))
            ((= previous color)
-            (set-dense-set-duplicate-marks!
-             dense (+ (dense-set-duplicate-marks dense) 1)))
+            (note-dense-set! dense dense-set-duplicate-marks-index 1))
            (else
-            (set-dense-set-recolors!
-             dense (+ (dense-set-recolors dense) 1))))
-          (if (> (+ identifier 1) (dense-set-high-water dense))
-              (set-dense-set-high-water! dense (+ identifier 1)))
+            (note-dense-set! dense dense-set-recolors-index 1)))
+          (note-dense-set-high-water! dense (+ identifier 1))
           previous)))
 
     (define (consent-dense-set-unmark! dense identifier)
@@ -534,12 +547,11 @@
       (let ((slot (dense-set-slot dense identifier)))
         (if (slot-current? dense slot)
             (let ((previous (slot-color dense slot)))
-              (consent-growable-vector-unsafe-set!
-               (dense-set-storage dense) identifier 0)
+              (dense-set-statistics-for-write! dense)
+              (vector-set! (dense-set-storage dense) identifier 0)
               (set-dense-set-size!
                dense (- (dense-set-size-value dense) 1))
-              (set-dense-set-unmarks!
-               dense (+ (dense-set-unmarks dense) 1))
+              (note-dense-set! dense dense-set-unmarks-index 1)
               previous)
             #f)))
 
@@ -550,6 +562,7 @@
         (returns (type dense-set) (description "The empty supplied DENSE."))
         (effects state-write error))
       (check-dense-set "consent-dense-set-clear!" dense)
+      (dense-set-statistics-for-write! dense)
       (if (= (dense-set-generation-value dense)
              (dense-set-maximum-generation-value dense))
           (physical-clear! dense)
@@ -557,9 +570,9 @@
             (set-dense-set-generation!
              dense (+ (dense-set-generation-value dense) 1))
             (set-dense-set-size! dense 0)
-            (set-dense-set-generation-advances!
-             dense (+ (dense-set-generation-advances dense) 1))))
-      (set-dense-set-clears! dense (+ (dense-set-clears dense) 1))
+            (note-dense-set!
+             dense dense-set-generation-advances-index 1)))
+      (note-dense-set! dense dense-set-clears-index 1)
       dense)
 
     (define (consent-dense-set-full-clear! dense)
@@ -570,7 +583,7 @@
         (effects state-write error))
       (check-dense-set "consent-dense-set-full-clear!" dense)
       (physical-clear! dense)
-      (set-dense-set-clears! dense (+ (dense-set-clears dense) 1))
+      (note-dense-set! dense dense-set-clears-index 1)
       dense)
 
     (define (consent-dense-set-release! dense)
@@ -584,14 +597,14 @@
           (error "consent-dense-set-release!: expected dense set" dense))
       (if (dense-set-active? dense)
           (let ((capacity (dense-set-capacity-value dense)))
-            (consent-growable-vector-release! (dense-set-storage dense))
-            (set-dense-set-release-clear-slots!
-             dense (+ (dense-set-release-clear-slots dense) capacity))
-            (set-dense-set-capacity! dense 0)
+            (dense-set-statistics-for-write! dense)
+            (if (> capacity 0)
+                (vector-fill! (dense-set-storage dense) 0))
+            (note-dense-set!
+             dense dense-set-release-clear-slots-index capacity)
             (set-dense-set-size! dense 0)
-            (set-dense-set-releases!
-             dense (+ (dense-set-releases dense) 1))
-            (set-dense-set-active! dense #f)))
+            (note-dense-set! dense dense-set-releases-index 1)
+            (set-dense-set-storage! dense #f)))
       dense)
 
     (define (consent-dense-set-integral-storage? dense)
@@ -612,7 +625,7 @@
               (cond
                ((= index capacity) #t)
                ((exact-nonnegative-integer?
-                 (consent-growable-vector-unsafe-ref storage index))
+                 (vector-ref storage index))
                 (loop (+ index 1)))
                (else #f))))))
 
@@ -638,23 +651,47 @@
        (list 'maximum-generation
              (dense-set-maximum-generation-value dense))
        (list 'color-count (dense-set-color-count-value dense))
-       (list 'high-water (dense-set-high-water dense))
-       (list 'membership-tests (dense-set-membership-tests dense))
-       (list 'color-reads (dense-set-color-reads dense))
-       (list 'mark-operations (dense-set-mark-operations dense))
-       (list 'new-marks (dense-set-new-marks dense))
-       (list 'recolors (dense-set-recolors dense))
-       (list 'duplicate-marks (dense-set-duplicate-marks dense))
-       (list 'unmarks (dense-set-unmarks dense))
-       (list 'clears (dense-set-clears dense))
+       (list 'high-water
+             (dense-set-statistic dense dense-set-high-water-index))
+       (list 'membership-tests
+             (dense-set-statistic
+              dense dense-set-membership-tests-index))
+       (list 'color-reads
+             (dense-set-statistic dense dense-set-color-reads-index))
+       (list 'mark-operations
+             (dense-set-statistic
+              dense dense-set-mark-operations-index))
+       (list 'new-marks
+             (dense-set-statistic dense dense-set-new-marks-index))
+       (list 'recolors
+             (dense-set-statistic dense dense-set-recolors-index))
+       (list 'duplicate-marks
+             (dense-set-statistic
+              dense dense-set-duplicate-marks-index))
+       (list 'unmarks
+             (dense-set-statistic dense dense-set-unmarks-index))
+       (list 'clears
+             (dense-set-statistic dense dense-set-clears-index))
        (list 'generation-advances
-             (dense-set-generation-advances dense))
-       (list 'physical-clears (dense-set-physical-clears dense))
+             (dense-set-statistic
+              dense dense-set-generation-advances-index))
+       (list 'physical-clears
+             (dense-set-statistic
+              dense dense-set-physical-clears-index))
        (list 'physical-clear-slots
-             (dense-set-physical-clear-slots dense))
-       (list 'capacity-changes (dense-set-capacity-changes dense))
-       (list 'automatic-growths (dense-set-automatic-growths dense))
-       (list 'copied-elements (dense-set-copied-elements dense))
-       (list 'releases (dense-set-releases dense))
+             (dense-set-statistic
+              dense dense-set-physical-clear-slots-index))
+       (list 'capacity-changes
+             (dense-set-statistic
+              dense dense-set-capacity-changes-index))
+       (list 'automatic-growths
+             (dense-set-statistic
+              dense dense-set-automatic-growths-index))
+       (list 'copied-elements
+             (dense-set-statistic
+              dense dense-set-copied-elements-index))
+       (list 'releases
+             (dense-set-statistic dense dense-set-releases-index))
        (list 'release-clear-slots
-             (dense-set-release-clear-slots dense))))))
+             (dense-set-statistic
+              dense dense-set-release-clear-slots-index))))))

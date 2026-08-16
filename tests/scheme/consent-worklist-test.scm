@@ -153,7 +153,7 @@
                (consent-worklist-empty? worklist))
   (test-equal 'worklist-initial-size 0
               (consent-worklist-size worklist))
-  (test-equal 'worklist-initial-capacity 4
+  (test-equal 'worklist-lazy-initial-capacity 0
               (consent-worklist-capacity worklist))
   (test-equal 'worklist-maximum-capacity 16
               (consent-worklist-maximum-capacity worklist))
@@ -162,6 +162,9 @@
   (test-assert 'worklist-push-back-returns-self
                (eq? worklist
                     (consent-worklist-push-back! worklist 'middle)))
+  (test-equal 'worklist-first-allocation-honors-initial-floor
+              4
+              (consent-worklist-capacity worklist))
   (test-assert 'worklist-push-front-returns-self
                (eq? worklist
                     (consent-worklist-push-front! worklist 'front)))
@@ -237,6 +240,9 @@
  'worklist-bounded-reserve-and-failure-atomicity
  '(portable runtime storage worklist collector error)
 (let ((worklist (consent-make-worklist 2 8 'pre-reserved)))
+  (test-equal 'worklist-pre-reserved-constructor-is-eager
+              2
+              (consent-worklist-capacity worklist))
   (consent-worklist-reserve! worklist 4)
   (push-integers! worklist 4)
   (let ((before-values (consent-worklist-snapshot worklist))
@@ -258,7 +264,12 @@
                 (lambda ()
                   (consent-worklist-reserve! worklist 9))))
   (test-equal 'worklist-reserve-preserves-order '#(0 1 2 3)
-              (consent-worklist-snapshot worklist))))
+              (consent-worklist-snapshot worklist)))
+(let ((worklist (consent-make-worklist 3 8 'allow-growth)))
+  (consent-worklist-reserve! worklist 1)
+  (test-equal 'worklist-first-reserve-honors-initial-floor
+              3
+              (consent-worklist-capacity worklist))))
 
 (testing-registry-case
  'worklist-boundaries-stats-and-lifecycle
@@ -373,8 +384,8 @@
                (eq? worklist (consent-worklist-reset! worklist)))
   (test-assert 'worklist-clear-returns-self
                (eq? worklist (consent-worklist-clear! worklist)))
-  (test-equal 'worklist-clear-restores-initial-after-reserve
-              3
+  (test-equal 'worklist-clear-restores-lazy-backing
+              0
               (consent-worklist-capacity worklist))
   (test-equal 'worklist-lifecycle-counts
               '(1 2)
@@ -431,8 +442,12 @@
                (consent-worklist-unused-slots-cleared? worklist))
   (push-integers! worklist 3)
   (consent-worklist-clear! worklist)
-  (test-equal 'worklist-clear-restores-initial-capacity 2
+  (test-equal 'worklist-clear-restores-lazy-capacity 0
               (consent-worklist-capacity worklist))
+  (consent-worklist-push-back! worklist 'materialized)
+  (test-equal 'worklist-reentry-honors-initial-floor 2
+              (consent-worklist-capacity worklist))
+  (consent-worklist-reset! worklist)
   (guard (caught
           (else (set! condition caught)))
     (dynamic-wind

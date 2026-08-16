@@ -1,8 +1,9 @@
 # Bootstrap-Safe Runtime Storage
 
-**Issues:** #968, #969, #980, #971, and #982
+**Issues:** #968, #969, #980, #971, #982, and #983
 
-**Roadmap versions:** 0.18.39, 0.18.41, 0.18.43, 0.18.44, and 0.18.45
+**Roadmap versions:** 0.18.39, 0.18.41, 0.18.43, 0.18.44, 0.18.45, and
+0.18.46
 
 **Status:** Implemented
 
@@ -15,10 +16,9 @@ allocation-sensitive runtime and graph algorithms:
   `(scheme base)`;
 - `(consent scratch-arena)` layers reusable, phase-owned lifetimes over that
   storage and imports `(consent growable-vector)`; and
-- `(consent worklist)` layers bounded FIFO and deque ordering over a circular
-  growable-vector backing store;
+- `(consent worklist)` owns one bounded FIFO and deque ring directly;
 - `(consent dense-set)` provides generation-stamped membership and colors over
-  dense integer identifiers; and
+  one direct dense integer vector; and
 - `(consent identity-table)` provides fixed-policy owned and host identity
   associations with bounded growth and explicit release.
 
@@ -46,8 +46,6 @@ flowchart TB
   srfi["(srfi 214)<br/>public flexvectors"]
   reader --> grow
   scratch --> grow
-  worklist --> grow
-  dense --> grow
   collectors["Collector phases"] --> scratch
   srfi -. "may reuse compatible storage" .-> grow
 ```
@@ -108,11 +106,140 @@ At every active-vector boundary:
 - every reserved slot at or above `length` contains `#f`;
 - clear replaces the backing vector at the immutable initial capacity;
 - reset moves `length` to zero without reducing `capacity`; and
-- release clears the prefix, replaces the backing vector with an empty vector,
-  and permanently makes the growable vector inactive.
+- release clears the prefix, drops the backing vector, and permanently makes
+  the growable vector inactive.
 
 The high-water and cumulative counters remain available after release. They
 describe the object's history, not its current logical contents.
+
+### Compact control-state inventory
+
+The 0.18.46 audit classifies state by ownership instead of keeping convenient
+copies in every wrapper. "Fields" below are portable record slots; a host may
+pack them differently. A lazy sidecar is one vector allocated only when an
+operation first needs to change a historical counter.
+
+| Layer | Base record fields | Compact record fields |
+| --- | ---: | ---: |
+| Growable vector | 10 | 6 |
+| Scratch arena | 7 | 5 |
+| Scratch owner | 4 | 3 |
+| Worklist and backing | 18 + 10 | 7 |
+| Dense set and backing | 27 + 10 | 10 |
+| Flexvector and backing | 1 + 10 | 1 + 6 |
+
+- Growable vectors keep hot length and backing plus initial, maximum, and
+  growth-factor policy. Capacity and active state are derived. Four historical
+  counters are cold.
+- Scratch arenas keep storage, initial floor, policy, and current owner. Owners
+  keep arena, lifetime token, and phase. Capacity and owner activity are
+  derived. Four arena counters are cold.
+- Worklists keep backing, size, front, and three capacity-policy values.
+  Capacity and active state are derived. Ten exact counters are cold.
+- Dense sets keep backing, initial and maximum capacity, generation bounds,
+  color count, policy, domain, current generation, and size. Capacity and
+  active state are derived. Seventeen exact counters are cold.
+- Flexvectors keep the nominal public wrapper and compact growable storage.
+  Public length is delegated to that storage; its four counters are cold.
+
+Worklists and dense sets no longer pay for a wrapper record around a second
+growable-vector record. Their direct vectors remain private and portable.
+Flexvectors retain one wrapper because SRFI 214 requires a distinct nominal
+type; removing it would weaken `flexvector?` and expose private storage.
+
+An `allow-growth` worklist, dense set, or scratch arena records its initial
+capacity as a first-allocation floor but starts at capacity zero. Growable
+vectors whose initial capacity is zero, and therefore empty flexvectors, also
+use a shared non-vector sentinel instead of allocating backing. The first
+positive reserve or insertion materializes at least the floor. `pre-reserved`
+constructors allocate eagerly, preserving no-allocation phase guarantees.
+
+The empty representation removes one backing-vector header everywhere lazy
+storage applies. Direct worklist and dense-set storage also removes one record
+header. Gambit's portable record ABI does not expose header bytes separately,
+so the benchmark below measures complete host allocation rather than guessing
+an ABI size.
+
+### Compact representation evidence
+
+`tools/benchmark-private-storage.scm` reports three raw timing samples for one
+selected kind, shape, and lifecycle phase. The following same-machine Gambit
+measurements compare base commit `308f056a` with the compact representation.
+Each construction timing retains 30,000 objects; times are median seconds and
+positive changes are improvements.
+
+| Kind and shape | Base | Compact | Change |
+| --- | ---: | ---: | ---: |
+| Worklist, empty | 0.346 | 0.049 | +85.8% |
+| Worklist, one | 0.410 | 0.210 | +48.8% |
+| Worklist, small | 0.813 | 0.669 | +17.8% |
+| Worklist, high-water | 9.023 | 5.383 | +40.3% |
+| Dense set, empty | 0.388 | 0.078 | +79.8% |
+| Dense set, one | 0.498 | 0.255 | +48.8% |
+| Dense set, small | 1.119 | 0.926 | +17.3% |
+| Dense set, high-water | 8.354 | 6.653 | +20.4% |
+
+Gambit's `time` form measures host bytes allocated inside the construction
+body. Empty and small runs use 30,000 retained objects; one and high-water runs
+use 10,000. These totals include backing and transient control allocation.
+
+| Kind and shape | Base bytes | Compact bytes | Reduction |
+| --- | ---: | ---: | ---: |
+| Worklist, empty | 835,004,448 | 98,597,736 | 88.2% |
+| Worklist, one | 315,760,944 | 134,917,864 | 57.3% |
+| Worklist, small | 1,726,561,008 | 1,123,680,720 | 34.9% |
+| Worklist, high-water | 5,753,600,720 | 2,905,120,448 | 49.5% |
+| Dense set, empty | 963,121,984 | 168,195,632 | 82.5% |
+| Dense set, one | 370,641,232 | 164,195,664 | 55.7% |
+| Dense set, small | 2,013,984,608 | 1,433,280,672 | 28.8% |
+| Dense set, high-water | 4,866,401,136 | 3,167,201,296 | 34.9% |
+
+Three fresh processes under `/usr/bin/time -l` give these median maximum
+resident-set sizes for 30,000-object construction runs:
+
+| Kind and shape | Base bytes | Compact bytes | Reduction |
+| --- | ---: | ---: | ---: |
+| Worklist, empty | 105,611,264 | 33,210,368 | 68.6% |
+| Worklist, small | 104,464,384 | 78,839,808 | 24.5% |
+| Dense set, empty | 123,518,976 | 40,239,104 | 67.4% |
+| Dense set, small | 125,566,976 | 100,384,768 | 20.1% |
+
+Small-shape residency includes the live payload vectors and host heap
+granularity. Its control-allocation reductions, 34.9% for worklists and 28.8%
+for dense sets, satisfy the 25% compactness threshold independently. Empty
+allocation and residency exceed that threshold for both structures.
+
+The phase benchmark uses 30,000 balanced steady operations or 30,000
+pre-populated eight-element objects. Dense-set reset is its explicit full
+clear; scratch clear and release both release an owner; flexvectors expose
+clear but no private reset or release. Times are three-run median seconds.
+
+| Layer and phase | Base | Compact | Change |
+| --- | ---: | ---: | ---: |
+| Growable, steady | 0.067 | 0.085 | -27.4% |
+| Growable, clear | 0.038 | 0.047 | -23.7% |
+| Growable, reset | 0.032 | 0.039 | -24.2% |
+| Growable, release | 0.045 | 0.049 | -8.5% |
+| Scratch, steady | 0.169 | 0.213 | -25.9% |
+| Scratch, clear | 0.063 | 0.066 | -5.3% |
+| Scratch, reset | 0.080 | 0.093 | -16.1% |
+| Scratch, release | 0.063 | 0.067 | -5.9% |
+| Worklist, steady | 0.128 | 0.132 | -3.3% |
+| Worklist, clear | 0.371 | 0.044 | +88.1% |
+| Worklist, reset | 0.165 | 0.160 | +2.8% |
+| Worklist, release | 0.204 | 0.146 | +28.6% |
+| Dense set, steady | 0.166 | 0.176 | -5.7% |
+| Dense set, clear | 0.043 | 0.046 | -5.9% |
+| Dense set, full clear | 0.067 | 0.054 | +19.7% |
+| Dense set, release | 0.082 | 0.044 | +45.9% |
+| Flexvector, steady | 0.366 | 0.416 | -13.8% |
+| Flexvector, clear | 0.048 | 0.045 | +5.6% |
+| Flexvector, reset analogue | 0.047 | 0.046 | +3.2% |
+| Flexvector, release analogue | 0.049 | 0.045 | +8.0% |
+
+The largest relative slowdown is 27.4%, but its absolute median delta is only
+0.018 seconds for 30,000 operations. No phase has both a 20% and three-second
+regression.
 
 ## Growable Vectors
 
@@ -122,6 +249,10 @@ and an optional growth factor that defaults to 2. Capacity bounds are exact
 nonnegative integers, the initial capacity must not exceed the maximum, and
 the growth factor must be an exact real greater than one. All three policy
 values are immutable for that storage object.
+
+Initial capacity zero is lazy: the object is active with capacity zero but
+owns no backing vector. Its first positive reserve, grow, or append allocates
+backing. A positive initial capacity remains eager.
 
 The populated prefix is separate from reserved capacity:
 
@@ -143,17 +274,16 @@ The populated prefix is separate from reserved capacity:
   growable vector permanently inactive.
 
 The private growable-vector library also exposes unchecked slot access for
-trusted runtime substrates that have already validated their own bounds. The
-worklist uses that narrow interface so each queue operation validates once;
-callers still cannot observe the backing vector. Ordinary consumers use the
-checked `ref` and `set!` operations.
+trusted runtime substrates that have already validated their own bounds.
+Ordinary consumers use the checked `ref` and `set!` operations.
 
 These operations are distinct primitive-backend lifetime signals. A native or
 collector-aware backend must not collapse them into aliases: clear abandons the
-high-water allocation for the initial-capacity backing, reset retains the
-allocation for reuse after removing live references, and release relinquishes
-the backing and invalidates the object. This contract lets a future Consent
-collector apply different heap policies without changing callers.
+high-water allocation and restores either positive initial backing or lazy
+capacity zero, reset retains the allocation for reuse after removing live
+references, and release relinquishes the backing and invalidates the object.
+This contract lets a future Consent collector apply different heap policies
+without changing callers.
 
 Append uses geometric growth. With the default factor of 2 and one initial
 slot, appending `n` elements copies fewer than `2n` existing elements across
@@ -180,7 +310,7 @@ The table abbreviates the common `consent-growable-vector-` prefix.
 | `fill!` | O(filled slice) | None. |
 | `snapshot` | O(length) | Always; returns a copy. |
 | `truncate!` | O(removed suffix) | None. |
-| `clear!` | O(initial capacity) | Always. |
+| `clear!` | O(initial capacity) | When initial capacity is positive. |
 | `reset!`, `release!` | O(length) | None. |
 | `unused-slots-cleared?` | O(capacity) | None. |
 | `stats` | O(1) | Allocates the result datum. |
@@ -192,15 +322,16 @@ argument as a minimum and may choose the larger geometric capacity.
 
 ## FIFO and Deque Worklists
 
-`(consent worklist)` stores its logical sequence in a circular buffer backed by
-`(consent growable-vector)`. The growable vector's populated prefix represents
-addressable ring slots; the worklist alone decides which slots are logically
-occupied. Callers never receive the backing vector or a physical index.
+`(consent worklist)` stores its logical sequence in one private circular
+vector. It owns capacity and copying directly, so there is no second growable
+record holding mirrored capacity, maximum, growth, or active state. Callers
+never receive the backing vector or a physical index.
 
 The constructor fixes an initial capacity, exact maximum capacity, and one of
 two growth policies:
 
-- `allow-growth` doubles full storage up to the exact maximum; and
+- `allow-growth` begins without backing, then allocates at least the initial
+  floor and doubles full storage up to the exact maximum; and
 - `pre-reserved` rejects a push whenever the currently reserved ring is full.
 
 `reserve!` can establish collector scratch capacity before a no-allocation
@@ -218,9 +349,11 @@ size, clear count, and reset count. Incremental collectors can therefore budget
 logical work independently of elapsed time and backing-store growth.
 
 A pop clears its vacated physical slot before publishing the shorter size.
-Reset clears all active slots while retaining capacity. Clear replaces the ring
-at its immutable initial capacity. Release clears active slots, drops backing
-storage, and permanently rejects further queue operations. The diagnostic
+Reset clears all active slots while retaining capacity. Clear returns an
+`allow-growth` ring to lazy capacity zero, but eagerly restores a
+`pre-reserved` ring's initial capacity. Release clears active slots, drops
+backing storage, and permanently rejects further queue operations. The
+diagnostic
 `consent-worklist-unused-slots-cleared?` verifies that no inactive ring slot
 retains a heap root, including across a wrapped logical range.
 
@@ -298,7 +431,7 @@ The table abbreviates the common `consent-worklist-` prefix.
 | `reserve!` | O(size) when larger | Only when larger. |
 | `snapshot` | O(size) | Always; returns a copy. |
 | `reset!`, `release!` | O(size) | None. |
-| `clear!` | O(initial capacity) | Always. |
+| `clear!` | O(size) | Only for a positive pre-reserved floor. |
 | `unused-slots-cleared?` | O(capacity) | None. |
 | `work-units` | O(1) | None. |
 | `stats` | O(1) | Allocates the result datum. |
@@ -329,9 +462,11 @@ Arena statistics distinguish:
 
 The arena has two growth policies:
 
-- `allow-growth` permits active append to allocate geometrically, bounded by
-  the configured maximum. It is suitable only when allocation from the
-  current runtime heap is allowed or the backing store is an external adapter.
+- `allow-growth` starts without backing. Its first append or positive reserve
+  allocates at least the configured initial floor, then active append grows
+  geometrically up to the maximum. It is suitable only when allocation from
+  the current runtime heap is allowed or the backing store is an external
+  adapter.
 - `pre-reserved` forbids growth while an owner is active. Reserve the arena
   while it is idle, before entering a collector or no-allocation phase. An
   exhausted owner fails closed instead of recursively allocating from the heap
@@ -659,15 +794,14 @@ private per-object policy, while other primitive consumers retain the private
 constructor's default factor of 2. These are implementation policies, not SRFI
 guarantees, and may be retuned from benchmark evidence.
 
-`flexvector-clear!` follows the official sample by invoking private clear on
-storage whose immutable initial capacity is four slots. Constructors reserve
-more storage when needed without changing that clear floor. The private
-operation allocates replacement storage before mutation, so the old value
-survives allocation failure. On success, the high-water backing vector becomes
-unreachable and eligible for collection, so repeated grow-and-clear cycles do
-not permanently retain their largest historical allocation. Explicit
-`consent-growable-vector-reset!` instead retains capacity for scratch storage
-whose caller intends reuse.
+An empty flexvector wraps compact growable storage with initial capacity zero,
+so it owns no backing vector. The first insertion reserves at least four slots;
+constructors for positive sizes reserve at least that floor immediately.
+`flexvector-clear!` invokes private clear and returns to lazy capacity zero. On
+success, the high-water backing vector becomes unreachable and eligible for
+collection, so repeated grow-and-clear cycles do not permanently retain their
+largest historical allocation. Explicit `consent-growable-vector-reset!`
+instead retains capacity for scratch storage whose caller intends reuse.
 
 Bulk flexvector insertion, removal, copying, and filling use private
 `vector-copy!` and `vector-fill!` operations owned by `(consent
@@ -731,18 +865,26 @@ second no-hash alist implementation.
 
 ## Verification
 
+`tools/benchmark-private-storage.scm` is the reproducible representation and
+lifecycle benchmark used for the 0.18.46 evidence above. Its environment
+selectors cover all five storage kinds, four construction shapes, and the
+construction, steady, clear, reset, and release analogues without introducing
+a timing gate into ordinary tests.
+
 `tests/scheme/consent-growable-vector-test.scm` covers zero and maximum capacity
 boundaries, a deterministic capacity/model sweep, no-op transitions, copy
 counters, overlap-safe bulk copy and fill, state preservation after failed
 operations, reset and release clearing, idempotent release, and stable
 representative errors.
 `tests/scheme/consent-scratch-arena-test.scm` covers both growth policies,
-active and idle statistics, cross-arena and stale marks, escaped owners,
-exception cleanup, dynamic-wind, continuation re-entry, and a pre-reserved
-synthetic collector workload. The portable plan runs both programs on direct
-and compiled routes. ERT imports each internal library independently through
-the Emacs source-library loader, proving that both bootstrap surfaces use their
-portable source implementations.
+lazy first-allocation floors, active and idle statistics, cross-arena and stale
+marks, escaped owners, exception cleanup, dynamic-wind, continuation re-entry,
+and a pre-reserved synthetic collector workload. Worklist and dense-set tests
+likewise assert lazy allow-growth capacity, eager pre-reservation, exact
+counters, failure atomicity, root clearing, and lifecycle behavior. The
+portable plan runs the programs on direct and compiled routes. ERT imports each
+internal library independently through the Emacs source-library loader,
+proving that both bootstrap surfaces use their portable source implementations.
 `tests/scheme/consent-identity-table-test.scm` covers fixed namespaces,
 hash-backed probing, allocation-serial burst distribution, forced bounded
 compatibility, roots, lifecycle, and counted scale behavior. ERT also proves

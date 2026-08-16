@@ -111,10 +111,12 @@ reset, release, maximum-capacity, or growth-policy controls. Programs must not
 infer spare capacity or depend on the current growth ratio.
 
 Consent's implementation currently selects the reference sample's growth
-factor of 3/2. `flexvector-clear!` abandons high-water storage and returns to a
-four-slot baseline so removed elements and oversized backing vectors can become
-unreachable. Those facts explain current allocation behavior; they are not new
-SRFI guarantees and may be retuned without changing program semantics.
+factor of 3/2. An empty flexvector owns no backing vector. Its first insertion
+allocates at least four slots. `flexvector-clear!` abandons high-water storage
+and returns to lazy capacity zero so removed elements and oversized backing
+vectors can become unreachable. Those facts explain current allocation
+behavior; they are not new SRFI guarantees and may be retuned without changing
+program semantics.
 
 Runtime code that needs explicit capacity budgets, reusable reset, terminal
 release, or collector-phase ownership should use the private abstractions
