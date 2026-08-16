@@ -328,25 +328,30 @@ table before entering language-visible data.
 Language-visible pairs (except the empty list), strings, vectors, and
 bytevectors are opaque objects owned by `(consent datum)`. Each evaluation
 context carries an explicit datum heap beside its symbol table. Scheme-visible
-objects have stable
-heap-local identity, kind, allocation generation, owner, revision, mutability,
-traversal metadata, and source provenance. Pair, string, vector, and bytevector
-mutation crosses one heap-owned observer gateway instead of calling a host
-container mutator directly.
+objects have stable heap-local identity and kind. Generation and owner are
+derived from the heap; mutation revision, traversal state, graph-map entries,
+and source provenance occupy lazily installed heap sidecars keyed by stable
+object ordinal. An ordinary object therefore carries no empty slots for cold
+metadata. Pair, string, vector, and bytevector mutation crosses one heap-owned
+observer gateway instead of calling a host container mutator directly.
 Mutable lexical cells use private heap slots and the same observer so later
 checkpoint work can distinguish binding writes from compound-data writes.
 
-The portable owner uses host vectors for pair/vector slots and indexed string
-characters, plus host bytevectors for bytes. Those containers are unreachable
-from Scheme code; a host string is converted once at the adapter boundary, so
-owned string access never inherits variable-width host indexing.
+The portable bootstrap uses kind-specific records. A pair is one record with
+its heap reference, ordinal, `car`, and `cdr` inline; it has no second payload
+vector. Strings and vectors use one private host-vector payload, bytevectors
+use one private host-bytevector payload, and private runtime slots use a compact
+kind-bearing record. Those containers are unreachable from Scheme code. A host
+string is converted once at the adapter boundary, so owned string access never
+inherits variable-width host indexing. This is the portable R7RS layout, not a
+promise about #120's eventual native object headers or field offsets.
 Heap-taking reader entry points and standard `read` allocate compound syntax
 directly in the active heap through a one-shot shell/fill capability. Datum
 labels fix those shells in the same scope; publication verifies every slot,
 then graph validation runs on the final objects. Fresh reader objects therefore
 remain at revision zero and never cross the mutation observer. Provenance is
-written directly to each owned object's current slot. No host compound graph or
-host identity map exists on this canonical path. These slots follow object
+written to the source sidecar only when enabled. No host compound graph or host
+identity map exists on this canonical path. Sidecar entries follow object
 reachability and do not pretend to be a decrementable persistent context count;
 only host keys actually retained by a context side table consume that count.
 Legacy `consent-read`,
@@ -365,6 +370,18 @@ source identity. This preserves arbitrary pair/vector cycles and all shared
 compound references. Compound `eq?` and `eqv?` use owned identity, structural
 `equal?` computes graph congruence with union-find, and writers count
 pair/vector nodes by owned identity.
+
+A heap may be sealed as a runtime image after an iterative validation of named
+roots. The validator certifies reachable public compound kinds by ordinal,
+permits edges only to the same heap or an already certified frozen image, and
+rejects raw host compounds, mutable foreign owned values, private runtime
+slots, and active construction scopes. Sealing forbids later allocation,
+content mutation, owner or observer changes, and provenance replacement.
+Cross-heap import reuses certified objects read-only, preserving their identity
+and topology without per-context reboxing; an unreachable object in the same
+frozen heap is immutable but not shareable and is copied into a mutable target.
+This boundary is suitable for parsed library forms and literal aggregates. It
+does not implement #721's mutable branch-local copy-on-write.
 
 Borrowed-host graph projection is call-scoped. Each outer native transition
 creates a fresh graph bridge containing only that call's arguments, results,
@@ -412,10 +429,11 @@ log without importing the recursive redaction graph walker or identity-map
 storage. The public redaction library composes that scalar state with graph
 traversal only for compound values.
 
-An owned datum object still supplies one private intrusive map header, so each
-call-scoped owned lookup takes one header probe and release restores any outer
-traversal. This remains preferable to allocating a separate table for canonical
-owned graph walks. A no-hash host uses an exact 64-identity compatibility
+An active owned graph map uses one lazily allocated heap sidecar slot per
+touched ordinal. Each lookup takes one ordinal-slot probe, nested scopes stack
+their entries, and release restores the outer traversal. No map field exists on
+an object outside an active map. A no-hash host uses an exact 64-identity
+compatibility
 envelope and fails closed before a sixty-fifth insertion could make lookup
 unboundedly quadratic. Canonical heap-taking reads never call that adapter.
 Borrowed native transitions fail closed when their required hash-backed adapter
@@ -427,7 +445,7 @@ copy and export visit each node and edge once; foreign-host import and export
 have the same bound on a hash-backed adapter and use the fixed 64-identity
 fail-closed envelope otherwise. Direct owned reading is linear in source plus
 the published graph and allocates exactly one heap object per compound datum;
-datum-label bookkeeping uses one-header owned maps. Prepared incremental reads
+datum-label bookkeeping uses ordinal-sidecar owned maps. Prepared incremental reads
 reuse lexical preprocessing, making a sequence linear in the source plus its
 published graphs. A native transition is independent of the
 heap's age and all earlier transitions; reconciliation may scan only the graph
@@ -436,7 +454,7 @@ host containers requires one active-graph scan at outer return. Native lowering
 with write barriers may later replace it with changed-object work, but no
 ordinary call may scan historical mirrors or repeatedly rescan one borrow for
 nested transitions. Owned writer bookkeeping uses the same call-scoped
-one-header marks and assembles output fragments once, so its work follows the
+ordinal marks and assembles output fragments once, so its work follows the
 visited graph and emitted text.
 
 Fresh native result, condition, and writeback compounds are charged once at the

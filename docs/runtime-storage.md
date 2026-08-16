@@ -1,8 +1,8 @@
 # Bootstrap-Safe Runtime Storage
 
-**Issues:** #968, #969, #980, and #971
+**Issues:** #968, #969, #980, #971, and #982
 
-**Roadmap versions:** 0.18.39, 0.18.41, 0.18.43, and 0.18.44
+**Roadmap versions:** 0.18.39, 0.18.41, 0.18.43, 0.18.44, and 0.18.45
 
 **Status:** Implemented
 
@@ -685,6 +685,35 @@ worklist's ordering state. Dense-set slots contain only encoded exact integers;
 ordinary clear advances an epoch without scanning capacity. See
 [Generation-Stamped Dense Sets and Epoch Marks](dense-sets.md) for wraparound,
 ownership-domain, accounting, and memory-key migration details.
+
+The compound datum heap uses stable object ordinals as its sidecar index. Four
+optional two-level page tables own mutation revisions, traversal or
+collector state, call-scoped graph-map entries, and source provenance. A
+sidecar is `#f` until its first non-default entry. Its outer page vector grows
+geometrically; fixed 256-ordinal pages allocate independently and disappear
+when empty; the whole sidecar returns to `#f` when its last entry clears. A
+page is one vector whose first slot is its live-entry count. These are
+heap-private property columns, not a new public table: ordinary pairs carry
+only heap, ordinal, `car`, and `cdr`, and an active algorithm pays only for the
+column and pages it uses. Two arithmetic indexes preserve constant lookup
+without an identity hash, a high-water-sized sparse vector, or one empty
+property field per object.
+
+Reader shell construction is already one dense dynamic extent, so it uses a
+scope-local vector indexed relative to the heap's starting ordinal. That
+vector covers only allocations made while the capability is active and is
+dropped when the scope seals or sanitizes its shells. It does not share the
+longer-lived heap traversal property column.
+
+Frozen runtime-image membership is a different shape. Seal validation knows
+the heap's exact ordinal high-water bound, so it allocates one pre-reserved
+`(consent dense-set)` and records only certified reachable public compounds.
+The set never grows after publication. A failed seal releases it; a successful
+seal retains it with the frozen heap so cross-context import can decide in
+constant time whether an object is safe to reuse read-only. Identity-table
+storage remains reserved for associations that need values, mixed owned and
+host namespaces, or lifetimes not representable as one heap-local property
+column.
 
 Identity-keyed values belong to `(consent identity-table)`, not to dense
 identifier membership or public comparator-configurable hash tables. Owned and

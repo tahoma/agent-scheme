@@ -69,7 +69,7 @@ that call's identity registry.
 7. Restore portable and self-hosted assertions for multi-element pair and
    vector datum-label cycles. Poison the host identity-map adapter and prove
    complete plus incremental owned reads still have exact linear allocations,
-   zero fresh revisions, zero mutation-hook calls, and one-header map probes.
+   zero fresh revisions, zero mutation-hook calls, and one-sidecar map probes.
 
 ## Task 3: Carry the heap through runtime state
 
@@ -139,9 +139,9 @@ that call's identity registry.
    if a nested transition would add or coexist with a compound borrow.
 6. Keep retaining or higher-order libraries on their canonical portable source
    realization so neither raw mirrors nor callback shims escape the call.
-7. Use scoped intrusive one-header marks for owned objects and host identity
-   hashing for host objects, so no transition scans heap history or mirrors
-   from an earlier call.
+7. Use scoped intrusive ordinal-sidecar marks for owned objects and host
+   identity hashing for host objects, so no transition scans heap history or
+   mirrors from an earlier call.
 8. Convert a raised argument or subobject while the bridge is active so its
    owned identity survives exception handling; do the same for host
    error-object irritants before the bridge unwinds.

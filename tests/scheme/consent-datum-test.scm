@@ -722,8 +722,8 @@
                   '(0 0)
                   (list (consent-datum-object-generation first)
                         (consent-datum-object-generation second)))
-      (test-equal 'allocation-owner-propagation
-                  '(branch-a branch-b)
+      (test-equal 'heap-owner-is-derived-by-existing-objects
+                  '(branch-b branch-b)
                   (list (consent-datum-object-owner first)
                         (consent-datum-object-owner second)))
       (test-assert 'fresh-object-ids-are-distinct
@@ -735,6 +735,106 @@
       (test-equal 'object-traversal-metadata
                   '(visited)
                   (consent-datum-object-traversal first))))))
+
+(datum-direct-host-case
+ 'owned-frozen-runtime-image-boundary
+ '(portable runtime datum identity mutation graph)
+(let* ((heap (consent-make-datum-heap))
+       (target (consent-make-datum-heap))
+       (foreign-heap (consent-make-datum-heap))
+       (foreign (consent-datum-cons foreign-heap 'foreign 'leaf))
+       (text (consent-datum-string-from-host heap "image"))
+       (bytes (consent-datum-bytevector-from-host heap (bytevector 1 2)))
+       (root (consent-datum-cons heap 'root #f))
+       (children
+        (consent-datum-vector-from-host-elements
+         heap (vector root text bytes)))
+       (orphan (consent-datum-cons heap 'orphan 'leaf))
+       (raises?
+        (lambda (thunk)
+          (guard (condition (else #t))
+            (thunk)
+            #f))))
+  (consent-datum-set-cdr! heap root children)
+  (consent-datum-object-source-metadata-set! root 'frozen-source)
+  (test-assert
+   'runtime-image-validation-failure-leaves-heap-mutable
+   (and
+    (raises?
+     (lambda ()
+       (consent-datum-heap-freeze! heap (list (vector 'raw)))))
+    (raises?
+     (lambda ()
+       (consent-datum-heap-freeze! heap (list foreign))))
+    (not (consent-datum-heap-frozen? heap))
+    (consent-datum-object-mutable? root)))
+  (test-assert
+   'runtime-image-freeze-is-idempotent
+   (eq? heap
+        (consent-datum-heap-freeze!
+         (consent-datum-heap-freeze! heap (list root))
+         (list orphan))))
+  (test-assert
+   'runtime-image-certifies-only-reachable-owned-objects
+   (and
+    (consent-datum-heap-frozen? heap)
+    (consent-datum-object-shareable? root)
+    (consent-datum-object-shareable? children)
+    (consent-datum-object-shareable? text)
+    (consent-datum-object-shareable? bytes)
+    (not (consent-datum-object-shareable? orphan))
+    (not (consent-datum-object-shareable? 'scalar))))
+  (test-equal
+   'runtime-image-preserves-cold-metadata
+   '(1 frozen-source)
+   (list
+    (consent-datum-object-revision root)
+    (consent-datum-object-source-metadata root)))
+  (test-assert
+   'frozen-heap-rejects-all-content-and-heap-mutation
+   (and
+    (not (consent-datum-object-mutable? root))
+    (not (consent-datum-object-mutable? orphan))
+    (raises? (lambda () (consent-datum-set-car! heap root 'changed)))
+    (raises?
+     (lambda ()
+       (consent-datum-vector-set! heap children 0 'changed)))
+    (raises?
+     (lambda ()
+       (consent-datum-string-set-host! heap text 0 #\I)))
+    (raises?
+     (lambda ()
+       (consent-datum-bytevector-u8-set! heap bytes 0 9)))
+    (raises? (lambda () (consent-datum-cons heap 'new 'pair)))
+    (raises? (lambda () (consent-datum-heap-owner-set! heap 'branch)))
+    (raises?
+     (lambda ()
+       (consent-datum-heap-mutation-hook-set! heap #f)))
+    (raises?
+     (lambda ()
+       (consent-datum-object-source-metadata-set! root 'changed)))))
+  (let* ((reused (consent-datum-import target root (lambda (value) value)))
+         (thawed
+          (consent-datum-import target orphan (lambda (value) value)))
+         (exported
+          (consent-datum-export reused (lambda (value) value))))
+    (test-assert
+     'runtime-image-import-reuses-certified-identity
+     (and
+      (consent-datum-same? reused root)
+      (consent-datum-same?
+       reused
+       (consent-datum-vector-ref (consent-datum-cdr reused) 0))))
+    (test-assert
+     'runtime-image-import-copies-uncertified-frozen-object
+     (and
+      (not (consent-datum-same? thawed orphan))
+      (= (consent-datum-object-heap-id thawed)
+         (consent-datum-heap-id target))
+      (consent-datum-object-mutable? thawed)))
+    (test-assert
+     'runtime-image-export-preserves-cycle
+     (eq? exported (vector-ref (cdr exported) 0))))))
 
 (datum-direct-host-case
  'owned-call-scoped-map-restoration

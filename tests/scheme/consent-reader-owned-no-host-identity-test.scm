@@ -97,7 +97,7 @@
          (check (eq? (consent-datum-object-map-ref map root #f) 'seen)
                 "owned object map lost its value")
          (check (= (consent-datum-object-map-probe-count map root) 1)
-                "owned object map lookup was not one header probe"))))))
+                "owned object map lookup was not one sidecar probe"))))))
 
 (define (check-owned-incremental-read)
   "Exercise the incremental owned entry while the host map stays poisoned."

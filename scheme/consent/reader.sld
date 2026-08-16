@@ -160,7 +160,7 @@
       (maximum-source-metadata reader-maximum-source-metadata)
       (source-id reader-source-id)
       (source-metadata reader-source-metadata set-reader-source-metadata!)
-      ;; Direct owned publication uses object fields and keeps this false.
+      ;; Direct owned publication uses the heap sidecar and keeps this false.
       ;; Legacy syntax readers use either a read-scoped or global host table.
       (source-metadata-table reader-source-metadata-table)
       ;; Context-backed readers publish immutable notes into the context's
@@ -985,7 +985,7 @@ r"
                   (and construction (vector-ref construction 1)))
                  (construction-fixup
                   (and construction (vector-ref construction 2)))
-                 ;; Direct owned reads attach provenance to object fields.
+                 ;; Direct owned reads attach provenance to a heap sidecar.
                  ;; Context sinks and identity tables remain legacy syntax
                  ;; machinery and must not observe unpublished owned shells.
                  (active-source-metadata-sink

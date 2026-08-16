@@ -84,19 +84,30 @@ untrusted code such as `(string->symbol (number->string i))` in a loop would
 otherwise grow interned-symbol memory without limit.  Reader-created identifiers
 are bounded by the reader's own node budgets rather than this dimension.
 **Source metadata entries** bound provenance attachment during one reader run
-and retained host-key entries in runtime context tables. Owned notes live on the
-object they describe, and direct owned reads attach them during shell
-construction without an identity side table. Their lifetime follows ordinary
-heap reachability, so they do not increment the persistent context-table count:
-portable R7RS supplies neither a weak-key notification nor a decrement hook
-that could make such a count honest. Legacy private syntax has no owned field;
-its retained host keys use the bounded bootstrap or context side table and do
-consume the persistent count. Replacing one identity's current immutable note
-neither retains history nor consumes another entry. Trusted callers can retry
-with a higher `max-source-metadata` grant for unusually large inputs.
+and retained host-key entries in runtime context tables. Owned notes live in a
+lazy heap sidecar keyed by the ordinal they describe, and direct owned reads
+attach them during shell construction without an identity table. The sidecar's
+lifetime follows its heap, so entries do not increment the persistent
+context-table count: portable R7RS supplies neither a weak-key notification nor
+an object-death hook with which to decrement such a count honestly. Legacy
+private syntax has no owned ordinal; its retained host keys use the bounded
+bootstrap or context side table and do consume the persistent count. Replacing
+one identity's current immutable note neither retains history nor consumes
+another entry. Trusted callers can retry with a higher `max-source-metadata`
+grant for unusually large inputs.
 Each textual input port retains only its current prepared reader snapshot. A
 source replacement replaces that cache entry, so incremental preprocessing does
 not create an allocation-history side table.
+
+Logical value-node charging is independent of the portable record's physical
+slot count. Compacting a pair from a generic wrapper plus payload vector to one
+inline record does not reduce the Scheme-visible allocation charge: one pair is
+still one value node. Optional revision, traversal, graph-map, and provenance
+sidecars are runtime bookkeeping and do not create additional language values.
+A frozen runtime-image object reused across contexts is not a fresh allocation
+and is not charged again; copying an uncertified cross-heap graph retains the
+existing source-equivalent charge. This keeps budget outcomes stable while
+physical residency improves.
 **Output bytes** are charged at each textual port write, before the bytes land,
 so an unbounded printing loop fails closed.
 

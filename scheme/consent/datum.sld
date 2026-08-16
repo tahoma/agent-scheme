@@ -14,8 +14,10 @@
           consent-datum-heap-id
           consent-datum-heap-generation
           consent-datum-heap-owner
+          consent-datum-heap-frozen?
           consent-datum-heap-owner-set!
           consent-datum-heap-mutation-hook-set!
+          consent-datum-heap-freeze!
           consent-datum-object?
           consent-datum-object-kind
           consent-datum-object-heap-id
@@ -28,6 +30,7 @@
           consent-datum-object-traversal-set!
           consent-datum-object-source-metadata
           consent-datum-object-source-metadata-set!
+          consent-datum-object-shareable?
           consent-make-datum-object-map
           consent-datum-object-map-ref
           consent-datum-object-map-set!
@@ -80,51 +83,370 @@
           consent-datum-import-with-node-count
           consent-datum-export)
   (import (scheme base)
+          (only (consent dense-set)
+                consent-dense-set-mark!
+                consent-dense-set-member?
+                consent-dense-set-release!
+                consent-make-dense-set)
           (consent identity-map))
   (begin
     ;; Process-local heap identifiers distinguish otherwise equal ordinals.
     (define next-datum-heap-id 0)
 
-    ;; A heap owns object-id allocation and the future mutation barrier.
+    ;; A heap owns object-id allocation, cold ordinal sidecars, and the future
+    ;; mutation barrier.  Object headers retain only the heap reference and
+    ;; ordinal needed to derive heap-level identity and ownership metadata.
     (define-record-type <consent-datum-heap>
-      (make-datum-heap-record id generation owner next-id mutation-hook)
+      (make-datum-heap-record
+       id generation owner next-id mutation-hook frozen? image-members
+       revision-sidecar traversal-sidecar map-sidecar source-sidecar
+       construction-count)
       consent-datum-heap?
       (id consent-datum-heap-id)
       (generation consent-datum-heap-generation)
       (owner consent-datum-heap-owner raw-set-datum-heap-owner!)
       (next-id datum-heap-next-id set-datum-heap-next-id!)
       (mutation-hook datum-heap-mutation-hook
-                     set-datum-heap-mutation-hook!))
+                     set-datum-heap-mutation-hook!)
+      (frozen? consent-datum-heap-frozen? set-datum-heap-frozen!)
+      (image-members datum-heap-image-members
+                     set-datum-heap-image-members!)
+      (revision-sidecar datum-heap-revision-sidecar
+                        set-datum-heap-revision-sidecar!)
+      (traversal-sidecar datum-heap-traversal-sidecar
+                         set-datum-heap-traversal-sidecar!)
+      (map-sidecar datum-heap-map-sidecar set-datum-heap-map-sidecar!)
+      (source-sidecar datum-heap-source-sidecar
+                      set-datum-heap-source-sidecar!)
+      (construction-count datum-heap-construction-count
+                          set-datum-heap-construction-count!))
 
-    ;; One opaque record is the semantic identity for every compound kind.
-    ;; STORAGE is deliberately private: a borrowed host may accelerate access
-    ;; with native containers, but host identity is never the language answer.
-    (define-record-type <consent-datum-object>
-      (make-datum-object-record heap heap-id id generation owner kind storage
-                                mutable? revision traversal map-entry
-                                source-metadata)
-      consent-datum-object?
-      (heap datum-object-heap)
-      (heap-id consent-datum-object-heap-id)
-      (id consent-datum-object-id)
-      (generation consent-datum-object-generation)
-      (owner consent-datum-object-owner raw-set-datum-object-owner!)
-      (kind consent-datum-object-kind)
-      (storage datum-object-storage raw-set-datum-object-storage!)
-      (mutable? consent-datum-object-mutable?)
-      (revision consent-datum-object-revision
-                set-datum-object-revision!)
-      (traversal consent-datum-object-traversal
-                 raw-set-datum-object-traversal!)
-      ;; Call-scoped graph maps use a distinct private intrusive header. This
-      ;; must never alias public traversal metadata: nested runtime traversals
-      ;; save and restore one another through this slot.
-      (map-entry datum-object-map-entry raw-set-datum-object-map-entry!)
-      ;; Provenance is opaque to this owner. One current metadata slot follows
-      ;; the object's lifetime without retaining replacement history or a
-      ;; process-global identity-table entry.
-      (source-metadata consent-datum-object-source-metadata
-                       raw-set-datum-object-source-metadata!))
+    ;; Sidecars are absent until a cold property is first written.  Their
+    ;; direct ordinal indexing preserves O(1) access without placing an empty
+    ;; slot in every ordinary object.
+    (define-record-type <consent-datum-sidecar>
+      (make-datum-sidecar-record storage count)
+      datum-sidecar?
+      (storage datum-sidecar-storage set-datum-sidecar-storage!)
+      (count datum-sidecar-count set-datum-sidecar-count!))
+
+    ;; Two-level pages keep a late cold property from allocating one empty
+    ;; slot for every earlier object in the heap. Division by this fixed power
+    ;; of two is exact on every supported portable host.  Slot zero records
+    ;; the number of live entries so each page remains one allocation.
+    (define datum-sidecar-page-size 256)
+
+    ;; Pairs keep their two semantic fields inline.  The other public kinds
+    ;; retain one private indexed payload appropriate to their operation
+    ;; contract.  Private runtime slots carry their kind because their kinds
+    ;; are open-ended; public compound kinds are derived from record type.
+    (define-record-type <consent-datum-pair>
+      (make-datum-pair-record heap id head tail)
+      datum-pair-record?
+      (heap datum-pair-heap)
+      (id datum-pair-id)
+      (head datum-pair-head raw-set-datum-pair-head!)
+      (tail datum-pair-tail raw-set-datum-pair-tail!))
+
+    ;; Strings keep one private character vector behind checked accessors.
+    (define-record-type <consent-datum-string>
+      (make-datum-string-record heap id storage)
+      datum-string-record?
+      (heap datum-string-heap)
+      (id datum-string-id)
+      (storage datum-string-storage))
+
+    ;; Vectors keep one private language-value vector behind checked accessors.
+    (define-record-type <consent-datum-vector>
+      (make-datum-vector-record heap id storage)
+      datum-vector-record?
+      (heap datum-vector-heap)
+      (id datum-vector-id)
+      (storage datum-vector-storage))
+
+    ;; Bytevectors keep one private host bytevector behind checked accessors.
+    (define-record-type <consent-datum-bytevector>
+      (make-datum-bytevector-record heap id storage)
+      datum-bytevector-record?
+      (heap datum-bytevector-heap)
+      (id datum-bytevector-id)
+      (storage datum-bytevector-storage))
+
+    ;; Open-ended private runtime slots retain an explicit internal kind.
+    (define-record-type <consent-datum-internal>
+      (make-datum-internal-record heap id kind storage)
+      datum-internal-record?
+      (heap datum-internal-heap)
+      (id datum-internal-id)
+      (kind datum-internal-kind)
+      (storage datum-internal-storage))
+
+    (define (consent-datum-object? value)
+      "Report whether VALUE is any owned compound or private slot object."
+      #((parameters (value . "Candidate value."))
+        (returns (type boolean)
+         (description "Whether VALUE has Consent-owned datum identity."))
+        (effects pure))
+      (or (datum-pair-record? value)
+          (datum-string-record? value)
+          (datum-vector-record? value)
+          (datum-bytevector-record? value)
+          (datum-internal-record? value)))
+
+    (define (datum-object-heap object)
+      "Return owned OBJECT's allocating heap."
+      (cond
+       ((datum-pair-record? object) (datum-pair-heap object))
+       ((datum-string-record? object) (datum-string-heap object))
+       ((datum-vector-record? object) (datum-vector-heap object))
+       ((datum-bytevector-record? object) (datum-bytevector-heap object))
+       ((datum-internal-record? object) (datum-internal-heap object))
+       (else (error "datum-object-heap: expected owned object" object))))
+
+    (define (consent-datum-object-id object)
+      "Return owned OBJECT's stable heap-local ordinal."
+      #((parameters
+         (object (type compound-datum)
+          (description "Owned object to identify.")))
+        (returns (type exact-non-negative-integer)
+         (description "Stable heap-local object ordinal."))
+        (effects error))
+      (cond
+       ((datum-pair-record? object) (datum-pair-id object))
+       ((datum-string-record? object) (datum-string-id object))
+       ((datum-vector-record? object) (datum-vector-id object))
+       ((datum-bytevector-record? object) (datum-bytevector-id object))
+       ((datum-internal-record? object) (datum-internal-id object))
+       (else
+        (error "consent-datum-object-id: expected owned object" object))))
+
+    (define (consent-datum-object-kind object)
+      "Return owned OBJECT's kind."
+      #((parameters
+         (object (type compound-datum)
+          (description "Owned object to classify.")))
+        (returns (type symbol) (description "Owned representation kind."))
+        (effects error))
+      (cond
+       ((datum-pair-record? object) 'pair)
+       ((datum-string-record? object) 'string)
+       ((datum-vector-record? object) 'vector)
+       ((datum-bytevector-record? object) 'bytevector)
+       ((datum-internal-record? object) (datum-internal-kind object))
+       (else
+        (error "consent-datum-object-kind: expected owned object" object))))
+
+    (define (datum-object-storage object)
+      "Return non-pair owned OBJECT's private indexed payload."
+      (cond
+       ((datum-string-record? object) (datum-string-storage object))
+       ((datum-vector-record? object) (datum-vector-storage object))
+       ((datum-bytevector-record? object) (datum-bytevector-storage object))
+       ((datum-internal-record? object) (datum-internal-storage object))
+       (else
+        (error "datum-object-storage: pair payload is inline" object))))
+
+    (define (consent-datum-object-heap-id object)
+      "Return owned OBJECT's allocating heap identifier."
+      #((parameters
+         (object (type compound-datum)
+          (description "Owned object to identify.")))
+        (returns (type exact-non-negative-integer)
+         (description "Process-local allocating heap identifier."))
+        (effects error))
+      (consent-datum-heap-id (datum-object-heap object)))
+
+    (define (consent-datum-object-generation object)
+      "Return owned OBJECT's heap generation."
+      #((parameters
+         (object (type compound-datum)
+          (description "Owned object to inspect.")))
+        (returns (type exact-non-negative-integer)
+         (description "Current owning-heap generation."))
+        (effects error))
+      (consent-datum-heap-generation (datum-object-heap object)))
+
+    (define (consent-datum-object-owner object)
+      "Return owned OBJECT's heap-level owner metadata."
+      #((parameters
+         (object (type compound-datum)
+          (description "Owned object to inspect.")))
+        (returns . "Current opaque heap owner metadata.")
+        (effects error))
+      (consent-datum-heap-owner (datum-object-heap object)))
+
+    (define (make-datum-sidecar)
+      "Return one lazily grown ordinal sidecar."
+      (make-datum-sidecar-record (vector) 0))
+
+    (define (datum-sidecar-ref sidecar ordinal default)
+      "Return SIDECAR's ORDINAL value or DEFAULT when absent."
+      (if sidecar
+          (let* ((page-index (quotient ordinal datum-sidecar-page-size))
+                 (offset (modulo ordinal datum-sidecar-page-size))
+                 (pages (datum-sidecar-storage sidecar)))
+            (if (< page-index (vector-length pages))
+                (let ((page (vector-ref pages page-index)))
+                  (if page
+                      (let ((value (vector-ref page (+ offset 1))))
+                        (if value value default))
+                      default))
+                default))
+          default))
+
+    (define (datum-sidecar-next-capacity current required)
+      "Return geometric sidecar capacity covering REQUIRED slots."
+      (let loop ((capacity (if (= current 0) 8 current)))
+        (if (>= capacity required)
+            capacity
+            (loop (* capacity 2)))))
+
+    (define (datum-sidecar-set! sidecar ordinal value)
+      "Set SIDECAR at ORDINAL to VALUE through a lazily allocated page."
+      (let* ((page-index (quotient ordinal datum-sidecar-page-size))
+             (offset (modulo ordinal datum-sidecar-page-size))
+             (pages (datum-sidecar-storage sidecar))
+             (length (vector-length pages)))
+        (if (and value (>= page-index length))
+            (let* ((required (+ page-index 1))
+                   (capacity
+                    (datum-sidecar-next-capacity length required))
+                   (larger (make-vector capacity #f)))
+              (vector-copy! larger 0 pages)
+              (set-datum-sidecar-storage! sidecar larger)))
+        (let ((current-pages (datum-sidecar-storage sidecar)))
+          (if (< page-index (vector-length current-pages))
+              (let ((page (vector-ref current-pages page-index)))
+                (if (and value (not page))
+                    (begin
+                      (set! page
+                            (make-vector (+ datum-sidecar-page-size 1) #f))
+                      (vector-set! page 0 0)
+                      (vector-set! current-pages page-index page)))
+                (if page
+                    (let* ((slot (+ offset 1))
+                           (old (vector-ref page slot)))
+                      (cond
+                       ((and old (not value))
+                        (set-datum-sidecar-count!
+                         sidecar (- (datum-sidecar-count sidecar) 1))
+                        (vector-set! page 0 (- (vector-ref page 0) 1)))
+                       ((and (not old) value)
+                        (set-datum-sidecar-count!
+                         sidecar (+ (datum-sidecar-count sidecar) 1))
+                        (vector-set! page 0 (+ (vector-ref page 0) 1))))
+                      (vector-set! page slot value)
+                      (if (= (vector-ref page 0) 0)
+                          (vector-set! current-pages page-index #f)))))))))
+
+    (define (heap-sidecar-set!
+             heap current install! object value)
+      "Set OBJECT's VALUE in a lazily installed HEAP sidecar."
+      (let ((sidecar (current heap)))
+        (if (and (not sidecar) value)
+            (begin
+              (set! sidecar (make-datum-sidecar))
+              (install! heap sidecar)))
+        (if sidecar
+            (begin
+              (datum-sidecar-set!
+               sidecar (consent-datum-object-id object) value)
+              (if (= (datum-sidecar-count sidecar) 0)
+                  (install! heap #f))))))
+
+    (define (consent-datum-object-revision object)
+      "Return owned OBJECT's mutation revision."
+      #((parameters
+         (object (type compound-datum)
+          (description "Owned object to inspect.")))
+        (returns (type exact-non-negative-integer)
+         (description "Visible mutation count, initially zero."))
+        (effects state-read error))
+      (let ((heap (datum-object-heap object)))
+        (datum-sidecar-ref
+         (datum-heap-revision-sidecar heap)
+         (consent-datum-object-id object)
+         0)))
+
+    (define (set-datum-object-revision! object revision)
+      "Set owned OBJECT's sidecar mutation REVISION."
+      (heap-sidecar-set!
+       (datum-object-heap object)
+       datum-heap-revision-sidecar
+       set-datum-heap-revision-sidecar!
+       object
+       revision))
+
+    (define (consent-datum-object-mutable? object)
+      "Report whether owned OBJECT permits visible slot mutation."
+      #((parameters
+         (object (type compound-datum)
+          (description "Owned object to inspect.")))
+        (returns (type boolean)
+         (description "Whether OBJECT's heap is still mutable."))
+        (effects state-read error))
+      (not (consent-datum-heap-frozen? (datum-object-heap object))))
+
+    (define (consent-datum-object-traversal object)
+      "Return owned OBJECT's optional traversal metadata."
+      #((parameters
+         (object (type compound-datum)
+          (description "Owned object to inspect.")))
+        (returns . "Opaque traversal metadata, or #f when absent.")
+        (effects state-read error))
+      (let ((heap (datum-object-heap object)))
+        (datum-sidecar-ref
+         (datum-heap-traversal-sidecar heap)
+         (consent-datum-object-id object)
+         #f)))
+
+    (define (raw-set-datum-object-traversal! object metadata)
+      "Set owned OBJECT's optional traversal METADATA sidecar."
+      (heap-sidecar-set!
+       (datum-object-heap object)
+       datum-heap-traversal-sidecar
+       set-datum-heap-traversal-sidecar!
+       object
+       metadata))
+
+    (define (datum-object-map-entry object)
+      "Return owned OBJECT's current intrusive-map entry."
+      (let ((heap (datum-object-heap object)))
+        (datum-sidecar-ref
+         (datum-heap-map-sidecar heap)
+         (consent-datum-object-id object)
+         #f)))
+
+    (define (raw-set-datum-object-map-entry! object entry)
+      "Set owned OBJECT's intrusive-map ENTRY sidecar."
+      (heap-sidecar-set!
+       (datum-object-heap object)
+       datum-heap-map-sidecar
+       set-datum-heap-map-sidecar!
+       object
+       entry))
+
+    (define (consent-datum-object-source-metadata object)
+      "Return owned OBJECT's optional source provenance."
+      #((parameters
+         (object (type compound-datum)
+          (description "Owned object to inspect.")))
+        (returns . "Opaque source provenance, or #f when absent.")
+        (effects state-read error))
+      (let ((heap (datum-object-heap object)))
+        (datum-sidecar-ref
+         (datum-heap-source-sidecar heap)
+         (consent-datum-object-id object)
+         #f)))
+
+    (define (raw-set-datum-object-source-metadata! object metadata)
+      "Set owned OBJECT's optional source METADATA sidecar."
+      (heap-sidecar-set!
+       (datum-object-heap object)
+       datum-heap-source-sidecar
+       set-datum-heap-source-sidecar!
+       object
+       metadata))
 
     (define (consent-make-datum-heap)
       "Return a fresh portable compound datum heap."
@@ -136,7 +458,8 @@
         (set! next-datum-heap-id (+ id 1))
         ;; A false hook is the explicit no-observer state. Procedure identity
         ;; is not a portable discriminator for recognizing a no-op default.
-        (make-datum-heap-record id 0 id 0 #f)))
+        (make-datum-heap-record
+         id 0 id 0 #f #f #f #f #f #f #f 0)))
 
     ;; Context-free internal callers use this root heap. Evaluation contexts
     ;; allocate their own heap instead of sharing it.
@@ -151,6 +474,8 @@
         (effects state-write error))
       (if (not (consent-datum-heap? heap))
           (error "consent-datum-heap-owner-set!: expected heap" heap))
+      (if (consent-datum-heap-frozen? heap)
+          (error "consent-datum-heap-owner-set!: heap is frozen" heap))
       (raw-set-datum-heap-owner! heap owner)
       heap)
 
@@ -167,6 +492,10 @@
       (if (not (consent-datum-heap? heap))
           (error
            "consent-datum-heap-mutation-hook-set!: expected heap"
+           heap))
+      (if (consent-datum-heap-frozen? heap)
+          (error
+           "consent-datum-heap-mutation-hook-set!: heap is frozen"
            heap))
       (if (and hook (not (procedure? hook)))
           (error
@@ -204,40 +533,47 @@
           (error
            "consent-datum-object-source-metadata-set!: expected owned object"
            object))
+      (if (consent-datum-heap-frozen? (datum-object-heap object))
+          (error
+           "consent-datum-object-source-metadata-set!: heap is frozen"
+           object))
       (raw-set-datum-object-source-metadata! object metadata)
       object)
 
-    (define (allocate-datum-object heap kind storage mutable?)
-      "Allocate one KIND object backed privately by STORAGE in HEAP."
+    (define (allocate-datum-id heap)
+      "Reserve and return one stable object ordinal in mutable HEAP."
       (if (not (consent-datum-heap? heap))
           (error "owned datum allocation expected heap" heap))
+      (if (consent-datum-heap-frozen? heap)
+          (error "owned datum allocation expected mutable heap" heap))
       (let ((id (datum-heap-next-id heap)))
         (set-datum-heap-next-id! heap (+ id 1))
-        (make-datum-object-record
-         heap
-         (consent-datum-heap-id heap)
-         id
-         (consent-datum-heap-generation heap)
-         (consent-datum-heap-owner heap)
-         kind
-         storage
-         mutable?
-         0
-         #f
-         #f
-         #f)))
+        id))
+
+    (define (allocate-datum-pair heap head tail)
+      "Allocate one inline owned pair in HEAP."
+      (make-datum-pair-record
+       heap (allocate-datum-id heap) head tail))
+
+    (define (allocate-datum-object heap kind storage)
+      "Allocate one KIND object backed privately by STORAGE in HEAP."
+      (let ((id (allocate-datum-id heap)))
+        (case kind
+          ((string) (make-datum-string-record heap id storage))
+          ((vector) (make-datum-vector-record heap id storage))
+          ((bytevector) (make-datum-bytevector-record heap id storage))
+          (else (make-datum-internal-record heap id kind storage)))))
 
     ;; Construction scopes are one-shot capabilities for trusted runtime
-    ;; producers such as the reader.  A shell is unpublished while its
-    ;; traversal slot names the active token, so construction fills cannot be
-    ;; confused with language-visible mutation.  Owned traversal maps use the
-    ;; separate map-entry field and therefore remain independent.
+    ;; producers such as the reader. A scope-local ordinal sidecar names each
+    ;; unpublished shell's active token, so construction fills cannot be
+    ;; confused with language-visible mutation or retained heap metadata.
     (define datum-construction-uninitialized
       (vector 'consent-datum-construction-uninitialized))
 
-    ;; Construction accounting must not be a host vector: traversal metadata
-    ;; is intentionally observable as an opaque value, and exposing the fill
-    ;; bitmap would let a capability callback forge shell completeness.
+    ;; Construction marker contents must not be a host vector: exposing the
+    ;; fill bitmap as ordinary traversal metadata would let a capability
+    ;; callback forge shell completeness.
     (define-record-type <datum-construction-marker>
       (make-datum-construction-marker token states remaining object next)
       datum-construction-marker?
@@ -247,6 +583,36 @@
                  set-datum-construction-marker-remaining!)
       (object datum-construction-marker-object)
       (next datum-construction-marker-next))
+
+    (define (datum-object-slot-count object)
+      "Return owned OBJECT's construction-visible slot count."
+      (case (consent-datum-object-kind object)
+        ((pair) 2)
+        ((bytevector)
+         (bytevector-length (datum-object-storage object)))
+        (else (vector-length (datum-object-storage object)))))
+
+    (define (raw-datum-object-slot-ref object index)
+      "Return owned OBJECT's raw construction slot at INDEX."
+      (case (consent-datum-object-kind object)
+        ((pair)
+         (if (= index 0)
+             (datum-pair-head object)
+             (datum-pair-tail object)))
+        ((bytevector)
+         (bytevector-u8-ref (datum-object-storage object) index))
+        (else (vector-ref (datum-object-storage object) index))))
+
+    (define (raw-datum-object-slot-set! object index value)
+      "Set owned OBJECT's raw construction slot at INDEX."
+      (case (consent-datum-object-kind object)
+        ((pair)
+         (if (= index 0)
+             (raw-set-datum-pair-head! object value)
+             (raw-set-datum-pair-tail! object value)))
+        ((bytevector)
+         (bytevector-u8-set! (datum-object-storage object) index value))
+        (else (vector-set! (datum-object-storage object) index value))))
 
     (define (consent-call-with-datum-construction heap procedure)
       "Call PROCEDURE with scoped owned-compound construction capabilities."
@@ -275,6 +641,8 @@
            procedure))
       (let ((token (vector 'consent-datum-construction-token))
             (objects #f)
+            (first-id (datum-heap-next-id heap))
+            (markers (vector))
             (state 'new))
         (define (active?)
           (eq? state 'active))
@@ -282,6 +650,20 @@
         (define (check-active operation)
           (if (not (active?))
               (error operation "construction scope is not active")))
+
+        (define (construction-marker-set! object marker)
+          "Associate OBJECT's scope-local ordinal with MARKER."
+          (let* ((offset
+                  (- (consent-datum-object-id object) first-id))
+                 (length (vector-length markers)))
+            (if (>= offset length)
+                (let* ((required (+ offset 1))
+                       (capacity
+                        (datum-sidecar-next-capacity length required))
+                       (larger (make-vector capacity #f)))
+                  (vector-copy! larger 0 markers)
+                  (set! markers larger)))
+            (vector-set! markers offset marker)))
 
         (define (make-shell kind length)
           (check-active "datum construction make-shell:")
@@ -300,19 +682,22 @@
               (error
                "datum construction make-shell: unsupported kind"
                kind))
-          ;; Allocate bytevectors in their final representation.  Their
-          ;; one-byte fill bitmap distinguishes an unfilled slot from byte
-          ;; zero without retaining and later copying a second payload.
+          ;; Pairs allocate one inline record. Bytevectors allocate their final
+          ;; payload immediately; other indexed kinds allocate one payload.
           (let* ((bytevector? (eq? kind 'bytevector))
                  (object
-                  (allocate-datum-object
-                   heap
-                   kind
-                   (if bytevector?
-                       (make-bytevector length 0)
-                       (make-vector
-                        length datum-construction-uninitialized))
-                   #t))
+                  (if (eq? kind 'pair)
+                      (allocate-datum-pair
+                       heap
+                       datum-construction-uninitialized
+                       datum-construction-uninitialized)
+                      (allocate-datum-object
+                       heap
+                       kind
+                       (if bytevector?
+                           (make-bytevector length 0)
+                           (make-vector
+                            length datum-construction-uninitialized)))))
                  ;; A slot state is zero before fill, one after fill, and two
                  ;; after its one permitted datum-label fixup.
                  (marker
@@ -322,7 +707,7 @@
                    length
                    object
                    objects)))
-            (raw-set-datum-object-traversal! object marker)
+            (construction-marker-set! object marker)
             ;; Link through the opaque marker instead of allocating one host
             ;; cons cell per compound merely to close the construction scope.
             (set! objects marker)
@@ -332,10 +717,15 @@
           "Return OBJECT's marker for this scope, or #f when it has none."
           (and (consent-datum-object? object)
                (eq? (datum-object-heap object) heap)
-               (let ((marker (consent-datum-object-traversal object)))
-                 (and (datum-construction-marker? marker)
-                      (eq? (datum-construction-marker-token marker) token)
-                      marker))))
+               (let ((offset
+                      (- (consent-datum-object-id object) first-id)))
+                 (and (>= offset 0)
+                      (< offset (vector-length markers))
+                      (let ((marker (vector-ref markers offset)))
+                        (and (datum-construction-marker? marker)
+                             (eq? (datum-construction-marker-token marker)
+                                  token)
+                             marker))))))
 
         (define (store-slot! operation expected-state next-state
                              object index value)
@@ -347,13 +737,7 @@
                  operation
                  "shell is outside scope"
                  object))
-            (let* ((storage (datum-object-storage object))
-                   (bytevector?
-                    (eq? (consent-datum-object-kind object) 'bytevector))
-                   (length
-                    (if bytevector?
-                        (bytevector-length storage)
-                        (vector-length storage))))
+            (let ((length (datum-object-slot-count object)))
               (if (not (and (integer? index)
                             (exact? index)
                             (>= index 0)
@@ -388,9 +772,7 @@
                       operation
                       "expected byte"
                       value))))
-              (if bytevector?
-                  (bytevector-u8-set! storage index value)
-                  (vector-set! storage index value))
+              (raw-datum-object-slot-set! object index value)
               (bytevector-u8-set!
                (datum-construction-marker-states marker) index next-state)
               (if (= expected-state 0)
@@ -419,22 +801,22 @@
 
         (define (seal! object)
           "Seal one completed shell without a visible mutation event."
-          (raw-set-datum-object-traversal! object #f))
+          (construction-marker-set! object #f))
 
         (define (sanitize-abandoned! object)
           "Make an escaped abandoned shell a valid inert owned datum."
-          (let ((kind (consent-datum-object-kind object))
-                (storage (datum-object-storage object)))
+          (let ((kind (consent-datum-object-kind object)))
             (if (not (eq? kind 'bytevector))
                 (let ((replacement (if (eq? kind 'string) #\null #f)))
                   (let loop ((index 0))
-                    (if (< index (vector-length storage))
+                    (if (< index (datum-object-slot-count object))
                         (begin
-                          (if (eq? (vector-ref storage index)
+                          (if (eq? (raw-datum-object-slot-ref object index)
                                    datum-construction-uninitialized)
-                              (vector-set! storage index replacement))
+                              (raw-datum-object-slot-set!
+                               object index replacement))
                           (loop (+ index 1)))))))
-            (raw-set-datum-object-traversal! object #f)))
+            (construction-marker-set! object #f)))
 
         (define (sanitize-all!)
           "Sanitize and close every shell after an abandoned construction."
@@ -463,6 +845,7 @@
                                  (datum-construction-marker-object rest))
                                 (seal
                                  (datum-construction-marker-next rest)))))
+                        (set! markers (vector))
                         (set! state 'closed))
                        ((shell-complete?
                          (datum-construction-marker-object rest))
@@ -477,6 +860,7 @@
                                      marker)
                                     'invalid-marker)))
                           (sanitize-all!)
+                          (set! markers (vector))
                           (set! state 'closed)
                           (error
                            "datum construction ended with unfilled slots"
@@ -484,6 +868,7 @@
                            remaining)))))
                     (begin
                       (sanitize-all!)
+                      (set! markers (vector))
                       (set! state 'closed))))))
 
         ;; Treat the scope as one-shot.  A continuation that leaves during
@@ -494,18 +879,28 @@
            (if (not (eq? state 'new))
                (error
                 "datum construction continuation cannot be re-entered"))
-           (set! state 'active))
+           (set! state 'active)
+           (set-datum-heap-construction-count!
+            heap (+ (datum-heap-construction-count heap) 1)))
          (lambda ()
            (let ((result (procedure make-shell fill-slot! fixup-slot!)))
              (set! state 'complete)
              result))
          (lambda ()
+           (set-datum-heap-construction-count!
+            heap (- (datum-heap-construction-count heap) 1))
            (close! (eq? state 'complete))))))
 
     (define (object-kind? value kind)
       "Report whether VALUE is an owned object of KIND."
-      (and (consent-datum-object? value)
-           (eq? (consent-datum-object-kind value) kind)))
+      (case kind
+        ((pair) (datum-pair-record? value))
+        ((string) (datum-string-record? value))
+        ((vector) (datum-vector-record? value))
+        ((bytevector) (datum-bytevector-record? value))
+        (else
+         (and (datum-internal-record? value)
+              (eq? (datum-internal-kind value) kind)))))
 
     (define (consent-datum-same? left right)
       "Report whether LEFT and RIGHT denote the same owned object identity."
@@ -515,12 +910,33 @@
         (returns (type boolean)
          (description "Whether both candidates have one owned identity."))
         (effects pure))
-      (and (consent-datum-object? left)
-           (consent-datum-object? right)
-           (= (consent-datum-object-heap-id left)
-              (consent-datum-object-heap-id right))
-           (= (consent-datum-object-id left)
-              (consent-datum-object-id right))))
+      (cond
+       ((datum-pair-record? left)
+        (and (datum-pair-record? right)
+             (= (consent-datum-heap-id (datum-pair-heap left))
+                (consent-datum-heap-id (datum-pair-heap right)))
+             (= (datum-pair-id left) (datum-pair-id right))))
+       ((datum-string-record? left)
+        (and (datum-string-record? right)
+             (= (consent-datum-heap-id (datum-string-heap left))
+                (consent-datum-heap-id (datum-string-heap right)))
+             (= (datum-string-id left) (datum-string-id right))))
+       ((datum-vector-record? left)
+        (and (datum-vector-record? right)
+             (= (consent-datum-heap-id (datum-vector-heap left))
+                (consent-datum-heap-id (datum-vector-heap right)))
+             (= (datum-vector-id left) (datum-vector-id right))))
+       ((datum-bytevector-record? left)
+        (and (datum-bytevector-record? right)
+             (= (consent-datum-heap-id (datum-bytevector-heap left))
+                (consent-datum-heap-id (datum-bytevector-heap right)))
+             (= (datum-bytevector-id left) (datum-bytevector-id right))))
+       ((datum-internal-record? left)
+        (and (datum-internal-record? right)
+             (= (consent-datum-heap-id (datum-internal-heap left))
+                (consent-datum-heap-id (datum-internal-heap right)))
+             (= (datum-internal-id left) (datum-internal-id right))))
+       (else #f)))
 
     (define (consent-datum-make-internal-slots heap kind values)
       "Allocate private KIND slots initialized from host list VALUES."
@@ -537,7 +953,7 @@
           (error
            "consent-datum-make-internal-slots: expected host kind symbol"
            kind))
-      (allocate-datum-object heap kind (list->vector values) #t))
+      (allocate-datum-object heap kind (list->vector values)))
 
     (define (consent-datum-internal-slot-ref object index)
       "Return private runtime OBJECT's slot at INDEX."
@@ -629,14 +1045,14 @@
         (effects pure))
       (object-kind? value 'pair))
 
-    (define (make-pair-placeholder heap mutable?)
+    (define (make-pair-placeholder heap)
       "Allocate an uninitialized pair used while importing cyclic graphs."
-      (allocate-datum-object heap 'pair (vector #f #f) mutable?))
+      (allocate-datum-pair heap #f #f))
 
     (define (initialize-pair! pair head tail)
       "Initialize fresh PAIR without reporting construction as mutation."
-      (vector-set! (datum-object-storage pair) 0 head)
-      (vector-set! (datum-object-storage pair) 1 tail)
+      (raw-set-datum-pair-head! pair head)
+      (raw-set-datum-pair-tail! pair tail)
       pair)
 
     (define (consent-datum-cons heap head tail)
@@ -647,7 +1063,7 @@
          (tail . "Initial cdr value."))
         (returns (type pair) (description "Fresh mutable owned pair."))
         (effects allocation error))
-      (initialize-pair! (make-pair-placeholder heap #t) head tail))
+      (initialize-pair! (make-pair-placeholder heap) head tail))
 
     (define (consent-datum-car pair)
       "Return owned PAIR's car."
@@ -665,7 +1081,7 @@
           (description "Owned pair already validated by the caller.")))
         (returns (type any) (description "Stored car value."))
         (effects error))
-      (vector-ref (datum-object-storage pair) 0))
+      (datum-pair-head pair))
 
     (define (consent-datum-cdr pair)
       "Return owned PAIR's cdr."
@@ -683,12 +1099,20 @@
           (description "Owned pair already validated by the caller.")))
         (returns (type any) (description "Stored cdr value."))
         (effects error))
-      (vector-ref (datum-object-storage pair) 1))
+      (datum-pair-tail pair))
 
     (define (pair-set! heap pair slot value operation)
       "Set PAIR's SLOT to VALUE through the mutation gateway."
       (check-object heap pair 'pair operation)
-      (vector-storage-set! heap pair operation slot value))
+      (let ((old
+             (if (= slot 0)
+                 (datum-pair-head pair)
+                 (datum-pair-tail pair))))
+        (prepare-mutation! heap pair operation slot old value)
+        (if (= slot 0)
+            (raw-set-datum-pair-head! pair value)
+            (raw-set-datum-pair-tail! pair value))
+        (complete-mutation! pair)))
 
     (define (consent-datum-set-car! heap pair value)
       "Set owned PAIR's car to VALUE through HEAP."
@@ -778,7 +1202,7 @@
           (if (< index count)
               (begin
                 (vector-set!
-                 copies index (make-pair-placeholder heap #t))
+                 copies index (make-pair-placeholder heap))
                 (allocate (+ index 1)))))
         (let initialize ((index 0))
           (if (< index count)
@@ -843,7 +1267,7 @@
           (error "consent-datum-string-from-host: expected host string"
                  string))
       (allocate-datum-object
-       heap 'string (host-string->string-storage string) #t))
+       heap 'string (host-string->string-storage string)))
 
     (define (consent-datum-string->host string)
       "Return a fresh host adapter copy of owned STRING."
@@ -864,7 +1288,7 @@
          (fill (type character) (description "Host adapter fill character.")))
         (returns (type string) (description "Fresh owned string."))
         (effects allocation error))
-      (allocate-datum-object heap 'string (make-vector length fill) #t))
+      (allocate-datum-object heap 'string (make-vector length fill)))
 
     (define (consent-datum-string-copy-range heap string start end)
       "Copy owned STRING's half-open range into a fresh string in HEAP."
@@ -901,7 +1325,7 @@
                   (vector-set!
                    copy copy-index (vector-ref source source-index))
                   (loop (+ source-index 1) (+ copy-index 1)))))
-          (allocate-datum-object heap 'string copy #t))))
+          (allocate-datum-object heap 'string copy))))
 
     (define (consent-datum-string-length string)
       "Return owned STRING's length."
@@ -969,9 +1393,9 @@
         (effects pure))
       (object-kind? value 'vector))
 
-    (define (make-vector-placeholder heap length mutable?)
+    (define (make-vector-placeholder heap length)
       "Allocate an uninitialized owned vector for cyclic graph import."
-      (allocate-datum-object heap 'vector (make-vector length #f) mutable?))
+      (allocate-datum-object heap 'vector (make-vector length #f)))
 
     (define (initialize-vector-slot! vector index value)
       "Initialize fresh VECTOR's INDEX without reporting a mutation."
@@ -1017,7 +1441,7 @@
                    value)))
                 (vector-set! storage index value)
                 (loop (+ index 1)))))
-        (allocate-datum-object heap 'vector storage #t)))
+        (allocate-datum-object heap 'vector storage)))
 
     (define (consent-datum-vector-from-host heap vector)
       "Import host VECTOR and nested compounds into HEAP."
@@ -1050,7 +1474,7 @@
          (fill . "Initial element value."))
         (returns (type vector) (description "Fresh owned vector."))
         (effects allocation error))
-      (allocate-datum-object heap 'vector (make-vector length fill) #t))
+      (allocate-datum-object heap 'vector (make-vector length fill)))
 
     (define (consent-datum-vector-length vector)
       "Return owned VECTOR's length."
@@ -1161,7 +1585,7 @@
            "consent-datum-bytevector-from-host: expected host bytevector"
            bytevector))
       (allocate-datum-object
-       heap 'bytevector (copy-host-bytevector bytevector) #t))
+       heap 'bytevector (copy-host-bytevector bytevector)))
 
     (define (consent-datum-bytevector->host bytevector)
       "Return a fresh host adapter copy of owned BYTEVECTOR."
@@ -1186,7 +1610,7 @@
         (returns (type bytevector) (description "Fresh owned bytevector."))
         (effects allocation error))
       (allocate-datum-object
-       heap 'bytevector (make-bytevector length fill) #t))
+       heap 'bytevector (make-bytevector length fill)))
 
     (define (consent-datum-bytevector-length bytevector)
       "Return owned BYTEVECTOR's length."
@@ -1233,14 +1657,13 @@
        heap bytevector 'bytevector-u8-set! index byte))
 
     ;; A call-scoped owned-object map is an intrusive traversal mark, the same
-    ;; mature pattern used by collectors and graph algorithms. Every owned
-    ;; object supplies one private map-entry header, so lookup and insertion
-    ;; take one header probe regardless of its stable integer IDs. A unique
-    ;; map token distinguishes nested traversals.
+    ;; mature pattern used by collectors and graph algorithms. Every lookup
+    ;; and insertion takes one ordinal-sidecar probe. A unique map token
+    ;; distinguishes nested traversals.
     ;;
     ;; MAP is #(token touched-entry active?). ENTRY is
     ;; #(token value older newer object next-touched). The intrusive touched
-    ;; chain avoids two host cons cells per first insertion. The two header
+    ;; chain avoids two host cons cells per first insertion. The two entry
     ;; links make explicit out-of-order release constant-time too; ordinary
     ;; dynamic nesting simply pops the current header and restores the outer
     ;; entry.
@@ -1269,7 +1692,7 @@
              entry)))
 
     (define (consent-datum-object-map-ref map object default)
-      "Return OBJECT's value in MAP, or DEFAULT after one header probe."
+      "Return OBJECT's value in MAP, or DEFAULT after one sidecar probe."
       #((parameters
          (map (type datum-object-map) (description "Map to inspect."))
          (object (type compound-datum)
@@ -1295,7 +1718,7 @@
         (effects state-write error))
       (check-active-datum-object-map
        "consent-datum-object-map-set!:" map object)
-      ;; Read the current header once. An absent insertion reuses that same
+      ;; Read the current sidecar slot once. An absent insertion reuses that
       ;; value as OLDER instead of probing OBJECT a second time.
       (let* ((header (datum-object-map-entry object))
              (entry
@@ -1353,17 +1776,17 @@
       map)
 
     (define (consent-datum-object-map-probe-count map object)
-      "Return the fixed number of object-header probes used by MAP lookup."
+      "Return the fixed number of ordinal-sidecar probes used by MAP lookup."
       #((parameters
          (map (type datum-object-map) (description "Map to inspect."))
          (object (type compound-datum)
-          (description "Owned object whose header is probed.")))
+          (description "Owned object whose sidecar slot is probed.")))
         (returns (type exact-positive-integer)
-         (description "The fixed object-header probe count."))
+         (description "The fixed ordinal-sidecar probe count."))
         (effects state-read error))
       (check-active-datum-object-map
        "consent-datum-object-map-probe-count:" map object)
-      ;; Exercise the same real header path as REF; this diagnostic must not
+      ;; Exercise the same real sidecar path as REF; this diagnostic must not
       ;; merely report the documented constant without probing the object.
       (datum-object-map-entry object)
       1)
@@ -1387,6 +1810,121 @@
                (error "datum-object map continuation cannot be re-entered")))
          (lambda () (procedure map))
          (lambda () (consent-datum-object-map-release! map)))))
+
+    (define (consent-datum-object-shareable? object)
+      "Report whether OBJECT belongs to a certified frozen runtime image."
+      #((parameters
+         (object (type any)
+          (description "Candidate read-only runtime-image object.")))
+        (returns (type boolean)
+         (description
+          ("Whether OBJECT was validated as part of its frozen heap's"
+            "shareable graph.")))
+        (effects state-read state-write))
+      (and
+       (consent-datum-object? object)
+       (let* ((heap (datum-object-heap object))
+              (members (datum-heap-image-members heap)))
+         (and (consent-datum-heap-frozen? heap)
+              members
+              (consent-dense-set-member?
+               members (consent-datum-object-id object))))))
+
+    (define (consent-datum-heap-freeze! heap roots)
+      "Freeze HEAP after validating shareable runtime-image ROOTS."
+      "Reachable pairs, strings, vectors, and bytevectors allocated in HEAP"
+      "are certified by stable ordinal. Already-certified frozen objects may"
+      "be referenced. Mutable foreign owned objects and raw host compounds"
+      "are rejected. A frozen heap cannot allocate or visibly mutate values;"
+      "an import into another heap reuses certified objects read-only."
+      #((parameters
+         (heap (type datum-heap)
+          (description "Mutable heap to certify and freeze."))
+         (roots (type list)
+          (description "Proper list of runtime-image graph roots.")))
+        (returns (type datum-heap)
+         (description "The certified frozen HEAP."))
+        (effects allocation state-read state-write error))
+      (if (not (consent-datum-heap? heap))
+          (error "consent-datum-heap-freeze!: expected heap" heap))
+      (if (not (list? roots))
+          (error "consent-datum-heap-freeze!: expected root list" roots))
+      (if (> (datum-heap-construction-count heap) 0)
+          (error
+           "consent-datum-heap-freeze!: construction scope is active"
+           heap))
+      (if (consent-datum-heap-frozen? heap)
+          heap
+          (let* ((limit (datum-heap-next-id heap))
+                 (members
+                  (consent-make-dense-set
+                   limit limit 1 1 'pre-reserved 'datum-runtime-image)))
+            (guard
+             (condition
+              (else
+               (consent-dense-set-release! members)
+               (raise condition)))
+             (let loop ((work roots))
+               (if (pair? work)
+                   (let ((value (car work))
+                         (rest (cdr work)))
+                     (cond
+                      ((consent-datum-object? value)
+                       (let ((owner (datum-object-heap value)))
+                         (cond
+                          ((eq? owner heap)
+                           (let ((prior
+                                  (consent-dense-set-mark!
+                                   members
+                                   (consent-datum-object-id value))))
+                             (if prior
+                                 (loop rest)
+                                 (case (consent-datum-object-kind value)
+                                   ((pair)
+                                    (loop
+                                     (cons
+                                      (consent-datum-car-trusted value)
+                                      (cons
+                                       (consent-datum-cdr-trusted value)
+                                       rest))))
+                                   ((vector)
+                                    (let push
+                                        ((index
+                                          (-
+                                           (consent-datum-vector-length-trusted
+                                            value)
+                                           1))
+                                         (next rest))
+                                      (if (< index 0)
+                                          (loop next)
+                                          (push
+                                           (- index 1)
+                                           (cons
+                                            (consent-datum-vector-ref-trusted
+                                             value index)
+                                            next)))))
+                                   ((string bytevector) (loop rest))
+                                   (else
+                                    (error
+                                     "runtime image contains private datum"
+                                     value))))))
+                          ((consent-datum-object-shareable? value)
+                           (loop rest))
+                          (else
+                           (error
+                            "runtime image contains mutable foreign datum"
+                            value)))))
+                      ((or (pair? value)
+                           (string? value)
+                           (vector? value)
+                           (bytevector? value))
+                       (error
+                        "runtime image contains raw host compound"
+                        value))
+                      (else (loop rest))))))
+             (set-datum-heap-image-members! heap members)
+             (set-datum-heap-frozen! heap #t)
+             heap))))
 
     (define (host-seen-ref seen value)
       "Return host VALUE's graph copy in mutable registry SEEN, or #f."
@@ -1490,7 +2028,11 @@ identity maps"
             (set! work (cons (vector 2 source #f 0) work)))
           (define (deliver! destination slot result)
             "Store one imported RESULT in its already-allocated parent."
-            (vector-set! destination slot result))
+            (if (datum-pair-record? destination)
+                (if (= slot 0)
+                    (raw-set-datum-pair-head! destination result)
+                    (raw-set-datum-pair-tail! destination result))
+                (vector-set! destination slot result)))
           (define (accept-host-reuse! source destination slot)
             "Try host SOURCE's reuse hook and memoize an accepted target."
             (if counted?
@@ -1544,21 +2086,19 @@ identity maps"
             "Allocate and schedule one cross-heap owned compound copy."
             (case (consent-datum-object-kind source)
               ((pair)
-               (let ((copy
-                      (make-pair-placeholder
-                       heap (consent-datum-object-mutable? source))))
+               (let ((copy (make-pair-placeholder heap)))
                  (import-owned-set! source copy)
                  (deliver! destination slot copy)
                  (if count-source? (note-nodes! 1))
                  (push-finish! source copy)
                  (push-copy-visit!
                   (consent-datum-cdr-trusted source)
-                  (datum-object-storage copy)
+                  copy
                   1
                   count-source?)
                  (push-copy-visit!
                   (consent-datum-car-trusted source)
-                  (datum-object-storage copy)
+                  copy
                   0
                   count-source?)))
               ((string)
@@ -1566,8 +2106,8 @@ identity maps"
                       (allocate-datum-object
                        heap
                        'string
-                       (copy-string-storage (datum-object-storage source))
-                       (consent-datum-object-mutable? source))))
+                       (copy-string-storage
+                        (datum-object-storage source)))))
                  (import-owned-set! source copy)
                  (deliver! destination slot copy)
                  (if count-source?
@@ -1579,8 +2119,8 @@ identity maps"
                       (allocate-datum-object
                        heap
                        'bytevector
-                       (copy-host-bytevector (datum-object-storage source))
-                       (consent-datum-object-mutable? source))))
+                       (copy-host-bytevector
+                        (datum-object-storage source)))))
                  (import-owned-set! source copy)
                  (deliver! destination slot copy)
                  (if count-source?
@@ -1592,11 +2132,7 @@ identity maps"
               ((vector)
                (let* ((length
                        (consent-datum-vector-length-trusted source))
-                      (copy
-                       (make-vector-placeholder
-                        heap
-                        length
-                        (consent-datum-object-mutable? source))))
+                      (copy (make-vector-placeholder heap length)))
                  (import-owned-set! source copy)
                  (deliver! destination slot copy)
                  (if count-source? (note-nodes! 1))
@@ -1612,19 +2148,19 @@ identity maps"
             "Allocate and schedule one host compound copy into HEAP."
             (cond
              ((pair? source)
-              (let ((copy (make-pair-placeholder heap #t)))
+              (let ((copy (make-pair-placeholder heap)))
                 (import-host-update! source copy)
                 (deliver! destination slot copy)
                 (if count-source? (note-nodes! 1))
                 (push-finish! source copy)
                 (push-copy-visit!
                  (cdr source)
-                 (datum-object-storage copy)
+                 copy
                  1
                  count-source?)
                 (push-copy-visit!
                  (car source)
-                 (datum-object-storage copy)
+                 copy
                  0
                  count-source?)))
              ((string? source)
@@ -1644,7 +2180,7 @@ identity maps"
                 (push-finish! source copy)))
              ((vector? source)
               (let* ((length (vector-length source))
-                     (copy (make-vector-placeholder heap length #t)))
+                     (copy (make-vector-placeholder heap length)))
                 (import-host-update! source copy)
                 (deliver! destination slot copy)
                 (if count-source? (note-nodes! 1))
@@ -1654,7 +2190,8 @@ identity maps"
           (define (visit-owned!
                    source destination slot count-source?)
             "Deliver one owned SOURCE or schedule its cross-heap copy."
-            (if (eq? heap (datum-object-heap source))
+            (if (or (eq? heap (datum-object-heap source))
+                    (consent-datum-object-shareable? source))
                 (begin
                   (deliver! destination slot source)
                   (if (and counted? count-source?)
