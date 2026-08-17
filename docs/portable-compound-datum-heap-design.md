@@ -40,8 +40,6 @@ ABI edges; they are not a second language-visible compound-value domain.
 - Implement garbage collection, compaction, or a compiled object layout.
 - Own ports, process handles, filesystem handles, or other host-effect values.
 - Rework symbol identity or interning, which belongs to #346.
-- Complete the systematic `eq?`, `eqv?`, `equal?`, membership, and association
-  cleanup owned by #348.
 - Implement checkpoint fork, commit, abort, or branch-local copy-on-write.
   Issue #721 owns that work.
 
@@ -85,7 +83,9 @@ fields.
 The semantic identity key is `(heap-id, object-id)`. Compound-value code
 compares that key through `consent-datum-same?`; it does not infer language
 identity from the host record or its private storage. Fresh allocations
-therefore have fresh identity even when their contents are equal.
+therefore have fresh identity even when their contents are equal. The
+interpreter combines this key with scalar and opaque-runtime rules through the
+[Consent Value Equivalence](value-equivalence.md) contract.
 
 The compact pair calls one record constructor and performs no payload-container
 allocation. The portable implementation still uses a host vector for vector

@@ -10675,13 +10675,22 @@ d"
                    'binary64-equal?
                    (consent-number-owned-value left)
                    (consent-number-owned-value right)))
+                 ((infnan)
+                  (string=? (consent-number-owned-value left)
+                            (consent-number-owned-value right)))
                  (else
-                  (equal? (consent-number-owned-value left)
-                          (consent-number-owned-value right)))))))
+                  (error "unknown Consent number representation"
+                         (consent-number-kind left)))))))
 
-    (define (eqv-value? left right)
-      "Implement eqv? comparison with Consent Scheme numeric representation."
+    (define (value-identity? left right)
+      "Compare Scheme-visible values without borrowed-host identity."
       (cond
+       ((or (boolean? left) (boolean? right))
+        (and (boolean? left)
+             (boolean? right)
+             (if left right (not right))))
+       ((or (null? left) (null? right))
+        (and (null? left) (null? right)))
        ((or (consent-datum-object? left)
             (consent-datum-object? right))
         (consent-datum-same? left right))
@@ -10693,19 +10702,16 @@ d"
         (consent-character-equivalent? left right))
        ((and (consent-number? left) (consent-number? right))
         (numeric-representation-eqv? left right))
-       (else (eqv? left right))))
+       ((or (consent-number? left) (consent-number? right)) #f)
+       (else (consent-runtime-value-identity? left right))))
+
+    (define (eqv-value? left right)
+      "Implement eqv? through Consent Scheme-owned value identity."
+      (value-identity? left right))
 
     (define (eq-value? left right)
-      "Implement eq? comparison with owned-symbol and number semantics."
-      (or (eq? left right)
-          (consent-datum-same? left right)
-          (and (consent-symbol? left)
-               (consent-symbol? right)
-               (consent-symbol-equivalent? left right))
-          (consent-character-equivalent? left right)
-          (and (consent-number? left)
-               (consent-number? right)
-               (numeric-representation-eqv? left right))))
+      "Implement eq? through Consent Scheme-owned value identity."
+      (value-identity? left right))
 
     ;; Unique result for comparisons that require the general graph path.
     (define equal-comparison-unknown
@@ -10714,42 +10720,30 @@ d"
     (define (equal-graph-compound? value)
       "Return whether VALUE participates in graph comparison work."
       (or (consent-datum-pair? value)
-          (pair? value)
           (consent-datum-vector? value)
-          (vector? value)
           (consent-datum-string? value)
-          (string? value)
-          (consent-datum-bytevector? value)
-          (bytevector? value)
-          (consent-record? value)
-          (consent-record-type? value)))
+          (consent-datum-bytevector? value)))
 
     (define (equal-pair-value? value)
-      "Return whether VALUE is an owned or private host pair."
-      (or (consent-datum-pair? value) (pair? value)))
+      "Return whether VALUE is an owned pair."
+      (consent-datum-pair? value))
 
     (define (equal-pair-kind-matches? first second)
-      "Return whether FIRST and SECOND use the same pair representation."
-      (eq? (consent-datum-pair? first)
+      "Return whether FIRST and SECOND are both owned pairs."
+      (and (consent-datum-pair? first)
            (consent-datum-pair? second)))
 
     (define (equal-pair-same? first second)
-      "Return whether same-kind pair values FIRST and SECOND are identical."
-      (if (consent-datum-pair? first)
-          (consent-datum-same? first second)
-          (eq? first second)))
+      "Return whether owned pairs FIRST and SECOND are identical."
+      (consent-datum-same? first second))
 
     (define (equal-pair-car first)
-      "Return same-kind pair FIRST's car without repeated public validation."
-      (if (consent-datum-pair? first)
-          (consent-datum-car-trusted first)
-          (car first)))
+      "Return owned pair FIRST's car without repeated public validation."
+      (consent-datum-car-trusted first))
 
     (define (equal-pair-cdr first)
-      "Return same-kind pair FIRST's cdr without repeated public validation."
-      (if (consent-datum-pair? first)
-          (consent-datum-cdr-trusted first)
-          (cdr first)))
+      "Return owned pair FIRST's cdr without repeated public validation."
+      (consent-datum-cdr-trusted first))
 
     (define (equal-atomic-value? first second)
       "Compare atomic values, or return the general-path marker."
@@ -10758,7 +10752,7 @@ d"
        ((or (equal-graph-compound? first)
             (equal-graph-compound? second))
         equal-comparison-unknown)
-       (else (equal? first second))))
+       (else #f)))
 
     (define (equal-unary-pair-result left right)
       "Compare one unary pair graph, returning result/count or unknown."
@@ -10850,35 +10844,23 @@ d"
 
     (define (equal-graph-value? left right context)
       "Iteratively compare non-identical values by congruence closure."
-      ;; Union-find records equivalence classes of owned and private host
-      ;; compounds. Each successful union schedules that kind's corresponding
-      ;; edges exactly once, avoiding the product traversal of a pair-of-node
-      ;; memo on bisimilar cycles with different periods.
+      ;; Union-find records equivalence classes of owned compounds. Each
+      ;; successful union schedules that kind's corresponding edges exactly
+      ;; once, avoiding the product traversal of a pair-of-node memo on
+      ;; bisimilar cycles with different periods.
       (let ((absent (vector 'equal-comparison-absent))
             (owned-nodes #f)
-            (host-nodes #f)
             (pending (list (cons left right))))
         (define (node-ref value)
           "Return VALUE's union-find node, or ABSENT."
-          (if (consent-datum-object? value)
-              (if owned-nodes
-                  (consent-datum-object-map-ref
-                   owned-nodes value absent)
-                  absent)
-              (if host-nodes
-                  (consent-identity-map-ref host-nodes value absent)
-                  absent)))
+          (if owned-nodes
+              (consent-datum-object-map-ref owned-nodes value absent)
+              absent))
         (define (node-set! value node)
           "Associate compound VALUE with union-find NODE."
-          (if (consent-datum-object? value)
-              (begin
-                (if (not owned-nodes)
-                    (set! owned-nodes (consent-make-datum-object-map)))
-                (consent-datum-object-map-set! owned-nodes value node))
-              (begin
-                (if (not host-nodes)
-                    (set! host-nodes (consent-make-identity-map)))
-                (consent-identity-map-set! host-nodes value node))))
+          (if (not owned-nodes)
+              (set! owned-nodes (consent-make-datum-object-map)))
+          (consent-datum-object-map-set! owned-nodes value node))
         (define (value-node value)
           "Return VALUE's existing or fresh union-find node."
           (let ((known (node-ref value)))
@@ -10925,31 +10907,22 @@ d"
         (define (push! first second)
           "Schedule one pair of values for comparison."
           (set! pending (cons (cons first second) pending)))
-        (define (push-pair-edges! first second owned?)
+        (define (push-pair-edges! first second)
           "Schedule FIRST/SECOND pair edges in recursive order."
-          (if owned?
-              (begin
-                (push!
-                 (consent-datum-cdr-trusted first)
-                 (consent-datum-cdr-trusted second))
-                (push!
-                 (consent-datum-car-trusted first)
-                 (consent-datum-car-trusted second)))
-              (begin
-                (push! (cdr first) (cdr second))
-                (push! (car first) (car second)))))
-        (define (push-vector-edges! first second length owned?)
+          (push!
+           (consent-datum-cdr-trusted first)
+           (consent-datum-cdr-trusted second))
+          (push!
+           (consent-datum-car-trusted first)
+           (consent-datum-car-trusted second)))
+        (define (push-vector-edges! first second length)
           "Schedule vector slots in ascending recursive order."
           (let loop ((index (- length 1)))
             (if (>= index 0)
                 (begin
-                  (if owned?
-                      (push!
-                       (consent-datum-vector-ref-trusted first index)
-                       (consent-datum-vector-ref-trusted second index))
-                      (push!
-                       (vector-ref first index)
-                       (vector-ref second index)))
+                  (push!
+                   (consent-datum-vector-ref-trusted first index)
+                   (consent-datum-vector-ref-trusted second index))
                   (loop (- index 1))))))
         (define (owned-string-content=? first second length)
           "Compare LENGTH owned string slots without host copies."
@@ -10988,16 +10961,11 @@ d"
                  ((and (consent-datum-pair? first)
                        (consent-datum-pair? second))
                   (if (not (seen-or-mark! first second))
-                      (push-pair-edges! first second #t))
+                      (push-pair-edges! first second))
                   (loop))
                  ((or (consent-datum-pair? first)
                       (consent-datum-pair? second))
                   #f)
-                 ((and (pair? first) (pair? second))
-                  (if (not (seen-or-mark! first second))
-                      (push-pair-edges! first second #f))
-                  (loop))
-                 ((or (pair? first) (pair? second)) #f)
                  ((and (consent-datum-vector? first)
                        (consent-datum-vector? second))
                   (let ((length
@@ -11008,21 +10976,11 @@ d"
                         (begin
                           (if (not (seen-or-mark! first second))
                               (push-vector-edges!
-                               first second length #t))
+                               first second length))
                           (loop)))))
                  ((or (consent-datum-vector? first)
                       (consent-datum-vector? second))
                   #f)
-                 ((and (vector? first) (vector? second))
-                  (let ((length (vector-length first)))
-                    (if (not (= length (vector-length second)))
-                        #f
-                        (begin
-                          (if (not (seen-or-mark! first second))
-                              (push-vector-edges!
-                               first second length #f))
-                          (loop)))))
-                 ((or (vector? first) (vector? second)) #f)
                  ((and (consent-datum-string? first)
                        (consent-datum-string? second))
                   (let ((length
@@ -11053,15 +11011,8 @@ d"
                  ((or (consent-datum-bytevector? first)
                       (consent-datum-bytevector? second))
                   #f)
-                 ((or (consent-record? first)
-                      (consent-record? second)
-                      (consent-record-type? first)
-                      (consent-record-type? second))
-                  #f)
-                   (else (and (equal? first second) (loop))))))))
+                 (else #f))))))
          (lambda ()
-           (if host-nodes
-               (consent-identity-map-release! host-nodes))
            (if owned-nodes
                (consent-datum-object-map-release! owned-nodes))))))
 

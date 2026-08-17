@@ -30,6 +30,7 @@
           consent-make-empty-environment
           consent-unspecified
           consent-unspecified?
+          consent-runtime-value-identity?
           make-undefined
           undefined?
           undefined
@@ -714,6 +715,17 @@ t."
             (map consent-make-canonical-integer
                  (consent-version-components))))
 
+    ;; Scheme-visible opaque runtime values receive portable location tags.
+    ;; The shared counter makes tags unique across all runtime record kinds;
+    ;; reader-owned record values use their own kind-qualified tag domain.
+    (define next-runtime-value-location-tag 0)
+
+    (define (fresh-runtime-value-location-tag)
+      "Return a fresh process-local runtime value location tag."
+      (let ((tag next-runtime-value-location-tag))
+        (set! next-runtime-value-location-tag (+ tag 1))
+        tag))
+
     ;; Record type for the singleton unspecified value returned by effect-only
     ;; forms.
     (define-record-type <consent-unspecified>
@@ -918,25 +930,47 @@ t."
     ;; Record type for compound Scheme procedures and their closure
     ;; environments.
     (define-record-type <procedure>
-      (make-procedure formals body environment documentation
-        syntax-environment)
+      (make-procedure-record
+       location-tag formals body environment documentation
+       syntax-environment)
       consent-procedure?
+      (location-tag procedure-location-tag)
       (formals procedure-formals)
       (body procedure-body)
       (environment procedure-environment)
       (documentation procedure-documentation)
       (syntax-environment procedure-syntax-environment))
 
+    (define (make-procedure
+             formals body environment documentation syntax-environment)
+      "Create a compound Scheme procedure with fresh location identity."
+      #((parameters
+         (formals (type formals) (description "Parsed formal parameters."))
+         (body (type list) (description "Procedure body forms."))
+         (environment (type environment)
+          (description "Captured value environment."))
+         (documentation (type any)
+          (description "Retained documentation metadata."))
+         (syntax-environment (type syntax-environment)
+          (description "Captured syntax environment.")))
+        (returns (type procedure) (description "Fresh Scheme procedure."))
+        (effects allocation))
+      (make-procedure-record
+       (fresh-runtime-value-location-tag)
+       formals body environment documentation syntax-environment))
+
     ;; Primitive procedures are the kernel boundary: each call is budgeted as a
     ;; host callback even when the primitive implements pure R7RS behavior.
     (define-record-type <primitive-procedure>
       (make-primitive-procedure-record
+       location-tag
        name
        function
        minimum-arity
        maximum-arity
        documentation)
       consent-primitive-procedure?
+      (location-tag primitive-procedure-location-tag)
       (name primitive-procedure-name)
       (function primitive-procedure-function)
       (minimum-arity primitive-procedure-minimum-arity)
@@ -968,6 +1002,7 @@ t."
          (description "Fresh primitive procedure record."))
         (effects allocation))
       (make-primitive-procedure-record
+       (fresh-runtime-value-location-tag)
        name
        function
        minimum-arity
@@ -979,10 +1014,22 @@ t."
     ;; Record type for parameter procedure state and optional conversion
     ;; function.
     (define-record-type <consent-parameter>
-      (make-consent-parameter value converter)
+      (make-consent-parameter-record location-tag value converter)
       consent-parameter?
+      (location-tag parameter-location-tag)
       (value parameter-value set-parameter-value!)
       (converter parameter-converter))
+
+    (define (make-consent-parameter value converter)
+      "Create a parameter procedure with fresh location identity."
+      #((parameters
+         (value . "Initial parameter value.")
+         (converter (type (or procedure boolean))
+          (description "Value converter or #f.")))
+        (returns (type procedure) (description "Fresh parameter procedure."))
+        (effects allocation))
+      (make-consent-parameter-record
+       (fresh-runtime-value-location-tag) value converter))
 
     ;; Record type for packaged multiple return values crossing evaluator
     ;; boundaries.
@@ -994,13 +1041,32 @@ t."
     ;; Continuations snapshot the user procedure plus dynamic context so
     ;; repeated invocation can re-run dynamic-wind and handler transitions.
     (define-record-type <continuation>
-      (make-continuation procedure dynamic-winds exception-handlers
-                         current-error)
+      (make-continuation-record
+       location-tag procedure dynamic-winds exception-handlers current-error)
       continuation?
+      (location-tag continuation-location-tag)
       (procedure continuation-procedure)
       (dynamic-winds continuation-dynamic-winds)
       (exception-handlers continuation-exception-handlers)
       (current-error continuation-current-error))
+
+    (define (make-continuation
+             procedure dynamic-winds exception-handlers current-error)
+      "Create a continuation with fresh location identity."
+      #((parameters
+         (procedure (type procedure)
+          (description "Captured continuation procedure."))
+         (dynamic-winds (type list)
+          (description "Captured dynamic-wind stack."))
+         (exception-handlers (type list)
+          (description "Captured exception-handler stack."))
+         (current-error (type any)
+          (description "Current error state.")))
+        (returns (type procedure) (description "Fresh continuation."))
+        (effects allocation))
+      (make-continuation-record
+       (fresh-runtime-value-location-tag)
+       procedure dynamic-winds exception-handlers current-error))
 
     ;; Record type for before/after thunks active in dynamic-wind stacks.
     (define-record-type <dynamic-wind-frame>
@@ -1011,10 +1077,21 @@ t."
 
     ;; Record type for Scheme error objects with messages and irritants.
     (define-record-type <consent-error-object>
-      (make-consent-error-object message irritants)
+      (make-consent-error-object-record location-tag message irritants)
       consent-error-object?
+      (location-tag error-object-location-tag)
       (message consent-error-object-message)
       (irritants consent-error-object-irritants))
+
+    (define (make-consent-error-object message irritants)
+      "Create a Scheme error object with fresh location identity."
+      #((parameters
+         (message (type string) (description "Error message."))
+         (irritants (type list) (description "Associated irritants.")))
+        (returns (type error-object) (description "Fresh error object."))
+        (effects allocation))
+      (make-consent-error-object-record
+       (fresh-runtime-value-location-tag) message irritants))
 
     ;; Record type for the singleton EOF object used by Consent Scheme ports.
     (define-record-type <consent-eof-object>
@@ -1029,11 +1106,12 @@ t."
     (define-record-type <consent-port>
       ;; MEDIUM separates string, bytevector, host-file, and virtual ports.
       ;; SOURCE/POSITION back input ports; CONTENTS backs output ports.
-      (make-consent-port medium input? output? textual? binary?
-                              open? source position contents
-                              backing-domain operations grant limits handle
-                              status path counters)
+      (make-consent-port-record
+       location-tag medium input? output? textual? binary? open? source
+       position contents backing-domain operations grant limits handle status
+       path counters)
       consent-port?
+      (location-tag port-location-tag)
       (medium consent-port-medium)
       (input? consent-port-input?)
       (output? consent-port-output?)
@@ -1054,13 +1132,105 @@ t."
       (counters consent-port-counters
                 set-consent-port-counters!))
 
+    (define (make-consent-port
+             medium input? output? textual? binary? open? source position
+             contents backing-domain operations grant limits handle status
+             path counters)
+      "Create a portable port with fresh location identity."
+      #((parameters
+         (medium (type symbol) (description "Port medium tag."))
+         (input? (type boolean) (description "Whether input is supported."))
+         (output? (type boolean) (description "Whether output is supported."))
+         (textual? (type boolean) (description "Whether the port is textual."))
+         (binary? (type boolean) (description "Whether the port is binary."))
+         (open? (type boolean) (description "Initial open state."))
+         (source (type any) (description "Input source state."))
+         (position (type any) (description "Input position state."))
+         (contents (type any) (description "Output contents state."))
+         (backing-domain (type any)
+          (description "Backing-store domain tag."))
+         (operations (type list) (description "Allowed port operations."))
+         (grant (type any) (description "Capability grant state."))
+         (limits (type list) (description "Port resource limits."))
+         (handle (type any) (description "Host adapter handle state."))
+         (status (type any) (description "Current adapter status."))
+         (path (type any) (description "Associated path state."))
+         (counters (type any) (description "Mutable operation counters.")))
+        (returns (type port) (description "Fresh portable port."))
+        (effects allocation))
+      (make-consent-port-record
+       (fresh-runtime-value-location-tag)
+       medium input? output? textual? binary? open? source position contents
+       backing-domain operations grant limits handle status path counters))
+
     ;; Record type for eval environment specifiers and their mutability policy.
     (define-record-type <environment-specifier>
-      (make-environment-specifier environment syntax-environment immutable?)
+      (make-environment-specifier-record
+       location-tag environment syntax-environment immutable?)
       environment-specifier?
+      (location-tag environment-specifier-location-tag)
       (environment environment-specifier-environment)
       (syntax-environment environment-specifier-syntax-environment)
       (immutable? environment-specifier-immutable?))
+
+    (define (make-environment-specifier
+             environment syntax-environment immutable?)
+      "Create an environment specifier with fresh location identity."
+      #((parameters
+         (environment (type environment)
+          (description "Value environment."))
+         (syntax-environment (type syntax-environment)
+          (description "Syntax environment."))
+         (immutable? (type boolean)
+          (description "Whether the environment is immutable.")))
+        (returns (type environment-specifier)
+         (description "Fresh environment specifier."))
+        (effects allocation))
+      (make-environment-specifier-record
+       (fresh-runtime-value-location-tag)
+       environment syntax-environment immutable?))
+
+    (define (runtime-value-location-tag value)
+      "Return VALUE's explicit runtime location tag, or #f."
+      (cond
+       ((consent-procedure? value) (procedure-location-tag value))
+       ((consent-primitive-procedure? value)
+        (primitive-procedure-location-tag value))
+       ((consent-parameter? value) (parameter-location-tag value))
+       ((continuation? value) (continuation-location-tag value))
+       ((consent-error-object? value) (error-object-location-tag value))
+       ((consent-port? value) (port-location-tag value))
+       ((environment-specifier? value)
+        (environment-specifier-location-tag value))
+       (else #f)))
+
+    (define (consent-runtime-value-identity? left right)
+      "Report whether opaque runtime values share Consent location identity."
+      #((parameters
+         (left . "First value to compare.")
+         (right . "Second value to compare."))
+        (returns (type boolean)
+         (description "Whether LEFT and RIGHT share one runtime identity."))
+        (effects pure))
+      (cond
+       ((or (consent-record-type? left) (consent-record-type? right))
+        (and (consent-record-type? left)
+             (consent-record-type? right)
+             (= (consent-record-type-location-tag left)
+                (consent-record-type-location-tag right))))
+       ((or (consent-record? left) (consent-record? right))
+        (and (consent-record? left)
+             (consent-record? right)
+             (= (consent-record-location-tag left)
+                (consent-record-location-tag right))))
+       ((or (consent-unspecified? left) (consent-unspecified? right))
+        (and (consent-unspecified? left) (consent-unspecified? right)))
+       ((or (consent-eof-object? left) (consent-eof-object? right))
+        (and (consent-eof-object? left) (consent-eof-object? right)))
+       (else
+        (let ((left-tag (runtime-value-location-tag left))
+              (right-tag (runtime-value-location-tag right)))
+          (and left-tag right-tag (= left-tag right-tag))))))
 
     ;; Record type for accumulating string output port contents.
     (define-record-type <string-output-port>
