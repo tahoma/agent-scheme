@@ -69,10 +69,12 @@
           consent-make-character
           consent-make-record-type
           consent-record-type?
+          consent-record-type-location-tag
           consent-record-type-name
           consent-record-type-fields
           consent-make-record
           consent-record?
+          consent-record-location-tag
           consent-record-type
           consent-record-fields)
   (import (scheme base)
@@ -734,9 +736,20 @@
 
     ;; Portable record metadata belongs to Consent Scheme, not the host record
     ;; system, so evaluator-created records remain printable datums.
+    (define next-record-location-tag 0)
+
+    (define (fresh-record-location-tag)
+      "Return a fresh process-local record location tag."
+      (let ((tag next-record-location-tag))
+        (set! next-record-location-tag (+ tag 1))
+        tag))
+
+    ;; Record-type descriptors carry a location tag distinct from instances.
     (define-record-type <consent-record-type>
-      (make-consent-record-type-record name fields source-metadata)
+      (make-consent-record-type-record
+       location-tag name fields source-metadata)
       consent-record-type?
+      (location-tag consent-record-type-location-tag)
       (name consent-record-type-name)
       (fields consent-record-type-fields)
       (source-metadata consent-record-type-source-metadata
@@ -750,14 +763,16 @@
         (returns (type record-type)
          (description "A fresh portable record type."))
         (effects allocation))
-      (make-consent-record-type-record name fields #f))
+      (make-consent-record-type-record
+       (fresh-record-location-tag) name fields #f))
 
     ;; Portable record instances pair Consent Scheme record metadata with field
     ;; storage that the evaluator owns and may mutate through generated
     ;; setters.
     (define-record-type <consent-record>
-      (make-consent-record-record type fields source-metadata)
+      (make-consent-record-record location-tag type fields source-metadata)
       consent-record?
+      (location-tag consent-record-location-tag)
       (type consent-record-type)
       (fields consent-record-fields)
       (source-metadata consent-record-source-metadata
@@ -771,7 +786,8 @@
         (returns (type record)
          (description "A fresh portable record instance."))
         (effects allocation))
-      (make-consent-record-record type fields #f))
+      (make-consent-record-record
+       (fresh-record-location-tag) type fields #f))
 
     ;; Datum-label records hold placeholders while resolving shared and
     ;; circular

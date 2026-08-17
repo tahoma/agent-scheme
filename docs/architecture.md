@@ -369,7 +369,9 @@ Graph import and export allocate shells before following edges and memoize by
 source identity. This preserves arbitrary pair/vector cycles and all shared
 compound references. Compound `eq?` and `eqv?` use owned identity, structural
 `equal?` computes graph congruence with union-find, and writers count
-pair/vector nodes by owned identity.
+pair/vector nodes by owned identity. The central equivalence dispatcher also
+owns scalar, record, procedure, port, and other opaque runtime choices; see
+[Consent Value Equivalence](value-equivalence.md).
 
 A heap may be sealed as a runtime image after an iterative validation of named
 roots. The validator certifies reachable public compound kinds by ordinal,

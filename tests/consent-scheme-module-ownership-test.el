@@ -267,6 +267,29 @@ docstrings do not."
     (should
      (< (length (split-string eval "\n")) 80))))
 
+(ert-deftest
+    consent-scheme-module-ownership-test-equivalence-owns-value-identity ()
+  "Keep Scheme-visible equality independent of borrowed-host identity."
+  (let ((interpreter
+         (consent-scheme-module-ownership-test--read
+          "scheme/consent/interpreter.sld"))
+        (runtime
+         (consent-scheme-module-ownership-test--read
+          "scheme/consent/runtime.sld")))
+    (dolist (required '("(define (value-identity?"
+                         "(consent-datum-same? left right)"
+                         "(consent-runtime-value-identity? left right)"))
+      (should (string-match-p (regexp-quote required) interpreter)))
+    (dolist (fallback '("(else (eqv? left right))"
+                        "(else (equal? first second))"
+                        "host-nodes"))
+      (should-not (string-match-p (regexp-quote fallback) interpreter)))
+    (dolist (required '("(define (consent-runtime-value-identity?"
+                         "procedure-location-tag"
+                         "record-location-tag"
+                         "port-location-tag"))
+      (should (string-match-p (regexp-quote required) runtime)))))
+
 (ert-deftest consent-scheme-module-ownership-test-symbol-boundary-is-confined
   ()
   "Keep mixed host/owned symbol handling inside the Consent runtime."

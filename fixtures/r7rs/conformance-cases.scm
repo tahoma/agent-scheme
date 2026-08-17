@@ -2101,6 +2101,125 @@ continuations.")
        (value
          #t))
 )
+    ((id core-equivalence-owned-value-categories)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category equivalence)
+     (section "6.1")
+     (status implemented)
+     (oracle shared)
+     (oracle-eligibility not-oracle-eligible)
+     (oracle-reason implementation-dependent)
+     (options ())
+     (description
+       "Owned scalar and compound identities do not vary by host.")
+
+     (source
+       (form
+         (let* ((pair (list (quote value)))
+                (other-pair (list (quote value)))
+                (string (string-copy "value"))
+                (other-string (string-copy "value"))
+                (vector-value (vector (quote value)))
+                (other-vector (vector (quote value)))
+                (bytes (bytevector 1 2 3))
+                (other-bytes (bytevector 1 2 3)))
+           (list
+            (eq? #t #t)
+            (not (eq? #t #f))
+            (eqv? (quote ()) (quote ()))
+            (eq? (quote owned) (string->symbol "owned"))
+            (eqv? 17 17)
+            (eq? #\x #\x)
+            (eq? pair pair)
+            (not (eqv? pair other-pair))
+            (equal? pair other-pair)
+            (eq? string string)
+            (not (eqv? string other-string))
+            (equal? string other-string)
+            (eq? vector-value vector-value)
+            (not (eqv? vector-value other-vector))
+            (equal? vector-value other-vector)
+            (eq? bytes bytes)
+            (not (eqv? bytes other-bytes))
+            (equal? bytes other-bytes)))))
+     (expect
+       (value
+         (#t #t #t #t #t #t #t #t #t
+          #t #t #t #t #t #t #t #t #t)))
+)
+    ((id core-equivalence-opaque-location-tags)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category equivalence)
+     (section "6.1")
+     (status implemented)
+     (oracle shared)
+     (oracle-eligibility not-oracle-eligible)
+     (oracle-reason implementation-dependent)
+     (options ())
+     (description
+       "Records, procedures, and ports preserve explicit location identity.")
+
+     (source
+       (forms
+         (define-record-type <equivalence-box>
+           (make-equivalence-box value)
+           equivalence-box?
+           (value equivalence-box-value))
+         (let* ((record (make-equivalence-box 1))
+                (same-record record)
+                (other-record (make-equivalence-box 1))
+                (procedure (lambda (value) value))
+                (same-procedure procedure)
+                (other-procedure (lambda (value) value))
+                (port (open-input-string "value"))
+                (same-port port)
+                (other-port (open-input-string "value")))
+           (list
+            (eq? record same-record)
+            (not (eqv? record other-record))
+            (not (equal? record other-record))
+            (eq? procedure same-procedure)
+            (not (eqv? procedure other-procedure))
+            (not (equal? procedure other-procedure))
+            (eq? car car)
+            (eq? port same-port)
+            (not (eqv? port other-port))
+            (equal? port same-port)))))
+     (expect
+       (value
+         (#t #t #t #t #t #t #t #t #t #t)))
+)
+    ((id core-equivalence-membership-and-association)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category equivalence)
+     (section "6.4")
+     (status implemented)
+     (oracle shared)
+     (options ())
+     (description
+       "Membership and association procedures use their named predicates.")
+
+     (source
+       (form
+         (let* ((same (list (quote value)))
+                (equal (list (quote value)))
+                (items (list equal same))
+                (alist (list (cons equal (quote structural))
+                             (cons same (quote identity)))))
+           (list
+            (eq? (memq same items) (cdr items))
+            (eq? (memv same items) (cdr items))
+            (eq? (member same items) items)
+            (eq? (assq same alist) (cadr alist))
+            (eq? (assv same alist) (cadr alist))
+            (eq? (assoc same alist) (car alist))))))
+     (expect
+       (value
+         (#t #t #t #t #t #t)))
+)
     ((id reader-datum-label-cycle)
      (kind r7rs-conformance)
      (phase read)
