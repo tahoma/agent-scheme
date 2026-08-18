@@ -418,6 +418,12 @@ valid allocation-serial hashes from overlaying long-lived insertion bursts
 after short-lived identity maps advance the host's sequence. Hash distribution
 therefore remains table policy above the same narrow adapter boundary.
 
+Public standard hash tables have a separate representation and lifecycle. The
+shared stdlib-family engine and its relationship to the fixed-policy primitive
+are documented in [Standard Hash-Table Family](hash-tables.md). In particular,
+user comparator and hash callbacks never enter the private identity-table
+primitive boundary.
+
 Redaction traversal, JSON active paths, and helper datum copying use the
 portable `(consent identity-map)` specialization directly. These libraries
 traverse ordinary language values rather than `(consent datum)`'s private heap

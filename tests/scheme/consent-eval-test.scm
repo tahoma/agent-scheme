@@ -2995,8 +2995,8 @@ ged "
                               (entry-target entry))
                       (loop (cdr entries) (+ checked 1))))
                (loop (cdr entries) checked)))))")
- '((max-steps . 200000)
-   (max-host-callbacks . 30000))
+ '((max-steps . 400000)
+   (max-host-callbacks . 60000))
  "#t"))
 
 (testing-registry-case

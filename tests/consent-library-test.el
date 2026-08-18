@@ -5007,6 +5007,98 @@
                      '(stdlib comparator))))")
     "#t")))
 
+(ert-deftest consent-library-test-srfi-125-hash-table-behavior ()
+  "Import canonical `(scheme hash-table)' and exercise SRFI 125 behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (scheme comparator)
+              (except (scheme hash-table) string-hash string-ci-hash))
+      (define key-comparator
+        (make-comparator symbol? eq? #f symbol-hash))
+      (define table (make-hash-table key-comparator))
+      (hash-table-set! table 'alpha 1 'beta 2)
+      (hash-table-update! table 'beta (lambda (value) (+ value 10)))
+      (list (hash-table? table)
+            (hash-table-size table)
+            (hash-table-ref table 'alpha)
+            (hash-table-ref/default table 'missing 'absent)
+            (hash-table-ref table 'beta))")
+    "(#t 2 1 absent 12)")))
+
+(ert-deftest consent-library-test-srfi-125-alias-import ()
+  "Import hash tables through the secondary `(srfi 125)' alias."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (scheme comparator)
+              (except (srfi 125) string-hash string-ci-hash))
+      (define table (make-hash-table (make-eq-comparator)))
+      (hash-table-set! table 'key 'value)
+      (list (hash-table-contains? table 'key)
+            (hash-table-ref table 'key))")
+    "(#t value)")))
+
+(ert-deftest consent-library-test-srfi-125-portable-alias-import ()
+  "Import hash tables through the portable `(srfi srfi-125)' alias."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (scheme comparator)
+              (except (srfi srfi-125) string-hash string-ci-hash))
+      (define table (make-hash-table (make-eq-comparator)))
+      (hash-table-set! table 'portable 'alias)
+      (hash-table-ref table 'portable)")
+    "alias")))
+
+(ert-deftest consent-library-test-srfi-125-missing-export-diagnostic ()
+  "Report missing hash-table imports through the ordinary diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (scheme hash-table) missing-hash-table))
+            missing-hash-table")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-hash-table")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-125 ()
+  "Expose SRFI 125 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib hash-table)))
+            (scheme-alias (stdlib-manifest-ref '(scheme hash-table)))
+            (alias (stdlib-manifest-ref '(srfi 125)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-125)))
+            (engine
+             (stdlib-manifest-ref '(stdlib hash-table implementation))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'status)
+                     'direct-portable-implementation)
+             (equal? (manifest-field entry 'aliases)
+                     '((scheme hash-table) (srfi 125) (srfi srfi-125)))
+             (equal? (manifest-subfield entry 'provenance 'vendored?) #f)
+             (equal? (manifest-field scheme-alias 'target)
+                     '(stdlib hash-table))
+             (equal? (manifest-field alias 'target)
+                     '(stdlib hash-table))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib hash-table))
+             (equal? (manifest-field engine 'visibility)
+                     'internal-runtime)))")
+    "#t")))
+
 (ert-deftest consent-library-test-stdlib-rbtree-import ()
   "Import internal `(stdlib rbtree)' and exercise representative tree\
  behavior."

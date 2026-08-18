@@ -185,6 +185,12 @@
    (path "tests/scheme/stdlib-comparator-test.scm")
     (tags (full direct compiled stdlib registered)))
    (program
+   (path "tests/scheme/stdlib-hash-table-test.scm")
+    (tags (full direct compiled stdlib registered)))
+   (program
+   (path "tests/scheme/stdlib-hash-table-upstream-test.scm")
+    (tags (full direct compiled stdlib upstream registered)))
+   (program
    (path "tests/scheme/stdlib-rbtree-test.scm")
     (tags (full direct compiled stdlib slow registered)))
    (program

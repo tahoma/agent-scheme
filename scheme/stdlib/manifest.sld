@@ -2708,6 +2708,254 @@ f3")))
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (stdlib hash-table implementation))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility internal-runtime)
+        (source-kind source-library)
+        (source (path "hash-table/implementation.sld"))
+        (api-version internal)
+        (source-version unknown)
+        (realization portable-source)
+        (exports
+         (make-hash-table-policy
+          hash-table-policy?
+          hash-table-policy-type-test
+          hash-table-policy-equivalence
+          hash-table-policy-hash
+          hash-table-policy-token
+          hash-table-policy-comparator
+          make-hash-table-storage
+          hash-table-storage?
+          hash-table-storage-policy
+          hash-table-storage-mutable?
+          hash-table-storage-size
+          hash-table-storage-capacity
+          hash-table-storage-mutation-version
+          hash-table-storage-structural-version
+          hash-table-storage-compatible?
+          hash-table-storage-ref-entry
+          hash-table-storage-set!
+          hash-table-storage-delete!
+          hash-table-storage-clear!
+          hash-table-storage-reserve!
+          hash-table-storage-copy
+          hash-table-storage-entries
+          hash-table-storage-first-entry
+          hash-table-storage-last-entry
+          hash-table-entry?
+          hash-table-entry-key
+          hash-table-entry-value
+          hash-table-entry-set-value!
+          hash-table-entry-next
+          hash-table-entry-previous))
+        (dependencies
+         ((library (scheme base))))
+        (provenance
+         ((origin repo)
+          (derived-for
+           ((stdlib hash-table)
+            (stdlib hash-table basic)
+            (stdlib hash-table r6rs)
+            (stdlib hash-table insertion-ordered)))
+          (storage-model
+           (buckets separate-chaining)
+           (order stable-insertion-chain)
+           (revisions structural-and-value-sensitive))))
+        (verification
+         ((test-status
+           (collision-model insertion-order revision-semantics
+                            portable-host-suite))))
+        (status internal)
+        (canonical #t))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (stdlib hash-table))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility public)
+        (source-kind source-library)
+        (source (path "hash-table.sld"))
+        (api-version (compat 0))
+        (source-version
+         (upstream-revision
+          "d80d0e954480983b3e60c40041f3d0bec366e0ba"))
+        (realization portable-source)
+        (aliases ((scheme hash-table) (srfi 125) (srfi srfi-125)))
+        (exports
+         (make-hash-table
+          hash-table
+          hash-table-unfold
+          alist->hash-table
+          hash-table?
+          hash-table-contains?
+          hash-table-exists?
+          hash-table-empty?
+          hash-table=?
+          hash-table-mutable?
+          hash-table-ref
+          hash-table-ref/default
+          hash-table-set!
+          hash-table-delete!
+          hash-table-intern!
+          hash-table-update!
+          hash-table-update!/default
+          hash-table-pop!
+          hash-table-clear!
+          hash-table-size
+          hash-table-keys
+          hash-table-values
+          hash-table-entries
+          hash-table-find
+          hash-table-count
+          hash-table-map
+          hash-table-for-each
+          hash-table-walk
+          hash-table-map!
+          hash-table-map->list
+          hash-table-fold
+          hash-table-prune!
+          hash-table-copy
+          hash-table-empty-copy
+          hash-table->alist
+          hash-table-union!
+          hash-table-merge!
+          hash-table-intersection!
+          hash-table-difference!
+          hash-table-xor!
+          hash
+          string-hash
+          string-ci-hash
+          hash-by-identity
+          hash-table-equivalence-function
+          hash-table-hash-function))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme char))
+          (library (stdlib comparator))
+          (library (stdlib hash-table implementation))))
+        (provenance
+         ((origin repo)
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-125")
+          (local-reference-documents
+           ((path "reference/srfi-125/srfi-125.md")
+            (role specification)
+            (source srfi))
+           ((path "reference/r7rs-large/2016-07-red-edition-report.md")
+            (role docket-report)
+            (source r7rs-large)))
+          (upstream-source-files
+           ("srfi/125.sld" "srfi/125.body.scm"))
+          (upstream-source-test-file "tables-test.sps")
+          (upstream-revision
+           "d80d0e954480983b3e60c40041f3d0bec366e0ba")
+          (upstream-source-blobs
+           (("srfi/125.sld" .
+             "08d9ac1d48c6e9d071ff5ec2bf17fc893eedef06")
+            ("srfi/125.body.scm" .
+             "1fc30be444ff07f5510ca3b438b6bc9559e2f39d")
+            ("tables-test.sps" .
+             "d8809ed7c94a75fe9bca79fbe1f46b733180dd61")))
+          (upstream-source-sha256
+           (("srfi/125.sld" .
+             "a515be555197acb60d4a260f7c01d0ef5bf2a6cd78fe5a69f231cad37a1eab93")
+            ("srfi/125.body.scm" .
+             "e11001fc90a2f045074feabe5847ee3745eaf43acea74da6ce282082f76e41d1")
+            ("tables-test.sps"
+             .
+             ;; readability-allow: contiguous-datum -- Checksum stays whole.
+             "ac26a6e1bd6fbbb064a6f506806a2e2b2a9ad8df3719c81d31dc34b6d0f8c4b3")))
+          (upstream-license "LicenseRef-Clinger")
+          (upstream-test-license "MIT")
+          (local-license "Apache-2.0")
+          (vendored? #f)
+          (local-patches
+           ((sample-implementation
+             (status not-vendored)
+             (reason queued-srfi-126-dependency))
+            (direct-portable-implementation
+             (basis srfi-125-specification))
+            (shared-storage
+             (library (stdlib hash-table implementation))
+             (future-facades
+              (library (stdlib hash-table basic))
+              (library (stdlib hash-table r6rs))
+              (library (stdlib hash-table insertion-ordered))))
+            (registry-aliases
+             (aliases (scheme hash-table) (srfi 125) (srfi srfi-125)))
+            (documentation-metadata (scope exported-procedures))
+            (adapted-tests
+             (file "tests/scheme/stdlib-hash-table-upstream-test.scm"))
+            (local-tests
+             (file "tests/scheme/stdlib-hash-table-test.scm"))))))
+        (verification
+         ((test-status
+           (import-resolution representative-hash-table-behavior alias-import
+                              missing-export-diagnostic adapted-upstream-tests
+                              collision-model mutation-guards
+                              direct-host-conformance compiled-host-smoke
+                              portable-host-suite))))
+        (status direct-portable-implementation)
+        (canonical #t))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (scheme hash-table))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib hash-table)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib hash-table))
+        (dependencies
+         ((library (stdlib hash-table))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi 125))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib hash-table)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib hash-table))
+        (dependencies
+         ((library (stdlib hash-table))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi srfi-125))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib hash-table)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib hash-table))
+        (dependencies
+         ((library (stdlib hash-table))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (stdlib mapping implementation))
         (owner stdlib)
         (provider repo-source)
