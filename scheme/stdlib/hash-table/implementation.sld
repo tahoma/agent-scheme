@@ -73,18 +73,22 @@
           (error "hash-table policy requires procedures"
                  type-test equivalence hash)))
 
-    ;; Entries participate in a bucket and in a doubly linked order chain.
+    ;; Entries participate in an intrusive bucket chain and in a doubly linked
+    ;; order chain.  A false owner marks a removed entry, avoiding a separate
+    ;; liveness field in every association.
     (define-record-type <hash-table-entry>
-      (%make-hash-table-entry owner key value hash previous next active?)
+      (%make-hash-table-entry
+       owner key value hash previous next bucket-next)
       hash-table-entry?
-      (owner hash-table-entry-owner)
+      (owner hash-table-entry-owner %set-hash-table-entry-owner!)
       (key hash-table-entry-key)
       (value hash-table-entry-value %set-hash-table-entry-value!)
       (hash hash-table-entry-hash)
       (previous hash-table-entry-previous
                 %set-hash-table-entry-previous!)
       (next hash-table-entry-next %set-hash-table-entry-next!)
-      (active? hash-table-entry-active? %set-hash-table-entry-active?!))
+      (bucket-next hash-table-entry-bucket-next
+                   %set-hash-table-entry-bucket-next!))
 
     ;; Structural and value-sensitive revisions serve different later APIs.
     (define-record-type <hash-table-storage>
@@ -109,7 +113,12 @@
 
     (define (capacity->bucket-count capacity)
       "Return a power-of-two bucket count suitable for CAPACITY entries."
-      (let ((target (max minimum-bucket-count (* 2 capacity))))
+      ;; Automatic growth permits three live entries per four buckets.  Round
+      ;; 4 * CAPACITY / 3 upward so an explicit capacity request receives the
+      ;; same guarantee without reserving twice as many buckets.
+      (let ((target
+             (max minimum-bucket-count
+                  (quotient (+ (* 4 capacity) 2) 3))))
         (let loop ((count minimum-bucket-count))
           (if (>= count target) count (loop (* 2 count))))))
 
@@ -129,7 +138,7 @@
           (error "invalid hash-table capacity" capacity))
       (%make-hash-table-storage
        policy
-       (make-vector (capacity->bucket-count capacity) '())
+       (make-vector (capacity->bucket-count capacity) #f)
        0
        (if mutable? #t #f)
        0
@@ -144,7 +153,8 @@
         (returns (type exact-positive-integer)
          (description "Capacity before the next automatic resize."))
         (effects error))
-      (quotient (vector-length (hash-table-storage-buckets storage)) 2))
+      (quotient
+       (* 3 (vector-length (hash-table-storage-buckets storage))) 4))
 
     (define (hash-table-storage-compatible? left right)
       "Return whether LEFT and RIGHT use the same key policy identity."
@@ -176,16 +186,16 @@
       "Return HASH's index into BUCKETS."
       (modulo hash (vector-length buckets)))
 
-    (define (find-entry-in-bucket policy bucket key hash)
+    (define (find-entry-in-bucket policy entry key hash)
       "Return KEY's entry in BUCKET, or #f."
       (let ((equivalence (hash-table-policy-equivalence policy)))
-        (let loop ((entries bucket))
+        (let loop ((entry entry))
           (cond
-           ((null? entries) #f)
-           ((and (= hash (hash-table-entry-hash (car entries)))
-                 (equivalence key (hash-table-entry-key (car entries))))
-            (car entries))
-           (else (loop (cdr entries)))))))
+           ((not entry) #f)
+           ((and (= hash (hash-table-entry-hash entry))
+                 (equivalence key (hash-table-entry-key entry)))
+            entry)
+           (else (loop (hash-table-entry-bucket-next entry)))))))
 
     (define (hash-table-storage-ref-entry storage key)
       "Return STORAGE's entry for KEY, or #f when absent."
@@ -233,27 +243,37 @@
             (%set-hash-table-storage-last-entry! storage previous))
         (%set-hash-table-entry-previous! entry #f)
         (%set-hash-table-entry-next! entry #f)
-        (%set-hash-table-entry-active?! entry #f)))
+        (%set-hash-table-entry-owner! entry #f)))
 
-    (define (bucket-without-entry bucket entry)
-      "Return BUCKET without ENTRY."
-      (cond
-       ((null? bucket) '())
-       ((eq? (car bucket) entry) (cdr bucket))
-       (else
-        (cons (car bucket)
-              (bucket-without-entry (cdr bucket) entry)))))
+    (define (delete-entry-from-bucket! policy buckets index key hash)
+      "Unlink and return KEY's entry from BUCKETS, or return #f."
+      (let ((equivalence (hash-table-policy-equivalence policy)))
+        (let loop ((entry (vector-ref buckets index)) (previous #f))
+          (cond
+           ((not entry) #f)
+           ((and (= hash (hash-table-entry-hash entry))
+                 (equivalence key (hash-table-entry-key entry)))
+            (let ((next (hash-table-entry-bucket-next entry)))
+              (if previous
+                  (%set-hash-table-entry-bucket-next! previous next)
+                  (vector-set! buckets index next))
+              (%set-hash-table-entry-bucket-next! entry #f)
+              entry))
+           (else
+            (loop (hash-table-entry-bucket-next entry) entry))))))
 
     (define (rehash! storage bucket-count)
       "Replace STORAGE's buckets with BUCKET-COUNT buckets."
-      (let ((buckets (make-vector bucket-count '())))
+      (let ((buckets (make-vector bucket-count #f)))
         (let loop ((entry (hash-table-storage-first-entry storage)))
           (if entry
-              (let ((index (hash-index buckets
-                                       (hash-table-entry-hash entry))))
-                (vector-set!
-                 buckets index (cons entry (vector-ref buckets index)))
-                (loop (hash-table-entry-next entry)))))
+              (let ((next (hash-table-entry-next entry))
+                    (index
+                     (hash-index buckets (hash-table-entry-hash entry))))
+                (%set-hash-table-entry-bucket-next!
+                 entry (vector-ref buckets index))
+                (vector-set! buckets index entry)
+                (loop next))))
         (%set-hash-table-storage-buckets! storage buckets)))
 
     (define (hash-table-storage-reserve! storage capacity)
@@ -309,9 +329,9 @@
                      (index (hash-index buckets hash))
                      (entry
                       (%make-hash-table-entry
-                       storage key value hash #f #f #t)))
-                (vector-set!
-                 buckets index (cons entry (vector-ref buckets index)))
+                       storage key value hash #f #f
+                       (vector-ref buckets index))))
+                (vector-set! buckets index entry)
                 (append-entry! storage entry)
                 (%set-hash-table-storage-size!
                  storage (+ 1 (hash-table-storage-size storage)))
@@ -325,7 +345,7 @@
          (value (type any) (description "Replacement value.")))
         (returns (type unspecified) (description "Unspecified value."))
         (effects mutation error))
-      (if (not (hash-table-entry-active? entry))
+      (if (not (hash-table-entry-owner entry))
           (error "inactive hash-table entry" entry))
       (let ((storage (hash-table-entry-owner entry)))
         (check-mutable storage 'hash-table-entry-set-value!)
@@ -344,18 +364,15 @@
              (buckets (hash-table-storage-buckets storage))
              (index (hash-index buckets hash))
              (entry
-              (find-entry-in-bucket
+              (delete-entry-from-bucket!
                (hash-table-storage-policy storage)
-               (vector-ref buckets index)
+               buckets
+               index
                key
                hash)))
         (if (not entry)
             #f
             (begin
-              (vector-set!
-               buckets
-               index
-               (bucket-without-entry (vector-ref buckets index) entry))
               (unlink-entry! storage entry)
               (%set-hash-table-storage-size!
                storage (- (hash-table-storage-size storage) 1))
@@ -376,11 +393,11 @@
                   (let ((next (hash-table-entry-next entry)))
                     (%set-hash-table-entry-previous! entry #f)
                     (%set-hash-table-entry-next! entry #f)
-                    (%set-hash-table-entry-active?! entry #f)
+                    (%set-hash-table-entry-bucket-next! entry #f)
+                    (%set-hash-table-entry-owner! entry #f)
                     (loop next))))
             (%set-hash-table-storage-buckets!
-             storage
-             (make-vector minimum-bucket-count '()))
+             storage (make-vector minimum-bucket-count #f))
             (%set-hash-table-storage-size! storage 0)
             (%set-hash-table-storage-first-entry! storage #f)
             (%set-hash-table-storage-last-entry! storage #f)
@@ -393,10 +410,15 @@
         (returns (type list) (description "Fresh entry list."))
         (effects allocation error))
       (let loop ((entry (hash-table-storage-first-entry storage))
-                 (result '()))
-        (if entry
-            (loop (hash-table-entry-next entry) (cons entry result))
-            (reverse result))))
+                 (head '())
+                 (tail #f))
+        (if (not entry)
+            head
+            (let ((cell (list entry)))
+              (if tail (set-cdr! tail cell))
+              (loop (hash-table-entry-next entry)
+                    (if tail head cell)
+                    cell)))))
 
     (define (hash-table-storage-copy storage mutable?)
       "Return a copy of STORAGE whose mutability is MUTABLE?."
@@ -410,14 +432,14 @@
               (hash-table-storage-policy storage)
               (hash-table-storage-size storage)
               #t)))
-        (let loop ((entries (hash-table-storage-entries storage)))
-          (if (pair? entries)
+        (let loop ((entry (hash-table-storage-first-entry storage)))
+          (if entry
               (begin
                 (hash-table-storage-set!
                  copy
-                 (hash-table-entry-key (car entries))
-                 (hash-table-entry-value (car entries)))
-                (loop (cdr entries)))))
+                 (hash-table-entry-key entry)
+                 (hash-table-entry-value entry))
+                (loop (hash-table-entry-next entry)))))
         (if (not mutable?)
             (%set-hash-table-storage-mutable?! copy #f))
         copy))))

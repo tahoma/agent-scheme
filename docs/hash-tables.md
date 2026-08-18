@@ -15,12 +15,14 @@ set.
 | `(stdlib hash-table r6rs)` | Planned SRFI 126 facade for `(srfi 126)` and `(srfi srfi-126)`, with R6RS-style constructors, vectors, capacity, and introspection. |
 | `(stdlib hash-table insertion-ordered)` | Planned SRFI 250 facade for `(srfi 250)` and `(srfi srfi-250)`, with cursors and order-sensitive traversal. |
 
-The internal engine uses separate chaining for lookup and a doubly linked entry
-chain for stable insertion order. SRFI 125 deliberately continues to describe
-whole-table order as unspecified. Keeping the links now avoids a representation
-migration when the SRFI 250 facade adds first, last, next, previous, and cursor
-operations. Updating an existing association preserves its position; deleting
-and reinserting it appends a new entry.
+The internal engine uses intrusive separate chaining for lookup and a doubly
+linked entry chain for stable insertion order. Each entry carries its bucket
+link directly, so insertion and growth do not allocate a separate bucket-list
+pair. SRFI 125 deliberately continues to describe whole-table order as
+unspecified. Keeping the order links now avoids a representation migration when
+the SRFI 250 facade adds first, last, next, previous, and cursor operations.
+Updating an existing association preserves its position; deleting and
+reinserting it appends a new entry.
 
 The source-owning `(stdlib hash-table ...)` hierarchy makes the shared family
 visible without merging incompatible standards. No umbrella library exports a
@@ -31,7 +33,9 @@ library-surface decision.
 The engine records two revisions. Its structural revision changes when entries
 are inserted or removed, which is the invalidation boundary needed by future
 cursors. Its mutation revision also changes when an existing value is replaced,
-which lets SRFI 125 reject callbacks that mutate a table being traversed.
+which lets SRFI 125 reject callbacks that mutate a table being traversed. A
+removed entry clears its owner reference; that owner also serves as the stale
+entry marker instead of retaining a separate liveness field.
 
 ## Primitive Runtime Boundary
 
@@ -68,9 +72,10 @@ official sample source is recorded but not vendored because it is implemented
 on top of SRFI 126, which is scheduled after SRFI 125 in Consent's facade
 sequence. The complete upstream test program is vendored verbatim under
 `fixtures/srfi-125/` and retains its MIT license. Its executable adaptation
-retains all 88 upstream test forms; only unavailable import helpers and the
-test-runner epilogue differ. The local portable implementation remains
-Apache-2.0.
+retains all 88 upstream test forms. The executable adaptation replaces
+unavailable import helpers, spells three bytevector-containing data forms with
+R7RS constructors for the configured Racket reader, and replaces the test-runner
+epilogue. The local portable implementation remains Apache-2.0.
 
 ## SRFI 125 Test Coverage
 
@@ -89,7 +94,8 @@ portable test.
 
 The independent suite also covers adversarial collisions and growth, fresh
 entry result lists, comparator type rejection, unsupported weak-table options,
-empty-pop and arity errors, cross-policy set behavior, and the shared engine's
+empty-pop and arity errors, cross-policy set behavior, capacity/load bounds,
+stale-entry liveness, destructive self-set operations, and the shared engine's
 insertion links and revision boundaries. Emacs-hosted tests separately cover
 resolver aliases, missing-export diagnostics, and manifest provenance.
 
@@ -102,4 +108,25 @@ stable order is tested only as an internal engine contract for the future SRFI
 
 Expected lookup, insertion, update, and deletion cost is amortized constant time
 when the supplied hash function distributes keys satisfactorily. Whole-table
-operations allocate or traverse in proportion to the number of associations.
+operations traverse the insertion chain directly. Procedures returning lists
+allocate their required result lists; callback-only traversals do not first
+allocate an entry snapshot or per-callback argument lists.
+
+The provider grows before its occupied load exceeds three quarters. An explicit
+capacity request reserves the smallest power-of-two bucket vector that admits
+that many associations at the same load, rather than reserving two buckets per
+requested association. Growth allocates only the replacement bucket vector and
+relinks the existing entries.
+
+Arbitrary user hash procedures can deliberately return the same value for every
+key, so no generic provider can promise constant time for that case without
+changing its equality contract. Such a table degrades to linear lookup and
+quadratic bulk construction. The local stress suite retains a constant-hash
+comparator to cover correctness through that path; hash-flood resistance is not
+claimed for attacker-selected user hash procedures.
+
+`tools/benchmark-hash-table.scm` reports raw same-host jiffy samples for growing
+and pre-sized insertion, successful and missing lookup, callback traversal, and
+constant-hash scaling. Run it through `tools/run-portable-tests.sh` with
+`CONSENT_PORTABLE_PROGRAM` set to that file. Compare three-run medians from the
+same machine and host; the benchmark is intentionally not a correctness gate.

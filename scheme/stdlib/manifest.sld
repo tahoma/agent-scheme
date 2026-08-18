@@ -2698,6 +2698,7 @@ f3")))
             (documentation-metadata (scope exported-procedures))
             (default-hash (source local-portable-implementation))
             (stateful-hasher (source upstream-style-case-lambda))
+            (one-shot-string-hash (allocation state-threaded))
             (hash-helpers (source local-portable-procedures))))))
         (verification
          ((test-status
@@ -2759,13 +2760,15 @@ f3")))
             (stdlib hash-table r6rs)
             (stdlib hash-table insertion-ordered)))
           (storage-model
-           (buckets separate-chaining)
+           (buckets intrusive-separate-chaining)
+           (maximum-load 3/4)
            (order stable-insertion-chain)
            (revisions structural-and-value-sensitive))))
         (verification
          ((test-status
-           (collision-model insertion-order revision-semantics
-                            portable-host-suite))))
+           (capacity-envelope collision-model insertion-order
+                              revision-semantics stale-entry-liveness
+                              portable-host-suite))))
         (status internal)
         (canonical #t))
        (manifest-entry
@@ -2895,11 +2898,14 @@ f3")))
              (file "tests/scheme/stdlib-hash-table-upstream-test.scm")
              (coverage full-upstream-corpus)
              (test-forms 88)
-             (compatibility local-list-sort srfi-125-copy testing-runner))
+             (compatibility local-list-sort racket-bytevector-construction
+                            srfi-125-copy testing-runner))
             (local-tests
              (file "tests/scheme/stdlib-hash-table-test.scm")
              (coverage exported-identifiers callback-mutation-matrix
-                       immutable-mutator-matrix error-contracts))))))
+                       immutable-mutator-matrix error-contracts
+                       capacity-envelope stale-entry-liveness
+                       destructive-self-set-operations))))))
         (verification
          ((test-status
            (import-resolution representative-hash-table-behavior alias-import
@@ -2907,6 +2913,8 @@ f3")))
                               export-surface-complete collision-model
                               callback-mutation-matrix
                               immutable-mutator-matrix
+                              capacity-envelope stale-entry-liveness
+                              destructive-self-set-operations
                               direct-host-conformance compiled-host-smoke
                               portable-host-suite))))
         (status direct-portable-implementation)

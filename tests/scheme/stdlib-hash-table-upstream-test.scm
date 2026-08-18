@@ -263,14 +263,14 @@
 
 (test (map hash-table-contains?
            test-tables
-           '(#u8() 47.9
-             '#() '()
-             foo bar
-             19 (henry)
-             "p" "perp"
-             "mike" "Noel"
-             jane paul
-             0 5))
+           (list (bytevector) 47.9
+                 '#() '()
+                 'foo 'bar
+                 19 '(henry)
+                 "p" "perp"
+                 "mike" "Noel"
+                 'jane 'paul
+                 0 5))
       (map (lambda (x) #f) test-tables))
 
 (test (map hash-table-empty? test-tables)
@@ -788,7 +788,8 @@
               (= h1 h2)))
       '(#t #t #t))
 
-(test (let* ((x '#(a "bcD" #\c (d 2.718) -42 #u8() #() #u8(19 20)))
+(test (let* ((x (vector 'a "bcD" #\c '(d 2.718) -42
+                        (bytevector) (vector) (bytevector 19 20)))
              (y x)
              (h1 (hash-by-identity x))
              (h2 (hash-by-identity y)))
@@ -824,7 +825,8 @@
               (= h1 h2)))
       '(#t #t #t))
 
-(test (let* ((x '#(a "bcD" #\c (d 2.718) -42 #u8() #() #u8(19 20)))
+(test (let* ((x (vector 'a "bcD" #\c '(d 2.718) -42
+                        (bytevector) (vector) (bytevector 19 20)))
              (y x)
              (h1 (hash-by-identity x 102))
              (h2 (hash-by-identity y 102)))

@@ -381,6 +381,7 @@
         (effects pure))
       (bounded-hash
        (cond
+        ((exact-integer? obj) (abs obj))
         ((not (real? obj))
          (+ (number-hash (real-part obj))
             (number-hash (imag-part obj))))
@@ -424,14 +425,18 @@
         (returns (type exact-non-negative-integer)
          (description "Hash value for OBJ."))
         (effects pure))
-      (let ((acc (make-hasher))
-            (len (string-length obj)))
-        (let loop ((n 0))
-          (cond
-           ((= n len) (acc))
-           (else
-            (acc (char->integer (string-ref obj n)))
-            (loop (+ n 1)))))))
+      ;; Keep the public stateful hasher for callers that need it, but thread
+      ;; this hot one-shot state directly so every table lookup does not
+      ;; allocate a vector and closure merely to hash one string.
+      (let ((len (string-length obj)))
+        (let loop ((n 0) (result (hash-salt)))
+          (if (= n len)
+              result
+              (loop
+               (+ n 1)
+               (bounded-hash
+                (+ (* result 33)
+                   (char->integer (string-ref obj n)))))))))
 
     (define (string-ci-hash obj)
       "Return a case-insensitive hash value for string OBJ."

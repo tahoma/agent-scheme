@@ -7,7 +7,9 @@
         (stdlib comparator)
         (except (stdlib hash-table) string-hash string-ci-hash)
         (only (stdlib hash-table implementation)
+              hash-table-entry-set-value!
               hash-table-storage-entries
+              hash-table-storage-capacity
               hash-table-storage-mutation-version
               hash-table-storage-structural-version
               hash-table-entry-key
@@ -112,8 +114,8 @@
 (testing-registry-case
  'hash-table/collisions-and-growth '(portable stdlib conformance stress)
  (test-equal
-  'hash-table/collisions-and-growth
-  '(198 199 100 #t)
+ 'hash-table/collisions-and-growth
+  '(197 199 100 #t #t)
   (let ((table (make-hash-table collision-comparator 0)))
     (let fill ((index 0))
       (if (< index 200)
@@ -124,7 +126,7 @@
              index)
             (fill (+ index 1)))))
     (let ((last (hash-table-ref table 'key-199)))
-      (hash-table-delete! table 'key-0 'key-2 'absent)
+      (hash-table-delete! table 'key-0 'key-2 'key-199 'absent)
       (hash-table-set! table 'key-100 'updated)
       (list (hash-table-size table)
             last
@@ -132,7 +134,8 @@
                             (lambda () 'missing)
                             (lambda (value)
                               (if (eq? value 'updated) 100 -1)))
-            (not (hash-table-contains? table 'key-0)))))))
+            (not (hash-table-contains? table 'key-0))
+            (not (hash-table-contains? table 'key-199)))))))
 
 (testing-registry-case
  'hash-table/mutation-operations '(portable stdlib conformance)
@@ -482,5 +485,51 @@
               (- (hash-table-storage-structural-version table) 2))
            linked?
            (hash-table-keys table))))))))
+
+(testing-registry-case
+ 'hash-table/shared-engine-capacity-and-liveness
+ '(portable stdlib internal invariant)
+ (test-equal
+  'hash-table/shared-engine-capacity-and-liveness
+  '(6 48 192 #t #t)
+  (let ((small (make-hash-table integer-comparator))
+        (medium (make-hash-table integer-comparator 32))
+        (large (make-hash-table integer-comparator 100))
+        (deleted (make-hash-table integer-comparator))
+        (cleared (make-hash-table integer-comparator)))
+    (hash-table-set! deleted 1 'one)
+    (hash-table-set! cleared 2 'two)
+    (let ((deleted-entry (car (hash-table-storage-entries deleted)))
+          (cleared-entry (car (hash-table-storage-entries cleared))))
+      (hash-table-delete! deleted 1)
+      (hash-table-clear! cleared)
+      (list
+       (hash-table-storage-capacity small)
+       (hash-table-storage-capacity medium)
+       (hash-table-storage-capacity large)
+       (raises?
+        (lambda () (hash-table-entry-set-value! deleted-entry 'changed)))
+       (raises?
+        (lambda ()
+          (hash-table-entry-set-value! cleared-entry 'changed))))))))
+
+(testing-registry-case
+ 'hash-table/direct-self-set-operations
+ '(portable stdlib internal invariant)
+ (test-equal
+  'hash-table/direct-self-set-operations
+  '((a b c) 0 0)
+  (let ((intersection (make-hash-table symbol-comparator))
+        (difference (make-hash-table symbol-comparator))
+        (xor (make-hash-table symbol-comparator)))
+    (hash-table-set! intersection 'a 1 'b 2 'c 3)
+    (hash-table-set! difference 'a 1 'b 2 'c 3)
+    (hash-table-set! xor 'a 1 'b 2 'c 3)
+    (hash-table-intersection! intersection intersection)
+    (hash-table-difference! difference difference)
+    (hash-table-xor! xor xor)
+    (list (hash-table-keys intersection)
+          (hash-table-size difference)
+          (hash-table-size xor)))))
 
 (testing-runner-main "SRFI 125 hash tables" (command-line))

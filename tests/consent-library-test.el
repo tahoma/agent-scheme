@@ -5116,7 +5116,11 @@
                  (regexp-quote "(displayln \"Done.\")") text)))
           (unless (and start end)
             (error "Missing SRFI 125 upstream corpus markers in %s" path))
-          (substring text start end))))
+          (substring text start end)))
+       (literal-replace
+        (from to text)
+        (replace-regexp-in-string
+         (regexp-quote from) to text t t)))
     (let* ((fixture
             (expand-file-name
              "fixtures/srfi-125/reference/tables-test.sps"
@@ -5131,7 +5135,36 @@
        (equal
         (consent-library-test--file-sha256 fixture)
         "ac26a6e1bd6fbbb064a6f506806a2e2b2a9ad8df3719c81d31dc34b6d0f8c4b3"))
-      (should (equal fixture-corpus adapted-corpus))
+      (let* ((contains-input
+              "'(#u8() 47.9
+             '#() '()
+             foo bar
+             19 (henry)
+             \"p\" \"perp\"
+             \"mike\" \"Noel\"
+             jane paul
+             0 5)")
+             (contains-adaptation
+              "(list (bytevector) 47.9
+                 '#() '()
+                 'foo 'bar
+                 19 '(henry)
+                 \"p\" \"perp\"
+                 \"mike\" \"Noel\"
+                 'jane 'paul
+                 0 5)")
+             (identity-input
+              "'#(a \"bcD\" #\\c (d 2.718) -42 #u8() #() #u8(19 20))")
+             (identity-adaptation
+              "(vector 'a \"bcD\" #\\c '(d 2.718) -42
+                        (bytevector) (vector) (bytevector 19 20))")
+             (expected-corpus
+              (literal-replace
+               identity-input
+               identity-adaptation
+               (literal-replace
+                contains-input contains-adaptation fixture-corpus))))
+        (should (equal expected-corpus adapted-corpus)))
       (should
        (= 88
           (cl-count-if
