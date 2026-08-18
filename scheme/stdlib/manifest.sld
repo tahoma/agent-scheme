@@ -2871,6 +2871,7 @@ f3")))
           (upstream-test-license "MIT")
           (local-license "Apache-2.0")
           (vendored? #f)
+          (vendored-tests? #t)
           (local-patches
            ((sample-implementation
              (status not-vendored)
@@ -2886,15 +2887,26 @@ f3")))
             (registry-aliases
              (aliases (scheme hash-table) (srfi 125) (srfi srfi-125)))
             (documentation-metadata (scope exported-procedures))
+            (vendored-tests
+             (file "fixtures/srfi-125/reference/tables-test.sps")
+             (preservation verbatim)
+             (test-forms 88))
             (adapted-tests
-             (file "tests/scheme/stdlib-hash-table-upstream-test.scm"))
+             (file "tests/scheme/stdlib-hash-table-upstream-test.scm")
+             (coverage full-upstream-corpus)
+             (test-forms 88)
+             (compatibility local-list-sort srfi-125-copy testing-runner))
             (local-tests
-             (file "tests/scheme/stdlib-hash-table-test.scm"))))))
+             (file "tests/scheme/stdlib-hash-table-test.scm")
+             (coverage exported-identifiers callback-mutation-matrix
+                       immutable-mutator-matrix error-contracts))))))
         (verification
          ((test-status
            (import-resolution representative-hash-table-behavior alias-import
-                              missing-export-diagnostic adapted-upstream-tests
-                              collision-model mutation-guards
+                              missing-export-diagnostic full-upstream-corpus
+                              export-surface-complete collision-model
+                              callback-mutation-matrix
+                              immutable-mutator-matrix
                               direct-host-conformance compiled-host-smoke
                               portable-host-suite))))
         (status direct-portable-implementation)

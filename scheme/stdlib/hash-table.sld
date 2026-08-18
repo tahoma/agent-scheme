@@ -66,10 +66,12 @@
                  comparator-hash-function
                  default-hash
                  string-hash
-                 string-ci-hash)
+                 string-ci-hash
+                 symbol-hash)
            (default-hash comparator-default-hash)
            (string-hash comparator-string-hash)
-           (string-ci-hash comparator-string-ci-hash))
+           (string-ci-hash comparator-string-ci-hash)
+           (symbol-hash comparator-symbol-hash))
           (stdlib hash-table implementation))
   (begin
     ;; Optional facilities that this portable provider cannot implement.
@@ -96,6 +98,7 @@
         comparator-default-hash)
        ((eq? equivalence string=?) comparator-string-hash)
        ((eq? equivalence string-ci=?) comparator-string-ci-hash)
+       ((eq? equivalence symbol=?) comparator-symbol-hash)
        (else #f)))
 
     (define (arguments->policy comparator/equivalence arguments)

@@ -20,11 +20,6 @@
 ;;; TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 ;;; SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-;;;
-;;; Consent adaptation:
-;;; - replaces unavailable `(scheme sort)' with a local stable list sort;
-;;; - replaces the queued `(srfi 126)' copy helper with SRFI 125 copy;
-;;; - reports the unchanged upstream test forms through `(testing runner)'.
 ;;; This is a very shallow sanity test for hash tables.
 ;;;
 ;;; Tests marked by a "FIXME: glass-box" comment test behavior of the
@@ -33,28 +28,24 @@
 (import (scheme base)
         (scheme char)
         (scheme write)
-        (scheme process-context)
-        (stdlib comparator)
-        (rename (stdlib hash-table)
-                (string-hash deprecated:string-hash)
-                (string-ci-hash deprecated:string-ci-hash))
-        (testing registry)
-        (testing runner))
+        (only (scheme process-context) exit)
+        (scheme comparator)            ; was (srfi 128)
+        (only (scheme sort) list-sort) ; was (r6rs sorting)
+        (only (srfi 126) hashtable-copy)
+        (rename (srfi 125)
+                (string-hash    deprecated:string-hash)
+                (string-ci-hash deprecated:string-ci-hash)))
 
-;;; Write XS and terminate the output line.
 (define (writeln . xs)
   (for-each write xs)
   (newline))
 
-;;; Display XS and terminate the output line.
 (define (displayln . xs)
   (for-each display xs)
   (newline))
 
-;;; Aggregate the upstream macro results for Consent's runner epilogue.
 (define ultimate-exit-status 0)
 
-;;; Record a failed upstream assertion and return false.
 (define (fail token . more)
   (set! ultimate-exit-status 1)
   (displayln "Error: test failed: ")
@@ -76,13 +67,11 @@
         (or (equal? actual expected)
             (fail 'expr actual expected)))))))
 
-;;; Assert that the upstream expression produces a true value.
 (define-syntax test-assert
   (syntax-rules ()
    ((_ expr)
     (or expr (fail 'expr)))))
 
-;;; Assert that the upstream expression produces a false value.
 (define-syntax test-deny
   (syntax-rules ()
    ((_ expr)
@@ -94,49 +83,26 @@
 ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;;; Compatibility for the upstream `(scheme sort)' import.
-(define (list-sort less? values)
-  (define (insert value sorted)
-    (cond
-     ((null? sorted) (list value))
-     ((less? value (car sorted)) (cons value sorted))
-     (else (cons (car sorted) (insert value (cdr sorted))))))
-  (let loop ((rest values) (sorted '()))
-    (if (null? rest)
-        sorted
-        (loop (cdr rest) (insert (car rest) sorted)))))
-
-;;; Compatibility for the one upstream `(srfi 126)' helper call.
-(define (hashtable-copy table mutable?)
-  (hash-table-copy table mutable?))
-
-;;; Reuse the SRFI 128 default comparator throughout the corpus.
 (define default-comparator (make-default-comparator))
 
 ;;; SRFI 128 says the following definition will work, but that's
 ;;; an error in SRFI 128; the hash function produce non-integers.
 
 #;
-;;; Retain the disabled comparator from the upstream transition note.
 (define number-comparator
   (make-comparator real? = < (lambda (x) (exact (abs x)))))
 
-;;; Compare real-number keys with an integer-valued hash function.
 (define number-comparator
   (make-comparator real? = < (lambda (x) (exact (abs (round x))))))
 
-;;; Compare string keys case-sensitively.
 (define string-comparator
   (make-comparator string? string=? string<? string-hash))
 
-;;; Compare string keys without regard to case.
 (define string-ci-comparator
   (make-comparator string? string-ci=? string-ci<? string-ci-hash))
 
-;;; Compare keys by identity.
 (define eq-comparator (make-eq-comparator))
 
-;;; Compare keys with Scheme's `eqv?' relation.
 (define eqv-comparator (make-eqv-comparator))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -164,44 +130,32 @@
 
 (define ht-default (make-hash-table default-comparator))
 
-;;; Exercise identity-comparator construction with ignored options.
 (define ht-eq (make-hash-table eq-comparator 'random-argument "another"))
 
-;;; Exercise the `eqv?' comparator constructor.
 (define ht-eqv (make-hash-table eqv-comparator))
 
-;;; Exercise legacy equivalence-procedure construction with `eq?'.
 (define ht-eq2 (make-hash-table eq?))
 
-;;; Exercise legacy equivalence-procedure construction with `eqv?'.
 (define ht-eqv2 (make-hash-table eqv?))
 
-;;; Exercise legacy equivalence-procedure construction with `equal?'.
 (define ht-equal (make-hash-table equal?))
 
-;;; Exercise inferred hashing for `string=?'.
 (define ht-string (make-hash-table string=?))
 
-;;; Exercise inferred hashing for `string-ci=?'.
 (define ht-string-ci (make-hash-table string-ci=?))
 
-;;; Exercise inferred hashing for `symbol=?'.
 (define ht-symbol (make-hash-table symbol=?))    ; FIXME: glass-box
 
-;;; Exercise an explicitly supplied numeric hash function.
 (define ht-fixnum (make-hash-table = abs))
 
-;;; Construct a populated table with the default comparator.
 (define ht-default2
   (hash-table default-comparator 'foo 'bar 101.3 "fever" '(x y z) '#()))
 
-;;; Tabulate the square-to-root fixture used by the upstream tests.
 (define ht-fixnum2
   (hash-table-tabulate number-comparator
                        10
                        (lambda (i) (values (* i i) i))))
 
-;;; Unfold the prefixes fixture used by the upstream tests.
 (define ht-string2
   (hash-table-unfold (lambda (s) (= 0 (string-length s)))
                      (lambda (s) (values s (string-length s)))
@@ -210,18 +164,15 @@
                      string-comparator
                      'ignored1 'ignored2 "ignored3" '#(ignored 4 5)))
 
-;;; Convert a case-insensitive string association list.
 (define ht-string-ci2
   (alist->hash-table '(("" . 0) ("Mary" . 4) ("Paul" . 4) ("Peter" . 5))
                      string-ci-comparator
                      "ignored1" 'ignored2))
 
-;;; Convert a symbol association list through the legacy interface.
 (define ht-symbol2
   (alist->hash-table '((mary . travers) (noel . stookey) (peter .yarrow))
                      eq?))
 
-;;; Convert list keys through the legacy `equal?' interface.
 (define ht-equal2
   (alist->hash-table '(((edward) . abbey)
                        ((dashiell) . hammett)
@@ -230,7 +181,6 @@
                      equal?
                      (comparator-hash-function default-comparator)))
 
-;;; Collect every constructor fixture for the shared predicate tests.
 (define test-tables
   (list ht-default   ht-default2   ; initial keys: foo, 101.3, (x y z)
         ht-eq        ht-eq2        ; initially empty
@@ -957,13 +907,6 @@
 
 (displayln "Done.")
 
-(testing-registry-case
- 'hash-table-upstream/full-corpus
- '(portable stdlib upstream conformance)
- (if (= 0 ultimate-exit-status)
-     #t
-     (error "upstream SRFI 125 corpus failed")))
-
-(testing-runner-main "Complete upstream SRFI 125 tests" (command-line))
+(exit ultimate-exit-status)
 
 ; eof

@@ -23,6 +23,12 @@
     (thunk)
     #f))
 
+(define (every? predicate values)
+  "Return whether PREDICATE accepts every member of VALUES."
+  (or (null? values)
+      (and (predicate (car values))
+           (every? predicate (cdr values)))))
+
 ;; Comparator for ordinary exact-integer keys.
 (define integer-comparator
   (make-comparator integer? = < number-hash))
@@ -175,6 +181,32 @@
      (hash-table->alist table)))))
 
 (testing-registry-case
+ 'hash-table/entries-and-fresh-results '(portable stdlib conformance)
+ (test-equal
+  'hash-table/entries-and-fresh-results
+  '(#t 1 2 #t)
+  (let ((table (make-hash-table symbol-comparator)))
+    (hash-table-set! table 'a 1 'b 2)
+    (call-with-values
+     (lambda () (hash-table-entries table))
+     (lambda (keys values)
+       (let ((pairs (map cons keys values)))
+         (set-car! keys 'changed)
+         (set-car! values 99)
+         (list
+          (every?
+           (lambda (pair)
+             (= (cdr pair) (hash-table-ref table (car pair))))
+           pairs)
+          (hash-table-ref table 'a)
+          (hash-table-ref table 'b)
+          (call-with-values
+           (lambda () (hash-table-entries table))
+           (lambda (next-keys next-values)
+             (and (not (eq? keys next-keys))
+                  (not (eq? values next-values))))))))))))
+
+(testing-registry-case
  'hash-table/traversal-and-prune '(portable stdlib conformance)
  (test-equal
   'hash-table/traversal-and-prune
@@ -252,6 +284,26 @@
                 (make-hash-table (lambda (left right) #f))))))))
 
 (testing-registry-case
+ 'hash-table/error-contracts '(portable stdlib conformance error)
+ (test-equal
+  'hash-table/error-contracts
+  '(#t #t #t #t #t)
+  (let ((table (make-hash-table symbol-comparator))
+        (unhashable
+         (make-comparator integer? = < #f)))
+    (list
+     (raises? (lambda () (hash-table-pop! table)))
+     (raises? (lambda () (hash-table symbol-comparator 'odd)))
+     (raises? (lambda () (hash-table-set! table 'odd)))
+     (raises?
+      (lambda ()
+        (hash-table-ref table 'missing
+                        (lambda () 'missing)
+                        (lambda (value) value)
+                        'extra)))
+     (raises? (lambda () (make-hash-table unhashable)))))))
+
+(testing-registry-case
  'hash-table/different-key-comparators '(portable stdlib conformance)
  (test-equal
   'hash-table/different-key-comparators
@@ -289,26 +341,119 @@
  'hash-table/callback-mutation-guards '(portable stdlib conformance error)
  (test-equal
   'hash-table/callback-mutation-guards
-  '(#t #t)
-  (let ((counted (make-hash-table symbol-comparator))
-        (mapped (make-hash-table symbol-comparator)))
-    (hash-table-set! counted 'a 1 'b 2)
-    (hash-table-set! mapped 'a 1 'b 2)
+  '(#t #t #t #t #t #t #t #t #t)
+  (let ((walk
+         (lambda (walker)
+           (let ((table (make-hash-table symbol-comparator)))
+             (hash-table-set! table 'a 1 'b 2)
+             (raises? (lambda () (walker table)))))))
     (list
-     (raises?
-      (lambda ()
+     (walk
+      (lambda (table)
+        (hash-table-find
+         (lambda (key value)
+           (hash-table-set! table 'c 3)
+           #f)
+         table
+         (lambda () #f))))
+     (walk
+      (lambda (table)
         (hash-table-count
          (lambda (key value)
-           (hash-table-set! counted 'c 3)
+           (hash-table-set! table 'c 3)
            #t)
-         counted)))
-     (raises?
-      (lambda ()
+         table)))
+     (walk
+      (lambda (table)
+        (hash-table-map
+         (lambda (value)
+           (hash-table-set! table 'c 3)
+           value)
+         symbol-comparator
+         table)))
+     (walk
+      (lambda (table)
+        (hash-table-for-each
+         (lambda (key value)
+           (hash-table-set! table 'c 3))
+         table)))
+     (walk
+      (lambda (table)
         (hash-table-map!
          (lambda (key value)
-           (hash-table-delete! mapped 'b)
+           (hash-table-set! table 'c 3)
            value)
-         mapped)))))))
+         table)))
+     (walk
+      (lambda (table)
+        (hash-table-map->list
+         (lambda (key value)
+           (hash-table-set! table 'c 3)
+           value)
+         table)))
+     (walk
+      (lambda (table)
+        (hash-table-fold
+         (lambda (key value total)
+           (hash-table-set! table 'c 3)
+           (+ total value))
+         0
+         table)))
+     (walk
+      (lambda (table)
+        (hash-table-prune!
+         (lambda (key value)
+           (hash-table-set! table 'c 3)
+           #f)
+         table)))
+     (let ((source (make-hash-table symbol-comparator))
+           (other (make-hash-table symbol-comparator)))
+       (hash-table-set! source 'a 1 'b 2)
+       (hash-table-for-each
+        (lambda (key value)
+          (hash-table-set! other key value))
+        source)
+       (= 2 (hash-table-size other)))))))
+
+(testing-registry-case
+ 'hash-table/immutable-mutator-guards '(portable stdlib conformance error)
+ (test-equal
+  'hash-table/immutable-mutator-guards
+  '(#t #t #t #t #t #t #t #t #t #t #t #t #t #t)
+  (let ((rejects?
+         (lambda (mutator)
+           (let ((table (hash-table symbol-comparator 'a 1))
+                 (other (make-hash-table symbol-comparator)))
+             (hash-table-set! other 'b 2)
+             (raises? (lambda () (mutator table other)))))))
+    (list
+     (rejects? (lambda (table other) (hash-table-set! table 'b 2)))
+     (rejects? (lambda (table other) (hash-table-delete! table 'a)))
+     (rejects?
+      (lambda (table other)
+        (hash-table-intern! table 'b (lambda () 2))))
+     (rejects?
+      (lambda (table other)
+        (hash-table-update! table 'a (lambda (value) (+ value 1)))))
+     (rejects?
+      (lambda (table other)
+        (hash-table-update!/default
+         table 'a (lambda (value) (+ value 1)) 0)))
+     (rejects? (lambda (table other) (hash-table-pop! table)))
+     (rejects? (lambda (table other) (hash-table-clear! table)))
+     (rejects?
+      (lambda (table other)
+        (hash-table-map! (lambda (key value) value) table)))
+     (rejects?
+      (lambda (table other)
+        (hash-table-prune! (lambda (key value) #f) table)))
+     (rejects? (lambda (table other) (hash-table-union! table other)))
+     (rejects? (lambda (table other) (hash-table-merge! table other)))
+     (rejects?
+      (lambda (table other) (hash-table-intersection! table other)))
+     (rejects?
+      (lambda (table other) (hash-table-difference! table other)))
+     (rejects? (lambda (table other) (hash-table-xor! table other)))))))
 
 (testing-registry-case
  'hash-table/shared-engine-order-and-revisions

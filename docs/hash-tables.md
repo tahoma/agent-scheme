@@ -66,8 +66,39 @@ conversion, and destructive set operations.
 The implementation follows the official SRFI 125 specification directly. The
 official sample source is recorded but not vendored because it is implemented
 on top of SRFI 126, which is scheduled after SRFI 125 in Consent's facade
-sequence. Adapted upstream tests retain their MIT license; the local portable
-implementation remains Apache-2.0.
+sequence. The complete upstream test program is vendored verbatim under
+`fixtures/srfi-125/` and retains its MIT license. Its executable adaptation
+retains all 88 upstream test forms; only unavailable import helpers and the
+test-runner epilogue differ. The local portable implementation remains
+Apache-2.0.
+
+## SRFI 125 Test Coverage
+
+Coverage is split deliberately between upstream compatibility and independent
+conformance tests. The upstream program exercises 44 of the 46 exported
+identifiers; it does not call `hash-table-values` or `hash-table-entries`. The
+local suite covers both, so every public export is exercised by at least one
+portable test.
+
+| Contract | Upstream | Independent | Combined |
+| --- | ---: | ---: | ---: |
+| Public exported identifiers | 44/46 | 46/46 | 46/46 |
+| Traversal callbacks forbidden to mutate their table | 0/8 | 8/8 | 8/8 |
+| Public mutators rejected by immutable tables | 0/14 | 14/14 | 14/14 |
+| Upstream test forms retained by the executable port | 88/88 | n/a | 88/88 |
+
+The independent suite also covers adversarial collisions and growth, fresh
+entry result lists, comparator type rejection, unsupported weak-table options,
+empty-pop and arity errors, cross-policy set behavior, and the shared engine's
+insertion links and revision boundaries. Emacs-hosted tests separately cover
+resolver aliases, missing-export diagnostics, and manifest provenance.
+
+Weak or ephemeral storage, thread safety, and hash-distribution performance are
+not claimed as conformance coverage. The portable provider rejects those
+optional storage requests, and timing or statistical hash-quality tests would
+not establish SRFI semantics. Public traversal order also remains unspecified;
+stable order is tested only as an internal engine contract for the future SRFI
+250 facade.
 
 Expected lookup, insertion, update, and deletion cost is amortized constant time
 when the supplied hash function distributes keys satisfactorily. Whole-table
