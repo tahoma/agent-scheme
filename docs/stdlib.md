@@ -33,6 +33,7 @@ source-tree layers.
 | `(stdlib receive)` | shimmed | Built-in portable shim over R7RS multiple values, recorded in `(stdlib manifest)` | `(stdlib receive)`, `(srfi 8)`, `(srfi srfi-8)`, `(srfi :8)`, `(srfi :8 receive)` | Optional SRFI 8 `receive` syntax for binding multiple values; not part of the R7RS-small baseline. |
 | `(stdlib assume)` | shimmed | Built-in portable SRFI 145 shim, recorded in `(stdlib manifest)` | `(stdlib assume)`, `(srfi 145)`, `(srfi srfi-145)` | Optional SRFI 145 `assume` syntax for invalid code paths; not part of the R7RS-small baseline. |
 | `(stdlib comparator)` | implemented | Vendored adapted SRFI 128 sample implementation, recorded in `(stdlib manifest)` | `(stdlib comparator)`, `(scheme comparator)`, `(srfi 128)`, `(srfi srfi-128)` | Primary stdlib spelling owns the source; R7RS-large and SRFI spellings are compatibility aliases. |
+| [`(stdlib hash-table)`](hash-tables.md) | implemented | Portable SRFI 125 implementation over the shared standard hash-table engine, recorded in `(stdlib manifest)` | `(stdlib hash-table)`, `(scheme hash-table)`, `(srfi 125)`, `(srfi srfi-125)` | R7RS-large and SRFI 125 facade. The engine retains insertion links and separate structural/value revisions for later SRFI 69, SRFI 126, and SRFI 250 facades without exposing private runtime identity-table semantics. |
 | `(stdlib mapping)` | implemented | Vendored adapted SRFI 146 ordered mapping implementation, recorded in `(stdlib manifest)` | `(stdlib mapping)`, `(scheme mapping)`, `(srfi 146)`, `(srfi srfi-146)` | Ordered finite mappings over SRFI 128 comparators. Standard constructors remain red-black-backed; `(data mapping avl)` supplies optional AVL-selecting constructors whose results use the same Mapping API. Hash mappings are separate future work. |
 
 ## Internal Helpers
@@ -41,6 +42,7 @@ source-tree layers.
 | --- | --- | --- | --- | --- |
 | `(stdlib rbtree)` | implemented helper | Vendored adapted SRFI 146 `nieper/rbtree` helper, recorded in `(stdlib manifest)` | `(stdlib rbtree)` | Internal stdlib substrate for ordered SRFI 146 mappings; no R7RS-large or SRFI aliases are exposed for direct user-facing imports. |
 | `(stdlib mapping implementation)` | implemented helper | Project-owned provider-neutral SRFI 146 implementation seam | internal runtime only | Stores comparator, ordered-provider identity, and provider-owned root while preserving the source provider across derived Mapping operations. |
+| `(stdlib hash-table implementation)` | implemented helper | Project-owned provider-neutral mutable hash-table engine | internal runtime only | Shares buckets, key policies, insertion links, and mutation revisions across the standard hash-table facade family while remaining separate from private fixed-policy runtime identity tables. |
 
 The Scheme-readable `(stdlib manifest)` library records source URLs, upstream
 revisions, licenses, local patches, import aliases, dependencies, and test

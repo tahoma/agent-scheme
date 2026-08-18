@@ -5007,6 +5007,170 @@
                      '(stdlib comparator))))")
     "#t")))
 
+(ert-deftest consent-library-test-srfi-125-hash-table-behavior ()
+  "Import canonical `(scheme hash-table)' and exercise SRFI 125 behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (scheme comparator)
+              (except (scheme hash-table) string-hash string-ci-hash))
+      (define key-comparator
+        (make-comparator symbol? eq? #f symbol-hash))
+      (define table (make-hash-table key-comparator))
+      (hash-table-set! table 'alpha 1 'beta 2)
+      (hash-table-update! table 'beta (lambda (value) (+ value 10)))
+      (list (hash-table? table)
+            (hash-table-size table)
+            (hash-table-ref table 'alpha)
+            (hash-table-ref/default table 'missing 'absent)
+            (hash-table-ref table 'beta))")
+    "(#t 2 1 absent 12)")))
+
+(ert-deftest consent-library-test-srfi-125-alias-import ()
+  "Import hash tables through the secondary `(srfi 125)' alias."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (scheme comparator)
+              (except (srfi 125) string-hash string-ci-hash))
+      (define table (make-hash-table (make-eq-comparator)))
+      (hash-table-set! table 'key 'value)
+      (list (hash-table-contains? table 'key)
+            (hash-table-ref table 'key))")
+    "(#t value)")))
+
+(ert-deftest consent-library-test-srfi-125-portable-alias-import ()
+  "Import hash tables through the portable `(srfi srfi-125)' alias."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (scheme comparator)
+              (except (srfi srfi-125) string-hash string-ci-hash))
+      (define table (make-hash-table (make-eq-comparator)))
+      (hash-table-set! table 'portable 'alias)
+      (hash-table-ref table 'portable)")
+    "alias")))
+
+(ert-deftest consent-library-test-srfi-125-missing-export-diagnostic ()
+  "Report missing hash-table imports through the ordinary diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (scheme hash-table) missing-hash-table))
+            missing-hash-table")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-hash-table")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-125 ()
+  "Expose SRFI 125 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib hash-table)))
+            (scheme-alias (stdlib-manifest-ref '(scheme hash-table)))
+            (alias (stdlib-manifest-ref '(srfi 125)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-125)))
+            (engine
+             (stdlib-manifest-ref '(stdlib hash-table implementation))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'status)
+                     'direct-portable-implementation)
+             (equal? (manifest-field entry 'aliases)
+                     '((scheme hash-table) (srfi 125) (srfi srfi-125)))
+             (equal? (manifest-subfield entry 'provenance 'vendored?) #f)
+             (equal? (manifest-subfield
+                      entry 'provenance 'vendored-tests?)
+                     #t)
+             (equal? (manifest-field scheme-alias 'target)
+                     '(stdlib hash-table))
+             (equal? (manifest-field alias 'target)
+                     '(stdlib hash-table))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib hash-table))
+             (equal? (manifest-field engine 'visibility)
+                     'internal-runtime)))")
+    "#t"))
+  (cl-labels
+      ((upstream-corpus
+        (path)
+        (let* ((text
+                (with-temp-buffer
+                  (insert-file-contents path)
+                  (buffer-string)))
+               (start
+                (string-match
+                 (regexp-quote "(test (map hash-table?") text))
+               (end
+                (string-match
+                 (regexp-quote "(displayln \"Done.\")") text)))
+          (unless (and start end)
+            (error "Missing SRFI 125 upstream corpus markers in %s" path))
+          (substring text start end)))
+       (literal-replace
+        (from to text)
+        (replace-regexp-in-string
+         (regexp-quote from) to text t t)))
+    (let* ((fixture
+            (expand-file-name
+             "fixtures/srfi-125/reference/tables-test.sps"
+             consent-library-test--root))
+           (adapted
+            (expand-file-name
+             "tests/scheme/stdlib-hash-table-upstream-test.scm"
+             consent-library-test--root))
+           (fixture-corpus (upstream-corpus fixture))
+           (adapted-corpus (upstream-corpus adapted)))
+      (should
+       (equal
+        (consent-library-test--file-sha256 fixture)
+        "ac26a6e1bd6fbbb064a6f506806a2e2b2a9ad8df3719c81d31dc34b6d0f8c4b3"))
+      (let* ((contains-input
+              "'(#u8() 47.9
+             '#() '()
+             foo bar
+             19 (henry)
+             \"p\" \"perp\"
+             \"mike\" \"Noel\"
+             jane paul
+             0 5)")
+             (contains-adaptation
+              "(list (bytevector) 47.9
+                 '#() '()
+                 'foo 'bar
+                 19 '(henry)
+                 \"p\" \"perp\"
+                 \"mike\" \"Noel\"
+                 'jane 'paul
+                 0 5)")
+             (identity-input
+              "'#(a \"bcD\" #\\c (d 2.718) -42 #u8() #() #u8(19 20))")
+             (identity-adaptation
+              "(vector 'a \"bcD\" #\\c '(d 2.718) -42
+                        (bytevector) (vector) (bytevector 19 20))")
+             (expected-corpus
+              (literal-replace
+               identity-input
+               identity-adaptation
+               (literal-replace
+                contains-input contains-adaptation fixture-corpus))))
+        (should (equal expected-corpus adapted-corpus)))
+      (should
+       (= 88
+          (cl-count-if
+           (lambda (line) (string-prefix-p "(test" line))
+           (split-string fixture-corpus "\n")))))))
+
 (ert-deftest consent-library-test-stdlib-rbtree-import ()
   "Import internal `(stdlib rbtree)' and exercise representative tree\
  behavior."
